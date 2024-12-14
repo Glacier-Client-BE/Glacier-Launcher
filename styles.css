@@ -46,7 +46,7 @@ header h1 {
 }
 
 main {
-  background: url('https://via.placeholder.com/800x400') no-repeat center center/cover;
+  background: url('assets/bg.png') no-repeat center center/cover;
   flex: 1;
   display: flex;
   align-items: center;
