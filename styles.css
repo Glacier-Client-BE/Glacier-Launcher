@@ -38,9 +38,20 @@ header {
   gap: 15px;
 }
 
+.logo {
+  display: flex;
+  align-items: center; 
+  justify-content: center; 
+}
+
 .logo-img {
-  width: 50px;
-  height: 50px;
+  height: 50px; 
+  margin-right: 10px; 
+}
+
+.logo h1 {
+  margin: 0; 
+  font-size: 1.8rem; 
 }
 
 header h1 {
