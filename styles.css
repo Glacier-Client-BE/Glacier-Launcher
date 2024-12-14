@@ -1,27 +1,30 @@
-/* General Reset */
 * {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
 }
 
-body {
+html, body {
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
   background-color: #121212;
   color: #ffffff;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
   display: flex;
   justify-content: center;
   align-items: center;
-  height: 100vh;
-  overflow: hidden;
 }
 
 .launcher-container {
   background-color: #1e1e1e;
-  width: 90%;
-  max-width: 800px;
-  border-radius: 15px;
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.5);
+  width: 100%;
+  height: 100%;
+  border-radius: 0; 
+  box-shadow: none;
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -55,6 +58,7 @@ main {
 
 .changelog-section {
   width: 90%;
+  max-width: 800px;
   background-color: rgba(0, 0, 0, 0.5);
   padding: 15px;
   border-radius: 10px;
