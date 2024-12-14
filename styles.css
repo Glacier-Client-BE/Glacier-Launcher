@@ -1,0 +1,99 @@
+/* General Reset */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  background-color: #121212;
+  color: #ffffff;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.launcher-container {
+  background-color: #1e1e1e;
+  width: 90%;
+  max-width: 800px;
+  border-radius: 15px;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+header {
+  background-color: #252525;
+  padding: 15px;
+  display: flex;
+  align-items: center;
+  gap: 15px;
+}
+
+.logo-img {
+  width: 50px;
+  height: 50px;
+}
+
+header h1 {
+  font-size: 1.8rem;
+  color: #00a870;
+}
+
+main {
+  background: url('https://via.placeholder.com/800x400') no-repeat center center/cover;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.changelog-section {
+  width: 90%;
+  background-color: rgba(0, 0, 0, 0.5);
+  padding: 15px;
+  border-radius: 10px;
+}
+
+.changelog-section h2 {
+  font-size: 1.5rem;
+  margin-bottom: 10px;
+}
+
+.changelog-blur {
+  backdrop-filter: blur(5px);
+  padding: 10px;
+  border-radius: 5px;
+  background: rgba(0, 0, 0, 0.3);
+}
+
+.changelog-blur p {
+  margin: 5px 0;
+  font-size: 1rem;
+}
+
+footer {
+  background-color: #252525;
+  padding: 15px;
+  text-align: center;
+}
+
+button {
+  background-color: #00a870;
+  color: #ffffff;
+  font-size: 1.2rem;
+  border: none;
+  border-radius: 5px;
+  padding: 10px 20px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+button:hover {
+  background-color: #008a5c;
+}
