@@ -34,19 +34,6 @@
           }
         }
       },
-      "EasyHook/2.7.7097": {
-        "type": "package",
-        "compile": {
-          "lib/net40/EasyHook.dll": {
-            "related": ".xml"
-          }
-        },
-        "runtime": {
-          "lib/net40/EasyHook.dll": {
-            "related": ".xml"
-          }
-        }
-      },
       "Microsoft.AspNetCore.Authorization/10.0.0": {
         "type": "package",
         "dependencies": {
@@ -690,47 +677,6 @@
         "lib/netstandard2.0/DiscordRPC.dll",
         "lib/netstandard2.0/DiscordRPC.pdb",
         "lib/netstandard2.0/DiscordRPC.xml"
-      ]
-    },
-    "EasyHook/2.7.7097": {
-      "sha512": "DCx3T5I1D5zo6BIjiEjE/1Wlsm0UPw9Z0DlQ9Wz12YSBohQMD4vlt03OPXfb5+MQ2WeieqVKYXvwNhnT/E+fbg==",
-      "type": "package",
-      "path": "easyhook/2.7.7097",
-      "hasTools": true,
-      "files": [
-        ".nupkg.metadata",
-        ".signature.p7s",
-        "content/net35/EasyHook32.dll",
-        "content/net35/EasyHook32Svc.exe",
-        "content/net35/EasyHook64.dll",
-        "content/net35/EasyHook64Svc.exe",
-        "content/net35/EasyLoad32.dll",
-        "content/net35/EasyLoad64.dll",
-        "content/net40/EasyHook32.dll",
-        "content/net40/EasyHook32Svc.exe",
-        "content/net40/EasyHook64.dll",
-        "content/net40/EasyHook64Svc.exe",
-        "content/net40/EasyLoad32.dll",
-        "content/net40/EasyLoad64.dll",
-        "contentFiles/any/net35/EasyHook32.dll",
-        "contentFiles/any/net35/EasyHook32Svc.exe",
-        "contentFiles/any/net35/EasyHook64.dll",
-        "contentFiles/any/net35/EasyHook64Svc.exe",
-        "contentFiles/any/net35/EasyLoad32.dll",
-        "contentFiles/any/net35/EasyLoad64.dll",
-        "contentFiles/any/net40/EasyHook32.dll",
-        "contentFiles/any/net40/EasyHook32Svc.exe",
-        "contentFiles/any/net40/EasyHook64.dll",
-        "contentFiles/any/net40/EasyHook64Svc.exe",
-        "contentFiles/any/net40/EasyLoad32.dll",
-        "contentFiles/any/net40/EasyLoad64.dll",
-        "easyhook.2.7.7097.nupkg.sha512",
-        "easyhook.nuspec",
-        "lib/net35/EasyHook.dll",
-        "lib/net35/EasyHook.xml",
-        "lib/net40/EasyHook.dll",
-        "lib/net40/EasyHook.xml",
-        "tools/install.ps1"
       ]
     },
     "Microsoft.AspNetCore.Authorization/10.0.0": {
@@ -1656,7 +1602,6 @@
     "net10.0-windows10.0.17763": [
       "CommunityToolkit.Mvvm >= 8.4.0",
       "DiscordRichPresence >= 1.2.1.24",
-      "EasyHook >= 2.7.7097",
       "Microsoft.AspNetCore.Components.WebView.Wpf >= 10.0.*-*",
       "Newtonsoft.Json >= 13.0.4"
     ]
@@ -1716,10 +1661,6 @@
           "DiscordRichPresence": {
             "target": "Package",
             "version": "[1.2.1.24, )"
-          },
-          "EasyHook": {
-            "target": "Package",
-            "version": "[2.7.7097, )"
           },
           "Microsoft.AspNetCore.Components.WebView.Wpf": {
             "target": "Package",

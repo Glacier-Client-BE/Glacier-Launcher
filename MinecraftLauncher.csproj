@@ -7,14 +7,15 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
     <NoWarn>NU1701;NU1603</NoWarn>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Platforms>x64</Platforms>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="CommunityToolkit.Mvvm"                         Version="8.4.0" />
-    <PackageReference Include="DiscordRichPresence"                            Version="1.2.1.24" />
-    <PackageReference Include="EasyHook"                                       Version="2.7.7097" />
-    <PackageReference Include="Newtonsoft.Json"                                Version="13.0.4" />
-    <PackageReference Include="Microsoft.AspNetCore.Components.WebView.Wpf"   Version="10.0.*-*" />
+    <PackageReference Include="CommunityToolkit.Mvvm"                        Version="8.4.0" />
+    <PackageReference Include="DiscordRichPresence"                           Version="1.2.1.24" />
+    <PackageReference Include="Newtonsoft.Json"                               Version="13.0.4" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebView.Wpf"  Version="10.0.*-*" />
   </ItemGroup>
 
 </Project>

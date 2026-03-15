@@ -18,6 +18,5 @@
   </ImportGroup>
   <PropertyGroup Condition=" '$(ExcludeRestorePackageImports)' != 'true' ">
     <PkgMicrosoft_Web_WebView2 Condition=" '$(PkgMicrosoft_Web_WebView2)' == '' ">C:\Users\User\.nuget\packages\microsoft.web.webview2\1.0.3179.45</PkgMicrosoft_Web_WebView2>
-    <PkgEasyHook Condition=" '$(PkgEasyHook)' == '' ">C:\Users\User\.nuget\packages\easyhook\2.7.7097</PkgEasyHook>
   </PropertyGroup>
 </Project>

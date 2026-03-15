@@ -2,17 +2,24 @@
 @using MinecraftLauncher.Services
 @using MinecraftLauncher.Models
 @inject GameLauncher Launcher
+@inject FlarialService Flarial
 @inject SettingsService SettingsService
 @inject DiscordRpcService Discord
 @inject IJSRuntime JS
 @implements IDisposable
 
 <div class="window">
-
     <div class="window-bg"></div>
-
     <div class="drag-zone" @onmousedown="OnDragStart"></div>
 
+    <!-- Drop overlay -->
+    <div class="drop-zone-overlay">
+        <i class="fa-solid fa-file-arrow-down"></i>
+        <span>Drop your DLL</span>
+        <small>Saved to clients folder and selected automatically</small>
+    </div>
+
+    <!-- Top bar -->
     <div class="top-bar">
         <div class="branding">
             <img class="logo-icon" src="images/icon.png" alt="" />
@@ -22,212 +29,383 @@
             </div>
         </div>
         <div class="window-controls">
-            <button class="wnd-btn minimize-btn" @onclick="MinimizeWindow" @onmousedown:stopPropagation>
-                <svg width="10" height="2" viewBox="0 0 10 2" fill="none">
-                    <path d="M1 1H9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
-                </svg>
+            <button class="wnd-btn minimize-btn" @onclick="MinimizeWindow" @onmousedown:stopPropagation title="Minimize">
+                <i class="fa-solid fa-minus"></i>
             </button>
-            <button class="wnd-btn close-btn" @onclick="CloseWindow" @onmousedown:stopPropagation>
-                <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-                    <path d="M1 1L9 9M9 1L1 9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
-                </svg>
+            <button class="wnd-btn maximize-btn" @onclick="MaximizeWindow" @onmousedown:stopPropagation title="Maximize">
+                <i class="fa-solid fa-square"></i>
+            </button>
+            <button class="wnd-btn close-btn" @onclick="CloseWindow" @onmousedown:stopPropagation title="Close">
+                <i class="fa-solid fa-xmark"></i>
             </button>
         </div>
     </div>
 
+    <!-- Main content -->
     <div class="main-content">
         @if (currentView == "home")
         {
             <div class="btn-row">
-
                 <button class="action-btn @(hoveredBtn == "launch" || isLaunching ? "btn-wide btn-blue" : "btn-sq")"
-                        @onmouseenter='() => SetHover("launch")'
-                        @onmouseleave="ClearHover"
-                        @onclick="HandleLaunch"
-                        @onmousedown:stopPropagation
-                        disabled="@isLaunching">
+                        @onmouseenter='() => SetHover("launch")' @onmouseleave="ClearHover"
+                        @onclick="HandleLaunch" @onmousedown:stopPropagation disabled="@isLaunching">
                     @if (hoveredBtn == "launch" || isLaunching)
                     {
-                        @if (isLaunching)
-                        {
-                            <span class="spinner"></span>
-                            <span>Launching…</span>
-                        }
-                        else
-                        {
-                            <span>Launch</span>
-                        }
+                        @if (isLaunching) { <span class="spinner"></span><span>Launching…</span> }
+                        else              { <span>Launch</span> }
                     }
-                    else
-                    {
-                        @PlayIcon
-                    }
+                    else { <i class="fa-solid fa-play"></i> }
                 </button>
 
                 <button class="action-btn @(hoveredBtn == "settings" ? "btn-wide" : "btn-sq")"
-                        @onmouseenter='() => SetHover("settings")'
-                        @onmouseleave="ClearHover"
-                        @onclick="OpenSettings"
-                        @onmousedown:stopPropagation>
+                        @onmouseenter='() => SetHover("settings")' @onmouseleave="ClearHover"
+                        @onclick="OpenSettings" @onmousedown:stopPropagation>
                     @if (hoveredBtn == "settings") { <span>Settings</span> }
-                    else { @GearIcon }
+                    else { <i class="fa-solid fa-gear"></i> }
+                </button>
+
+                <button class="action-btn @(hoveredBtn == "clients" ? "btn-wide" : "btn-sq")"
+                        @onmouseenter='() => SetHover("clients")' @onmouseleave="ClearHover"
+                        @onclick="OpenClients" @onmousedown:stopPropagation>
+                    @if (hoveredBtn == "clients") { <span>Clients</span> }
+                    else { <i class="fa-solid fa-puzzle-piece"></i> }
                 </button>
 
                 <button class="action-btn @(hoveredBtn == "versions" ? "btn-wide" : "btn-sq")"
-                        @onmouseenter='() => SetHover("versions")'
-                        @onmouseleave="ClearHover"
-                        @onclick="OpenVersions"
-                        @onmousedown:stopPropagation>
+                        @onmouseenter='() => SetHover("versions")' @onmouseleave="ClearHover"
+                        @onclick="OpenVersions" @onmousedown:stopPropagation>
                     @if (hoveredBtn == "versions") { <span>Versions</span> }
-                    else { @ClockIcon }
+                    else { <i class="fa-solid fa-clock-rotate-left"></i> }
                 </button>
-
             </div>
 
-            <p class="status-msg @(isError ? "error" : "") @(statusVisible ? "visible" : "")">
-                @statusMessage
-            </p>
+            <p class="status-msg @(isError ? "error" : "") @(statusVisible ? "visible" : "")">@statusMessage</p>
         }
     </div>
 
+    <!-- Footer -->
     <div class="footer">
         <img class="avatar" src="images/avatar.png" alt="" />
         <div class="user-info">
             <span class="username">@displayName</span>
             <span class="user-handle">@displayHandle</span>
         </div>
+        <div class="footer-right">
+            <span style="font-size:11px; color:var(--text-dim);">
+                @if (!string.IsNullOrEmpty(SettingsService.Settings.LastUsedVersion))
+                {
+                    <i class="fa-solid fa-clock" style="margin-right:4px;"></i>@SettingsService.Settings.LastUsedVersion
+                }
+            </span>
+        </div>
     </div>
 
+    <!-- News ticker -->
+    <div class="news-strip">
+        <div class="news-track">
+            @foreach (var item in _newsItems)
+            {
+                <span class="news-item" @onclick='() => OpenUrl(item.Url)'>
+                    <i class="@item.Icon"></i>
+                    <span class="news-title">@item.Title</span>
+                    <span>@item.Subtitle</span>
+                </span>
+            }
+            @foreach (var item in _newsItems)
+            {
+                <span class="news-item" @onclick='() => OpenUrl(item.Url)'>
+                    <i class="@item.Icon"></i>
+                    <span class="news-title">@item.Title</span>
+                    <span>@item.Subtitle</span>
+                </span>
+            }
+        </div>
+    </div>
+
+    <!-- ── SETTINGS PANEL ── -->
     @if (currentView == "settings")
     {
         <div class="panel-overlay">
-            <div class="panel-topbar" @onmousedown="OnDragStart">
-                <div class="branding">
-            <img class="logo-icon" src="images/icon.png" alt="" />
-            <div class="branding-text">
-                <span class="branding-title">Glacier Launcher</span>
-                <span class="branding-sub">Glacier Productions</span>
-            </div>
-        </div>
-                <div class="window-controls">
-                    <button class="wnd-btn minimize-btn" @onclick="MinimizeWindow" @onmousedown:stopPropagation>
-                        <svg width="10" height="2" viewBox="0 0 10 2" fill="none">
-                            <path d="M1 1H9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
-                        </svg>
-                    </button>
-                    <button class="wnd-btn close-btn" @onclick="CloseWindow" @onmousedown:stopPropagation>
-                        <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-                            <path d="M1 1L9 9M9 1L1 9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
-                        </svg>
+            <div class="panel-header">
+                <div class="panel-title-wrap">
+                    <span class="panel-title">Settings</span>
+                    <div class="panel-title-underline"></div>
+                </div>
+                <div class="panel-header-actions">
+                    <button class="panel-back-btn" @onclick="GoHome" @onmousedown:stopPropagation>
+                        <i class="fa-solid fa-chevron-down"></i>
                     </button>
                 </div>
             </div>
-
-            <div class="panel-header">
-                <span class="panel-title">Settings</span>
-                <button class="panel-back-btn" @onclick="GoHome" @onmousedown:stopPropagation>
-                    @ArrowRightIcon
-                </button>
-            </div>
-
             <div class="panel-body">
+
+                <span class="panel-section-label">Injection</span>
+
                 <div class="setting-row">
-                    <span class="setting-label">Inject when pressing "Launch"</span>
-                    <select class="setting-select"
-                            value="@SettingsService.Settings.SelectedClient"
-                            @onchange="OnClientChanged"
-                            @onclick:stopPropagation>
+                    <span class="setting-label">Active client</span>
+                    <select class="setting-select" value="@SettingsService.Settings.SelectedClient"
+                            @onchange="OnClientChanged" @onclick:stopPropagation>
                         <option value="Latite Client">Latite Client</option>
+                        <option value="Flarial Client">Flarial Client</option>
+                        @if (!string.IsNullOrEmpty(customDllPath))
+                        {
+                            <option value="Custom DLL">Custom DLL</option>
+                        }
                     </select>
                 </div>
 
-                <div class="setting-row clickable" @onclick="ToggleDiscord">
+                <div class="setting-row">
+                    <div class="setting-meta">
+                        <span class="setting-label">Injection delay</span>
+                        <span class="setting-hint">How long to wait after game launches before injecting</span>
+                    </div>
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        <input type="range" min="1000" max="10000" step="500"
+                               value="@SettingsService.Settings.InjectionDelayMs"
+                               @oninput="OnDelayChanged" />
+                        <span style="font-size:11px; color:var(--text-dim); width:38px; text-align:right;">
+                            @(SettingsService.Settings.InjectionDelayMs / 1000.0)s
+                        </span>
+                    </div>
+                </div>
+
+                <div class="setting-row clickable" @onclick="ToggleProp(() => SettingsService.Settings.AutoInject = !SettingsService.Settings.AutoInject)">
+                    <div class="setting-meta">
+                        <span class="setting-label">Auto-inject</span>
+                        <span class="setting-hint">Inject automatically once the game process is detected</span>
+                    </div>
+                    <div class="toggle @(SettingsService.Settings.AutoInject ? "on" : "")"
+                         @onclick:stopPropagation
+                         @onclick='() => ToggleProp(() => SettingsService.Settings.AutoInject = !SettingsService.Settings.AutoInject)'></div>
+                </div>
+
+                <div class="setting-row clickable" @onclick='() => ToggleProp(() => SettingsService.Settings.CloseAfterLaunch = !SettingsService.Settings.CloseAfterLaunch)'>
+                    <div class="setting-meta">
+                        <span class="setting-label">Close after launch</span>
+                        <span class="setting-hint">Minimise the launcher once injection succeeds</span>
+                    </div>
+                    <div class="toggle @(SettingsService.Settings.CloseAfterLaunch ? "on" : "")"
+                         @onclick:stopPropagation
+                         @onclick='() => ToggleProp(() => SettingsService.Settings.CloseAfterLaunch = !SettingsService.Settings.CloseAfterLaunch)'></div>
+                </div>
+
+                <span class="panel-section-label">Appearance</span>
+
+                <div class="setting-row">
+                    <div class="setting-meta">
+                        <span class="setting-label">Accent colour</span>
+                        <span class="setting-hint">Used for buttons, highlights and glows</span>
+                    </div>
+                    <div class="color-swatches">
+                        @foreach (var c in _accentSwatches)
+                        {
+                            <div class="color-swatch @(SettingsService.Settings.AccentColor == c ? "active" : "")"
+                                 style="background:@c;"
+                                 title="@c"
+                                 @onclick='() => SetAccent(c)'
+                                 @onmousedown:stopPropagation></div>
+                        }
+                    </div>
+                </div>
+
+                <div class="setting-row clickable" @onclick='() => ToggleProp(() => SettingsService.Settings.RememberWindowSize = !SettingsService.Settings.RememberWindowSize)'>
+                    <div class="setting-meta">
+                        <span class="setting-label">Remember window size</span>
+                        <span class="setting-hint">Restore last used size on next launch</span>
+                    </div>
+                    <div class="toggle @(SettingsService.Settings.RememberWindowSize ? "on" : "")"
+                         @onclick:stopPropagation
+                         @onclick='() => ToggleProp(() => SettingsService.Settings.RememberWindowSize = !SettingsService.Settings.RememberWindowSize)'></div>
+                </div>
+
+                <span class="panel-section-label">Account</span>
+
+                <div class="setting-row">
+                    <span class="setting-label">Display name</span>
+                    <input class="setting-input" style="width:130px;"
+                           value="@SettingsService.Settings.Username"
+                           placeholder="@System.Environment.UserName"
+                           @onchange="OnUsernameChanged"
+                           @onclick:stopPropagation />
+                </div>
+
+                <span class="panel-section-label">Social</span>
+
+                <div class="setting-row clickable" @onclick='() => ToggleProp(() => SettingsService.Settings.DiscordRichPresence = !SettingsService.Settings.DiscordRichPresence, true)'>
                     <span class="setting-label">Discord Rich Presence</span>
                     <div class="toggle @(SettingsService.Settings.DiscordRichPresence ? "on" : "")"
                          @onclick:stopPropagation
-                         @onclick="ToggleDiscord"></div>
+                         @onclick='() => ToggleProp(() => SettingsService.Settings.DiscordRichPresence = !SettingsService.Settings.DiscordRichPresence, true)'></div>
                 </div>
+
+                <span class="panel-section-label">About</span>
 
                 <div class="setting-row">
                     <span class="setting-label">Credits</span>
-                    <button class="btn-sm" @onclick="OpenCredits" @onmousedown:stopPropagation>Open</button>
+                    <button class="btn-sm" @onclick="OpenCredits" @onmousedown:stopPropagation>
+                        <i class="fa-solid fa-arrow-up-right-from-square"></i> Open
+                    </button>
                 </div>
+
             </div>
         </div>
     }
 
+    <!-- ── CLIENTS PANEL ── -->
+    @if (currentView == "clients")
+    {
+        <div class="panel-overlay">
+            <div class="panel-header">
+                <div class="panel-title-wrap">
+                    <span class="panel-title">Clients</span>
+                    <div class="panel-title-underline"></div>
+                </div>
+                <div class="panel-header-actions">
+                    <button class="panel-back-btn" @onclick="GoHome" @onmousedown:stopPropagation>
+                        <i class="fa-solid fa-chevron-down"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="panel-body">
+
+                <div class="client-card @(SettingsService.Settings.SelectedClient == "Flarial Client" ? "client-active" : "")">
+                    <div class="client-card-header">
+                        <div class="client-card-icon flarial-icon"><i class="fa-solid fa-fire"></i></div>
+                        <div class="client-card-meta">
+                            <span class="client-card-name">Flarial Client</span>
+                            <span class="client-card-sub">
+                                @if (flarialDownloaded)
+                                {
+                                    @if (flarialUpToDate) { <span class="tag-uptodate"><i class="fa-solid fa-circle-check"></i> Up to date</span> }
+                                    else                  { <span class="tag-outdated"><i class="fa-solid fa-triangle-exclamation"></i> Update available</span> }
+                                }
+                                else { <span style="opacity:0.5;">Not downloaded</span> }
+                            </span>
+                        </div>
+                        <div class="client-card-actions">
+                            @if (flarialDownloading)
+                            {
+                                <div class="dl-progress-row">
+                                    @if (flarialProgress > 0)
+                                    {
+                                        <div class="progress-bar-wrap"><div class="progress-bar-fill" style="width:@(flarialProgress.ToString("F0"))%"></div></div>
+                                        <span class="dl-pct">@((int)flarialProgress)%</span>
+                                    }
+                                    <button class="icon-btn" disabled><span class="spinner"></span></button>
+                                </div>
+                            }
+                            else
+                            {
+                                @if (!flarialDownloaded || !flarialUpToDate)
+                                {
+                                    <button class="icon-btn" title="@(flarialDownloaded ? "Update" : "Download")" @onclick="HandleFlarialDownload" @onmousedown:stopPropagation>
+                                        <i class="fa-solid @(flarialDownloaded ? "fa-arrow-up" : "fa-download")"></i>
+                                    </button>
+                                }
+                                @if (flarialDownloaded)
+                                {
+                                    <button class="icon-btn icon-btn-ghost" title="Delete" @onclick="HandleFlarialDelete" @onmousedown:stopPropagation>
+                                        <i class="fa-solid fa-trash"></i>
+                                    </button>
+                                }
+                            }
+                        </div>
+                    </div>
+                    @if (!string.IsNullOrEmpty(flarialError)) { <span class="error-text" style="font-size:11px; padding:0 2px;">@flarialError</span> }
+                    <p class="client-card-desc">Feature-rich Bedrock client with modules, HUD customization, and active development from the Flarial team.</p>
+                </div>
+
+                <div class="client-card @(SettingsService.Settings.SelectedClient == "Latite Client" ? "client-active" : "")">
+                    <div class="client-card-header">
+                        <div class="client-card-icon latite-icon"><i class="fa-solid fa-bolt"></i></div>
+                        <div class="client-card-meta">
+                            <span class="client-card-name">Latite Client</span>
+                            <span class="client-card-sub" style="opacity:0.5;">Versioned GitHub releases</span>
+                        </div>
+                        <div class="client-card-actions">
+                            <button class="icon-btn" title="View Versions" @onclick="OpenVersions" @onmousedown:stopPropagation>
+                                <i class="fa-solid fa-clock-rotate-left"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <p class="client-card-desc">Classic Minecraft Bedrock client. Choose a specific release from the Versions panel.</p>
+                </div>
+
+                @if (!string.IsNullOrEmpty(customDllPath))
+                {
+                    <div class="client-card @(SettingsService.Settings.SelectedClient == "Custom DLL" ? "client-active" : "") custom-dll">
+                        <div class="client-card-header">
+                            <div class="client-card-icon" style="background:var(--accent-bg); color:var(--accent); font-size:17px;">
+                                <i class="fa-solid fa-file-code"></i>
+                            </div>
+                            <div class="client-card-meta">
+                                <span class="client-card-name">@System.IO.Path.GetFileName(customDllPath)</span>
+                                <span class="client-card-sub" style="font-size:10px; max-width:190px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">@customDllPath</span>
+                            </div>
+                            <div class="client-card-actions">
+                                <button class="icon-btn" title="Select" @onclick='() => SelectClient("Custom DLL")' @onmousedown:stopPropagation>
+                                    <i class="fa-solid fa-check"></i>
+                                </button>
+                                <button class="icon-btn icon-btn-ghost" title="Remove" @onclick="ClearCustomDll" @onmousedown:stopPropagation>
+                                    <i class="fa-solid fa-xmark"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <p class="client-card-desc">Custom DLL loaded via drag-and-drop or file picker.</p>
+                    </div>
+                }
+
+                <div class="drop-hint-row">
+                    <i class="fa-solid fa-file-arrow-down"></i>
+                    <span>Drag &amp; drop a DLL onto the window to load it</span>
+                    <button class="btn-sm" @onclick="PickDllFile" @onmousedown:stopPropagation style="margin-left:auto;">
+                        <i class="fa-solid fa-folder-open"></i> Browse…
+                    </button>
+                </div>
+
+            </div>
+        </div>
+    }
+
+    <!-- ── VERSIONS PANEL ── -->
     @if (currentView == "versions")
     {
         <div class="panel-overlay">
-            <div class="panel-topbar" @onmousedown="OnDragStart">
-                <div class="branding">
-            <img class="logo-icon" src="images/icon.png" alt="" />
-            <div class="branding-text">
-                <span class="branding-title">Glacier Launcher</span>
-                <span class="branding-sub">Glacier Productions</span>
-            </div>
-        </div>
-                <div class="window-controls">
-                    <button class="wnd-btn minimize-btn" @onclick="MinimizeWindow" @onmousedown:stopPropagation>
-                        <svg width="10" height="2" viewBox="0 0 10 2" fill="none">
-                            <path d="M1 1H9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
-                        </svg>
-                    </button>
-                    <button class="wnd-btn close-btn" @onclick="CloseWindow" @onmousedown:stopPropagation>
-                        <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-                            <path d="M1 1L9 9M9 1L1 9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
-                        </svg>
-                    </button>
-                </div>
-            </div>
-
             <div class="panel-header">
-                <span class="panel-title">Versions</span>
-                <div style="display:flex; gap:6px; align-items:center;">
+                <div class="panel-title-wrap">
+                    <span class="panel-title">Latite Versions</span>
+                    <div class="panel-title-underline"></div>
+                </div>
+                <div class="panel-header-actions">
                     <button class="panel-icon-btn @(isLoadingVersions ? "spinning" : "")"
                             disabled="@isLoadingVersions"
-                            @onclick="LoadVersionsAsync"
-                            @onmousedown:stopPropagation>
-                        @RefreshIcon
+                            @onclick="LoadVersionsAsync" @onmousedown:stopPropagation>
+                        <i class="fa-solid fa-rotate"></i>
                     </button>
                     <button class="panel-back-btn" @onclick="GoHome" @onmousedown:stopPropagation>
-                        @ArrowRightIcon
+                        <i class="fa-solid fa-chevron-down"></i>
                     </button>
                 </div>
             </div>
-
             <div class="panel-body">
                 @if (isLoadingVersions)
                 {
-                    <div class="versions-loading">
-                        <span class="spinner"></span>
-                        <span>Fetching versions…</span>
-                    </div>
+                    <div class="versions-loading"><span class="spinner"></span><span>Fetching versions…</span></div>
                 }
                 else if (versions.Count == 0)
                 {
-                    <div class="versions-loading">
-                        <span style="opacity:0.5;">No versions found.</span>
-                    </div>
+                    <div class="versions-loading"><span style="opacity:0.5;">No versions found.</span></div>
                 }
                 else
                 {
                     @foreach (var v in versions)
                     {
                         <div class="version-row @(v.ErrorMessage != null ? "error-row" : "")">
-
                             <div class="version-meta">
                                 <span class="version-name">@v.DisplayName</span>
-                                @if (v.ErrorMessage != null)
-                                {
-                                    <span class="version-sub error-text">@v.ErrorMessage</span>
-                                }
-                                else if (v.IsDownloaded && !v.IsDownloading)
-                                {
-                                    <span class="version-sub">Ready</span>
-                                }
+                                @if (v.ErrorMessage != null)       { <span class="error-text">@v.ErrorMessage</span> }
+                                else if (v.IsDownloaded && !v.IsDownloading) { <span class="version-sub">Ready</span> }
                             </div>
-
                             @if (v.ErrorMessage == null)
                             {
                                 @if (v.IsDownloading)
@@ -235,41 +413,30 @@
                                     <div class="dl-progress-row">
                                         @if (downloadProgress > 0)
                                         {
-                                            <div class="progress-bar-wrap">
-                                                <div class="progress-bar-fill" style="width:@(downloadProgress.ToString("F0"))%"></div>
-                                            </div>
+                                            <div class="progress-bar-wrap"><div class="progress-bar-fill" style="width:@(downloadProgress.ToString("F0"))%"></div></div>
                                             <span class="dl-pct">@((int)downloadProgress)%</span>
                                         }
-                                        <button class="icon-btn" disabled>
-                                            <span class="spinner"></span>
-                                        </button>
+                                        <button class="icon-btn" disabled><span class="spinner"></span></button>
                                     </div>
                                 }
                                 else if (v.IsDownloaded)
                                 {
                                     <div class="version-actions">
-                                        <button class="icon-btn icon-btn-ghost" title="Delete"
-                                                @onclick='() => HandleVersionDelete(v)'
-                                                @onmousedown:stopPropagation>
-                                            @TrashIcon
+                                        <button class="icon-btn icon-btn-ghost" title="Delete" @onclick='() => HandleVersionDelete(v)' @onmousedown:stopPropagation>
+                                            <i class="fa-solid fa-trash"></i>
                                         </button>
-                                        <button class="icon-btn" title="Launch"
-                                                @onclick='async () => await HandleVersionLaunch(v)'
-                                                @onmousedown:stopPropagation>
-                                            @PlayIconSm
+                                        <button class="icon-btn" title="Launch" @onclick='async () => await HandleVersionLaunch(v)' @onmousedown:stopPropagation>
+                                            <i class="fa-solid fa-play"></i>
                                         </button>
                                     </div>
                                 }
                                 else
                                 {
-                                    <button class="icon-btn" title="Download"
-                                            @onclick='async () => await HandleVersionDownload(v)'
-                                            @onmousedown:stopPropagation>
-                                        @DownloadIcon
+                                    <button class="icon-btn" title="Download" @onclick='async () => await HandleVersionDownload(v)' @onmousedown:stopPropagation>
+                                        <i class="fa-solid fa-download"></i>
                                     </button>
                                 }
                             }
-
                         </div>
                     }
                 }
@@ -280,7 +447,6 @@
 </div>
 
 @code {
-
     private string currentView   = "home";
     private string hoveredBtn    = "";
     private bool   isLaunching   = false;
@@ -293,8 +459,32 @@
     private List<MinecraftVersion> versions = new();
     private double downloadProgress = 0;
 
+    private bool   flarialDownloaded  = false;
+    private bool   flarialUpToDate    = false;
+    private bool   flarialDownloading = false;
+    private double flarialProgress    = 0;
+    private string flarialError       = "";
+
+    private string customDllPath = "";
+
     private string displayName   = System.Environment.UserName;
     private string displayHandle = $"@{System.Environment.UserName.ToLower()}";
+
+    private DotNetObjectReference<Home>? _selfRef;
+
+    private static readonly string[] _accentSwatches =
+        { "#7289da", "#5865f2", "#3ba55d", "#faa61a", "#f04747", "#eb459e", "#00d8ff", "#ff7043" };
+
+    private record NewsItem(string Icon, string Title, string Subtitle, string Url);
+    private static readonly NewsItem[] _newsItems =
+    {
+        new("fa-brands fa-discord",     "Join Our Discord",        "discord.glacierclient.xyz",     "https://discord.gg/glacierclient"),
+        new("fa-solid fa-globe",        "Visit Our Website",        "glacierclient.xyz",              "https://glacierclient.xyz"),
+        new("fa-solid fa-layer-group",  "Glacier Texture Pack",    "Download for free",              "https://glacierclient.xyz/texturepack"),
+        new("fa-solid fa-star",         "Star Us on GitHub",       "github.com/glacier-launcher",    "https://github.com"),
+        new("fa-solid fa-newspaper",    "Latest Release",          "Check the Versions tab",         ""),
+        new("fa-solid fa-shield-halved","About Glacier",           "Made with ❤ by Glacier Prods",  ""),
+    };
 
     protected override void OnInitialized()
     {
@@ -304,23 +494,30 @@
             displayHandle = SettingsService.Settings.UserHandle;
     }
 
-    public void Dispose()
+    protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        _statusCts?.Cancel();
-        _statusCts?.Dispose();
+        if (!firstRender) return;
+        _selfRef = DotNetObjectReference.Create(this);
+        await JS.InvokeVoidAsync("glacierRegisterDropHandler", _selfRef);
     }
+
+    [JSInvokable]
+    public void OnDllDropped(string path)
+    {
+        customDllPath = path;
+        SelectClient("Custom DLL");
+        currentView = "clients";
+        InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose() { _selfRef?.Dispose(); _statusCts?.Cancel(); _statusCts?.Dispose(); }
 
     private async Task OnDragStart()    => await JS.InvokeVoidAsync("startDrag");
     private async Task CloseWindow()    => await JS.InvokeVoidAsync("closeWindow");
     private async Task MinimizeWindow() => await JS.InvokeVoidAsync("minimizeWindow");
+    private async Task MaximizeWindow() => await JS.InvokeVoidAsync("maximizeWindow");
 
-    private void GoHome()
-    {
-        currentView = "home";
-        hoveredBtn  = "";
-        Discord.SetIdlePresence();
-    }
-
+    private void GoHome() { currentView = "home"; hoveredBtn = ""; Discord.SetIdlePresence(); }
     private void SetHover(string btn) => hoveredBtn = btn;
     private void ClearHover()         => hoveredBtn = "";
 
@@ -329,192 +526,177 @@
         _statusCts?.Cancel();
         _statusCts = new System.Threading.CancellationTokenSource();
         var token  = _statusCts.Token;
-
-        isError       = error;
-        statusMessage = message;
-        statusVisible = true;
+        isError = error; statusMessage = message; statusVisible = true;
         StateHasChanged();
-
-        try
-        {
-            await Task.Delay(clearAfterMs, token);
-            statusVisible = false;
-            StateHasChanged();
-        }
+        try { await Task.Delay(clearAfterMs, token); statusVisible = false; StateHasChanged(); }
         catch (TaskCanceledException) { }
     }
 
     private async Task HandleLaunch()
     {
+        bool isFlarial = SettingsService.Settings.SelectedClient == "Flarial Client";
+        bool isCustom  = SettingsService.Settings.SelectedClient == "Custom DLL";
         isLaunching = true;
         await ShowStatus("Starting Minecraft…", clearAfterMs: 30_000);
-
         try
         {
-            await Launcher.LaunchAsync();
+            if (isCustom && !string.IsNullOrEmpty(customDllPath))
+                await Launcher.LaunchWithDllAsync(customDllPath);
+            else
+                await Launcher.LaunchAsync(useFlarial: isFlarial);
+
             isLaunching = false;
-            Discord.SetInGamePresence(SettingsService.Settings.LastUsedVersion);
+            var label = isCustom  ? System.IO.Path.GetFileNameWithoutExtension(customDllPath)
+                      : isFlarial ? "Flarial"
+                      : SettingsService.Settings.LastUsedVersion;
+            Discord.SetInGamePresence(label);
             await ShowStatus("Injected! Have fun.", clearAfterMs: 3000);
+
+            if (SettingsService.Settings.CloseAfterLaunch)
+                await CloseWindow();
         }
         catch (Exception ex)
         {
             isLaunching = false;
-            await ShowStatus(ex.Message, error: true, clearAfterMs: 6000);
+            await ShowStatus(ex.Message, error: true, clearAfterMs: 8000);
         }
     }
 
     private void OpenSettings() => currentView = "settings";
 
-    private void OnClientChanged(ChangeEventArgs e)
-    {
-        SettingsService.Settings.SelectedClient = e.Value?.ToString() ?? "Latite Client";
-        SettingsService.Save();
-    }
+    private void OnClientChanged(ChangeEventArgs e) => SelectClient(e.Value?.ToString() ?? "Latite Client");
 
-    private void ToggleDiscord()
+    private void SelectClient(string name)
     {
-        Discord.Toggle();
+        SettingsService.Settings.SelectedClient = name;
+        SettingsService.Save();
         StateHasChanged();
     }
 
-    private void OpenCredits()
+    private void ClearCustomDll()
     {
+        customDllPath = "";
+        if (SettingsService.Settings.SelectedClient == "Custom DLL") SelectClient("Latite Client");
+        StateHasChanged();
+    }
+
+    private void ToggleProp(Action toggle, bool discordToggle = false)
+    {
+        toggle();
+        if (discordToggle) Discord.Toggle();
+        SettingsService.Save();
+        StateHasChanged();
+    }
+
+    private void OnDelayChanged(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out int v))
+        { SettingsService.Settings.InjectionDelayMs = v; SettingsService.Save(); StateHasChanged(); }
+    }
+
+    private void OnUsernameChanged(ChangeEventArgs e)
+    {
+        var val = e.Value?.ToString() ?? "";
+        SettingsService.Settings.Username = val;
+        displayName = string.IsNullOrEmpty(val) ? System.Environment.UserName : val;
+        SettingsService.Save();
+        StateHasChanged();
+    }
+
+    private void SetAccent(string color)
+    {
+        SettingsService.Settings.AccentColor = color;
+        SettingsService.Save();
+        JS.InvokeVoidAsync("eval", $"document.documentElement.style.setProperty('--accent','{color}')");
+        StateHasChanged();
+    }
+
+    private void OpenCredits() =>
         System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+        { FileName = "https://github.com/Imrglop/Latite-Releases", UseShellExecute = true });
+
+    private void OpenUrl(string url)
+    {
+        if (!string.IsNullOrEmpty(url))
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            { FileName = url, UseShellExecute = true });
+    }
+
+    private async Task PickDllFile() => await JS.InvokeVoidAsync("pickDllFile", _selfRef);
+
+    private async Task OpenClients()
+    {
+        currentView = "clients";
+        flarialDownloaded = Flarial.IsDownloaded;
+        flarialUpToDate   = flarialDownloaded && await Flarial.IsUpToDateAsync();
+        StateHasChanged();
+    }
+
+    private async Task HandleFlarialDownload()
+    {
+        flarialDownloading = true; flarialProgress = 0; flarialError = "";
+        StateHasChanged();
+        try
         {
-            FileName        = "https://github.com/Imrglop/Latite-Releases",
-            UseShellExecute = true
-        });
+            await Flarial.DownloadAsync(new Progress<double>(pct => { flarialProgress = pct; InvokeAsync(StateHasChanged); }));
+            flarialDownloaded = true;
+            flarialUpToDate   = await Flarial.IsUpToDateAsync();
+        }
+        catch (Exception ex) { flarialError = ex.Message; }
+        finally { flarialDownloading = false; flarialProgress = 0; }
+        StateHasChanged();
+    }
+
+    private void HandleFlarialDelete()
+    {
+        Flarial.Delete();
+        flarialDownloaded = false; flarialUpToDate = false;
+        StateHasChanged();
     }
 
     private async Task OpenVersions()
     {
         currentView = "versions";
-        if (versions.Count == 0)
-            await LoadVersionsAsync();
+        if (versions.Count == 0) await LoadVersionsAsync();
     }
 
     private async Task LoadVersionsAsync()
     {
-        isLoadingVersions = true;
-        StateHasChanged();
+        isLoadingVersions = true; StateHasChanged();
         versions = await Launcher.GetVersionsAsync();
-        isLoadingVersions = false;
-        StateHasChanged();
+        isLoadingVersions = false; StateHasChanged();
     }
 
     private async Task HandleVersionDownload(MinecraftVersion v)
     {
-        v.IsDownloading  = true;
-        v.ErrorMessage   = null;
-        downloadProgress = 0;
-        StateHasChanged();
-
+        v.IsDownloading = true; v.ErrorMessage = null; downloadProgress = 0; StateHasChanged();
         try
         {
-            var progress = new Progress<double>(pct =>
-            {
-                downloadProgress = pct;
-                InvokeAsync(StateHasChanged);
-            });
-            await Launcher.DownloadVersionAsync(v, progress);
+            await Launcher.DownloadVersionAsync(v, new Progress<double>(pct => { downloadProgress = pct; InvokeAsync(StateHasChanged); }));
         }
-        catch (Exception ex)
-        {
-            v.ErrorMessage = ex.Message;
-        }
-        finally
-        {
-            v.IsDownloading  = false;
-            downloadProgress = 0;
-        }
-
+        catch (Exception ex) { v.ErrorMessage = ex.Message; }
+        finally { v.IsDownloading = false; downloadProgress = 0; }
         StateHasChanged();
     }
 
-    private void HandleVersionDelete(MinecraftVersion v)
-    {
-        Launcher.DeleteVersion(v);
-        StateHasChanged();
-    }
+    private void HandleVersionDelete(MinecraftVersion v) { Launcher.DeleteVersion(v); StateHasChanged(); }
 
     private async Task HandleVersionLaunch(MinecraftVersion v)
     {
-        GoHome();
-        isLaunching = true;
+        GoHome(); isLaunching = true;
         await ShowStatus($"Launching {v.DisplayName}…", clearAfterMs: 30_000);
-
         try
         {
             await Launcher.LaunchAsync(v.Tag);
             isLaunching = false;
             Discord.SetInGamePresence(v.Tag);
             await ShowStatus("Injected! Have fun.", clearAfterMs: 3000);
+            if (SettingsService.Settings.CloseAfterLaunch) await CloseWindow();
         }
         catch (Exception ex)
         {
             isLaunching = false;
-            await ShowStatus(ex.Message, error: true, clearAfterMs: 6000);
+            await ShowStatus(ex.Message, error: true, clearAfterMs: 8000);
         }
     }
-
-    private RenderFragment PlayIcon =>
-        @<svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-            <path d="M4 2.5L13.5 8L4 13.5V2.5Z" fill="white"/>
-        </svg>;
-
-    private RenderFragment PlayIconSm =>
-        @<svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-            <path d="M2 1.5L10.5 6L2 10.5V1.5Z" fill="white"/>
-        </svg>;
-
-    private RenderFragment GearIcon =>
-        @<svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-            <path fill-rule="evenodd" clip-rule="evenodd"
-                  d="M8 1C7.586 1 7.25 1.336 7.25 1.75V2.3C6.84 2.42 6.46 2.59 6.12 2.82L5.72 2.42C5.43 2.13
-                     4.96 2.13 4.67 2.42L3.96 3.13C3.67 3.42 3.67 3.89 3.96 4.18L4.36 4.58C4.13 4.92 3.96 5.3
-                     3.84 5.7H3.25C2.836 5.7 2.5 6.086 2.5 6.5V7.5C2.5 7.914 2.836 8.25 3.25 8.25H3.84C3.96
-                     8.65 4.13 9.03 4.36 9.37L3.96 9.77C3.67 10.06 3.67 10.53 3.96 10.82L4.67 11.53C4.96 11.82
-                     5.43 11.82 5.72 11.53L6.12 11.13C6.46 11.36 6.84 11.53 7.25 11.65V12.25C7.25 12.664 7.586
-                     13 8 13C8.414 13 8.75 12.664 8.75 12.25V11.65C9.16 11.53 9.54 11.36 9.88 11.13L10.28
-                     11.53C10.57 11.82 11.04 11.82 11.33 11.53L12.04 10.82C12.33 10.53 12.33 10.06 12.04
-                     9.77L11.64 9.37C11.87 9.03 12.04 8.65 12.16 8.25H12.75C13.164 8.25 13.5 7.914 13.5
-                     7.5V6.5C13.5 6.086 13.164 5.7 12.75 5.7H12.16C12.04 5.3 11.87 4.92 11.64 4.58L12.04
-                     4.18C12.33 3.89 12.33 3.42 12.04 3.13L11.33 2.42C11.04 2.13 10.57 2.13 10.28 2.42L9.88
-                     2.82C9.54 2.59 9.16 2.42 8.75 2.3V1.75C8.75 1.336 8.414 1 8 1ZM8 5.5C6.619 5.5 5.5
-                     6.619 5.5 8C5.5 9.381 6.619 10.5 8 10.5C9.381 10.5 10.5 9.381 10.5 8C10.5 6.619 9.381
-                     5.5 8 5.5Z" fill="white"/>
-        </svg>;
-
-    private RenderFragment ClockIcon =>
-        @<svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-            <circle cx="8" cy="8" r="6.25" stroke="white" stroke-width="1.5"/>
-            <path d="M8 4.5V8.5L10.5 10" stroke="white" stroke-width="1.5"
-                  stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>;
-
-    private RenderFragment DownloadIcon =>
-        @<svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-            <path d="M6 1V8M6 8L3 5M6 8L9 5" stroke="white" stroke-width="1.5"
-                  stroke-linecap="round" stroke-linejoin="round"/>
-            <path d="M1 10H11" stroke="white" stroke-width="1.5" stroke-linecap="round"/>
-        </svg>;
-
-    private RenderFragment TrashIcon =>
-        @<svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-            <path d="M1 3H11M4 3V2H8V3M5 5.5V9M7 5.5V9M2 3L2.5 10.5C2.5 11 3 11.5 3.5 11.5H8.5C9 11.5 9.5 11 9.5 10.5L10 3"
-                  stroke="white" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>;
-
-    private RenderFragment RefreshIcon =>
-        @<svg width="13" height="13" viewBox="0 0 13 13" fill="none">
-            <path d="M11.5 2C10.3 0.8 8.7 0 6.9 0C3.1 0 0 3.1 0 6.9C0 10.7 3.1 13 6.9 13C10.1 13 12.8
-                     10.9 13 8H11.5C11.2 10.1 9.2 11.5 6.9 11.5C3.9 11.5 2 9.5 2 6.9C2 4.2 3.9 2 6.9
-                     2C8.4 2 9.7 2.7 10.5 3.5L8 6H13V1L11.5 2Z" fill="white" fill-opacity="0.8"/>
-        </svg>;
-
-    private RenderFragment ArrowRightIcon =>
-        @<svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-            <path d="M3 7H11M7 3L11 7L7 11" stroke="currentColor" stroke-width="1.6"
-                  stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>;
 }
