@@ -169,7 +169,7 @@
                     </div>
                 </div>
 
-                <div class="setting-row clickable" @onclick="ToggleProp(() => SettingsService.Settings.AutoInject = !SettingsService.Settings.AutoInject)">
+                <div class="setting-row clickable" @onclick='() => ToggleProp(() => SettingsService.Settings.AutoInject = !SettingsService.Settings.AutoInject)'>
                     <div class="setting-meta">
                         <span class="setting-label">Auto-inject</span>
                         <span class="setting-hint">Inject automatically once the game process is detected</span>
