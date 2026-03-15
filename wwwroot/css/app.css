@@ -1,0 +1,633 @@
+/* ============================================================
+   Glacier Launcher – app.css
+   ============================================================ */
+
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+:root {
+    --accent: #6b8de8;
+    --accent-hover: #7fa0f5;
+    --btn-dark: rgba(28, 28, 34, 0.90);
+    --btn-dark-hover: rgba(42, 42, 52, 0.95);
+    --panel-bg: rgba(20, 20, 26, 0.92);
+    --panel-item: rgba(255, 255, 255, 0.055);
+    --panel-item-hover: rgba(255, 255, 255, 0.10);
+    --text: #ffffff;
+    --text-dim: rgba(255, 255, 255, 0.50);
+    --radius-sm: 8px;
+    --radius-md: 12px;
+    --radius-lg: 16px;
+    --transition: 0.16s ease;
+}
+
+html,
+body {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    color: var(--text);
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+/* ── Window root ── */
+.window {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    min-width: 340px;
+    min-height: 280px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    background: #16161e;
+}
+
+/* ── Background image ──
+   Drop your panoramic background at wwwroot/images/bg.jpg     */
+.window-bg {
+    position: absolute;
+    inset: 0;
+    background-image: url('images/bg.png');
+    background-size: cover;
+    background-position: center;
+    background-color: #16161e;
+    z-index: 0;
+}
+
+.window-bg::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(to bottom,
+            rgba(0, 0, 0, 0.12) 0%,
+            rgba(0, 0, 0, 0.06) 50%,
+            rgba(0, 0, 0, 0.55) 100%);
+}
+
+/* ── Drag zone ── */
+.drag-zone {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 200px;
+    z-index: 1;
+    cursor: grab;
+}
+
+/* ── Top bar ── */
+.top-bar {
+    position: relative;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 16px 0;
+    pointer-events: none;
+}
+
+.logo-icon {
+    width: 26px;
+    height: 26px;
+    object-fit: contain;
+    pointer-events: none;
+    border-radius: 50%;
+}
+
+/* Window control button group */
+.window-controls {
+    display: flex;
+    gap: 6px;
+    pointer-events: all;
+}
+
+.wnd-btn {
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    border: none;
+    background: rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.55);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background var(--transition), color var(--transition);
+}
+
+.wnd-btn:hover {
+    color: #fff;
+}
+
+.minimize-btn:hover {
+    background: rgba(255, 255, 255, 0.16);
+}
+
+.close-btn:hover {
+    background: rgba(220, 70, 70, 0.55);
+}
+
+/* ── Main content ── */
+.main-content {
+    position: relative;
+    z-index: 5;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+
+/* ── Button row ── */
+.btn-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* Base action button */
+.action-btn {
+    height: 48px;
+    border: none;
+    border-radius: var(--radius-sm);
+    background: var(--btn-dark);
+    color: var(--text);
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    overflow: hidden;
+    white-space: nowrap;
+    transition:
+        width 0.22s cubic-bezier(0.25, 0.46, 0.45, 0.94),
+        background 0.15s ease,
+        box-shadow 0.15s ease;
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    outline: none;
+}
+
+.action-btn:disabled {
+    opacity: 0.68;
+    cursor: not-allowed;
+}
+
+.action-btn:not(:disabled):hover {
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.40);
+}
+
+/* Icon-only square */
+.btn-sq {
+    width: 48px;
+    flex-shrink: 0;
+}
+
+.btn-sq:not(:disabled):hover {
+    background: var(--btn-dark-hover);
+}
+
+/* Wide with label */
+.btn-wide {
+    width: 130px;
+    padding: 0 18px;
+}
+
+/* Blue accent */
+.btn-blue {
+    background: var(--accent);
+}
+
+.btn-blue:not(:disabled):hover {
+    background: var(--accent-hover);
+}
+
+/* ── SVG inside buttons ── */
+.action-btn svg {
+    flex-shrink: 0;
+    opacity: 0.92;
+}
+
+/* ── Status message (fade-in / fade-out) ── */
+.status-msg {
+    margin-top: 14px;
+    font-size: 12px;
+    color: var(--text-dim);
+    text-align: center;
+    min-height: 16px;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.status-msg.visible {
+    opacity: 1;
+}
+
+.status-msg.error {
+    color: #ff7070;
+}
+
+/* ── Spinner ── */
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.spinner {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    border: 2px solid rgba(255, 255, 255, 0.30);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    flex-shrink: 0;
+}
+
+/* ── Footer ── */
+.footer {
+    position: relative;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 0 16px 22px;
+}
+
+.avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    object-fit: cover;
+    background: rgba(255, 255, 255, 0.10);
+    flex-shrink: 0;
+}
+
+.user-info {
+    display: flex;
+    flex-direction: column;
+    line-height: 1.3;
+}
+
+.username {
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.user-handle {
+    font-size: 11px;
+    color: var(--text-dim);
+}
+
+/* ============================================================
+   PANEL OVERLAY (Settings / Versions)
+   ============================================================ */
+
+.panel-overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 20;
+    display: flex;
+    flex-direction: column;
+    background: var(--panel-bg);
+    backdrop-filter: blur(22px);
+    -webkit-backdrop-filter: blur(22px);
+    animation: panelIn 0.18s ease;
+    overflow: hidden;
+}
+
+.panel-overlay .drag-zone {
+    pointer-events: none;
+}
+
+@keyframes panelIn {
+    from {
+        opacity: 0;
+        transform: translateY(6px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 20px 14px;
+}
+
+.panel-title {
+    font-size: 16px;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+}
+
+/* Back arrow button */
+.panel-back-btn {
+    width: 30px;
+    height: 30px;
+    border: none;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: rgba(255, 255, 255, 0.55);
+    font-size: 16px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: color var(--transition), background var(--transition);
+}
+
+.panel-back-btn:hover {
+    color: #fff;
+    background: rgba(255, 255, 255, 0.08);
+}
+
+/* Refresh / icon button in panel header */
+.panel-icon-btn {
+    width: 30px;
+    height: 30px;
+    border: none;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: rgba(255, 255, 255, 0.45);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: color var(--transition), background var(--transition);
+}
+
+.panel-icon-btn:not(:disabled):hover {
+    color: #fff;
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.panel-icon-btn:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+}
+
+.panel-icon-btn.spinning svg {
+    animation: spin 0.8s linear infinite;
+}
+
+/* ── Panel scroll body ── */
+.panel-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 0 14px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    scrollbar-width: none;
+}
+
+.panel-body::-webkit-scrollbar {
+    display: none;
+}
+
+/* ── Setting row ── */
+.setting-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--panel-item);
+    border-radius: var(--radius-md);
+    padding: 13px 16px;
+    transition: background var(--transition);
+    gap: 12px;
+}
+
+.setting-row.clickable {
+    cursor: pointer;
+}
+
+.setting-row:hover {
+    background: var(--panel-item-hover);
+}
+
+.setting-label {
+    font-size: 13px;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.85);
+    flex: 1;
+    min-width: 0;
+}
+
+/* Client dropdown */
+.setting-select {
+    appearance: none;
+    -webkit-appearance: none;
+    background: rgba(255, 255, 255, 0.09) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E") no-repeat right 8px center;
+    border: none;
+    border-radius: 6px;
+    color: var(--text);
+    font-family: inherit;
+    font-size: 12px;
+    padding: 5px 26px 5px 10px;
+    cursor: pointer;
+    outline: none;
+    flex-shrink: 0;
+}
+
+.setting-select option {
+    background: #1e1e28;
+}
+
+/* Toggle switch */
+.toggle {
+    position: relative;
+    width: 42px;
+    height: 23px;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.18);
+    cursor: pointer;
+    transition: background 0.2s ease;
+    flex-shrink: 0;
+}
+
+.toggle.on {
+    background: var(--accent);
+}
+
+.toggle::after {
+    content: '';
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 17px;
+    height: 17px;
+    border-radius: 50%;
+    background: #fff;
+    transition: transform 0.2s ease;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.30);
+}
+
+.toggle.on::after {
+    transform: translateX(19px);
+}
+
+/* Small inline button */
+.btn-sm {
+    height: 28px;
+    padding: 0 13px;
+    border: none;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.09);
+    color: var(--text);
+    font-family: inherit;
+    font-size: 12px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background var(--transition);
+    flex-shrink: 0;
+}
+
+.btn-sm:hover {
+    background: rgba(255, 255, 255, 0.17);
+}
+
+/* ── Version row ── */
+.version-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--panel-item);
+    border-radius: var(--radius-md);
+    padding: 12px 14px;
+    gap: 12px;
+    transition: background var(--transition);
+}
+
+.version-row:hover {
+    background: var(--panel-item-hover);
+}
+
+.version-row.error-row {
+    background: rgba(220, 60, 60, 0.10);
+}
+
+.version-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+    flex: 1;
+}
+
+.version-name {
+    font-size: 13px;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.88);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.version-sub {
+    font-size: 11px;
+    color: var(--text-dim);
+}
+
+.version-sub.error {
+    color: #ff7070;
+}
+
+/* Icon button (download / play) */
+.icon-btn {
+    width: 32px;
+    height: 32px;
+    border: none;
+    border-radius: 8px;
+    background: var(--accent);
+    color: #fff;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: background var(--transition), transform 0.12s ease;
+}
+
+.icon-btn:not(:disabled):hover {
+    background: var(--accent-hover);
+    transform: scale(1.06);
+}
+
+.icon-btn:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+    transform: none;
+}
+
+.icon-btn .spinner {
+    width: 14px;
+    height: 14px;
+}
+
+/* Download progress row */
+.dl-progress-row {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    flex-shrink: 0;
+}
+
+.progress-bar-wrap {
+    width: 64px;
+    height: 4px;
+    border-radius: 2px;
+    background: rgba(255, 255, 255, 0.12);
+    overflow: hidden;
+}
+
+.progress-bar-fill {
+    height: 100%;
+    border-radius: 2px;
+    background: var(--accent);
+    transition: width 0.15s linear;
+    min-width: 4px;
+}
+
+.dl-pct {
+    font-size: 10px;
+    color: var(--text-dim);
+    width: 28px;
+    text-align: right;
+    flex-shrink: 0;
+}
+
+/* Loading placeholder */
+.versions-loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 36px;
+    color: var(--text-dim);
+    font-size: 13px;
+}
+
+.versions-loading .spinner {
+    width: 22px;
+    height: 22px;
+    border-width: 2.5px;
+}

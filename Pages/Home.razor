@@ -1,0 +1,550 @@
+@page "/"
+@using MinecraftLauncher.Services
+@using MinecraftLauncher.Models
+@inject GameLauncher Launcher
+@inject SettingsService SettingsService
+@inject DiscordRpcService Discord
+@inject IJSRuntime JS
+@implements IDisposable
+
+<div class="window">
+
+    <!-- ── Background ── -->
+    <div class="window-bg"></div>
+
+    <!-- ── Drag zone (behind all controls) ── -->
+    <div class="drag-zone" @onmousedown="OnDragStart"></div>
+
+    <!-- ── Top bar ── -->
+    <div class="top-bar">
+        <img class="logo-icon" src="images/icon.png" alt="" />
+        <div class="window-controls">
+            <button class="wnd-btn minimize-btn" title="Minimise" @onclick="MinimizeWindow" @onmousedown:stopPropagation>
+                <svg width="10" height="2" viewBox="0 0 10 2" fill="none">
+                    <path d="M1 1H9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                </svg>
+            </button>
+            <button class="wnd-btn close-btn" title="Close" @onclick="CloseWindow" @onmousedown:stopPropagation>
+                <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                    <path d="M1 1L9 9M9 1L1 9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                </svg>
+            </button>
+        </div>
+    </div>
+
+    <!-- ── Main content ── -->
+    <div class="main-content">
+
+        @if (currentView == "home")
+        {
+            <div class="btn-row">
+
+                <!-- Launch / Play -->
+                <button class="action-btn @(hoveredBtn == "launch" || isLaunching ? "btn-wide btn-blue" : "btn-sq")"
+                        @onmouseenter='() => SetHover("launch")'
+                        @onmouseleave="ClearHover"
+                        @onclick="HandleLaunch"
+                        @onmousedown:stopPropagation
+                        disabled="@isLaunching">
+                    @if (hoveredBtn == "launch" || isLaunching)
+                    {
+                        @if (isLaunching)
+                        {
+                            <span class="spinner"></span>
+                            <span>Launching…</span>
+                        }
+                        else
+                        {
+                            <span>Launch</span>
+                        }
+                    }
+                    else
+                    {
+                        @PlayIcon
+                    }
+                </button>
+
+                <!-- Settings -->
+                <button class="action-btn @(hoveredBtn == "settings" ? "btn-wide" : "btn-sq")"
+                        @onmouseenter='() => SetHover("settings")'
+                        @onmouseleave="ClearHover"
+                        @onclick="OpenSettings"
+                        @onmousedown:stopPropagation>
+                    @if (hoveredBtn == "settings")
+                    {
+                        <span>Settings</span>
+                    }
+                    else
+                    {
+                        @GearIcon
+                    }
+                </button>
+
+                <!-- Versions -->
+                <button class="action-btn @(hoveredBtn == "versions" ? "btn-wide" : "btn-sq")"
+                        @onmouseenter='() => SetHover("versions")'
+                        @onmouseleave="ClearHover"
+                        @onclick="OpenVersions"
+                        @onmousedown:stopPropagation>
+                    @if (hoveredBtn == "versions")
+                    {
+                        <span>Versions</span>
+                    }
+                    else
+                    {
+                        @ClockIcon
+                    }
+                </button>
+
+            </div>
+
+            <!-- Status / toast -->
+            <p class="status-msg @(isError ? "error" : "") @(statusVisible ? "visible" : "")">
+                @statusMessage
+            </p>
+        }
+
+    </div>
+
+    <!-- ── Footer ── -->
+    <div class="footer">
+        <img class="avatar" src="images/avatar.png" alt="avatar" />
+        <div class="user-info">
+            <span class="username">@displayName</span>
+            <span class="user-handle">@displayHandle</span>
+        </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════
+         SETTINGS PANEL
+    ════════════════════════════════════════════ -->
+    @if (currentView == "settings")
+    {
+        <div class="panel-overlay">
+
+            <div class="drag-zone" @onmousedown="OnDragStart"></div>
+
+            <!-- Replicated top-bar inside panel -->
+            <div class="top-bar" style="position:relative; z-index:30;">
+                <img class="logo-icon" src="images/icon.png" alt="" />
+                <div class="window-controls">
+                    <button class="wnd-btn minimize-btn" @onclick="MinimizeWindow" @onmousedown:stopPropagation>
+                        <svg width="10" height="2" viewBox="0 0 10 2" fill="none">
+                            <path d="M1 1H9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                        </svg>
+                    </button>
+                    <button class="wnd-btn close-btn" @onclick="CloseWindow" @onmousedown:stopPropagation>
+                        <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                            <path d="M1 1L9 9M9 1L1 9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+
+            <div class="panel-header">
+                <span class="panel-title">Settings</span>
+                <button class="panel-back-btn" title="Back" @onclick="GoHome" @onmousedown:stopPropagation>
+                    @ArrowRightIcon
+                </button>
+            </div>
+
+            <div class="panel-body">
+
+                <!-- Inject client dropdown -->
+                <div class="setting-row">
+                    <span class="setting-label">Inject when pressing "Launch"</span>
+                    <select class="setting-select"
+                            value="@SettingsService.Settings.SelectedClient"
+                            @onchange="OnClientChanged"
+                            @onclick:stopPropagation>
+                        <option value="Latite Client">Latite Client</option>
+                    </select>
+                </div>
+
+                <!-- Discord Rich Presence toggle -->
+                <div class="setting-row clickable" @onclick="ToggleDiscord">
+                    <span class="setting-label">Discord Rich Presence</span>
+                    <div class="toggle @(SettingsService.Settings.DiscordRichPresence ? "on" : "")"
+                         @onclick:stopPropagation
+                         @onclick="ToggleDiscord"></div>
+                </div>
+
+                <!-- Credits -->
+                <div class="setting-row">
+                    <span class="setting-label">Credits</span>
+                    <button class="btn-sm" @onclick="OpenCredits" @onmousedown:stopPropagation>Open</button>
+                </div>
+
+            </div>
+        </div>
+    }
+
+    <!-- ═══════════════════════════════════════════
+         VERSIONS PANEL
+    ════════════════════════════════════════════ -->
+    @if (currentView == "versions")
+    {
+        <div class="panel-overlay">
+
+            <div class="drag-zone" @onmousedown="OnDragStart"></div>
+
+            <div class="top-bar" style="position:relative; z-index:30;">
+                <img class="logo-icon" src="images/icon.png" alt="" />
+                <div class="window-controls">
+                    <button class="wnd-btn minimize-btn" @onclick="MinimizeWindow" @onmousedown:stopPropagation>
+                        <svg width="10" height="2" viewBox="0 0 10 2" fill="none">
+                            <path d="M1 1H9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                        </svg>
+                    </button>
+                    <button class="wnd-btn close-btn" @onclick="CloseWindow" @onmousedown:stopPropagation>
+                        <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                            <path d="M1 1L9 9M9 1L1 9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+
+            <div class="panel-header">
+                <span class="panel-title">Versions</span>
+                <div style="display:flex; gap:6px; align-items:center;">
+                    <!-- Refresh -->
+                    <button class="panel-icon-btn @(isLoadingVersions ? "spinning" : "")"
+                            title="Refresh"
+                            disabled="@isLoadingVersions"
+                            @onclick="LoadVersionsAsync"
+                            @onmousedown:stopPropagation>
+                        @RefreshIcon
+                    </button>
+                    <!-- Back -->
+                    <button class="panel-back-btn" title="Back" @onclick="GoHome" @onmousedown:stopPropagation>
+                        @ArrowRightIcon
+                    </button>
+                </div>
+            </div>
+
+            <div class="panel-body">
+                @if (isLoadingVersions)
+                {
+                    <div class="versions-loading">
+                        <span class="spinner"></span>
+                        <span>Fetching versions…</span>
+                    </div>
+                }
+                else if (versions.Count == 0)
+                {
+                    <div class="versions-loading">
+                        <span style="opacity:0.5;">No versions found.</span>
+                    </div>
+                }
+                else
+                {
+                    @foreach (var v in versions)
+                    {
+                        <div class="version-row @(v.ErrorMessage != null ? "error-row" : "")">
+
+                            <!-- Name + status sub-text -->
+                            <div class="version-meta">
+                                <span class="version-name">@v.DisplayName</span>
+                                @if (v.ErrorMessage != null)
+                                {
+                                    <span class="version-sub error">@v.ErrorMessage</span>
+                                }
+                                else if (v.IsDownloaded && !v.IsDownloading)
+                                {
+                                    <span class="version-sub">Ready</span>
+                                }
+                            </div>
+
+                            <!-- Action area -->
+                            @if (v.ErrorMessage == null)
+                            {
+                                @if (v.IsDownloading)
+                                {
+                                    <div class="dl-progress-row">
+                                        @if (downloadProgress > 0)
+                                        {
+                                            <div class="progress-bar-wrap">
+                                                <div class="progress-bar-fill"
+                                                     style="width:@(downloadProgress.ToString("F0"))%">
+                                                </div>
+                                            </div>
+                                            <span class="dl-pct">@((int)downloadProgress)%</span>
+                                        }
+                                        <button class="icon-btn" disabled>
+                                            <span class="spinner"></span>
+                                        </button>
+                                    </div>
+                                }
+                                else if (v.IsDownloaded)
+                                {
+                                    <button class="icon-btn" title="Launch with this version"
+                                            @onclick='async () => await HandleVersionLaunch(v)'
+                                            @onmousedown:stopPropagation>
+                                        @PlayIconSm
+                                    </button>
+                                }
+                                else
+                                {
+                                    <button class="icon-btn" title="Download"
+                                            @onclick='async () => await HandleVersionDownload(v)'
+                                            @onmousedown:stopPropagation>
+                                        @DownloadIcon
+                                    </button>
+                                }
+                            }
+
+                        </div>
+                    }
+                }
+            </div>
+        </div>
+    }
+
+</div><!-- /window -->
+
+@code {
+
+    // ── View state ──────────────────────────────────────────────
+    private string currentView  = "home";
+    private string hoveredBtn   = "";
+    private bool   isLaunching  = false;
+    private bool   isError      = false;
+    private string statusMessage = "";
+    private bool   statusVisible = false;
+    private System.Threading.CancellationTokenSource? _statusCts;
+
+    // ── Versions state ──────────────────────────────────────────
+    private bool   isLoadingVersions = false;
+    private List<MinecraftVersion> versions = new();
+    private double downloadProgress = 0;
+
+    // ── User display ────────────────────────────────────────────
+    private string displayName   = System.Environment.UserName;
+    private string displayHandle = $"@{System.Environment.UserName.ToLower()}";
+
+    // ────────────────────────────────────────────────────────────
+
+    protected override void OnInitialized()
+    {
+        if (!string.IsNullOrEmpty(SettingsService.Settings.Username))
+            displayName = SettingsService.Settings.Username;
+        if (!string.IsNullOrEmpty(SettingsService.Settings.UserHandle))
+            displayHandle = SettingsService.Settings.UserHandle;
+    }
+
+    public void Dispose()
+    {
+        _statusCts?.Cancel();
+        _statusCts?.Dispose();
+    }
+
+    // ── Window operations ────────────────────────────────────────
+
+    private async Task OnDragStart()    => await JS.InvokeVoidAsync("startDrag");
+    private async Task CloseWindow()    => await JS.InvokeVoidAsync("closeWindow");
+    private async Task MinimizeWindow() => await JS.InvokeVoidAsync("minimizeWindow");
+
+    // ── Navigation ───────────────────────────────────────────────
+
+    private void GoHome()
+    {
+        currentView = "home";
+        hoveredBtn  = "";
+        Discord.SetIdlePresence();
+    }
+
+    private void SetHover(string btn)  => hoveredBtn = btn;
+    private void ClearHover()          => hoveredBtn = "";
+
+    // ── Status message with auto-clear ───────────────────────────
+
+    private async Task ShowStatus(string message, bool error = false, int clearAfterMs = 4000)
+    {
+        _statusCts?.Cancel();
+        _statusCts = new System.Threading.CancellationTokenSource();
+        var token  = _statusCts.Token;
+
+        isError       = error;
+        statusMessage = message;
+        statusVisible = true;
+        StateHasChanged();
+
+        try
+        {
+            await Task.Delay(clearAfterMs, token);
+            statusVisible = false;
+            StateHasChanged();
+        }
+        catch (TaskCanceledException) { /* replaced by a newer message */ }
+    }
+
+    // ── Launch ───────────────────────────────────────────────────
+
+    private async Task HandleLaunch()
+    {
+        isLaunching = true;
+        await ShowStatus("Starting Minecraft…", clearAfterMs: 30_000);
+
+        try
+        {
+            await Launcher.LaunchAsync();
+            isLaunching = false;
+            Discord.SetInGamePresence(SettingsService.Settings.LastUsedVersion);
+            await ShowStatus("Injected! Have fun.", clearAfterMs: 3000);
+        }
+        catch (Exception ex)
+        {
+            isLaunching = false;
+            await ShowStatus(ex.Message, error: true, clearAfterMs: 6000);
+        }
+    }
+
+    // ── Settings panel ───────────────────────────────────────────
+
+    private void OpenSettings() => currentView = "settings";
+
+    private void OnClientChanged(ChangeEventArgs e)
+    {
+        SettingsService.Settings.SelectedClient = e.Value?.ToString() ?? "Latite Client";
+        SettingsService.Save();
+    }
+
+    private void ToggleDiscord()
+    {
+        Discord.Toggle();
+        StateHasChanged(); // force the toggle visual to re-render
+    }
+
+    private void OpenCredits()
+    {
+        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+        {
+            FileName        = "https://github.com/Imrglop/Latite-Releases",
+            UseShellExecute = true
+        });
+    }
+
+    // ── Versions panel ───────────────────────────────────────────
+
+    private async Task OpenVersions()
+    {
+        currentView = "versions";
+        if (versions.Count == 0)
+            await LoadVersionsAsync();
+    }
+
+    private async Task LoadVersionsAsync()
+    {
+        isLoadingVersions = true;
+        StateHasChanged();
+        versions = await Launcher.GetVersionsAsync();
+        isLoadingVersions = false;
+        StateHasChanged();
+    }
+
+    private async Task HandleVersionDownload(MinecraftVersion v)
+    {
+        v.IsDownloading  = true;
+        v.ErrorMessage   = null;
+        downloadProgress = 0;
+        StateHasChanged();
+
+        try
+        {
+            var progress = new Progress<double>(pct =>
+            {
+                downloadProgress = pct;
+                InvokeAsync(StateHasChanged);
+            });
+            await Launcher.DownloadVersionAsync(v, progress);
+        }
+        catch (Exception ex)
+        {
+            v.ErrorMessage = ex.Message;
+        }
+        finally
+        {
+            v.IsDownloading  = false;
+            downloadProgress = 0;
+        }
+
+        StateHasChanged();
+    }
+
+    private async Task HandleVersionLaunch(MinecraftVersion v)
+    {
+        GoHome();
+        isLaunching = true;
+        await ShowStatus($"Launching {v.DisplayName}…", clearAfterMs: 30_000);
+
+        try
+        {
+            await Launcher.LaunchAsync(v.Tag);
+            isLaunching = false;
+            Discord.SetInGamePresence(v.Tag);
+            await ShowStatus("Injected! Have fun.", clearAfterMs: 3000);
+        }
+        catch (Exception ex)
+        {
+            isLaunching = false;
+            await ShowStatus(ex.Message, error: true, clearAfterMs: 6000);
+        }
+    }
+
+    // ── Inline SVG fragments ─────────────────────────────────────
+
+    private RenderFragment PlayIcon =>
+        @<svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <path d="M4 2.5L13.5 8L4 13.5V2.5Z" fill="white"/>
+        </svg>;
+
+    private RenderFragment PlayIconSm =>
+        @<svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+            <path d="M2 1.5L10.5 6L2 10.5V1.5Z" fill="white"/>
+        </svg>;
+
+    private RenderFragment GearIcon =>
+        @<svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <path fill-rule="evenodd" clip-rule="evenodd"
+                  d="M8 1C7.586 1 7.25 1.336 7.25 1.75V2.3C6.84 2.42 6.46 2.59 6.12 2.82L5.72 2.42C5.43 2.13
+                     4.96 2.13 4.67 2.42L3.96 3.13C3.67 3.42 3.67 3.89 3.96 4.18L4.36 4.58C4.13 4.92 3.96 5.3
+                     3.84 5.7H3.25C2.836 5.7 2.5 6.086 2.5 6.5V7.5C2.5 7.914 2.836 8.25 3.25 8.25H3.84C3.96
+                     8.65 4.13 9.03 4.36 9.37L3.96 9.77C3.67 10.06 3.67 10.53 3.96 10.82L4.67 11.53C4.96 11.82
+                     5.43 11.82 5.72 11.53L6.12 11.13C6.46 11.36 6.84 11.53 7.25 11.65V12.25C7.25 12.664 7.586
+                     13 8 13C8.414 13 8.75 12.664 8.75 12.25V11.65C9.16 11.53 9.54 11.36 9.88 11.13L10.28
+                     11.53C10.57 11.82 11.04 11.82 11.33 11.53L12.04 10.82C12.33 10.53 12.33 10.06 12.04
+                     9.77L11.64 9.37C11.87 9.03 12.04 8.65 12.16 8.25H12.75C13.164 8.25 13.5 7.914 13.5
+                     7.5V6.5C13.5 6.086 13.164 5.7 12.75 5.7H12.16C12.04 5.3 11.87 4.92 11.64 4.58L12.04
+                     4.18C12.33 3.89 12.33 3.42 12.04 3.13L11.33 2.42C11.04 2.13 10.57 2.13 10.28 2.42L9.88
+                     2.82C9.54 2.59 9.16 2.42 8.75 2.3V1.75C8.75 1.336 8.414 1 8 1ZM8 5.5C6.619 5.5 5.5
+                     6.619 5.5 8C5.5 9.381 6.619 10.5 8 10.5C9.381 10.5 10.5 9.381 10.5 8C10.5 6.619 9.381
+                     5.5 8 5.5Z" fill="white"/>
+        </svg>;
+
+    private RenderFragment ClockIcon =>
+        @<svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <circle cx="8" cy="8" r="6.25" stroke="white" stroke-width="1.5"/>
+            <path d="M8 4.5V8.5L10.5 10" stroke="white" stroke-width="1.5"
+                  stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>;
+
+    private RenderFragment DownloadIcon =>
+        @<svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+            <path d="M6 1V8M6 8L3 5M6 8L9 5" stroke="white" stroke-width="1.5"
+                  stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M1 10H11" stroke="white" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>;
+
+    private RenderFragment RefreshIcon =>
+        @<svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+            <path d="M11.5 2C10.3 0.8 8.7 0 6.9 0C3.1 0 0 3.1 0 6.9C0 10.7 3.1 13 6.9 13C10.1 13 12.8
+                     10.9 13 8H11.5C11.2 10.1 9.2 11.5 6.9 11.5C3.9 11.5 2 9.5 2 6.9C2 4.2 3.9 2 6.9
+                     2C8.4 2 9.7 2.7 10.5 3.5L8 6H13V1L11.5 2Z" fill="white" fill-opacity="0.8"/>
+        </svg>;
+
+    private RenderFragment ArrowRightIcon =>
+        @<svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <path d="M3 7H11M7 3L11 7L7 11" stroke="currentColor" stroke-width="1.6"
+                  stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>;
+}
