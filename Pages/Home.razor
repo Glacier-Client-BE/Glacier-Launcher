@@ -478,10 +478,10 @@
     private record NewsItem(string Icon, string Title, string Subtitle, string Url);
     private static readonly NewsItem[] _newsItems =
     {
-        new("fa-brands fa-discord",     "Join Our Discord",        "discord.glacierclient.xyz",     "https://discord.glacierclient.xyz"),
+        new("fa-brands fa-discord",     "Join Our Discord",        "discord.glacierclient.xyz",     "https://discord.gg/glacierclient"),
         new("fa-solid fa-globe",        "Visit Our Website",        "glacierclient.xyz",              "https://glacierclient.xyz"),
-        new("fa-solid fa-layer-group",  "Glacier Texture Pack",    "Download for free",              "https://glacierclient.xyz/#downloads"),
-        new("fa-solid fa-star",         "Star Us on GitHub",       "github.com/Glacier-Client-BE",    "https://github.com/Glacier-Client-BE/"),
+        new("fa-solid fa-layer-group",  "Glacier Texture Pack",    "Download for free",              "https://glacierclient.xyz/texturepack"),
+        new("fa-solid fa-star",         "Star Us on GitHub",       "github.com/glacier-launcher",    "https://github.com"),
         new("fa-solid fa-newspaper",    "Latest Release",          "Check the Versions tab",         ""),
         new("fa-solid fa-shield-halved","About Glacier",           "Made with ❤ by Glacier Prods",  ""),
     };
@@ -550,10 +550,14 @@
                       : isFlarial ? "Flarial"
                       : SettingsService.Settings.LastUsedVersion;
             Discord.SetInGamePresence(label);
-            await ShowStatus("Injected! Have fun.", clearAfterMs: 3000);
 
             if (SettingsService.Settings.CloseAfterLaunch)
+            {
                 await CloseWindow();
+                return;
+            }
+
+            await ShowStatus("Injected! Have fun.", clearAfterMs: 3000);
         }
         catch (Exception ex)
         {
@@ -690,8 +694,14 @@
             await Launcher.LaunchAsync(v.Tag);
             isLaunching = false;
             Discord.SetInGamePresence(v.Tag);
+
+            if (SettingsService.Settings.CloseAfterLaunch)
+            {
+                await CloseWindow();
+                return;
+            }
+
             await ShowStatus("Injected! Have fun.", clearAfterMs: 3000);
-            if (SettingsService.Settings.CloseAfterLaunch) await CloseWindow();
         }
         catch (Exception ex)
         {

@@ -1,14 +1,14 @@
 {
   "SelectedClient": "Latite Client",
   "DiscordRichPresence": true,
-  "LastUsedVersion": "v2.6.2",
+  "LastUsedVersion": "",
   "Username": "Pepe",
   "UserHandle": "",
-  "CloseAfterLaunch": false,
-  "AutoInject": false,
+  "CloseAfterLaunch": true,
+  "AutoInject": true,
   "InjectionDelayMs": 4000,
   "AccentColor": "#7289da",
-  "WindowWidth": 740,
-  "WindowHeight": 500,
+  "WindowWidth": 772,
+  "WindowHeight": 469.6,
   "RememberWindowSize": true
 }

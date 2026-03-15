@@ -48,10 +48,6 @@ public class GameLauncher
     [DllImport("kernel32.dll")]
     private static extern bool VirtualFreeEx(IntPtr proc, IntPtr addr, uint size, uint type);
 
-    [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
-    private static extern int ShellExecute(IntPtr hwnd, string? verb, string file,
-        string? parameters, string? directory, int showCmd);
-
     [DllImport("advapi32.dll", CharSet = CharSet.Unicode)]
     private static extern uint SetEntriesInAclW(uint count,
         [MarshalAs(UnmanagedType.LPArray)] ExplicitAccess[] entries,
@@ -185,7 +181,9 @@ public class GameLauncher
 
     public async Task LaunchAsync(string? versionTag = null, bool useFlarial = false)
     {
-        string dllPath;
+        // Determine DLL path — null means launch MC only, no injection
+        string? dllPath = null;
+
         if (useFlarial)
         {
             dllPath = FlarialService.FilePath;
@@ -197,16 +195,11 @@ public class GameLauncher
             var tag = versionTag ?? _settingsService.Settings.LastUsedVersion;
             if (!string.IsNullOrEmpty(tag))
             {
-                dllPath = GetDllPath(tag);
-                if (!File.Exists(dllPath))
-                    throw new FileNotFoundException($"DLL not found for '{tag}'. Please download it first.");
+                var path = GetDllPath(tag);
+                // If a version is selected but not downloaded yet, still launch MC — just skip injection
+                dllPath = File.Exists(path) ? path : null;
             }
-            else
-            {
-                dllPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Latite.dll");
-                if (!File.Exists(dllPath))
-                    throw new FileNotFoundException("No version selected. Download one from the Versions panel.");
-            }
+            // If no version is selected at all, dllPath stays null — launch MC without injection
         }
 
         await LaunchWithPathAsync(dllPath);
@@ -223,45 +216,87 @@ public class GameLauncher
 
     // ── Core launch + inject ─────────────────────────────────────
 
-    private async Task LaunchWithPathAsync(string dllPath)
+    private async Task LaunchWithPathAsync(string? dllPath)
     {
-        // Launch Minecraft via ShellExecute with the shell: URI.
-        // This is the most reliable method across GDK and legacy UWP builds
-        // because it delegates activation to the Windows shell itself rather than
-        // going through the COM activation manager (which requires elevated trust).
-        int hr = ShellExecute(IntPtr.Zero, "open",
-            $"shell:AppsFolder\\{UwpAppModelId}",
-            null, null, 1 /* SW_SHOWNORMAL */);
+        // Check if Minecraft is already running before launching
+        var alreadyRunning = GetMinecraftProcess();
 
-        if (hr <= 32)
-            throw new Exception($"ShellExecute failed (error {hr}). Make sure Minecraft for Windows is installed.");
-
-        // Wait for Minecraft.Windows to appear (up to 20 s)
-        Process? mcProcess = null;
-        for (int i = 0; i < 40; i++)
+        if (alreadyRunning == null)
         {
-            var procs = Process.GetProcessesByName(ProcessName);
-            if (procs.Length > 0) { mcProcess = procs[0]; break; }
-            await Task.Delay(500);
+            await TryLaunchMinecraftAsync();
+
+            // Wait up to 60 seconds — GDK can be very slow on first launch
+            for (int i = 0; i < 120; i++)
+            {
+                await Task.Delay(500);
+                if (GetMinecraftProcess() != null) break;
+            }
         }
 
+        var mcProcess = GetMinecraftProcess();
         if (mcProcess == null)
-            throw new TimeoutException("Minecraft.Windows did not appear. Is Minecraft for Windows installed?");
+            throw new TimeoutException("Minecraft did not start. Please launch Minecraft manually and then click Launch again.");
 
-        // Wait for the game engine to initialise its module list before injecting
+        // If no DLL was provided, just launch MC without injecting
+        if (string.IsNullOrEmpty(dllPath)) return;
+
+        // Wait for the game engine to initialise before injecting
         await Task.Delay(_settingsService.Settings.InjectionDelayMs);
 
-        // Re-acquire in case GDK bootstrapper relaunched the real process
-        var fresh = Process.GetProcessesByName(ProcessName);
-        if (fresh.Length == 0)
-            throw new TimeoutException("Minecraft.Windows exited before injection.");
-        mcProcess = fresh[0];
+        // Re-acquire — GDK sometimes restarts the process during init
+        mcProcess = GetMinecraftProcess()
+            ?? throw new TimeoutException("Minecraft exited before injection could complete.");
 
-        // Grant ALL APPLICATION PACKAGES access to the DLL so UWP process can load it
         GrantUwpAccess(dllPath);
-
-        // Inject via CreateRemoteThread + LoadLibraryW
         Inject((uint)mcProcess.Id, dllPath);
+    }
+
+    // Checks all known Minecraft process names
+    private static Process? GetMinecraftProcess()
+    {
+        foreach (var name in new[] { "Minecraft.Windows", "Minecraft", "MinecraftUWP" })
+        {
+            var procs = Process.GetProcessesByName(name);
+            if (procs.Length > 0) return procs[0];
+        }
+        return null;
+    }
+
+    // Tries each launch method in order, silently moving to the next on failure
+    private static async Task TryLaunchMinecraftAsync()
+    {
+        // Method 1: minecraft:// URI — standard protocol, works on UWP and GDK
+        if (await TryLaunchAsync(() =>
+            Process.Start(new ProcessStartInfo("minecraft:")
+            {
+                UseShellExecute = true
+            }))) return;
+
+        // Method 2: start command via cmd — fallback if URI handler isn't registered
+        await TryLaunchAsync(() =>
+            Process.Start(new ProcessStartInfo("cmd.exe")
+            {
+                Arguments       = "/c start minecraft:",
+                UseShellExecute = false,
+                CreateNoWindow  = true,
+                WindowStyle     = ProcessWindowStyle.Hidden
+            }));
+    }
+
+    private static async Task<bool> TryLaunchAsync(Func<Process?> launcher)
+    {
+        try
+        {
+            launcher();
+            // Give it 3 seconds to see if the process appears before trying the next method
+            for (int i = 0; i < 6; i++)
+            {
+                await Task.Delay(500);
+                if (GetMinecraftProcess() != null) return true;
+            }
+            return false;
+        }
+        catch { return false; }
     }
 
     private static void GrantUwpAccess(string dllPath)
