@@ -1,33 +1,25 @@
-/* ============================================================
-   Glacier Launcher – app.css
-   ============================================================ */
-
-*,
-*::before,
-*::after {
+*, *::before, *::after {
     box-sizing: border-box;
     margin: 0;
     padding: 0;
 }
 
 :root {
-    --accent: #6b8de8;
-    --accent-hover: #7fa0f5;
-    --btn-dark: rgba(28, 28, 34, 0.90);
-    --btn-dark-hover: rgba(42, 42, 52, 0.95);
-    --panel-bg: rgba(20, 20, 26, 0.92);
-    --panel-item: rgba(255, 255, 255, 0.055);
-    --panel-item-hover: rgba(255, 255, 255, 0.10);
-    --text: #ffffff;
-    --text-dim: rgba(255, 255, 255, 0.50);
-    --radius-sm: 8px;
-    --radius-md: 12px;
-    --radius-lg: 16px;
-    --transition: 0.16s ease;
+    --accent:         #7289da;
+    --accent-hover:   #8ea0e0;
+    --accent-glow:    rgba(114, 137, 218, 0.50);
+    --bg:             #23272a;
+    --bg-panel:       #2c2f33;
+    --bg-item:        rgba(255, 255, 255, 0.04);
+    --bg-item-hover:  rgba(255, 255, 255, 0.08);
+    --text:           #ffffff;
+    --text-dim:       #99aab5;
+    --radius-sm:      8px;
+    --radius-md:      12px;
+    --transition:     0.16s ease;
 }
 
-html,
-body {
+html, body {
     width: 100%;
     height: 100%;
     overflow: hidden;
@@ -35,30 +27,28 @@ body {
     color: var(--text);
     user-select: none;
     -webkit-user-select: none;
+    background: var(--bg);
 }
 
-/* ── Window root ── */
 .window {
     position: relative;
     width: 100%;
     height: 100%;
     min-width: 340px;
-    min-height: 280px;
+    min-height: 300px;
     overflow: hidden;
     display: flex;
     flex-direction: column;
-    background: #16161e;
+    background: var(--bg);
 }
 
-/* ── Background image ──
-   Drop your panoramic background at wwwroot/images/bg.jpg     */
 .window-bg {
     position: absolute;
     inset: 0;
-    background-image: url('images/bg.png');
+    background-image: url('../images/bg.png');
     background-size: cover;
     background-position: center;
-    background-color: #16161e;
+    background-color: var(--bg);
     z-index: 0;
 }
 
@@ -66,24 +56,24 @@ body {
     content: '';
     position: absolute;
     inset: 0;
-    background: linear-gradient(to bottom,
-            rgba(0, 0, 0, 0.12) 0%,
-            rgba(0, 0, 0, 0.06) 50%,
-            rgba(0, 0, 0, 0.55) 100%);
+    background: linear-gradient(
+        to bottom,
+        rgba(35, 39, 42, 0.45) 0%,
+        rgba(35, 39, 42, 0.20) 50%,
+        rgba(35, 39, 42, 0.75) 100%
+    );
 }
 
-/* ── Drag zone ── */
 .drag-zone {
     position: absolute;
     top: 0;
     left: 0;
     right: 0;
-    height: 200px;
+    height: 56px;
     z-index: 1;
     cursor: grab;
 }
 
-/* ── Top bar ── */
 .top-bar {
     position: relative;
     z-index: 10;
@@ -94,15 +84,42 @@ body {
     pointer-events: none;
 }
 
-.logo-icon {
-    width: 26px;
-    height: 26px;
-    object-fit: contain;
+.branding {
+    display: flex;
+    align-items: center;
+    gap: 10px;
     pointer-events: none;
-    border-radius: 50%;
 }
 
-/* Window control button group */
+.logo-icon {
+    width: 38px;
+    height: 38px;
+    object-fit: contain;
+    pointer-events: none;
+    border-radius: 8px;
+    flex-shrink: 0;
+}
+
+.branding-text {
+    display: flex;
+    flex-direction: column;
+    line-height: 1.25;
+}
+
+.branding-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: #ffffff;
+    letter-spacing: 0.01em;
+}
+
+.branding-sub {
+    font-size: 10px;
+    font-weight: 500;
+    color: var(--text-dim);
+    letter-spacing: 0.02em;
+}
+
 .window-controls {
     display: flex;
     gap: 6px;
@@ -114,8 +131,8 @@ body {
     height: 26px;
     border-radius: 50%;
     border: none;
-    background: rgba(255, 255, 255, 0.08);
-    color: rgba(255, 255, 255, 0.55);
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--text-dim);
     cursor: pointer;
     display: flex;
     align-items: center;
@@ -123,19 +140,10 @@ body {
     transition: background var(--transition), color var(--transition);
 }
 
-.wnd-btn:hover {
-    color: #fff;
-}
+.wnd-btn:hover { color: #fff; }
+.minimize-btn:hover { background: rgba(255, 255, 255, 0.14); }
+.close-btn:hover    { background: rgba(220, 70, 70, 0.55); color: #fff; }
 
-.minimize-btn:hover {
-    background: rgba(255, 255, 255, 0.16);
-}
-
-.close-btn:hover {
-    background: rgba(220, 70, 70, 0.55);
-}
-
-/* ── Main content ── */
 .main-content {
     position: relative;
     z-index: 5;
@@ -146,19 +154,17 @@ body {
     justify-content: center;
 }
 
-/* ── Button row ── */
 .btn-row {
     display: flex;
     align-items: center;
     gap: 8px;
 }
 
-/* Base action button */
 .action-btn {
     height: 48px;
     border: none;
     border-radius: var(--radius-sm);
-    background: var(--btn-dark);
+    background: rgba(44, 47, 51, 0.92);
     color: var(--text);
     font-family: inherit;
     font-size: 14px;
@@ -172,55 +178,32 @@ body {
     overflow: hidden;
     white-space: nowrap;
     transition:
-        width 0.22s cubic-bezier(0.25, 0.46, 0.45, 0.94),
+        width      0.22s cubic-bezier(0.25, 0.46, 0.45, 0.94),
         background 0.15s ease,
-        box-shadow 0.15s ease;
+        box-shadow 0.18s ease;
     backdrop-filter: blur(14px);
     -webkit-backdrop-filter: blur(14px);
     outline: none;
 }
 
-.action-btn:disabled {
-    opacity: 0.68;
-    cursor: not-allowed;
-}
+.action-btn:disabled { opacity: 0.60; cursor: not-allowed; }
 
-.action-btn:not(:disabled):hover {
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.40);
-}
-
-/* Icon-only square */
-.btn-sq {
-    width: 48px;
-    flex-shrink: 0;
-}
+.btn-sq  { width: 48px; flex-shrink: 0; }
+.btn-wide { width: 134px; padding: 0 18px; }
 
 .btn-sq:not(:disabled):hover {
-    background: var(--btn-dark-hover);
+    background: rgba(44, 47, 51, 0.98);
+    box-shadow: 0 0 14px var(--accent-glow);
 }
 
-/* Wide with label */
-.btn-wide {
-    width: 130px;
-    padding: 0 18px;
-}
-
-/* Blue accent */
-.btn-blue {
-    background: var(--accent);
-}
-
+.btn-blue { background: var(--accent); }
 .btn-blue:not(:disabled):hover {
     background: var(--accent-hover);
+    box-shadow: 0 0 20px var(--accent-glow), 0 4px 16px rgba(0,0,0,0.4);
 }
 
-/* ── SVG inside buttons ── */
-.action-btn svg {
-    flex-shrink: 0;
-    opacity: 0.92;
-}
+.action-btn svg { flex-shrink: 0; opacity: 0.90; }
 
-/* ── Status message (fade-in / fade-out) ── */
 .status-msg {
     margin-top: 14px;
     font-size: 12px;
@@ -231,40 +214,29 @@ body {
     transition: opacity 0.3s ease;
 }
 
-.status-msg.visible {
-    opacity: 1;
-}
+.status-msg.visible { opacity: 1; }
+.status-msg.error   { color: #f04747; }
 
-.status-msg.error {
-    color: #ff7070;
-}
-
-/* ── Spinner ── */
-@keyframes spin {
-    to {
-        transform: rotate(360deg);
-    }
-}
+@keyframes spin { to { transform: rotate(360deg); } }
 
 .spinner {
     display: inline-block;
     width: 16px;
     height: 16px;
-    border: 2px solid rgba(255, 255, 255, 0.30);
+    border: 2px solid rgba(255, 255, 255, 0.25);
     border-top-color: #fff;
     border-radius: 50%;
     animation: spin 0.7s linear infinite;
     flex-shrink: 0;
 }
 
-/* ── Footer ── */
 .footer {
     position: relative;
     z-index: 10;
     display: flex;
     align-items: center;
     gap: 10px;
-    padding: 0 16px 22px;
+    padding: 0 16px 28px;
 }
 
 .avatar {
@@ -272,29 +244,15 @@ body {
     height: 32px;
     border-radius: 50%;
     object-fit: cover;
-    background: rgba(255, 255, 255, 0.10);
+    background: var(--bg-panel);
     flex-shrink: 0;
 }
 
-.user-info {
-    display: flex;
-    flex-direction: column;
-    line-height: 1.3;
-}
+.user-info { display: flex; flex-direction: column; line-height: 1.3; }
+.username  { font-size: 13px; font-weight: 600; color: var(--text); }
+.user-handle { font-size: 11px; color: var(--text-dim); }
 
-.username {
-    font-size: 13px;
-    font-weight: 600;
-}
-
-.user-handle {
-    font-size: 11px;
-    color: var(--text-dim);
-}
-
-/* ============================================================
-   PANEL OVERLAY (Settings / Versions)
-   ============================================================ */
+/* ── Panels ── */
 
 .panel-overlay {
     position: absolute;
@@ -302,51 +260,52 @@ body {
     z-index: 20;
     display: flex;
     flex-direction: column;
-    background: var(--panel-bg);
-    backdrop-filter: blur(22px);
-    -webkit-backdrop-filter: blur(22px);
+    background: rgba(35, 39, 42, 0.94);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
     animation: panelIn 0.18s ease;
     overflow: hidden;
 }
 
-.panel-overlay .drag-zone {
-    pointer-events: none;
-}
-
 @keyframes panelIn {
-    from {
-        opacity: 0;
-        transform: translateY(6px);
-    }
-
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
+    from { opacity: 0; transform: translateY(6px); }
+    to   { opacity: 1; transform: translateY(0); }
 }
+
+.panel-topbar {
+    position: relative;
+    z-index: 30;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 16px 0;
+    cursor: grab;
+}
+
+.panel-topbar .branding { pointer-events: none; }
+.panel-topbar .window-controls { pointer-events: all; cursor: default; }
 
 .panel-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 14px 20px 14px;
+    padding: 14px 20px 12px;
 }
 
 .panel-title {
     font-size: 16px;
-    font-weight: 600;
+    font-weight: 700;
+    color: var(--text);
     letter-spacing: 0.01em;
 }
 
-/* Back arrow button */
 .panel-back-btn {
     width: 30px;
     height: 30px;
     border: none;
     border-radius: var(--radius-sm);
     background: transparent;
-    color: rgba(255, 255, 255, 0.55);
-    font-size: 16px;
+    color: var(--text-dim);
     cursor: pointer;
     display: flex;
     align-items: center;
@@ -355,18 +314,17 @@ body {
 }
 
 .panel-back-btn:hover {
-    color: #fff;
-    background: rgba(255, 255, 255, 0.08);
+    color: var(--text);
+    background: var(--bg-item-hover);
 }
 
-/* Refresh / icon button in panel header */
 .panel-icon-btn {
     width: 30px;
     height: 30px;
     border: none;
     border-radius: var(--radius-sm);
     background: transparent;
-    color: rgba(255, 255, 255, 0.45);
+    color: var(--text-dim);
     cursor: pointer;
     display: flex;
     align-items: center;
@@ -375,20 +333,13 @@ body {
 }
 
 .panel-icon-btn:not(:disabled):hover {
-    color: #fff;
-    background: rgba(255, 255, 255, 0.08);
+    color: var(--text);
+    background: var(--bg-item-hover);
 }
 
-.panel-icon-btn:disabled {
-    opacity: 0.35;
-    cursor: not-allowed;
-}
+.panel-icon-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+.panel-icon-btn.spinning svg { animation: spin 0.8s linear infinite; }
 
-.panel-icon-btn.spinning svg {
-    animation: spin 0.8s linear infinite;
-}
-
-/* ── Panel scroll body ── */
 .panel-body {
     flex: 1;
     overflow-y: auto;
@@ -398,30 +349,21 @@ body {
     gap: 8px;
     scrollbar-width: none;
 }
+.panel-body::-webkit-scrollbar { display: none; }
 
-.panel-body::-webkit-scrollbar {
-    display: none;
-}
-
-/* ── Setting row ── */
 .setting-row {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    background: var(--panel-item);
+    background: var(--bg-item);
     border-radius: var(--radius-md);
     padding: 13px 16px;
     transition: background var(--transition);
     gap: 12px;
 }
 
-.setting-row.clickable {
-    cursor: pointer;
-}
-
-.setting-row:hover {
-    background: var(--panel-item-hover);
-}
+.setting-row.clickable { cursor: pointer; }
+.setting-row:hover     { background: var(--bg-item-hover); }
 
 .setting-label {
     font-size: 13px;
@@ -431,12 +373,13 @@ body {
     min-width: 0;
 }
 
-/* Client dropdown */
 .setting-select {
     appearance: none;
     -webkit-appearance: none;
-    background: rgba(255, 255, 255, 0.09) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E") no-repeat right 8px center;
-    border: none;
+    background: rgba(255,255,255,0.07)
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%2399aab5' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E")
+        no-repeat right 8px center;
+    border: 1px solid rgba(255,255,255,0.08);
     border-radius: 6px;
     color: var(--text);
     font-family: inherit;
@@ -445,27 +388,24 @@ body {
     cursor: pointer;
     outline: none;
     flex-shrink: 0;
+    transition: border-color var(--transition);
 }
 
-.setting-select option {
-    background: #1e1e28;
-}
+.setting-select:focus { border-color: var(--accent); }
+.setting-select option { background: #2c2f33; }
 
-/* Toggle switch */
 .toggle {
     position: relative;
     width: 42px;
     height: 23px;
     border-radius: 12px;
-    background: rgba(255, 255, 255, 0.18);
+    background: rgba(255, 255, 255, 0.15);
     cursor: pointer;
     transition: background 0.2s ease;
     flex-shrink: 0;
 }
 
-.toggle.on {
-    background: var(--accent);
-}
+.toggle.on { background: var(--accent); box-shadow: 0 0 8px var(--accent-glow); }
 
 .toggle::after {
     content: '';
@@ -480,49 +420,41 @@ body {
     box-shadow: 0 1px 4px rgba(0, 0, 0, 0.30);
 }
 
-.toggle.on::after {
-    transform: translateX(19px);
-}
+.toggle.on::after { transform: translateX(19px); }
 
-/* Small inline button */
 .btn-sm {
     height: 28px;
     padding: 0 13px;
     border: none;
     border-radius: 6px;
-    background: rgba(255, 255, 255, 0.09);
+    background: rgba(255, 255, 255, 0.07);
     color: var(--text);
     font-family: inherit;
     font-size: 12px;
     cursor: pointer;
     white-space: nowrap;
-    transition: background var(--transition);
+    transition: background var(--transition), box-shadow var(--transition);
     flex-shrink: 0;
 }
 
 .btn-sm:hover {
-    background: rgba(255, 255, 255, 0.17);
+    background: var(--accent);
+    box-shadow: 0 0 10px var(--accent-glow);
 }
 
-/* ── Version row ── */
 .version-row {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    background: var(--panel-item);
+    background: var(--bg-item);
     border-radius: var(--radius-md);
     padding: 12px 14px;
     gap: 12px;
     transition: background var(--transition);
 }
 
-.version-row:hover {
-    background: var(--panel-item-hover);
-}
-
-.version-row.error-row {
-    background: rgba(220, 60, 60, 0.10);
-}
+.version-row:hover    { background: var(--bg-item-hover); }
+.version-row.error-row { background: rgba(240, 71, 71, 0.08); }
 
 .version-meta {
     display: flex;
@@ -535,22 +467,15 @@ body {
 .version-name {
     font-size: 13px;
     font-weight: 500;
-    color: rgba(255, 255, 255, 0.88);
+    color: var(--text);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
 }
 
-.version-sub {
-    font-size: 11px;
-    color: var(--text-dim);
-}
+.version-sub  { font-size: 11px; color: var(--text-dim); }
+.error-text   { font-size: 11px; color: #f04747; }
 
-.version-sub.error {
-    color: #ff7070;
-}
-
-/* Icon button (download / play) */
 .icon-btn {
     width: 32px;
     height: 32px;
@@ -563,26 +488,34 @@ body {
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
-    transition: background var(--transition), transform 0.12s ease;
+    transition: background var(--transition), box-shadow var(--transition), transform 0.12s ease;
 }
 
 .icon-btn:not(:disabled):hover {
     background: var(--accent-hover);
+    box-shadow: 0 0 14px var(--accent-glow);
     transform: scale(1.06);
 }
 
-.icon-btn:disabled {
-    opacity: 0.55;
-    cursor: not-allowed;
-    transform: none;
+.icon-btn:disabled { opacity: 0.50; cursor: not-allowed; transform: none; }
+.icon-btn .spinner { width: 14px; height: 14px; }
+
+.icon-btn-ghost {
+    background: rgba(255, 255, 255, 0.07);
 }
 
-.icon-btn .spinner {
-    width: 14px;
-    height: 14px;
+.icon-btn-ghost:not(:disabled):hover {
+    background: rgba(240, 71, 71, 0.40);
+    box-shadow: 0 0 10px rgba(240, 71, 71, 0.30);
 }
 
-/* Download progress row */
+.version-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+}
+
 .dl-progress-row {
     display: flex;
     align-items: center;
@@ -594,7 +527,7 @@ body {
     width: 64px;
     height: 4px;
     border-radius: 2px;
-    background: rgba(255, 255, 255, 0.12);
+    background: rgba(255, 255, 255, 0.10);
     overflow: hidden;
 }
 
@@ -604,6 +537,7 @@ body {
     background: var(--accent);
     transition: width 0.15s linear;
     min-width: 4px;
+    box-shadow: 0 0 6px var(--accent-glow);
 }
 
 .dl-pct {
@@ -614,7 +548,6 @@ body {
     flex-shrink: 0;
 }
 
-/* Loading placeholder */
 .versions-loading {
     display: flex;
     flex-direction: column;
@@ -626,8 +559,4 @@ body {
     font-size: 13px;
 }
 
-.versions-loading .spinner {
-    width: 22px;
-    height: 22px;
-    border-width: 2.5px;
-}
+.versions-loading .spinner { width: 22px; height: 22px; border-width: 2.5px; }

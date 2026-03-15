@@ -1,4 +1,7 @@
-﻿using System.Windows;
+using System;
+using System.Runtime.InteropServices;
+using System.Windows;
+using System.Windows.Interop;
 using Microsoft.Extensions.DependencyInjection;
 using MinecraftLauncher.Services;
 
@@ -6,6 +9,13 @@ namespace MinecraftLauncher;
 
 public partial class MainWindow : Window
 {
+    [DllImport("dwmapi.dll")]
+    private static extern int DwmSetWindowAttribute(IntPtr hwnd, uint attr, ref int attrValue, int attrSize);
+
+    private const uint DWMWA_WINDOW_CORNER_PREFERENCE = 33;
+    private const uint DWMWA_USE_IMMERSIVE_DARK_MODE  = 20;
+    private const int  DWMWCP_ROUND = 2;
+
     public MainWindow()
     {
         var serviceCollection = new ServiceCollection();
@@ -20,15 +30,21 @@ public partial class MainWindow : Window
 
         InitializeComponent();
 
-        // Auto-start Discord RPC if it was enabled on last run
-        var rpc = services.GetRequiredService<DiscordRpcService>();
-        rpc.Start();
+        services.GetRequiredService<DiscordRpcService>().Start();
 
-        // Wire up window-level messages from the Blazor UI via WebView2 postMessage
+        SourceInitialized += (_, _) =>
+        {
+            var hwnd = new WindowInteropHelper(this).Handle;
+            int round = DWMWCP_ROUND;
+            DwmSetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, ref round, sizeof(int));
+            int dark = 1;
+            DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, ref dark, sizeof(int));
+        };
+
         Loaded += async (_, _) =>
         {
             await blazorWebView.WebView.EnsureCoreWebView2Async();
-            blazorWebView.WebView.DefaultBackgroundColor = System.Drawing.Color.FromArgb(0, 22, 22, 30);
+            blazorWebView.WebView.DefaultBackgroundColor = System.Drawing.Color.FromArgb(255, 26, 26, 32);
             blazorWebView.WebView.CoreWebView2.WebMessageReceived += (_, args) =>
             {
                 var msg = args.TryGetWebMessageAsString();
@@ -50,7 +66,6 @@ public partial class MainWindow : Window
             };
         };
 
-        // Clean up Discord RPC when the window is closed
         Closed += (_, _) =>
         {
             services.GetRequiredService<DiscordRpcService>().Stop();

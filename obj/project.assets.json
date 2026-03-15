@@ -1655,7 +1655,7 @@
   "projectFileDependencyGroups": {
     "net10.0-windows10.0.17763": [
       "CommunityToolkit.Mvvm >= 8.4.0",
-      "DiscordRichPresence >= 1.2.1",
+      "DiscordRichPresence >= 1.2.1.24",
       "EasyHook >= 2.7.7097",
       "Microsoft.AspNetCore.Components.WebView.Wpf >= 10.0.*-*",
       "Newtonsoft.Json >= 13.0.4"
@@ -1691,6 +1691,7 @@
       },
       "warningProperties": {
         "noWarn": [
+          "NU1603",
           "NU1701"
         ],
         "warnAsError": [
@@ -1714,7 +1715,7 @@
           },
           "DiscordRichPresence": {
             "target": "Package",
-            "version": "[1.2.1, )"
+            "version": "[1.2.1.24, )"
           },
           "EasyHook": {
             "target": "Package",
@@ -2050,17 +2051,5 @@
         }
       }
     }
-  },
-  "logs": [
-    {
-      "code": "NU1603",
-      "level": "Warning",
-      "warningLevel": 1,
-      "message": "MinecraftLauncher depends on DiscordRichPresence (>= 1.2.1) but DiscordRichPresence 1.2.1 was not found. DiscordRichPresence 1.2.1.24 was resolved instead.",
-      "libraryId": "DiscordRichPresence",
-      "targetGraphs": [
-        "net10.0-windows10.0.17763.0"
-      ]
-    }
-  ]
+  }
 }

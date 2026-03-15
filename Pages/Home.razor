@@ -9,22 +9,25 @@
 
 <div class="window">
 
-    <!-- ── Background ── -->
     <div class="window-bg"></div>
 
-    <!-- ── Drag zone (behind all controls) ── -->
     <div class="drag-zone" @onmousedown="OnDragStart"></div>
 
-    <!-- ── Top bar ── -->
     <div class="top-bar">
-        <img class="logo-icon" src="images/icon.png" alt="" />
+        <div class="branding">
+            <img class="logo-icon" src="images/icon.png" alt="" />
+            <div class="branding-text">
+                <span class="branding-title">Glacier Launcher</span>
+                <span class="branding-sub">Glacier Productions</span>
+            </div>
+        </div>
         <div class="window-controls">
-            <button class="wnd-btn minimize-btn" title="Minimise" @onclick="MinimizeWindow" @onmousedown:stopPropagation>
+            <button class="wnd-btn minimize-btn" @onclick="MinimizeWindow" @onmousedown:stopPropagation>
                 <svg width="10" height="2" viewBox="0 0 10 2" fill="none">
                     <path d="M1 1H9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
                 </svg>
             </button>
-            <button class="wnd-btn close-btn" title="Close" @onclick="CloseWindow" @onmousedown:stopPropagation>
+            <button class="wnd-btn close-btn" @onclick="CloseWindow" @onmousedown:stopPropagation>
                 <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
                     <path d="M1 1L9 9M9 1L1 9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
                 </svg>
@@ -32,14 +35,11 @@
         </div>
     </div>
 
-    <!-- ── Main content ── -->
     <div class="main-content">
-
         @if (currentView == "home")
         {
             <div class="btn-row">
 
-                <!-- Launch / Play -->
                 <button class="action-btn @(hoveredBtn == "launch" || isLaunching ? "btn-wide btn-blue" : "btn-sq")"
                         @onmouseenter='() => SetHover("launch")'
                         @onmouseleave="ClearHover"
@@ -64,69 +64,51 @@
                     }
                 </button>
 
-                <!-- Settings -->
                 <button class="action-btn @(hoveredBtn == "settings" ? "btn-wide" : "btn-sq")"
                         @onmouseenter='() => SetHover("settings")'
                         @onmouseleave="ClearHover"
                         @onclick="OpenSettings"
                         @onmousedown:stopPropagation>
-                    @if (hoveredBtn == "settings")
-                    {
-                        <span>Settings</span>
-                    }
-                    else
-                    {
-                        @GearIcon
-                    }
+                    @if (hoveredBtn == "settings") { <span>Settings</span> }
+                    else { @GearIcon }
                 </button>
 
-                <!-- Versions -->
                 <button class="action-btn @(hoveredBtn == "versions" ? "btn-wide" : "btn-sq")"
                         @onmouseenter='() => SetHover("versions")'
                         @onmouseleave="ClearHover"
                         @onclick="OpenVersions"
                         @onmousedown:stopPropagation>
-                    @if (hoveredBtn == "versions")
-                    {
-                        <span>Versions</span>
-                    }
-                    else
-                    {
-                        @ClockIcon
-                    }
+                    @if (hoveredBtn == "versions") { <span>Versions</span> }
+                    else { @ClockIcon }
                 </button>
 
             </div>
 
-            <!-- Status / toast -->
             <p class="status-msg @(isError ? "error" : "") @(statusVisible ? "visible" : "")">
                 @statusMessage
             </p>
         }
-
     </div>
 
-    <!-- ── Footer ── -->
     <div class="footer">
-        <img class="avatar" src="images/avatar.png" alt="avatar" />
+        <img class="avatar" src="images/avatar.png" alt="" />
         <div class="user-info">
             <span class="username">@displayName</span>
             <span class="user-handle">@displayHandle</span>
         </div>
     </div>
 
-    <!-- ═══════════════════════════════════════════
-         SETTINGS PANEL
-    ════════════════════════════════════════════ -->
     @if (currentView == "settings")
     {
         <div class="panel-overlay">
-
-            <div class="drag-zone" @onmousedown="OnDragStart"></div>
-
-            <!-- Replicated top-bar inside panel -->
-            <div class="top-bar" style="position:relative; z-index:30;">
-                <img class="logo-icon" src="images/icon.png" alt="" />
+            <div class="panel-topbar" @onmousedown="OnDragStart">
+                <div class="branding">
+            <img class="logo-icon" src="images/icon.png" alt="" />
+            <div class="branding-text">
+                <span class="branding-title">Glacier Launcher</span>
+                <span class="branding-sub">Glacier Productions</span>
+            </div>
+        </div>
                 <div class="window-controls">
                     <button class="wnd-btn minimize-btn" @onclick="MinimizeWindow" @onmousedown:stopPropagation>
                         <svg width="10" height="2" viewBox="0 0 10 2" fill="none">
@@ -143,14 +125,12 @@
 
             <div class="panel-header">
                 <span class="panel-title">Settings</span>
-                <button class="panel-back-btn" title="Back" @onclick="GoHome" @onmousedown:stopPropagation>
+                <button class="panel-back-btn" @onclick="GoHome" @onmousedown:stopPropagation>
                     @ArrowRightIcon
                 </button>
             </div>
 
             <div class="panel-body">
-
-                <!-- Inject client dropdown -->
                 <div class="setting-row">
                     <span class="setting-label">Inject when pressing "Launch"</span>
                     <select class="setting-select"
@@ -161,7 +141,6 @@
                     </select>
                 </div>
 
-                <!-- Discord Rich Presence toggle -->
                 <div class="setting-row clickable" @onclick="ToggleDiscord">
                     <span class="setting-label">Discord Rich Presence</span>
                     <div class="toggle @(SettingsService.Settings.DiscordRichPresence ? "on" : "")"
@@ -169,27 +148,25 @@
                          @onclick="ToggleDiscord"></div>
                 </div>
 
-                <!-- Credits -->
                 <div class="setting-row">
                     <span class="setting-label">Credits</span>
                     <button class="btn-sm" @onclick="OpenCredits" @onmousedown:stopPropagation>Open</button>
                 </div>
-
             </div>
         </div>
     }
 
-    <!-- ═══════════════════════════════════════════
-         VERSIONS PANEL
-    ════════════════════════════════════════════ -->
     @if (currentView == "versions")
     {
         <div class="panel-overlay">
-
-            <div class="drag-zone" @onmousedown="OnDragStart"></div>
-
-            <div class="top-bar" style="position:relative; z-index:30;">
-                <img class="logo-icon" src="images/icon.png" alt="" />
+            <div class="panel-topbar" @onmousedown="OnDragStart">
+                <div class="branding">
+            <img class="logo-icon" src="images/icon.png" alt="" />
+            <div class="branding-text">
+                <span class="branding-title">Glacier Launcher</span>
+                <span class="branding-sub">Glacier Productions</span>
+            </div>
+        </div>
                 <div class="window-controls">
                     <button class="wnd-btn minimize-btn" @onclick="MinimizeWindow" @onmousedown:stopPropagation>
                         <svg width="10" height="2" viewBox="0 0 10 2" fill="none">
@@ -207,16 +184,13 @@
             <div class="panel-header">
                 <span class="panel-title">Versions</span>
                 <div style="display:flex; gap:6px; align-items:center;">
-                    <!-- Refresh -->
                     <button class="panel-icon-btn @(isLoadingVersions ? "spinning" : "")"
-                            title="Refresh"
                             disabled="@isLoadingVersions"
                             @onclick="LoadVersionsAsync"
                             @onmousedown:stopPropagation>
                         @RefreshIcon
                     </button>
-                    <!-- Back -->
-                    <button class="panel-back-btn" title="Back" @onclick="GoHome" @onmousedown:stopPropagation>
+                    <button class="panel-back-btn" @onclick="GoHome" @onmousedown:stopPropagation>
                         @ArrowRightIcon
                     </button>
                 </div>
@@ -242,12 +216,11 @@
                     {
                         <div class="version-row @(v.ErrorMessage != null ? "error-row" : "")">
 
-                            <!-- Name + status sub-text -->
                             <div class="version-meta">
                                 <span class="version-name">@v.DisplayName</span>
                                 @if (v.ErrorMessage != null)
                                 {
-                                    <span class="version-sub error">@v.ErrorMessage</span>
+                                    <span class="version-sub error-text">@v.ErrorMessage</span>
                                 }
                                 else if (v.IsDownloaded && !v.IsDownloading)
                                 {
@@ -255,7 +228,6 @@
                                 }
                             </div>
 
-                            <!-- Action area -->
                             @if (v.ErrorMessage == null)
                             {
                                 @if (v.IsDownloading)
@@ -264,9 +236,7 @@
                                         @if (downloadProgress > 0)
                                         {
                                             <div class="progress-bar-wrap">
-                                                <div class="progress-bar-fill"
-                                                     style="width:@(downloadProgress.ToString("F0"))%">
-                                                </div>
+                                                <div class="progress-bar-fill" style="width:@(downloadProgress.ToString("F0"))%"></div>
                                             </div>
                                             <span class="dl-pct">@((int)downloadProgress)%</span>
                                         }
@@ -277,11 +247,18 @@
                                 }
                                 else if (v.IsDownloaded)
                                 {
-                                    <button class="icon-btn" title="Launch with this version"
-                                            @onclick='async () => await HandleVersionLaunch(v)'
-                                            @onmousedown:stopPropagation>
-                                        @PlayIconSm
-                                    </button>
+                                    <div class="version-actions">
+                                        <button class="icon-btn icon-btn-ghost" title="Delete"
+                                                @onclick='() => HandleVersionDelete(v)'
+                                                @onmousedown:stopPropagation>
+                                            @TrashIcon
+                                        </button>
+                                        <button class="icon-btn" title="Launch"
+                                                @onclick='async () => await HandleVersionLaunch(v)'
+                                                @onmousedown:stopPropagation>
+                                            @PlayIconSm
+                                        </button>
+                                    </div>
                                 }
                                 else
                                 {
@@ -300,29 +277,24 @@
         </div>
     }
 
-</div><!-- /window -->
+</div>
 
 @code {
 
-    // ── View state ──────────────────────────────────────────────
-    private string currentView  = "home";
-    private string hoveredBtn   = "";
-    private bool   isLaunching  = false;
-    private bool   isError      = false;
+    private string currentView   = "home";
+    private string hoveredBtn    = "";
+    private bool   isLaunching   = false;
+    private bool   isError       = false;
     private string statusMessage = "";
     private bool   statusVisible = false;
     private System.Threading.CancellationTokenSource? _statusCts;
 
-    // ── Versions state ──────────────────────────────────────────
     private bool   isLoadingVersions = false;
     private List<MinecraftVersion> versions = new();
     private double downloadProgress = 0;
 
-    // ── User display ────────────────────────────────────────────
     private string displayName   = System.Environment.UserName;
     private string displayHandle = $"@{System.Environment.UserName.ToLower()}";
-
-    // ────────────────────────────────────────────────────────────
 
     protected override void OnInitialized()
     {
@@ -338,13 +310,9 @@
         _statusCts?.Dispose();
     }
 
-    // ── Window operations ────────────────────────────────────────
-
     private async Task OnDragStart()    => await JS.InvokeVoidAsync("startDrag");
     private async Task CloseWindow()    => await JS.InvokeVoidAsync("closeWindow");
     private async Task MinimizeWindow() => await JS.InvokeVoidAsync("minimizeWindow");
-
-    // ── Navigation ───────────────────────────────────────────────
 
     private void GoHome()
     {
@@ -353,10 +321,8 @@
         Discord.SetIdlePresence();
     }
 
-    private void SetHover(string btn)  => hoveredBtn = btn;
-    private void ClearHover()          => hoveredBtn = "";
-
-    // ── Status message with auto-clear ───────────────────────────
+    private void SetHover(string btn) => hoveredBtn = btn;
+    private void ClearHover()         => hoveredBtn = "";
 
     private async Task ShowStatus(string message, bool error = false, int clearAfterMs = 4000)
     {
@@ -375,10 +341,8 @@
             statusVisible = false;
             StateHasChanged();
         }
-        catch (TaskCanceledException) { /* replaced by a newer message */ }
+        catch (TaskCanceledException) { }
     }
-
-    // ── Launch ───────────────────────────────────────────────────
 
     private async Task HandleLaunch()
     {
@@ -399,8 +363,6 @@
         }
     }
 
-    // ── Settings panel ───────────────────────────────────────────
-
     private void OpenSettings() => currentView = "settings";
 
     private void OnClientChanged(ChangeEventArgs e)
@@ -412,7 +374,7 @@
     private void ToggleDiscord()
     {
         Discord.Toggle();
-        StateHasChanged(); // force the toggle visual to re-render
+        StateHasChanged();
     }
 
     private void OpenCredits()
@@ -423,8 +385,6 @@
             UseShellExecute = true
         });
     }
-
-    // ── Versions panel ───────────────────────────────────────────
 
     private async Task OpenVersions()
     {
@@ -471,6 +431,12 @@
         StateHasChanged();
     }
 
+    private void HandleVersionDelete(MinecraftVersion v)
+    {
+        Launcher.DeleteVersion(v);
+        StateHasChanged();
+    }
+
     private async Task HandleVersionLaunch(MinecraftVersion v)
     {
         GoHome();
@@ -490,8 +456,6 @@
             await ShowStatus(ex.Message, error: true, clearAfterMs: 6000);
         }
     }
-
-    // ── Inline SVG fragments ─────────────────────────────────────
 
     private RenderFragment PlayIcon =>
         @<svg width="16" height="16" viewBox="0 0 16 16" fill="none">
@@ -533,6 +497,12 @@
             <path d="M6 1V8M6 8L3 5M6 8L9 5" stroke="white" stroke-width="1.5"
                   stroke-linecap="round" stroke-linejoin="round"/>
             <path d="M1 10H11" stroke="white" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>;
+
+    private RenderFragment TrashIcon =>
+        @<svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+            <path d="M1 3H11M4 3V2H8V3M5 5.5V9M7 5.5V9M2 3L2.5 10.5C2.5 11 3 11.5 3.5 11.5H8.5C9 11.5 9.5 11 9.5 10.5L10 3"
+                  stroke="white" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>;
 
     private RenderFragment RefreshIcon =>
