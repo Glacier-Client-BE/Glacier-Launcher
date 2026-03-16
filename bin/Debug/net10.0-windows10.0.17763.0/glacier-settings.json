@@ -1,14 +1,31 @@
 {
-  "SelectedClient": "Latite Client",
+  "SelectedClient": "OderSo Client",
   "DiscordRichPresence": true,
   "LastUsedVersion": "",
-  "Username": "Pepe",
+  "Username": "",
   "UserHandle": "",
-  "CloseAfterLaunch": true,
+  "CloseAfterLaunch": false,
   "AutoInject": true,
   "InjectionDelayMs": 4000,
   "AccentColor": "#7289da",
-  "WindowWidth": 772,
-  "WindowHeight": 469.6,
-  "RememberWindowSize": true
+  "ThemePreset": "dark",
+  "BlurIntensity": 16,
+  "BackgroundOpacity": 0.8,
+  "WindowWidth": 740,
+  "WindowHeight": 500,
+  "RememberWindowSize": true,
+  "MinimizeToTray": false,
+  "ShowRecentlyLaunched": true,
+  "RecentlyLaunched": [
+    "OderSo"
+  ],
+  "PinnedVersions": [],
+  "CheckUpdatesOnStartup": true,
+  "SkippedLauncherVersion": "",
+  "LastUpdateCheck": "2026-03-16T18:11:41.5196041Z",
+  "DiscordLoggedIn": false,
+  "DiscordUserId": "",
+  "DiscordUsername": "",
+  "DiscordAvatar": "",
+  "DiscordToken": ""
 }

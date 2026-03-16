@@ -1,6 +1,6 @@
 namespace MinecraftLauncher.Models;
 
-public enum ClientType { Latite, Flarial }
+public enum ClientType { Latite, Flarial, OderSo }
 
 public class ClientInfo
 {

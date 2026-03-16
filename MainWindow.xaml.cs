@@ -16,7 +16,7 @@ public partial class MainWindow : Window
     private const uint DWMWA_USE_IMMERSIVE_DARK_MODE  = 20;
     private const int  DWMWCP_ROUND = 2;
 
-    private const int WM_NCHITTEST  = 0x0084;
+    private const int WM_NCHITTEST       = 0x0084;
     private const int WM_NCLBUTTONDBLCLK = 0x00A3;
     private const int HTLEFT        = 10;
     private const int HTRIGHT       = 11;
@@ -37,6 +37,8 @@ public partial class MainWindow : Window
         sc.AddSingleton<SettingsService>();
         sc.AddSingleton<GameLauncher>();
         sc.AddSingleton<FlarialService>();
+        sc.AddSingleton<OderSoService>();
+        sc.AddSingleton<AutoUpdateService>();
         sc.AddSingleton<DiscordRpcService>();
         sc.AddBlazorWebViewDeveloperTools();
 
@@ -46,7 +48,6 @@ public partial class MainWindow : Window
 
         var settings = _services.GetRequiredService<SettingsService>().Settings;
 
-        // Restore saved window size
         if (settings.RememberWindowSize && settings.WindowWidth >= 500)
         {
             Width  = settings.WindowWidth;
@@ -75,23 +76,29 @@ public partial class MainWindow : Window
                 if (msg == null) return;
                 Dispatcher.Invoke(() =>
                 {
-                    if      (msg == "startDrag")  { try { DragMove(); } catch { } }
-                    else if (msg == "close")    Close();
-                    else if (msg == "minimize") WindowState = WindowState.Minimized;
+                    if      (msg == "startDrag")     { try { DragMove(); } catch { } }
+                    else if (msg == "close")         Close();
+                    else if (msg == "minimize")      WindowState = WindowState.Minimized;
+                    else if (msg == "minimizeToTray") WindowState = WindowState.Minimized; // WPF-only: just minimize
                     else if (msg == "maximize")
                     {
                         WindowState = WindowState == WindowState.Maximized
                             ? WindowState.Normal
                             : WindowState.Maximized;
                     }
+                    else if (msg.StartsWith("openUrl:"))
+                    {
+                        var url = msg.Substring("openUrl:".Length);
+                        try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(url) { UseShellExecute = true }); }
+                        catch { }
+                    }
                 });
             };
         };
 
-        // Save window size on close
         Closed += (_, _) =>
         {
-            var svc      = _services.GetRequiredService<SettingsService>();
+            var svc = _services.GetRequiredService<SettingsService>();
             if (svc.Settings.RememberWindowSize && WindowState == WindowState.Normal)
             {
                 svc.Settings.WindowWidth  = Width;
@@ -104,8 +111,7 @@ public partial class MainWindow : Window
 
     private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
     {
-        if (msg == WM_NCLBUTTONDBLCLK) { handled = true; return IntPtr.Zero; } // block title-bar dblclick
-
+        if (msg == WM_NCLBUTTONDBLCLK) { handled = true; return IntPtr.Zero; }
         if (msg != WM_NCHITTEST) return IntPtr.Zero;
 
         int x  = (short)(lParam.ToInt32() & 0xFFFF);
