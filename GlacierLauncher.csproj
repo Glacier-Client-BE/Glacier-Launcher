@@ -9,13 +9,25 @@
     <NoWarn>NU1701;NU1603</NoWarn>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <Platforms>x64</Platforms>
+    
+    <EnableDefaultStaticWebAssetsCheck>false</EnableDefaultStaticWebAssetsCheck>
+    
     <IncludeAllContentForSelfExtract>true</IncludeAllContentForSelfExtract>
+    
+    <StaticWebAssetsEnabled>true</StaticWebAssetsEnabled>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="CommunityToolkit.Mvvm"                        Version="8.4.0" />
-    <PackageReference Include="DiscordRichPresence"                           Version="1.2.1.24" />
-    <PackageReference Include="Newtonsoft.Json"                               Version="13.0.4" />
-    <PackageReference Include="Microsoft.AspNetCore.Components.WebView.Wpf"  Version="10.0.*-*" />
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
+    <PackageReference Include="DiscordRichPresence" Version="1.2.1.24" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebView.Wpf" Version="10.0.*-*" />
   </ItemGroup>
+
+  <ItemGroup>
+    <Content Update="wwwroot\**">
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
+  </ItemGroup>
+
 </Project>
