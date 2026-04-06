@@ -7,7 +7,7 @@ using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
 
-namespace MinecraftLauncher.Services;
+namespace GlacierLauncher.Services;
 
 public class FlarialService
 {

@@ -1,4 +1,4 @@
-namespace MinecraftLauncher.Models;
+namespace GlacierLauncher.Models;
 
 public class MinecraftVersion
 {

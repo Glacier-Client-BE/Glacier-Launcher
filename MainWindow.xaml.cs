@@ -3,9 +3,9 @@ using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Interop;
 using Microsoft.Extensions.DependencyInjection;
-using MinecraftLauncher.Services;
+using GlacierLauncher.Services;
 
-namespace MinecraftLauncher;
+namespace GlacierLauncher;
 
 public partial class MainWindow : Window
 {

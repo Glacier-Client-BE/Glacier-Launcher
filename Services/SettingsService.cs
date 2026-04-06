@@ -1,8 +1,8 @@
 using System.IO;
 using System.Text.Json;
-using MinecraftLauncher.Models;
+using GlacierLauncher.Models;
 
-namespace MinecraftLauncher.Services;
+namespace GlacierLauncher.Services;
 
 public class SettingsService
 {

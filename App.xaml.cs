@@ -2,7 +2,7 @@
 using System.Data;
 using System.Windows;
 
-namespace MinecraftLauncher;
+namespace GlacierLauncher;
 
 /// <summary>
 /// Interaction logic for App.xaml

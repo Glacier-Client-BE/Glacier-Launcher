@@ -1,9 +1,9 @@
 using System;
 using DiscordRPC;
 using DiscordRPC.Logging;
-using MinecraftLauncher.Models;
+using GlacierLauncher.Models;
 
-namespace MinecraftLauncher.Services;
+namespace GlacierLauncher.Services;
 
 public class DiscordRpcService : IDisposable
 {

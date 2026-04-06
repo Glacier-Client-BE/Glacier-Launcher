@@ -7,9 +7,9 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
-using MinecraftLauncher.Models;
+using GlacierLauncher.Models;
 
-namespace MinecraftLauncher.Services;
+namespace GlacierLauncher.Services;
 
 public class GameLauncher
 {

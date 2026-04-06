@@ -7,7 +7,7 @@ using System.Text.Json;
 using System.Threading.Tasks;
 using System.Windows;
 
-namespace MinecraftLauncher.Services;
+namespace GlacierLauncher.Services;
 
 public record LauncherUpdateInfo(
     string Tag,

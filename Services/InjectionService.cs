@@ -3,7 +3,7 @@ using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 
-namespace MinecraftLauncher.Services;
+namespace GlacierLauncher.Services;
 
 public static class InjectionService
 {

@@ -69,5 +69,5 @@ GlacierLauncher/
 │   └── index.html
 ├── MainWindow.xaml           – Frameless WPF window with rounded corners + shadow
 ├── MainWindow.xaml.cs        – WebView2 message handler, Discord RPC init
-└── MinecraftLauncher.csproj
+└── GlacierLauncher.csproj
 ```
