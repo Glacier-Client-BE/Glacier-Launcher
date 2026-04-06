@@ -51,31 +51,8 @@ public partial class MainWindow : Window
 
         InitializeComponent();
 
-        try
-        {
-            string processPath = Environment.ProcessPath ?? AppDomain.CurrentDomain.BaseDirectory;
-            string realLocation = Path.GetDirectoryName(processPath) ?? AppDomain.CurrentDomain.BaseDirectory;
-            
-            string publishedPath = Path.Combine(realLocation, "wwwroot", "index.html");
-            string devPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "wwwroot", "index.html");
-
-            if (File.Exists(publishedPath))
-            {
-                blazorWebView.HostPage = publishedPath;
-            }
-            else if (File.Exists(devPath))
-            {
-                blazorWebView.HostPage = devPath;
-            }
-            else
-            {
-                MessageBox.Show($"Content Missing!\n\nChecked:\n1. {publishedPath}\n2. {devPath}", "Launcher Error");
-            }
-        }
-        catch (Exception ex)
-        {
-            MessageBox.Show($"Startup Error: {ex.Message}");
-        }
+        // Point to the internal path. Blazor handles the extraction from EXE automatically.
+        blazorWebView.HostPage = "wwwroot/index.html";
 
         var settings = _services.GetRequiredService<SettingsService>().Settings;
         if (settings.RememberWindowSize && settings.WindowWidth >= 500)

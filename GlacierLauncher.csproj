@@ -10,11 +10,8 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <Platforms>x64</Platforms>
     
-    <EnableDefaultStaticWebAssetsCheck>false</EnableDefaultStaticWebAssetsCheck>
-    
-    <IncludeAllContentForSelfExtract>true</IncludeAllContentForSelfExtract>
-    
     <StaticWebAssetsEnabled>true</StaticWebAssetsEnabled>
+    <EnableDefaultStaticWebAssetsCheck>true</EnableDefaultStaticWebAssetsCheck>
   </PropertyGroup>
 
   <ItemGroup>
@@ -25,9 +22,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Content Update="wwwroot\**">
-      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
-    </Content>
+    <EmbeddedResource Include="wwwroot\**" />
+    <Content Remove="wwwroot\**" />
   </ItemGroup>
 
 </Project>
