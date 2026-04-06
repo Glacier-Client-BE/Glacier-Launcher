@@ -2048,7 +2048,74 @@
     private void CloseDiscordModal() { discordModalOpen = false; StateHasChanged(); }
 
     private async Task OpenDiscordOAuth()
-        => await JS.InvokeVoidAsync("openDiscordOAuth", "YOUR_DISCORD_CLIENT_ID");
+    {
+        try
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = "https://discord.com/oauth2/authorize?client_id=1482726422094024779&response_type=code&redirect_uri=http%3A%2F%2Flocalhost%3A5000%2Fcallback&scope=identify",
+                UseShellExecute = true
+            });
+
+            using var listener = new System.Net.HttpListener();
+            listener.Prefixes.Add("http://localhost:5000/callback/");
+            listener.Start();
+
+            var context = await listener.GetContextAsync();
+            var code = context.Request.QueryString["code"];
+
+            var responseBytes = System.Text.Encoding.UTF8.GetBytes("Success");
+            context.Response.OutputStream.Write(responseBytes, 0, responseBytes.Length);
+            context.Response.Close();
+            listener.Stop();
+
+            if (!string.IsNullOrEmpty(code))
+            {
+                using var http = new System.Net.Http.HttpClient();
+                var tokenContent = new System.Net.Http.FormUrlEncodedContent(new[]
+                {
+                    new System.Collections.Generic.KeyValuePair<string, string>("client_id", "1482726422094024779"),
+                    new System.Collections.Generic.KeyValuePair<string, string>("client_secret", "zwvBIpvo18qHSLUzlvG1AKfJKAkMLujc"),
+                    new System.Collections.Generic.KeyValuePair<string, string>("grant_type", "authorization_code"),
+                    new System.Collections.Generic.KeyValuePair<string, string>("code", code),
+                    new System.Collections.Generic.KeyValuePair<string, string>("redirect_uri", "http://localhost:5000/callback")
+                });
+
+                var tokenResponse = await http.PostAsync("https://discord.com/api/oauth2/token", tokenContent);
+                var tokenJson = await tokenResponse.Content.ReadAsStringAsync();
+                var tokenDoc = System.Text.Json.JsonDocument.Parse(tokenJson);
+                var accessToken = tokenDoc.RootElement.GetProperty("access_token").GetString();
+
+                http.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", accessToken);
+                var userResponse = await http.GetAsync("https://discord.com/api/users/@me");
+                var userJson = await userResponse.Content.ReadAsStringAsync();
+                var userDoc = System.Text.Json.JsonDocument.Parse(userJson);
+
+                var userId = userDoc.RootElement.GetProperty("id").GetString();
+                var username = userDoc.RootElement.GetProperty("username").GetString();
+                var avatarHash = userDoc.RootElement.GetProperty("avatar").GetString();
+
+                var avatarUrl = $"https://cdn.discordapp.com/avatars/{userId}/{avatarHash}.png";
+
+                SettingsService.Settings.DiscordLoggedIn = true;
+                SettingsService.Settings.DiscordUsername = username;
+                SettingsService.Settings.DiscordAvatar = avatarUrl;
+                SettingsService.Settings.DiscordToken = accessToken;
+                displayName = username;
+                displayHandle = "@" + username.ToLower().Replace(" ", "");
+                SettingsService.Settings.Username = displayName;
+                SettingsService.Settings.UserHandle = displayHandle;
+                SettingsService.Save();
+                BuildDefaultSearchResults();
+                discordModalOpen = false;
+                _ = ShowToast("Signed in as " + displayName, "success");
+                StateHasChanged();
+            }
+        }
+        catch
+        {
+        }
+    }
 
     private void SaveDiscordManual()
     {
@@ -2092,6 +2159,6 @@
     {
         if (SettingsService.Settings.DiscordLoggedIn && !string.IsNullOrEmpty(SettingsService.Settings.DiscordAvatar))
             return SettingsService.Settings.DiscordAvatar;
-        return "images/avatar.png";
+        return "images/icon.png";
     }
 }
