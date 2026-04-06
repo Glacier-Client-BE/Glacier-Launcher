@@ -140,7 +140,7 @@
           "buildMultiTargeting/Microsoft.AspNetCore.Components.WebView.props": {}
         }
       },
-      "Microsoft.AspNetCore.Components.WebView.Wpf/10.0.50": {
+      "Microsoft.AspNetCore.Components.WebView.Wpf/10.0.51": {
         "type": "package",
         "dependencies": {
           "Microsoft.AspNetCore.Components.WebView": "10.0.0",
@@ -779,10 +779,10 @@
         "staticwebassets/blazor.webview.js"
       ]
     },
-    "Microsoft.AspNetCore.Components.WebView.Wpf/10.0.50": {
-      "sha512": "VM789KG0AAxe+y3aFoi4j8FAQWPfY0Ep+g7mxeItH1q5rdYzbI5RmBPwuKyDIbCMkNAxS9ut6ZBK9UkddScWpg==",
+    "Microsoft.AspNetCore.Components.WebView.Wpf/10.0.51": {
+      "sha512": "HiGa973TvlQq865vILSRwlvZXXTMyYcKT4zDEp9D9aWnN8uN5HF2D3u0/AwXvw/V0ZYZmSf1bYlacBol02Jzow==",
       "type": "package",
-      "path": "microsoft.aspnetcore.components.webview.wpf/10.0.50",
+      "path": "microsoft.aspnetcore.components.webview.wpf/10.0.51",
       "files": [
         ".nupkg.metadata",
         ".signature.p7s",
@@ -795,7 +795,7 @@
         "lib/net10.0-windows7.0/Microsoft.AspNetCore.Components.WebView.Wpf.dll",
         "lib/net10.0-windows7.0/Microsoft.AspNetCore.Components.WebView.Wpf.pdb",
         "lib/net10.0-windows7.0/Microsoft.AspNetCore.Components.WebView.Wpf.xml",
-        "microsoft.aspnetcore.components.webview.wpf.10.0.50.nupkg.sha512",
+        "microsoft.aspnetcore.components.webview.wpf.10.0.51.nupkg.sha512",
         "microsoft.aspnetcore.components.webview.wpf.nuspec"
       ]
     },
@@ -1612,9 +1612,9 @@
   "project": {
     "version": "1.0.0",
     "restore": {
-      "projectUniqueName": "C:\\Users\\User\\MinecraftLauncher\\MinecraftLauncher.csproj",
-      "projectName": "MinecraftLauncher",
-      "projectPath": "C:\\Users\\User\\MinecraftLauncher\\MinecraftLauncher.csproj",
+      "projectUniqueName": "C:\\Users\\User\\MinecraftLauncher\\GlacierLauncher.csproj",
+      "projectName": "GlacierLauncher",
+      "projectPath": "C:\\Users\\User\\MinecraftLauncher\\GlacierLauncher.csproj",
       "packagesPath": "C:\\Users\\User\\.nuget\\packages\\",
       "outputPath": "C:\\Users\\User\\MinecraftLauncher\\obj\\",
       "projectStyle": "PackageReference",

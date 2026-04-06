@@ -74,12 +74,12 @@ public class DiscordRpcService : IDisposable
         });
     }
 
-public void SetInGamePresence(string versionTag, string? clientName = null)
-{
-    if (!_running || _client == null) return;
-
-    var state = clientName switch
+    public void SetInGamePresence(string versionTag, string? clientName = null)
     {
+        if (!_running || _client == null) return;
+
+        var state = clientName switch
+        {
         "Flarial Client" => "Using Flarial",
         "OderSo Client"  => string.IsNullOrEmpty(versionTag) ? "Using OderSo" : $"Using OderSo · {versionTag}",
         "Custom DLL"     => string.IsNullOrEmpty(versionTag) ? "Using a custom DLL" : $"Using {versionTag}",

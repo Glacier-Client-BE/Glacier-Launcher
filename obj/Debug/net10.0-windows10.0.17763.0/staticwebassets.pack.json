@@ -49,24 +49,24 @@
       "PackagePath": "staticwebassets\\js\\interop.js"
     },
     {
-      "Id": "obj\\Debug\\net10.0-windows10.0.17763.0\\staticwebassets\\msbuild.MinecraftLauncher.Microsoft.AspNetCore.StaticWebAssetEndpoints.props",
+      "Id": "obj\\Debug\\net10.0-windows10.0.17763.0\\staticwebassets\\msbuild.GlacierLauncher.Microsoft.AspNetCore.StaticWebAssetEndpoints.props",
       "PackagePath": "build\\Microsoft.AspNetCore.StaticWebAssetEndpoints.props"
     },
     {
-      "Id": "obj\\Debug\\net10.0-windows10.0.17763.0\\staticwebassets\\msbuild.MinecraftLauncher.Microsoft.AspNetCore.StaticWebAssets.props",
+      "Id": "obj\\Debug\\net10.0-windows10.0.17763.0\\staticwebassets\\msbuild.GlacierLauncher.Microsoft.AspNetCore.StaticWebAssets.props",
       "PackagePath": "build\\Microsoft.AspNetCore.StaticWebAssets.props"
     },
     {
-      "Id": "obj\\Debug\\net10.0-windows10.0.17763.0\\staticwebassets\\msbuild.build.MinecraftLauncher.props",
-      "PackagePath": "build\\MinecraftLauncher.props"
+      "Id": "obj\\Debug\\net10.0-windows10.0.17763.0\\staticwebassets\\msbuild.build.GlacierLauncher.props",
+      "PackagePath": "build\\GlacierLauncher.props"
     },
     {
-      "Id": "obj\\Debug\\net10.0-windows10.0.17763.0\\staticwebassets\\msbuild.buildMultiTargeting.MinecraftLauncher.props",
-      "PackagePath": "buildMultiTargeting\\MinecraftLauncher.props"
+      "Id": "obj\\Debug\\net10.0-windows10.0.17763.0\\staticwebassets\\msbuild.buildMultiTargeting.GlacierLauncher.props",
+      "PackagePath": "buildMultiTargeting\\GlacierLauncher.props"
     },
     {
-      "Id": "obj\\Debug\\net10.0-windows10.0.17763.0\\staticwebassets\\msbuild.buildTransitive.MinecraftLauncher.props",
-      "PackagePath": "buildTransitive\\MinecraftLauncher.props"
+      "Id": "obj\\Debug\\net10.0-windows10.0.17763.0\\staticwebassets\\msbuild.buildTransitive.GlacierLauncher.props",
+      "PackagePath": "buildTransitive\\GlacierLauncher.props"
     }
   ],
   "ElementsToRemove": []

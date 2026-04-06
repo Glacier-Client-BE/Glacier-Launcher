@@ -2060,12 +2060,12 @@
 
     private void CloseDiscordModal() { discordModalOpen = false; StateHasChanged(); }
 
-private async Task OpenDiscordOAuth()
-{
-    try
+    private async Task OpenDiscordOAuth()
     {
-        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+        try
         {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
             FileName = "https://discord.com/oauth2/authorize?client_id=1482726422094024779&response_type=code&redirect_uri=http%3A%2F%2Flocalhost%3A5000%2Fcallback&scope=identify",
             UseShellExecute = true
         });
@@ -2126,11 +2126,10 @@ private async Task OpenDiscordOAuth()
             _ = ShowToast("Signed in as " + displayName, "success");
             StateHasChanged();
         }
+        catch
+        {
+        }
     }
-    catch
-    {
-    }
-}
 
     private void SaveDiscordManual()
     {
