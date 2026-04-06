@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("MinecraftLauncher")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+88b2a787f8e7bb2dcfe5645e03d4d37a0dc49191")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+224335e69c9201940f85d1fb9e2f1acb555b1684")]
 [assembly: System.Reflection.AssemblyProductAttribute("MinecraftLauncher")]
 [assembly: System.Reflection.AssemblyTitleAttribute("MinecraftLauncher")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
