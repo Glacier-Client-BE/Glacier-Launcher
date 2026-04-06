@@ -74,24 +74,32 @@ public class DiscordRpcService : IDisposable
         });
     }
 
-    public void SetInGamePresence(string versionTag)
-    {
-        if (!_running || _client == null) return;
+public void SetInGamePresence(string versionTag, string? clientName = null)
+{
+    if (!_running || _client == null) return;
 
-        _client.SetPresence(new RichPresence
+    var state = clientName switch
+    {
+        "Flarial Client" => "Using Flarial",
+        "OderSo Client"  => string.IsNullOrEmpty(versionTag) ? "Using OderSo" : $"Using OderSo · {versionTag}",
+        "Custom DLL"     => string.IsNullOrEmpty(versionTag) ? "Using a custom DLL" : $"Using {versionTag}",
+        _                => string.IsNullOrEmpty(versionTag) ? "Using Latite" : $"Using Latite · {versionTag}",
+    };
+
+    _client.SetPresence(new RichPresence
+    {
+        Details    = "Playing Minecraft",
+        State      = state,
+        Assets     = new Assets
         {
-            Details    = "Playing Minecraft",
-            State      = $"Using Latite {versionTag}",
-            Assets     = new Assets
-            {
-                LargeImageKey  = "minecraft_icon",
-                LargeImageText = "Minecraft",
-                SmallImageKey  = "glacier_logo",
-                SmallImageText = "Glacier Launcher"
-            },
-            Timestamps = Timestamps.Now
-        });
-    }
+            LargeImageKey  = "minecraft_icon",
+            LargeImageText = "Minecraft",
+            SmallImageKey  = "glacier_logo",
+            SmallImageText = "Glacier Launcher"
+        },
+        Timestamps = Timestamps.Now
+    });
+}
 
     public void Dispose() => Stop();
 }
