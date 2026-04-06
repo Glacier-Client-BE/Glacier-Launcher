@@ -20,6 +20,7 @@
 
     <Grid WindowChrome.IsHitTestVisibleInChrome="True">
         <blazor:BlazorWebView x:Name="blazorWebView"
+                              HostPage="wwwroot/index.html"
                               Services="{DynamicResource services}">
             <blazor:BlazorWebView.RootComponents>
                 <blazor:RootComponent Selector="#app"
