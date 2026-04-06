@@ -156,7 +156,8 @@ public partial class MainWindow : Window
 
         Directory.CreateDirectory(wwwrootDir);
 
-        using var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("wwwroot.zip")!;
+        using var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("wwwroot.zip")
+            ?? throw new InvalidOperationException("Embedded resource 'wwwroot.zip' not found in assembly.");
         using var archive = new ZipArchive(stream, ZipArchiveMode.Read);
         archive.ExtractToDirectory(wwwrootDir);
 
