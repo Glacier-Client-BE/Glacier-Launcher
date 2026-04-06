@@ -1,5 +1,7 @@
 using System;
 using System.IO;
+using System.IO.Compression;
+using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Interop;
@@ -51,8 +53,12 @@ public partial class MainWindow : Window
 
         InitializeComponent();
 
-        // Point to the internal path. Blazor handles the extraction from EXE automatically.
+#if DEBUG
         blazorWebView.HostPage = "wwwroot/index.html";
+#else
+        var wwwrootDir = ExtractWwwroot();
+        blazorWebView.HostPage = Path.Combine(wwwrootDir, "index.html");
+#endif
 
         var settings = _services.GetRequiredService<SettingsService>().Settings;
         if (settings.RememberWindowSize && settings.WindowWidth >= 500)
@@ -137,5 +143,23 @@ public partial class MainWindow : Window
         }
         catch { }
         return IntPtr.Zero;
+    }
+
+    private static string ExtractWwwroot()
+    {
+        var wwwrootDir = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "GlacierLauncher", "wwwroot");
+
+        if (Directory.Exists(wwwrootDir))
+            Directory.Delete(wwwrootDir, true);
+
+        Directory.CreateDirectory(wwwrootDir);
+
+        using var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("wwwroot.zip")!;
+        using var archive = new ZipArchive(stream, ZipArchiveMode.Read);
+        archive.ExtractToDirectory(wwwrootDir);
+
+        return wwwrootDir;
     }
 }

@@ -1,8 +1,6 @@
-# Ignore build output
 bin/
 obj/
-
-# Ignore user-specific Visual Studio files
 .vs/
 *.user
 *.suo
+.claude/

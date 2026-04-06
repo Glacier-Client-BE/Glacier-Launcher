@@ -22,4 +22,15 @@
   </ItemGroup>
 
 
+  <!-- Zip and embed wwwroot for single-file publish support -->
+  <Target Name="EmbedWwwroot" BeforeTargets="CoreCompile">
+    <MakeDir Directories="$(IntermediateOutputPath)" />
+    <ZipDirectory SourceDirectory="$(MSBuildProjectDirectory)\wwwroot"
+                  DestinationFile="$(IntermediateOutputPath)wwwroot.zip"
+                  Overwrite="true" />
+    <ItemGroup>
+      <EmbeddedResource Include="$(IntermediateOutputPath)wwwroot.zip" LogicalName="wwwroot.zip" />
+    </ItemGroup>
+  </Target>
+
 </Project>

@@ -9,6 +9,46 @@
       "PackagePath": "staticwebassets\\_framework\\blazor.webview.js"
     },
     {
+      "Id": "C:\\Users\\User\\MinecraftLauncher\\wwwroot\\css\\app.css",
+      "PackagePath": "staticwebassets\\css\\app.css"
+    },
+    {
+      "Id": "C:\\Users\\User\\MinecraftLauncher\\wwwroot\\images\\PUT_IMAGES_HERE.txt",
+      "PackagePath": "staticwebassets\\images\\PUT_IMAGES_HERE.txt"
+    },
+    {
+      "Id": "C:\\Users\\User\\MinecraftLauncher\\wwwroot\\images\\avatar.png",
+      "PackagePath": "staticwebassets\\images\\avatar.png"
+    },
+    {
+      "Id": "C:\\Users\\User\\MinecraftLauncher\\wwwroot\\images\\bg.png",
+      "PackagePath": "staticwebassets\\images\\bg.png"
+    },
+    {
+      "Id": "C:\\Users\\User\\MinecraftLauncher\\wwwroot\\images\\clients\\flarial.svg",
+      "PackagePath": "staticwebassets\\images\\clients\\flarial.svg"
+    },
+    {
+      "Id": "C:\\Users\\User\\MinecraftLauncher\\wwwroot\\images\\clients\\latite.png",
+      "PackagePath": "staticwebassets\\images\\clients\\latite.png"
+    },
+    {
+      "Id": "C:\\Users\\User\\MinecraftLauncher\\wwwroot\\images\\clients\\oderso.png",
+      "PackagePath": "staticwebassets\\images\\clients\\oderso.png"
+    },
+    {
+      "Id": "C:\\Users\\User\\MinecraftLauncher\\wwwroot\\images\\icon.png",
+      "PackagePath": "staticwebassets\\images\\icon.png"
+    },
+    {
+      "Id": "C:\\Users\\User\\MinecraftLauncher\\wwwroot\\index.html",
+      "PackagePath": "staticwebassets\\index.html"
+    },
+    {
+      "Id": "C:\\Users\\User\\MinecraftLauncher\\wwwroot\\js\\interop.js",
+      "PackagePath": "staticwebassets\\js\\interop.js"
+    },
+    {
       "Id": "obj\\Debug\\net10.0-windows10.0.17763.0\\staticwebassets\\msbuild.GlacierLauncher.Microsoft.AspNetCore.StaticWebAssetEndpoints.props",
       "PackagePath": "build\\Microsoft.AspNetCore.StaticWebAssetEndpoints.props"
     },
