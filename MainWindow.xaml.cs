@@ -6,7 +6,6 @@ using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Interop;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.FileProviders;
 using GlacierLauncher.Services;
 
 namespace GlacierLauncher;
@@ -56,8 +55,8 @@ public partial class MainWindow : Window
 
 #if !DEBUG
         string wwwrootDir = ExtractWwwroot();
-        blazorWebView.FileProvider = new PhysicalFileProvider(wwwrootDir);
-        blazorWebView.HostPage = "index.html"; 
+        // Fixed: Use absolute path. FileProvider is not a direct property of BlazorWebView in WPF.
+        blazorWebView.HostPage = Path.Combine(wwwrootDir, "index.html"); 
 #else
         blazorWebView.HostPage = "wwwroot/index.html";
 #endif

@@ -6,6 +6,10 @@ on:
       - main
   workflow_dispatch:
 
+env:
+  # Opt-in to Node 24 to silence deprecation warnings for actions
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   build:
     runs-on: windows-latest
@@ -24,12 +28,13 @@ jobs:
       shell: pwsh
       run: |
         $tags = git tag -l "v*" | Sort-Object { [version]($_ -replace 'v','') }
-        if ($null -eq $tags) {
+        if ($null -eq $tags -or $tags.Count -eq 0) {
             $latest = "1.0.6"
         } else {
             $latest = ($tags[-1] -replace 'v','')
         }
         $v = [version]$latest
+        # Ensure we increment the correct part of the version string
         $next = "v$($v.Major).$($v.Minor).$($v.Build + 1)"
         echo "NEXT_TAG=$next" >> $env:GITHUB_OUTPUT
         Write-Host "Next version: $next"
@@ -43,7 +48,15 @@ jobs:
       run: dotnet restore
 
     - name: Build and Publish Single File Exe
-      run: dotnet publish GlacierLauncher.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:StaticWebAssetsEnabled=true -o "${{ github.workspace }}\publish"
+      run: >
+        dotnet publish GlacierLauncher.csproj 
+        -c Release 
+        -r win-x64 
+        --self-contained true 
+        -p:PublishSingleFile=true 
+        -p:IncludeNativeLibrariesForSelfExtract=true 
+        -p:StaticWebAssetsEnabled=true 
+        -o "${{ github.workspace }}\publish"
 
     - name: Create and Push Tag
       shell: pwsh
