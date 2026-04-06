@@ -9,6 +9,7 @@
     <NoWarn>NU1701;NU1603</NoWarn>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <Platforms>x64</Platforms>
+    <IncludeAllContentForSelfExtract>true</IncludeAllContentForSelfExtract>
   </PropertyGroup>
 
   <ItemGroup>
@@ -16,8 +17,5 @@
     <PackageReference Include="DiscordRichPresence"                           Version="1.2.1.24" />
     <PackageReference Include="Newtonsoft.Json"                               Version="13.0.4" />
     <PackageReference Include="Microsoft.AspNetCore.Components.WebView.Wpf"  Version="10.0.*-*" />
-    <Content Include="wwwroot\**">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
   </ItemGroup>
 </Project>
