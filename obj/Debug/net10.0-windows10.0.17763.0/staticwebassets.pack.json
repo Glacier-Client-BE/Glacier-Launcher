@@ -25,6 +25,18 @@
       "PackagePath": "staticwebassets\\images\\bg.png"
     },
     {
+      "Id": "C:\\Users\\User\\MinecraftLauncher\\wwwroot\\images\\clients\\flarial.svg",
+      "PackagePath": "staticwebassets\\images\\clients\\flarial.svg"
+    },
+    {
+      "Id": "C:\\Users\\User\\MinecraftLauncher\\wwwroot\\images\\clients\\latite.png",
+      "PackagePath": "staticwebassets\\images\\clients\\latite.png"
+    },
+    {
+      "Id": "C:\\Users\\User\\MinecraftLauncher\\wwwroot\\images\\clients\\oderso.png",
+      "PackagePath": "staticwebassets\\images\\clients\\oderso.png"
+    },
+    {
       "Id": "C:\\Users\\User\\MinecraftLauncher\\wwwroot\\images\\icon.png",
       "PackagePath": "staticwebassets\\images\\icon.png"
     },

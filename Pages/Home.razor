@@ -48,7 +48,10 @@
                                 <div class="search-result-item @(searchSelIdx == idx ? "sel" : "")"
                                      @onclick="r.OnSelect"
                                      @onmouseenter="() => searchSelIdx = idx">
-                                    <div class="search-result-icon"><i class="@r.Icon"></i></div>
+                                    <div class="search-result-icon">
+                                        @if (r.Icon.StartsWith("images/")) { <img src="@r.Icon" style="width:16px;height:16px;object-fit:contain;" /> }
+                                        else { <i class="@r.Icon"></i> }
+                                    </div>
                                     <div class="search-result-text">
                                         <span class="search-result-label">@r.Label</span>
                                         @if (!string.IsNullOrEmpty(r.Sub)) { <span class="search-result-sub">@r.Sub</span> }
@@ -79,7 +82,10 @@
                                 <div class="search-result-item @(searchSelIdx == fi ? "sel" : "")"
                                      @onclick="r.OnSelect"
                                      @onmouseenter="() => searchSelIdx = fi">
-                                    <div class="search-result-icon"><i class="@r.Icon"></i></div>
+                                    <div class="search-result-icon">
+                                        @if (r.Icon.StartsWith("images/")) { <img src="@r.Icon" style="width:16px;height:16px;object-fit:contain;" /> }
+                                        else { <i class="@r.Icon"></i> }
+                                    </div>
                                     <div class="search-result-text">
                                         <span class="search-result-label">@r.Label</span>
                                         @if (!string.IsNullOrEmpty(r.Sub)) { <span class="search-result-sub">@r.Sub</span> }
@@ -220,7 +226,14 @@
         <div class="topbar-client-chip" @onclick="CycleClient" @onmousedown:stopPropagation
              title="Click to cycle client (@SettingsService.Settings.SelectedClient)">
             <div class="chip-dot"></div>
-            <i class="chip-icon @(GetClientIcon(SettingsService.Settings.SelectedClient))"></i>
+            @if (SettingsService.Settings.SelectedClient == "Custom DLL")
+            {
+                <i class="chip-icon @(GetClientIcon(SettingsService.Settings.SelectedClient))"></i>
+            }
+            else
+            {
+                <img class="chip-icon" src="@GetClientImagePath(SettingsService.Settings.SelectedClient)" style="width:14px;height:14px;object-fit:contain;" alt="" />
+            }
             <span>@SettingsService.Settings.SelectedClient</span>
             <i class="fa-solid fa-chevron-right chip-arrow"></i>
         </div>
@@ -650,7 +663,7 @@
                 <!-- Flarial -->
                 <div class="client-card @(SettingsService.Settings.SelectedClient == "Flarial Client" ? "client-active" : "")">
                     <div class="client-card-header">
-                        <div class="client-card-icon flarial-icon"><i class="fa-solid fa-fire"></i></div>
+                        <div class="client-card-icon" style="padding:5px;"><img src="images/clients/flarial.svg" style="width:100%;height:100%;object-fit:contain;"/></div>
                         <div class="client-card-meta">
                             <span class="client-card-name">Flarial Client</span>
                             <span class="client-card-sub">
@@ -704,7 +717,7 @@
                 <!-- Latite -->
                 <div class="client-card @(SettingsService.Settings.SelectedClient == "Latite Client" ? "client-active" : "")">
                     <div class="client-card-header">
-                        <div class="client-card-icon latite-icon"><i class="fa-solid fa-bolt"></i></div>
+                        <div class="client-card-icon" style="padding:5px;"><img src="images/clients/latite.png" style="width:100%;height:100%;object-fit:contain;"/></div>
                         <div class="client-card-meta">
                             <span class="client-card-name">Latite Client</span>
                             <span class="client-card-sub" style="opacity:0.5;">Versioned GitHub releases</span>
@@ -727,7 +740,7 @@
                 <!-- OderSo -->
                 <div class="client-card @(SettingsService.Settings.SelectedClient == "OderSo Client" ? "client-active" : "")">
                     <div class="client-card-header">
-                        <div class="client-card-icon oderso-icon"><i class="fa-solid fa-wand-magic-sparkles"></i></div>
+                        <div class="client-card-icon" style="padding:5px;"><img src="images/clients/oderso.png" style="width:100%;height:100%;object-fit:contain;"/></div>
                         <div class="client-card-meta">
                             <span class="client-card-name">OderSo Client</span>
                             <span class="client-card-sub">
@@ -1015,7 +1028,7 @@
                 <span class="panel-section-label">Clients</span>
 
                 <div class="credits-card">
-                    <div class="credits-card-icon latite-icon"><i class="fa-solid fa-bolt"></i></div>
+                    <div class="credits-card-icon" style="padding:6px;"><img src="images/clients/latite.png" style="width:100%;height:100%;object-fit:contain;"/></div>
                     <div class="credits-card-meta">
                         <span class="credits-card-name">Latite Client</span>
                         <span class="credits-card-sub">by Imrglop &amp; contributors</span>
@@ -1033,7 +1046,7 @@
                 </div>
 
                 <div class="credits-card">
-                    <div class="credits-card-icon flarial-icon"><i class="fa-solid fa-fire"></i></div>
+                    <div class="credits-card-icon" style="padding:6px;"><img src="images/clients/flarial.svg" style="width:100%;height:100%;object-fit:contain;"/></div>
                     <div class="credits-card-meta">
                         <span class="credits-card-name">Flarial Client</span>
                         <span class="credits-card-sub">by the Flarial team</span>
@@ -1051,7 +1064,7 @@
                 </div>
 
                 <div class="credits-card">
-                    <div class="credits-card-icon oderso-icon"><i class="fa-solid fa-wand-magic-sparkles"></i></div>
+                    <div class="credits-card-icon" style="padding:6px;"><img src="images/clients/oderso.png" style="width:100%;height:100%;object-fit:contain;"/></div>
                     <div class="credits-card-meta">
                         <span class="credits-card-name">OderSo Client</span>
                         <span class="credits-card-sub">by MasonOderSo</span>
@@ -1252,9 +1265,9 @@
             new("fa-solid fa-puzzle-piece",       "Manage Clients",   "Quick Actions", "Flarial, Latite, OderSo, Custom DLL",             "Ctrl+2", () => { CloseSearch(); _ = OpenClients(); }),
             new("fa-solid fa-clock-rotate-left",  "Browse Versions",  "Quick Actions", "Download & manage Latite versions",               "Ctrl+3", () => { CloseSearch(); _ = OpenVersions(); }),
             new("fa-brands fa-discord",           "Discord Account",  "Account",       "Connect or manage Discord",                       "",       () => { CloseSearch(); OpenDiscordModal(); }),
-            new("fa-solid fa-fire",               "Select Flarial",   "Clients",       "Switch active client to Flarial",                 "",       () => { CloseSearch(); SelectClient("Flarial Client"); }),
-            new("fa-solid fa-bolt",               "Select Latite",    "Clients",       "Switch active client to Latite",                  "",       () => { CloseSearch(); SelectClient("Latite Client"); }),
-            new("fa-solid fa-wand-magic-sparkles","Select OderSo",    "Clients",       "Switch active client to OderSo",                  "",       () => { CloseSearch(); SelectClient("OderSo Client"); }),
+            new("images/clients/flarial.svg",     "Select Flarial",   "Clients",       "Switch active client to Flarial",                 "",       () => { CloseSearch(); SelectClient("Flarial Client"); }),
+            new("images/clients/latite.png",      "Select Latite",    "Clients",       "Switch active client to Latite",                  "",       () => { CloseSearch(); SelectClient("Latite Client"); }),
+            new("images/clients/oderso.png",      "Select OderSo",    "Clients",       "Switch active client to OderSo",                  "",       () => { CloseSearch(); SelectClient("OderSo Client"); }),
         };
     }
 
@@ -2149,10 +2162,15 @@
     // ── Helpers ───────────────────────────────────────────────
     private static string GetClientIcon(string client) => client switch
     {
-        "Flarial Client" => "fa-solid fa-fire",
-        "OderSo Client"  => "fa-solid fa-wand-magic-sparkles",
         "Custom DLL"     => "fa-solid fa-file-code",
-        _                => "fa-solid fa-bolt",
+        _                => "",
+    };
+
+    private static string GetClientImagePath(string client) => client switch
+    {
+        "Flarial Client" => "images/clients/flarial.svg",
+        "OderSo Client"  => "images/clients/oderso.png",
+        _                => "images/clients/latite.png",
     };
 
     private string GetAvatarSrc()
