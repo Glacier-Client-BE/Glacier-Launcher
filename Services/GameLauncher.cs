@@ -98,15 +98,19 @@ public class GameLauncher
     private readonly SettingsService _settingsService;
     private readonly HttpClient      _httpClient;
 
-    public static string ClientsDirectory =>
-        Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "clients");
+    public static string DownloadsDirectory =>
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+            "Glacier Launcher", "downloads");
+
+    public static string LatiteDirectory =>
+        Path.Combine(DownloadsDirectory, "Latite");
 
     public GameLauncher(SettingsService settingsService)
     {
         _settingsService = settingsService;
         _httpClient      = new HttpClient();
         _httpClient.DefaultRequestHeaders.Add("User-Agent", "GlacierLauncher/1.0");
-        Directory.CreateDirectory(ClientsDirectory);
+        Directory.CreateDirectory(LatiteDirectory);
     }
 
     public async Task<List<MinecraftVersion>> GetVersionsAsync()
@@ -212,7 +216,7 @@ public class GameLauncher
     }
 
     public static string GetDllPath(string tag) =>
-        Path.Combine(ClientsDirectory, $"Latite_{tag}.dll");
+        Path.Combine(LatiteDirectory, $"Latite_{tag}.dll");
 
     // ── Core launch + inject ─────────────────────────────────────
 

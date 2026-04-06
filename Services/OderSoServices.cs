@@ -21,10 +21,11 @@ public class OderSoService
         $"https://raw.githubusercontent.com/{Org}/{Repo}/{Branch}/";
 
     // ── Local paths ───────────────────────────────────────────────
-    public static string ClientsDirectory => GameLauncher.ClientsDirectory;
+    public static string OderSoDirectory =>
+        Path.Combine(GameLauncher.DownloadsDirectory, "OderSo");
 
     private static string VerPath =>
-        Path.Combine(ClientsDirectory, "OderSo.ver");
+        Path.Combine(OderSoDirectory, "OderSo.ver");
 
     // ── Active-entry facade (used by GameLauncher) ────────────────
     public bool IsDownloaded
@@ -43,7 +44,7 @@ public class OderSoService
         {
             var entry = GetStoredEntry();
             if (entry != null) return GetDllPath(entry.Name);
-            return Path.Combine(ClientsDirectory, "OderSo.dll");
+            return Path.Combine(OderSoDirectory, "OderSo.dll");
         }
     }
 
@@ -53,6 +54,7 @@ public class OderSoService
     {
         _http = new HttpClient();
         _http.DefaultRequestHeaders.Add("User-Agent", "GlacierLauncher/1.0");
+        Directory.CreateDirectory(OderSoDirectory);
     }
 
     // ── GitHub Contents API ───────────────────────────────────────
@@ -102,7 +104,7 @@ public class OderSoService
 
     public async Task DownloadEntryAsync(DllEntry entry, IProgress<double>? progress = null)
     {
-        Directory.CreateDirectory(ClientsDirectory);
+        Directory.CreateDirectory(OderSoDirectory);
 
         var rawUrl  = RawBaseUrl + Uri.EscapeDataString(entry.Name);
         var dllPath = GetDllPath(entry.Name);
@@ -178,7 +180,7 @@ public class OderSoService
     // ── Helpers ───────────────────────────────────────────────────
 
     private static string GetDllPath(string fileName) =>
-        Path.Combine(ClientsDirectory, "OderSo_" + fileName);
+        Path.Combine(OderSoDirectory, "OderSo_" + fileName);
 
     private DllEntry? GetStoredEntry()
     {

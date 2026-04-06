@@ -53,9 +53,7 @@ public partial class MainWindow : Window
 
         InitializeComponent();
 
-#if DEBUG
-        blazorWebView.HostPage = "wwwroot/index.html";
-#else
+#if !DEBUG
         var wwwrootDir = ExtractWwwroot();
         blazorWebView.HostPage = Path.Combine(wwwrootDir, "index.html");
 #endif

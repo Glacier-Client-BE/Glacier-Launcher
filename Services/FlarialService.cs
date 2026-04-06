@@ -17,8 +17,11 @@ public class FlarialService
 
     public static string FileName => "Flarial.Client.Release.dll";
 
+    public static string FlarialDirectory =>
+        Path.Combine(GameLauncher.DownloadsDirectory, "Flarial");
+
     public static string FilePath =>
-        Path.Combine(GameLauncher.ClientsDirectory, FileName);
+        Path.Combine(FlarialDirectory, FileName);
 
     private readonly HttpClient _http;
 
@@ -26,6 +29,7 @@ public class FlarialService
     {
         _http = new HttpClient();
         _http.DefaultRequestHeaders.Add("User-Agent", "GlacierLauncher/1.0");
+        Directory.CreateDirectory(FlarialDirectory);
     }
 
     public bool IsDownloaded => File.Exists(FilePath);
