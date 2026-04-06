@@ -12,6 +12,7 @@
     
     <StaticWebAssetsEnabled>true</StaticWebAssetsEnabled>
     <EnableDefaultStaticWebAssetsCheck>true</EnableDefaultStaticWebAssetsCheck>
+    <ApplicationIcon>icon.ico</ApplicationIcon>
   </PropertyGroup>
 
   <ItemGroup>
@@ -31,6 +32,7 @@
   </Target>
 
   <ItemGroup>
+    <Content Remove="wwwroot\**" />
     <EmbeddedResource Include="wwwroot.zip" LogicalName="wwwroot.zip" />
   </ItemGroup>
 
