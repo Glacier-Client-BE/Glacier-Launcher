@@ -51,17 +51,8 @@ public partial class MainWindow : Window
 
         InitializeComponent();
 
-        string userFolder = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-        string customWwwroot = Path.Combine(userFolder, "Glacier Launcher", "wwwroot", "index.html");
-
-        if (File.Exists(customWwwroot))
-        {
-            blazorWebView.HostPage = customWwwroot;
-        }
-        else
-        {
-            blazorWebView.HostPage = "wwwroot/index.html";
-        }
+        // Point to the internal path. Blazor handles the extraction from EXE automatically.
+        blazorWebView.HostPage = "wwwroot/index.html";
 
         var settings = _services.GetRequiredService<SettingsService>().Settings;
         if (settings.RememberWindowSize && settings.WindowWidth >= 500)

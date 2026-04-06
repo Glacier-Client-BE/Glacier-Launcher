@@ -21,9 +21,5 @@
     <PackageReference Include="Microsoft.AspNetCore.Components.WebView.Wpf" Version="10.0.*-*" />
   </ItemGroup>
 
-  <ItemGroup>
-    <EmbeddedResource Include="wwwroot\**" />
-    <Content Remove="wwwroot\**" />
-  </ItemGroup>
 
 </Project>
