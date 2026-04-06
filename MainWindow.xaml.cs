@@ -6,6 +6,7 @@ using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Interop;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.FileProviders;
 using GlacierLauncher.Services;
 
 namespace GlacierLauncher;
@@ -54,8 +55,11 @@ public partial class MainWindow : Window
         InitializeComponent();
 
 #if !DEBUG
-        var wwwrootDir = ExtractWwwroot();
-        blazorWebView.HostPage = Path.Combine(wwwrootDir, "index.html");
+        string wwwrootDir = ExtractWwwroot();
+        blazorWebView.FileProvider = new PhysicalFileProvider(wwwrootDir);
+        blazorWebView.HostPage = "index.html"; 
+#else
+        blazorWebView.HostPage = "wwwroot/index.html";
 #endif
 
         var settings = _services.GetRequiredService<SettingsService>().Settings;
@@ -150,14 +154,18 @@ public partial class MainWindow : Window
             "GlacierLauncher", "wwwroot");
 
         if (Directory.Exists(wwwrootDir))
-            Directory.Delete(wwwrootDir, true);
+        {
+            try { Directory.Delete(wwwrootDir, true); } catch { }
+        }
 
         Directory.CreateDirectory(wwwrootDir);
 
-        using var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("wwwroot.zip")
-            ?? throw new InvalidOperationException("Embedded resource 'wwwroot.zip' not found in assembly.");
+        var assembly = Assembly.GetExecutingAssembly();
+        using var stream = assembly.GetManifestResourceStream("wwwroot.zip")
+            ?? throw new InvalidOperationException("Embedded resource 'wwwroot.zip' not found.");
+            
         using var archive = new ZipArchive(stream, ZipArchiveMode.Read);
-        archive.ExtractToDirectory(wwwrootDir);
+        archive.ExtractToDirectory(wwwrootDir, true);
 
         return wwwrootDir;
     }
