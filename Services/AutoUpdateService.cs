@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
+using System.Reflection;
 using System.Text.Json;
 using System.Threading.Tasks;
 using System.Windows;
@@ -19,7 +20,8 @@ public record LauncherUpdateInfo(
 public class AutoUpdateService
 {
     // ── Launcher identity ─────────────────────────────────────────
-    public const string CurrentVersion = "1.0.0";
+    public static readonly string CurrentVersion =
+        Assembly.GetEntryAssembly()?.GetName().Version?.ToString(3) ?? "0.0.0";
 
     // Change these to your actual GitHub org/repo once you push releases.
     private const string LauncherOrg  = "Glacier-Client-BE";
