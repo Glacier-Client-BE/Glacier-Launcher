@@ -1004,14 +1004,14 @@
                 <span class="panel-section-label">Launcher</span>
 
                 <div class="credits-card credits-card-glacier">
-                    <div class="credits-card-icon"><i class="fa-solid fa-mountain-snow"></i></div>
+<div class="credits-card-icon" style="padding:6px;"><img src="images/pepe.png" style="width:100%;height:100%;object-fit:contain;"/></div>
                     <div class="credits-card-meta">
                         <span class="credits-card-name">Glacier Launcher</span>
                         <span class="credits-card-sub">Built by Pepe · Glacier Productions</span>
                     </div>
                     <div class="credits-card-actions">
                         <button class="credits-link-btn" title="GitHub"
-                                @onclick='() => OpenUrl("https://github.com/glacierlauncher")' @onmousedown:stopPropagation>
+                                @onclick='() => OpenUrl("https://github.com/Glacier-Client-BE")' @onmousedown:stopPropagation>
                             <i class="fa-brands fa-github"></i>
                         </button>
                         <button class="credits-link-btn" title="Website"
@@ -1019,7 +1019,7 @@
                             <i class="fa-solid fa-globe"></i>
                         </button>
                         <button class="credits-link-btn" title="Discord"
-                                @onclick='() => OpenUrl("https://discord.gg/glacierclient")' @onmousedown:stopPropagation>
+                                @onclick='() => OpenUrl("https://discord.glacierclient.xyz")' @onmousedown:stopPropagation>
                             <i class="fa-brands fa-discord"></i>
                         </button>
                     </div>
@@ -1082,7 +1082,7 @@
                 <div class="credits-oss-row">
                     <i class="fa-solid fa-code-branch" style="color:var(--accent);"></i>
                     <span>Glacier Launcher is open source. Contributions and forks are welcome.</span>
-                    <button class="btn-sm" @onclick='() => OpenUrl("https://github.com/glacierlauncher")' @onmousedown:stopPropagation>
+                    <button class="btn-sm" @onclick='() => OpenUrl("https://github.com/Glacier-Client-BE/Glacier-Launcher")' @onmousedown:stopPropagation>
                         <i class="fa-brands fa-github"></i> View
                     </button>
                 </div>
@@ -1210,10 +1210,10 @@
     private record NewsItem(string Icon, string Title, string Subtitle, string Url);
     private static readonly NewsItem[] _newsItems =
     {
-        new("fa-brands fa-discord",     "Join Our Discord",       "discord.glacierclient.xyz",  "https://discord.gg/glacierclient"),
+        new("fa-brands fa-discord",     "Join Our Discord",       "discord.glacierclient.xyz",  "https://discord.glacierclient.xyz"),
         new("fa-solid fa-globe",        "Visit Our Website",      "glacierclient.xyz",          "https://glacierclient.xyz"),
-        new("fa-solid fa-layer-group",  "Glacier Texture Pack",   "Download for free",          "https://glacierclient.xyz/texturepack"),
-        new("fa-solid fa-star",         "Star Us on GitHub",      "github.com/glacier-launcher","https://github.com"),
+        new("fa-solid fa-layer-group",  "Glacier Texture Pack",   "Download for free",          "https://glacierclient.xyz/#downloads"),
+        new("fa-solid fa-star",         "Star Us on GitHub",      "github.com/Glacier-Client-BE","https://github.com/Glacier-Client-BE/Glacier-Launcher"),
         new("fa-solid fa-newspaper",    "Latest Release",         "Check the Versions tab",    ""),
         new("fa-solid fa-shield-halved","About Glacier",          "Made with ❤ by Glacier",   ""),
     };

@@ -22,8 +22,8 @@ public class AutoUpdateService
     public const string CurrentVersion = "1.0.0";
 
     // Change these to your actual GitHub org/repo once you push releases.
-    private const string LauncherOrg  = "glacierlauncher";
-    private const string LauncherRepo = "launcher";
+    private const string LauncherOrg  = "Glacier-Client-BE";
+    private const string LauncherRepo = "Glacier-Launcher";
 
     private static string LatestReleaseApiUrl =>
         $"https://api.github.com/repos/{LauncherOrg}/{LauncherRepo}/releases/latest";

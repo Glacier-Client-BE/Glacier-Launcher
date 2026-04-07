@@ -27,27 +27,41 @@ jobs:
       id: versioning
       shell: pwsh
       run: |
+        # Version format: Major.Edition.Hotfix (e.g. 1.0.0, 1.1.0, 1.1.1)
+        # "hotfix:" in commit message → bump hotfix (1.0.0 → 1.0.1)
+        # "update:" in commit message → bump edition, reset hotfix (1.0.0 → 1.1.0)
         $tags = git tag -l "v*" | Sort-Object { [version]($_ -replace 'v','') }
         if ($null -eq $tags -or $tags.Count -eq 0) {
-            $latest = "1.0.6"
+            $next = "v1.0.0"
         } else {
             $latest = ($tags[-1] -replace 'v','')
+            $v = [version]$latest
+            $msg = git log -1 --pretty=%s
+            if ($msg -match '^hotfix:') {
+                $next = "v$($v.Major).$($v.Minor).$($v.Build + 1)"
+            } elseif ($msg -match '^update:') {
+                $next = "v$($v.Major).$($v.Minor + 1).0"
+            } else {
+                Write-Host "Commit message does not start with 'hotfix:' or 'update:' — skipping release."
+                echo "SKIP=true" >> $env:GITHUB_OUTPUT
+                return
+            }
         }
-        $v = [version]$latest
-        # Ensure we increment the correct part of the version string
-        $next = "v$($v.Major).$($v.Minor).$($v.Build + 1)"
         echo "NEXT_TAG=$next" >> $env:GITHUB_OUTPUT
         Write-Host "Next version: $next"
 
     - name: Setup .NET
+      if: steps.versioning.outputs.SKIP != 'true'
       uses: actions/setup-dotnet@v4
       with:
         dotnet-version: '10.0.x'
 
     - name: Restore dependencies
+      if: steps.versioning.outputs.SKIP != 'true'
       run: dotnet restore
 
     - name: Build and Publish Single File Exe
+      if: steps.versioning.outputs.SKIP != 'true'
       run: >
         dotnet publish GlacierLauncher.csproj
         -c Release
@@ -58,6 +72,7 @@ jobs:
         -o "${{ github.workspace }}\publish"
 
     - name: Create and Push Tag
+      if: steps.versioning.outputs.SKIP != 'true'
       shell: pwsh
       run: |
         $tag = "${{ steps.versioning.outputs.NEXT_TAG }}"
@@ -67,6 +82,7 @@ jobs:
         git push origin $tag
 
     - name: Release
+      if: steps.versioning.outputs.SKIP != 'true'
       uses: softprops/action-gh-release@v2
       with:
         tag_name: ${{ steps.versioning.outputs.NEXT_TAG }}
