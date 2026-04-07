@@ -1161,7 +1161,7 @@
     private string odersoError       = "";
 
     // ── Custom DLL ────────────────────────────────────────────
-    private string customDllPath = "";
+    private string customDllPath { get => SettingsService.Settings.CustomDllPath; set { SettingsService.Settings.CustomDllPath = value; SettingsService.Save(); } }
     private bool   copiedDllPath = false;
 
     // ── Display ───────────────────────────────────────────────
@@ -1689,7 +1689,27 @@
         foreach (var s in oderSoVersions) s.IsActive = (s.Entry.Name == state.Entry.Name);
         SelectClient("OderSo Client");
         GoHome();
-        await HandleLaunch();
+        isLaunching = true;
+        await ShowStatus($"Launching OderSo {state.Entry.Name}…", clearAfterMs: 30_000);
+        try
+        {
+            var dllPath = OderSo.GetEntryFilePath(state.Entry);
+            await Launcher.LaunchWithDllAsync(dllPath);
+            isLaunching = false;
+            Discord.SetInGamePresence(state.Entry.Name, "OderSo Client");
+            AddToRecentlyLaunched("OderSo");
+
+            if (SettingsService.Settings.CloseAfterLaunch) { await CloseWindow(); return; }
+
+            await ShowStatus("Injected! Have fun.", clearAfterMs: 3000);
+            _ = ShowToast("Injection successful!", "success");
+        }
+        catch (Exception ex)
+        {
+            isLaunching = false;
+            await ShowStatus(ex.Message, error: true, clearAfterMs: 8000);
+            _ = ShowToast(ex.Message, "error");
+        }
     }
 
     // ── OderSo version action render fragment ─────────────────
@@ -1906,8 +1926,11 @@
         await ShowStatus($"Launching {v.DisplayName}…", clearAfterMs: 30_000);
         try
         {
-            await Launcher.LaunchAsync(v.Tag);
+            var dllPath = GameLauncher.GetDllPath(v.Tag);
+            await Launcher.LaunchWithDllAsync(dllPath);
             isLaunching = false;
+            SettingsService.Settings.LastUsedVersion = v.Tag;
+            SettingsService.Save();
             Discord.SetInGamePresence(v.Tag, SettingsService.Settings.SelectedClient);
             AddToRecentlyLaunched(v.Tag);
 

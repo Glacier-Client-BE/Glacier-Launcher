@@ -1,8 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Net.Http;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 
 namespace GlacierLauncher.Services;
@@ -81,6 +83,7 @@ public class OderSoService
             }
         }
         catch { /* return empty — caller handles */ }
+        result.Sort((a, b) => CompareVersionNames(b.Name, a.Name));
         return result;
     }
 
@@ -181,6 +184,21 @@ public class OderSoService
 
     private static string GetDllPath(string fileName) =>
         Path.Combine(OderSoDirectory, "OderSo_" + fileName);
+
+    /// <summary>Extracts version numbers from a filename and compares them numerically.</summary>
+    private static int CompareVersionNames(string a, string b)
+    {
+        var numsA = Regex.Matches(a, @"\d+").Select(m => int.TryParse(m.Value, out var v) ? v : 0).ToArray();
+        var numsB = Regex.Matches(b, @"\d+").Select(m => int.TryParse(m.Value, out var v) ? v : 0).ToArray();
+        var len = Math.Max(numsA.Length, numsB.Length);
+        for (int i = 0; i < len; i++)
+        {
+            var va = i < numsA.Length ? numsA[i] : 0;
+            var vb = i < numsB.Length ? numsB[i] : 0;
+            if (va != vb) return va.CompareTo(vb);
+        }
+        return string.Compare(a, b, StringComparison.OrdinalIgnoreCase);
+    }
 
     private DllEntry? GetStoredEntry()
     {

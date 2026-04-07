@@ -31,6 +31,9 @@ public class LauncherSettings
     // ── Pinned Versions ──────────────────────────────────────────
     public List<string> PinnedVersions { get; set; } = new();
 
+    // ── Custom DLL ──────────────────────────────────────────────
+    public string CustomDllPath         { get; set; } = "";
+
     // ── Updates ──────────────────────────────────────────────────
     public bool   CheckUpdatesOnStartup   { get; set; } = true;
     public string SkippedLauncherVersion  { get; set; } = "";
