@@ -9,9 +9,6 @@
     <NoWarn>NU1701;NU1603</NoWarn>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <Platforms>x64</Platforms>
-    
-    <StaticWebAssetsEnabled>true</StaticWebAssetsEnabled>
-    <EnableDefaultStaticWebAssetsCheck>true</EnableDefaultStaticWebAssetsCheck>
     <ApplicationIcon>icon.ico</ApplicationIcon>
   </PropertyGroup>
 
@@ -22,19 +19,39 @@
     <PackageReference Include="Microsoft.AspNetCore.Components.WebView.Wpf" Version="10.0.*-*" />
   </ItemGroup>
 
-
-  <!-- Zip wwwroot before build, embed as resource for single-file publish -->
-  <Target Name="CreateWwwrootZip" BeforeTargets="PrepareForBuild">
-    <Delete Files="wwwroot.zip" Condition="Exists('wwwroot.zip')" />
-    <ZipDirectory SourceDirectory="wwwroot"
-                  DestinationFile="wwwroot.zip"
-                  Overwrite="true" />
-  </Target>
-
+  <!-- Keep wwwroot as EmbeddedResource for dev-time static web assets, remove from Content to avoid conflicts -->
   <ItemGroup>
     <EmbeddedResource Include="wwwroot\**" />
     <Content Remove="wwwroot\**" />
     <EmbeddedResource Include="wwwroot.zip" LogicalName="wwwroot.zip" />
   </ItemGroup>
+
+  <!-- Build a zip of wwwroot + _framework files from the NuGet package for single-file publish -->
+  <Target Name="CreateWwwrootZip" BeforeTargets="PrepareForBuild">
+    <PropertyGroup>
+      <_Staging>$(IntermediateOutputPath)_wwwroot_staging</_Staging>
+    </PropertyGroup>
+
+    <RemoveDir Directories="$(_Staging)" />
+    <MakeDir Directories="$(_Staging)\_framework" />
+
+    <!-- Copy app wwwroot files -->
+    <ItemGroup>
+      <_AppFiles Include="wwwroot\**\*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_AppFiles)"
+          DestinationFiles="@(_AppFiles->'$(_Staging)\%(RecursiveDir)%(Filename)%(Extension)')" />
+
+    <!-- Copy blazor framework files from NuGet package -->
+    <ItemGroup>
+      <_FrameworkFiles Include="$(NuGetPackageRoot)microsoft.aspnetcore.components.webview\**\staticwebassets\*.*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_FrameworkFiles)" DestinationFolder="$(_Staging)\_framework" />
+
+    <!-- Zip everything -->
+    <Delete Files="wwwroot.zip" Condition="Exists('wwwroot.zip')" />
+    <ZipDirectory SourceDirectory="$(_Staging)" DestinationFile="wwwroot.zip" Overwrite="true" />
+    <RemoveDir Directories="$(_Staging)" />
+  </Target>
 
 </Project>

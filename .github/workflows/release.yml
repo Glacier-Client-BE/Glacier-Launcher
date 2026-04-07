@@ -49,13 +49,12 @@ jobs:
 
     - name: Build and Publish Single File Exe
       run: >
-        dotnet publish GlacierLauncher.csproj 
-        -c Release 
-        -r win-x64 
-        --self-contained true 
-        -p:PublishSingleFile=true 
-        -p:IncludeNativeLibrariesForSelfExtract=true 
-        -p:StaticWebAssetsEnabled=true 
+        dotnet publish GlacierLauncher.csproj
+        -c Release
+        -r win-x64
+        --self-contained true
+        -p:PublishSingleFile=true
+        -p:IncludeNativeLibrariesForSelfExtract=true
         -o "${{ github.workspace }}\publish"
 
     - name: Create and Push Tag

@@ -35,6 +35,9 @@ public partial class MainWindow : Window
 
     public MainWindow()
     {
+        // In published single-file mode, extract wwwroot before anything else
+        EnsureWwwroot();
+
         var sc = new ServiceCollection();
         sc.AddWpfBlazorWebView();
         sc.AddSingleton<SettingsService>();
@@ -52,14 +55,6 @@ public partial class MainWindow : Window
         Resources.Add("services", _services);
 
         InitializeComponent();
-
-#if !DEBUG
-        string wwwrootDir = ExtractWwwroot();
-        // Fixed: Use absolute path. FileProvider is not a direct property of BlazorWebView in WPF.
-        blazorWebView.HostPage = Path.Combine(wwwrootDir, "index.html"); 
-#else
-        blazorWebView.HostPage = "wwwroot/index.html";
-#endif
 
         var settings = _services.GetRequiredService<SettingsService>().Settings;
         if (settings.RememberWindowSize && settings.WindowWidth >= 500)
@@ -119,6 +114,31 @@ public partial class MainWindow : Window
         };
     }
 
+    private static void EnsureWwwroot()
+    {
+        var wwwrootDir = Path.Combine(AppContext.BaseDirectory, "wwwroot");
+
+        // If wwwroot/index.html already exists (dev mode or already extracted), skip
+        if (File.Exists(Path.Combine(wwwrootDir, "index.html")))
+            return;
+
+        // Extract embedded wwwroot.zip (contains app content + _framework files)
+        // Use typeof() instead of GetExecutingAssembly() for single-file compatibility
+        using var stream = typeof(MainWindow).Assembly.GetManifestResourceStream("wwwroot.zip");
+        if (stream == null)
+        {
+            // Log to file for debugging
+            File.WriteAllText(Path.Combine(AppContext.BaseDirectory, "extraction_error.txt"),
+                $"wwwroot.zip not found. BaseDir={AppContext.BaseDirectory}\n" +
+                $"Resources: {string.Join(", ", typeof(MainWindow).Assembly.GetManifestResourceNames())}");
+            return;
+        }
+
+        Directory.CreateDirectory(wwwrootDir);
+        using var archive = new ZipArchive(stream, ZipArchiveMode.Read);
+        archive.ExtractToDirectory(wwwrootDir, overwriteFiles: true);
+    }
+
     private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
     {
         if (msg == WM_NCLBUTTONDBLCLK) { handled = true; return IntPtr.Zero; }
@@ -144,28 +164,5 @@ public partial class MainWindow : Window
         }
         catch { }
         return IntPtr.Zero;
-    }
-
-    private static string ExtractWwwroot()
-    {
-        var wwwrootDir = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "GlacierLauncher", "wwwroot");
-
-        if (Directory.Exists(wwwrootDir))
-        {
-            try { Directory.Delete(wwwrootDir, true); } catch { }
-        }
-
-        Directory.CreateDirectory(wwwrootDir);
-
-        var assembly = Assembly.GetExecutingAssembly();
-        using var stream = assembly.GetManifestResourceStream("wwwroot.zip")
-            ?? throw new InvalidOperationException("Embedded resource 'wwwroot.zip' not found.");
-            
-        using var archive = new ZipArchive(stream, ZipArchiveMode.Read);
-        archive.ExtractToDirectory(wwwrootDir, true);
-
-        return wwwrootDir;
     }
 }
