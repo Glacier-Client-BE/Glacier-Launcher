@@ -473,6 +473,7 @@ input[type=range] { appearance: none; -webkit-appearance: none; width: 100px; he
     letter-spacing: 0.03em; text-transform: uppercase;
     box-shadow: 0 0 10px color-mix(in srgb, var(--accent) 60%, transparent);
     animation: pulse-pill 2.4s ease-in-out infinite;
+    pointer-events: all;
     transition: filter var(--t);
 }
 .update-pill:hover { filter: brightness(1.15); }

@@ -101,7 +101,7 @@ public class AutoUpdateService
     }
 
     /// <summary>
-    /// Downloads the update asset to %TEMP%, launches it, then shuts down this process.
+    /// Downloads the update asset to %TEMP%, replaces the original exe, relaunches, then shuts down.
     /// </summary>
     public async Task ApplyUpdateAsync(LauncherUpdateInfo info, IProgress<double>? progress = null)
     {
@@ -126,7 +126,41 @@ public class AutoUpdateService
 
         dest.Close();
 
-        Process.Start(new ProcessStartInfo(tmpPath) { UseShellExecute = true });
+        // Replace the original exe so shortcuts keep working.
+        // A running exe can't overwrite itself, so we use a small batch script
+        // that waits for this process to exit, copies the new exe over, then launches it.
+        var currentExe = Environment.ProcessPath ?? Process.GetCurrentProcess().MainModule?.FileName;
+        if (!string.IsNullOrEmpty(currentExe) && File.Exists(currentExe))
+        {
+            var pid = Environment.ProcessId;
+            var batPath = Path.Combine(Path.GetTempPath(), "GlacierLauncher_update.bat");
+            var script = $"""
+                @echo off
+                :waitloop
+                tasklist /FI "PID eq {pid}" 2>NUL | find /I "{pid}" >NUL
+                if not errorlevel 1 (
+                    timeout /t 1 /nobreak >NUL
+                    goto waitloop
+                )
+                copy /Y "{tmpPath}" "{currentExe}" >NUL
+                del "{tmpPath}" >NUL
+                start "" "{currentExe}"
+                del "%~f0"
+                """;
+            File.WriteAllText(batPath, script);
+            Process.Start(new ProcessStartInfo(batPath)
+            {
+                UseShellExecute = true,
+                CreateNoWindow  = true,
+                WindowStyle     = ProcessWindowStyle.Hidden
+            });
+        }
+        else
+        {
+            // Fallback: can't determine own path, just launch from temp.
+            Process.Start(new ProcessStartInfo(tmpPath) { UseShellExecute = true });
+        }
+
         Application.Current.Dispatcher.Invoke(() => Application.Current.Shutdown());
     }
 
