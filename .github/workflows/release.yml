@@ -30,8 +30,8 @@ jobs:
         # Version format: Major.Edition.Hotfix (e.g. 1.0.0, 1.1.0, 1.1.1)
         # "hotfix:" in commit message → bump hotfix (1.0.0 → 1.0.1)
         # "update:" in commit message → bump edition, reset hotfix (1.0.0 → 1.1.0)
-        $tags = git tag -l "v*" | Sort-Object { [version]($_ -replace 'v','') }
-        if ($null -eq $tags -or $tags.Count -eq 0) {
+        $tags = @(git tag -l "v*" | Sort-Object { [version]($_ -replace 'v','') })
+        if ($tags.Count -eq 0) {
             $next = "v1.0.0"
         } else {
             $latest = ($tags[-1] -replace 'v','')
