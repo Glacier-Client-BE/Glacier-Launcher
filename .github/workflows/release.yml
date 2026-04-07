@@ -48,6 +48,7 @@ jobs:
             }
         }
         echo "NEXT_TAG=$next" >> $env:GITHUB_OUTPUT
+        echo "NEXT_VERSION=$($next -replace 'v','')" >> $env:GITHUB_OUTPUT
         Write-Host "Next version: $next"
 
     - name: Setup .NET
@@ -69,6 +70,7 @@ jobs:
         --self-contained true
         -p:PublishSingleFile=true
         -p:IncludeNativeLibrariesForSelfExtract=true
+        -p:Version=${{ steps.versioning.outputs.NEXT_VERSION }}
         -o "${{ github.workspace }}\publish"
 
     - name: Create and Push Tag
