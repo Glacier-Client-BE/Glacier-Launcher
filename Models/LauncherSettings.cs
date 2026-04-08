@@ -17,6 +17,7 @@ public class LauncherSettings
     public string ThemePreset          { get; set; } = "dark";   // dark | darker | midnight | slate
     public int    BlurIntensity        { get; set; } = 14;       // px, 0-30
     public double BackgroundOpacity    { get; set; } = 0.80;     // 0.0-1.0
+    public string CustomBackgroundPath { get; set; } = "";       // empty = default bg
 
     // ── Window ───────────────────────────────────────────────────
     public double WindowWidth          { get; set; } = 740;

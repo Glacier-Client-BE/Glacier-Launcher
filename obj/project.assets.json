@@ -1610,7 +1610,7 @@
     "C:\\Users\\User\\.nuget\\packages\\": {}
   },
   "project": {
-    "version": "1.0.0",
+    "version": "0.0.0-dev",
     "restore": {
       "projectUniqueName": "C:\\Users\\User\\MinecraftLauncher\\GlacierLauncher.csproj",
       "projectName": "GlacierLauncher",

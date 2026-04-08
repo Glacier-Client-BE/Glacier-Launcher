@@ -59,6 +59,25 @@ window.pickDllFile = async (dotNetRef) => {
     });
 };
 
+// ── File picker (Image / Wallpaper) ───────────────────────
+window.pickImageFile = async (dotNetRef) => {
+    return new Promise(resolve => {
+        const input = document.createElement('input');
+        input.type   = 'file';
+        input.accept = 'image/*';
+        input.style.display = 'none';
+        document.body.appendChild(input);
+        input.onchange = () => {
+            const file = input.files[0];
+            if (file) dotNetRef.invokeMethodAsync('OnWallpaperPicked', file.path || file.name);
+            document.body.removeChild(input);
+            resolve();
+        };
+        input.oncancel = () => { document.body.removeChild(input); resolve(); };
+        input.click();
+    });
+};
+
 // ── Drag-and-drop DLL ─────────────────────────────────────────
 document.addEventListener('dragover', e => {
     e.preventDefault();
@@ -123,10 +142,21 @@ window.setBlurIntensity = (px) => {
     document.documentElement.style.setProperty('--blur', px + 'px');
 };
 
-window.applyStoredSettings = (accent, theme, blur) => {
+window.setCustomBackground = (filePath) => {
+    const bg = document.querySelector('.window-bg');
+    if (!bg) return;
+    if (filePath) {
+        bg.style.backgroundImage = `url('file:///${filePath.replace(/\\/g, '/')}')`;
+    } else {
+        bg.style.backgroundImage = "url('../images/bg.png')";
+    }
+};
+
+window.applyStoredSettings = (accent, theme, blur, customBg) => {
     if (accent) window.setAccentColor(accent);
     if (theme)  window.setTheme(theme);
     if (blur != null) window.setBlurIntensity(blur);
+    if (customBg) window.setCustomBackground(customBg);
     applyScale();
 };
 

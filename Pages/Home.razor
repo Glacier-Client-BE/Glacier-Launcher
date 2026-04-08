@@ -213,10 +213,14 @@
             </div>
             @if (launcherUpdateAvailable)
             {
-                <button class="update-pill" @onclick="OpenUpdateModal" @onmousedown:stopPropagation title="Launcher update available">
+                <button class="update-pill" @onclick="OpenUpdateModal" @onmousedown:stopPropagation title="Launcher update available — click to update">
                     <i class="fa-solid fa-arrow-up"></i>
                     <span>Update</span>
                 </button>
+            }
+            else
+            {
+                <span class="version-pill" title="Glacier Launcher v@(AutoUpdateService.CurrentVersion)">v@(AutoUpdateService.CurrentVersion)</span>
             }
         </div>
 
@@ -521,6 +525,33 @@
                     <div class="toggle @(SettingsService.Settings.RememberWindowSize ? "on" : "")"
                          @onclick:stopPropagation
                          @onclick='() => ToggleProp(() => SettingsService.Settings.RememberWindowSize = !SettingsService.Settings.RememberWindowSize)'></div>
+                </div>
+
+                <div class="setting-row @(SH("Custom background wallpaper","background wallpaper image custom"))">
+                    <div class="setting-meta">
+                        <span class="setting-label">Background wallpaper</span>
+                        <span class="setting-hint">
+                            @if (!string.IsNullOrEmpty(SettingsService.Settings.CustomBackgroundPath))
+                            {
+                                @("Custom — " + System.IO.Path.GetFileName(SettingsService.Settings.CustomBackgroundPath))
+                            }
+                            else
+                            {
+                                @("Default background")
+                            }
+                        </span>
+                    </div>
+                    <div style="display:flex; align-items:center; gap:6px;">
+                        @if (!string.IsNullOrEmpty(SettingsService.Settings.CustomBackgroundPath))
+                        {
+                            <button class="btn-sm" @onclick="ResetWallpaper" @onmousedown:stopPropagation title="Reset to default">
+                                <i class="fa-solid fa-rotate-left"></i> Default
+                            </button>
+                        }
+                        <button class="btn-sm" @onclick="PickWallpaper" @onmousedown:stopPropagation title="Choose image or drag & drop">
+                            <i class="fa-solid fa-image"></i> Choose
+                        </button>
+                    </div>
                 </div>
 
                 <span class="panel-section-label">Account</span>
@@ -1244,7 +1275,8 @@
         await JS.InvokeVoidAsync("applyStoredSettings",
             SettingsService.Settings.AccentColor,
             SettingsService.Settings.ThemePreset,
-            SettingsService.Settings.BlurIntensity);
+            SettingsService.Settings.BlurIntensity,
+            SettingsService.Settings.CustomBackgroundPath);
         clientsHasBadge = !Flarial.IsDownloaded || !OderSo.IsDownloaded;
 
         if (!string.IsNullOrEmpty(SettingsService.Settings.LastUpdateCheck))
@@ -1252,8 +1284,7 @@
 
         StateHasChanged();
 
-        if (SettingsService.Settings.CheckUpdatesOnStartup)
-            _ = RunStartupChecksAsync();
+        _ = RunStartupChecksAsync();
     }
 
     private void BuildDefaultSearchResults()
@@ -1547,6 +1578,41 @@
             await JS.InvokeVoidAsync("setBlurIntensity", v);
             StateHasChanged();
         }
+    }
+
+    // ── Wallpaper ─────────────────────────────────────────────
+    private async Task PickWallpaper() => await JS.InvokeVoidAsync("pickImageFile", _selfRef);
+
+    [JSInvokable]
+    public async Task OnWallpaperPicked(string path)
+    {
+        if (string.IsNullOrEmpty(path)) return;
+        try
+        {
+            var appFolder = System.IO.Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                "Glacier Launcher");
+            var destName = "custom-bg" + System.IO.Path.GetExtension(path);
+            var destPath = System.IO.Path.Combine(appFolder, destName);
+            System.IO.File.Copy(path, destPath, true);
+
+            SettingsService.Settings.CustomBackgroundPath = destPath;
+            SettingsService.Save();
+            await JS.InvokeVoidAsync("setCustomBackground", destPath);
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (Exception ex)
+        {
+            _ = ShowToast("Failed to set wallpaper: " + ex.Message, "error");
+        }
+    }
+
+    private async Task ResetWallpaper()
+    {
+        SettingsService.Settings.CustomBackgroundPath = "";
+        SettingsService.Save();
+        await JS.InvokeVoidAsync("setCustomBackground", "");
+        StateHasChanged();
     }
 
     private void OpenUrl(string url)
