@@ -229,10 +229,10 @@ html, body {
 .username    { font-size: 13px; font-weight: 600; color: var(--text); }
 .user-handle { font-size: 11px; color: var(--text-dim); }
 .footer-right { margin-left: auto; display: flex; align-items: center; gap: 6px; }
-.discord-connect-btn { display: inline-flex; align-items: center; gap: 6px; background: rgba(88,101,242,0.18); border: 1px solid rgba(88,101,242,0.35); border-radius: 8px; padding: 5px 10px; font-size: 11px; font-weight: 600; color: #7289da; cursor: pointer; font-family: inherit; transition: background var(--t), border-color var(--t), box-shadow var(--t); }
+.discord-connect-btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; background: rgba(88,101,242,0.18); border: 1px solid rgba(88,101,242,0.35); border-radius: 8px; padding: 5px 10px; font-size: 11px; font-weight: 600; color: #7289da; cursor: pointer; font-family: inherit; transition: background var(--t), border-color var(--t), box-shadow var(--t); }
 .discord-connect-btn:hover { background: rgba(88,101,242,0.30); border-color: rgba(88,101,242,0.60); box-shadow: 0 0 12px rgba(88,101,242,0.35); }
 .discord-connect-btn i { font-size: 12px; }
-.discord-connected-pill { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: var(--text-dim); background: rgba(67,181,129,0.12); border: 1px solid rgba(67,181,129,0.25); border-radius: 8px; padding: 4px 9px; }
+.discord-connected-pill { display: inline-flex; align-items: center; justify-content: center; gap: 5px; font-size: 11px; color: var(--text-dim); background: rgba(67,181,129,0.12); border: 1px solid rgba(67,181,129,0.25); border-radius: 8px; padding: 4px 9px; }
 .discord-connected-pill i { color: var(--green); font-size: 11px; }
 
 /* ── News ticker ── */
@@ -486,17 +486,14 @@ input[type=range] { appearance: none; -webkit-appearance: none; width: 100px; he
 /* ── Version pill (top bar, no update) ────────────────────── */
 .version-pill {
     display: inline-flex; align-items: center;
-    height: 20px; padding: 0 8px; margin-left: 8px;
+    height: 22px; padding: 0 9px; margin-left: 8px;
     border-radius: 20px;
-    background: rgba(255,255,255,0.07);
-    border: 1px solid rgba(255,255,255,0.10);
-    color: var(--text-dim);
-    font-size: 10px; font-weight: 600;
-    letter-spacing: 0.02em;
-    pointer-events: all;
-    transition: background var(--t), color var(--t);
+    background: var(--accent); color: #fff;
+    font-size: 10px; font-weight: 700;
+    letter-spacing: 0.03em;
+    pointer-events: none;
+    box-shadow: 0 0 10px color-mix(in srgb, var(--accent) 60%, transparent);
 }
-.version-pill:hover { background: rgba(255,255,255,0.12); color: var(--text); }
 
 /* ── Update modal ──────────────────────────────────────────── */
 .update-modal { max-width: 420px; }
@@ -526,8 +523,10 @@ input[type=range] { appearance: none; -webkit-appearance: none; width: 100px; he
     letter-spacing: 0.05em; color: var(--text-dim); display: block; margin-bottom: 6px;
 }
 .update-changelog-body {
-    font-size: 12px; color: var(--text-dim); white-space: pre-wrap; line-height: 1.6;
+    font-size: 12px; color: var(--text-dim); line-height: 1.6;
 }
+.update-changelog-body a { color: var(--accent); text-decoration: underline; cursor: pointer; }
+.update-changelog-body a:hover { color: var(--text); }
 
 .update-progress-wrap {
     display: flex; align-items: center; gap: 10px; margin-top: 12px;

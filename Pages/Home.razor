@@ -131,7 +131,7 @@
                     {
                         <div class="update-changelog">
                             <span class="update-changelog-label">What's new</span>
-                            <div class="update-changelog-body">@launcherUpdateInfo.Changelog</div>
+                            <div class="update-changelog-body">@((MarkupString)FormatChangelog(launcherUpdateInfo.Changelog))</div>
                         </div>
                     }
 
@@ -351,12 +351,9 @@
                     Connect
                 </button>
             }
-            @if (!string.IsNullOrEmpty(SettingsService.Settings.LastUsedVersion))
-            {
-                <span style="font-size:11px; color:var(--text-dim);">
-                    <i class="fa-solid fa-clock" style="margin-right:4px;"></i>@SettingsService.Settings.LastUsedVersion
-                </span>
-            }
+            <span style="font-size:11px; color:var(--text-dim);">
+                <i class="fa-solid fa-clock" style="margin-right:4px;"></i>@GetFooterVersionLabel()
+            </span>
         </div>
     </div>
 
@@ -2263,6 +2260,34 @@ private async Task OpenDiscordOAuth()
         "OderSo Client"  => "images/clients/oderso.png",
         _                => "images/clients/latite.png",
     };
+
+    private static string FormatChangelog(string md)
+    {
+        var html = System.Net.WebUtility.HtmlEncode(md);
+        // bold: **text**
+        html = System.Text.RegularExpressions.Regex.Replace(html, @"\*\*(.+?)\*\*", "<strong>$1</strong>");
+        // links: [text](url)
+        html = System.Text.RegularExpressions.Regex.Replace(html, @"\[([^\]]+)\]\((https?://[^\)]+)\)", "<a href=\"$2\" target=\"_blank\" rel=\"noopener\" style=\"color:var(--accent);text-decoration:underline;cursor:pointer;\">$1</a>");
+        // newlines
+        html = html.Replace("\r\n", "<br/>").Replace("\n", "<br/>");
+        return html;
+    }
+
+    private string GetFooterVersionLabel()
+    {
+        var client = SettingsService.Settings.SelectedClient;
+        return client switch
+        {
+            "Flarial Client" => "Flarial Client",
+            "OderSo Client"  => "OderSo Client",
+            "Custom DLL"     => !string.IsNullOrEmpty(customDllPath)
+                                ? System.IO.Path.GetFileNameWithoutExtension(customDllPath)
+                                : "Custom DLL",
+            _ => !string.IsNullOrEmpty(SettingsService.Settings.LastUsedVersion)
+                 ? SettingsService.Settings.LastUsedVersion
+                 : "Latite Client",
+        };
+    }
 
     private string GetAvatarSrc()
     {

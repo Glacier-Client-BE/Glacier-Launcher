@@ -75,6 +75,14 @@ public partial class MainWindow : Window
             HwndSource.FromHwnd(hwnd)!.AddHook(WndProc);
         };
 
+        blazorWebView.UrlLoading += (_, e) =>
+        {
+            if (e.Url.Scheme == "https" || e.Url.Scheme == "http")
+            {
+                e.UrlLoadingStrategy = Microsoft.AspNetCore.Components.WebView.UrlLoadingStrategy.OpenExternally;
+            }
+        };
+
         Loaded += async (_, _) =>
         {
             await blazorWebView.WebView.EnsureCoreWebView2Async();
