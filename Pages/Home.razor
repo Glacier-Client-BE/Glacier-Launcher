@@ -1631,7 +1631,30 @@
     }
 
     // ── Wallpaper ─────────────────────────────────────────────
-    private async Task PickWallpaper() => await JS.InvokeVoidAsync("pickImageFile", _selfRef);
+    private async Task PickWallpaper()
+    {
+        var path = await Task.Run(() =>
+        {
+            string result = null;
+            var thread = new System.Threading.Thread(() =>
+            {
+                var dlg = new Microsoft.Win32.OpenFileDialog
+                {
+                    Title  = "Choose a wallpaper",
+                    Filter = "Image files|*.png;*.jpg;*.jpeg;*.bmp;*.gif;*.webp|All files|*.*"
+                };
+                if (dlg.ShowDialog() == true)
+                    result = dlg.FileName;
+            });
+            thread.SetApartmentState(System.Threading.ApartmentState.STA);
+            thread.Start();
+            thread.Join();
+            return result;
+        });
+
+        if (!string.IsNullOrEmpty(path))
+            await OnWallpaperPicked(path);
+    }
 
     [JSInvokable]
     public async Task OnWallpaperPicked(string path)
