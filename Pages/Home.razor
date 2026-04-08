@@ -651,7 +651,7 @@
                 <div class="setting-row @(SH("Keyboard shortcuts","shortcuts keyboard help"))">
                     <div class="setting-meta">
                         <span class="setting-label">Keyboard shortcuts</span>
-                        <span class="setting-hint">Ctrl+K search · Ctrl+L launch · Ctrl+1/2/3 panels · Esc close</span>
+                        <span class="setting-hint">Ctrl+K search · Ctrl+L launch · Ctrl+1/2/3 panels · F11 fullscreen · Esc close</span>
                     </div>
                     <div class="kbs"><kbd>?</kbd></div>
                 </div>
@@ -1290,14 +1290,35 @@
     {
         _defaultSearchResults = new List<SearchResult>
         {
-            new("fa-solid fa-play",               "Launch Game",      "Quick Actions", "with " + SettingsService.Settings.SelectedClient, "Ctrl+L", () => { CloseSearch(); _ = HandleLaunch(); }),
-            new("fa-solid fa-gear",               "Open Settings",    "Quick Actions", "Injection, Appearance, Account",                  "Ctrl+1", () => { CloseSearch(); OpenSettings(); }),
-            new("fa-solid fa-puzzle-piece",       "Manage Clients",   "Quick Actions", "Flarial, Latite, OderSo, Custom DLL",             "Ctrl+2", () => { CloseSearch(); _ = OpenClients(); }),
-            new("fa-solid fa-clock-rotate-left",  "Browse Versions",  "Quick Actions", "Download & manage Latite versions",               "Ctrl+3", () => { CloseSearch(); _ = OpenVersions(); }),
-            new("fa-brands fa-discord",           "Discord Account",  "Account",       "Connect or manage Discord",                       "",       () => { CloseSearch(); OpenDiscordModal(); }),
-            new("images/clients/flarial.svg",     "Select Flarial",   "Clients",       "Switch active client to Flarial",                 "",       () => { CloseSearch(); SelectClient("Flarial Client"); }),
-            new("images/clients/latite.png",      "Select Latite",    "Clients",       "Switch active client to Latite",                  "",       () => { CloseSearch(); SelectClient("Latite Client"); }),
-            new("images/clients/oderso.png",      "Select OderSo",    "Clients",       "Switch active client to OderSo",                  "",       () => { CloseSearch(); SelectClient("OderSo Client"); }),
+            // Quick actions
+            new("fa-solid fa-play",               "Launch Game",           "Quick Actions", "with " + SettingsService.Settings.SelectedClient, "Ctrl+L", () => { CloseSearch(); _ = HandleLaunch(); }),
+            new("fa-solid fa-gear",               "Open Settings",         "Quick Actions", "Injection, Appearance, Account",                  "Ctrl+1", () => { CloseSearch(); OpenSettings(); }),
+            new("fa-solid fa-puzzle-piece",       "Manage Clients",        "Quick Actions", "Flarial, Latite, OderSo, Custom DLL",             "Ctrl+2", () => { CloseSearch(); _ = OpenClients(); }),
+            new("fa-solid fa-clock-rotate-left",  "Browse Versions",       "Quick Actions", "Download & manage Latite versions",               "Ctrl+3", () => { CloseSearch(); _ = OpenVersions(); }),
+            new("fa-brands fa-discord",           "Discord Account",       "Account",       "Connect or manage Discord",                       "",       () => { CloseSearch(); OpenDiscordModal(); }),
+            // Clients
+            new("images/clients/flarial.svg",     "Select Flarial",        "Clients",       "Switch active client to Flarial",                 "",       () => { CloseSearch(); SelectClient("Flarial Client"); }),
+            new("images/clients/latite.png",      "Select Latite",         "Clients",       "Switch active client to Latite",                  "",       () => { CloseSearch(); SelectClient("Latite Client"); }),
+            new("images/clients/oderso.png",      "Select OderSo",         "Clients",       "Switch active client to OderSo",                  "",       () => { CloseSearch(); SelectClient("OderSo Client"); }),
+            // Settings — Injection
+            new("fa-solid fa-syringe",            "Auto-inject",           "Settings",      "Inject automatically when game is detected",      "",       () => { CloseSearch(); OpenSettings(); settingsFilter = "auto-inject"; StateHasChanged(); }),
+            new("fa-solid fa-clock",              "Injection Delay",       "Settings",      "Time to wait before injecting",                   "",       () => { CloseSearch(); OpenSettings(); settingsFilter = "injection delay"; StateHasChanged(); }),
+            new("fa-solid fa-door-closed",        "Close After Launch",    "Settings",      "Minimize launcher after injection",               "",       () => { CloseSearch(); OpenSettings(); settingsFilter = "close after"; StateHasChanged(); }),
+            // Settings — Appearance
+            new("fa-solid fa-palette",            "Accent Colour",         "Settings",      "Change button and highlight colour",              "",       () => { CloseSearch(); OpenSettings(); settingsFilter = "accent"; StateHasChanged(); }),
+            new("fa-solid fa-moon",               "Theme Preset",          "Settings",      "Dark, Darker, Midnight, Slate",                   "",       () => { CloseSearch(); OpenSettings(); settingsFilter = "theme"; StateHasChanged(); }),
+            new("fa-solid fa-droplet",            "Background Blur",       "Settings",      "Backdrop blur intensity for panels",              "",       () => { CloseSearch(); OpenSettings(); settingsFilter = "blur"; StateHasChanged(); }),
+            new("fa-solid fa-image",              "Background Wallpaper",  "Settings",      "Change custom background image",                  "",       () => { CloseSearch(); OpenSettings(); settingsFilter = "wallpaper"; StateHasChanged(); }),
+            new("fa-solid fa-expand",             "Remember Window Size",  "Settings",      "Restore last used size on launch",                "",       () => { CloseSearch(); OpenSettings(); settingsFilter = "window size"; StateHasChanged(); }),
+            // Settings — Behaviour
+            new("fa-solid fa-clock-rotate-left",  "Show Recently Launched","Settings",      "Quick-access chips on home screen",               "",       () => { CloseSearch(); OpenSettings(); settingsFilter = "recently"; StateHasChanged(); }),
+            new("fa-solid fa-window-minimize",    "Minimize to Tray",      "Settings",      "Send to system tray instead of taskbar",          "",       () => { CloseSearch(); OpenSettings(); settingsFilter = "tray"; StateHasChanged(); }),
+            new("fa-solid fa-trash",              "Clear Recent History",  "Settings",      "Clear recently launched list",                    "",       () => { CloseSearch(); OpenSettings(); settingsFilter = "clear"; StateHasChanged(); }),
+            // Settings — Other
+            new("fa-solid fa-rotate",             "Check for Updates",     "Settings",      "Check for launcher and client updates",           "",       () => { CloseSearch(); OpenSettings(); settingsFilter = "update"; StateHasChanged(); }),
+            new("fa-solid fa-gamepad",            "Discord Rich Presence", "Settings",      "Show game status on Discord profile",             "",       () => { CloseSearch(); OpenSettings(); settingsFilter = "rich presence"; StateHasChanged(); }),
+            new("fa-solid fa-expand",             "Toggle Fullscreen",     "Quick Actions", "F11 to toggle fullscreen mode",                   "F11",    () => { CloseSearch(); _ = ToggleFullscreen(); }),
+            new("fa-solid fa-heart",              "Credits",               "About",         "View launcher credits",                           "",       () => { CloseSearch(); OpenCredits(); }),
         };
     }
 
@@ -1323,6 +1344,7 @@
                 case "settings": if (!searchOpen && currentView != "settings") OpenSettings(); break;
                 case "clients":  if (!searchOpen && currentView != "clients")  await OpenClients(); break;
                 case "versions": if (!searchOpen && currentView != "versions") await OpenVersions(); break;
+                case "fullscreen": await ToggleFullscreen(); break;
                 case "escape":
                     if      (searchOpen)       CloseSearch();
                     else if (discordModalOpen) CloseDiscordModal();
@@ -1351,6 +1373,7 @@
     private async Task OnDragStart()    => await JS.InvokeVoidAsync("startDrag");
     private async Task CloseWindow()    => await JS.InvokeVoidAsync("closeWindow");
     private async Task MaximizeWindow() => await JS.InvokeVoidAsync("maximizeWindow");
+    private async Task ToggleFullscreen() => await JS.InvokeVoidAsync("toggleFullscreen");
     private async Task MinimizeWindow()
     {
         if (SettingsService.Settings.MinimizeToTray)
@@ -1458,11 +1481,39 @@
         }
     }
 
-    private async Task QuickLaunchRecent(string tag)
+    private async Task QuickLaunchRecent(string label)
     {
-        var v = versions.FirstOrDefault(x => x.Tag == tag || x.DisplayName == tag);
+        // Check if it's a known client (Flarial, OderSo, Custom DLL)
+        if (label == "Flarial")
+        {
+            SettingsService.Settings.SelectedClient = "Flarial Client";
+            SettingsService.Save();
+            await HandleLaunch();
+            return;
+        }
+        if (label == "OderSo")
+        {
+            SettingsService.Settings.SelectedClient = "OderSo Client";
+            SettingsService.Save();
+            await HandleLaunch();
+            return;
+        }
+
+        // Check downloaded Latite versions
+        var v = versions.FirstOrDefault(x => x.Tag == label || x.DisplayName == label);
         if (v != null && v.IsDownloaded) { await HandleVersionLaunch(v); return; }
-        await ShowStatus($"'{tag}' not found in downloaded versions.", error: true);
+
+        // Check if it might be a custom DLL filename
+        if (!string.IsNullOrEmpty(customDllPath) &&
+            System.IO.Path.GetFileNameWithoutExtension(customDllPath) == label)
+        {
+            SettingsService.Settings.SelectedClient = "Custom DLL";
+            SettingsService.Save();
+            await HandleLaunch();
+            return;
+        }
+
+        await ShowStatus($"'{label}' not found in downloaded versions.", error: true);
     }
 
     private void AddToRecentlyLaunched(string label)
@@ -1588,12 +1639,23 @@
         if (string.IsNullOrEmpty(path)) return;
         try
         {
+            var fileInfo = new System.IO.FileInfo(path);
+            if (!fileInfo.Exists) { _ = ShowToast("File not found.", "error"); return; }
+            if (fileInfo.Length > 20 * 1024 * 1024)
+            {
+                _ = ShowToast("Image too large (max 20 MB). Try a smaller file.", "error");
+                return;
+            }
+
             var appFolder = System.IO.Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
                 "Glacier Launcher");
+            System.IO.Directory.CreateDirectory(appFolder);
             var destName = "custom-bg" + System.IO.Path.GetExtension(path);
             var destPath = System.IO.Path.Combine(appFolder, destName);
-            System.IO.File.Copy(path, destPath, true);
+
+            // Copy on a background thread to avoid blocking the UI
+            await Task.Run(() => System.IO.File.Copy(path, destPath, true));
 
             SettingsService.Settings.CustomBackgroundPath = destPath;
             SettingsService.Save();
@@ -1997,7 +2059,7 @@
             SettingsService.Settings.LastUsedVersion = v.Tag;
             SettingsService.Save();
             Discord.SetInGamePresence(v.Tag, SettingsService.Settings.SelectedClient);
-            AddToRecentlyLaunched(v.Tag);
+            AddToRecentlyLaunched(v.DisplayName);
 
             if (SettingsService.Settings.CloseAfterLaunch) { await CloseWindow(); return; }
 

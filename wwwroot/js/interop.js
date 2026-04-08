@@ -3,7 +3,8 @@ window.startDrag      = () => postToHost('startDrag');
 window.closeWindow    = () => postToHost('close');
 window.minimizeWindow = () => postToHost('minimize');
 window.minimizeToTray = () => postToHost('minimizeToTray');
-window.maximizeWindow = () => postToHost('maximize');
+window.maximizeWindow   = () => postToHost('maximize');
+window.toggleFullscreen = () => postToHost('fullscreen');
 
 function postToHost(msg) {
     if (window.chrome?.webview) window.chrome.webview.postMessage(msg);
@@ -106,6 +107,7 @@ document.addEventListener('keydown', e => {
     if (e.ctrlKey && e.key === '1') { e.preventDefault(); window._glacierDotNet.invokeMethodAsync('KbShortcut', 'settings'); return; }
     if (e.ctrlKey && e.key === '2') { e.preventDefault(); window._glacierDotNet.invokeMethodAsync('KbShortcut', 'clients'); return; }
     if (e.ctrlKey && e.key === '3') { e.preventDefault(); window._glacierDotNet.invokeMethodAsync('KbShortcut', 'versions'); return; }
+    if (e.key === 'F11')       { e.preventDefault(); window._glacierDotNet.invokeMethodAsync('KbShortcut', 'fullscreen'); return; }
     if (e.key === 'Escape')    { window._glacierDotNet.invokeMethodAsync('KbShortcut', 'escape'); return; }
     if (e.key === 'ArrowDown') { window._glacierDotNet.invokeMethodAsync('KbShortcut', 'down'); return; }
     if (e.key === 'ArrowUp')   { window._glacierDotNet.invokeMethodAsync('KbShortcut', 'up'); return; }

@@ -5,6 +5,7 @@ using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Interop;
+using System.Windows.Media;
 using Microsoft.Extensions.DependencyInjection;
 using GlacierLauncher.Services;
 
@@ -32,6 +33,10 @@ public partial class MainWindow : Window
     private const int ResizeBorder = 6;
 
     private ServiceProvider? _services;
+    private bool _isFullscreen;
+    private WindowState _preFullscreenState;
+    private double _preFullscreenWidth, _preFullscreenHeight;
+    private double _preFullscreenLeft, _preFullscreenTop;
 
     public MainWindow()
     {
@@ -98,8 +103,10 @@ public partial class MainWindow : Window
                     else if (msg == "minimize") WindowState = WindowState.Minimized;
                     else if (msg == "maximize")
                     {
-                        WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
+                        if (_isFullscreen) ToggleFullscreen(); // exit fullscreen first
+                        else WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
                     }
+                    else if (msg == "fullscreen") ToggleFullscreen();
                     else if (msg.StartsWith("openUrl:"))
                     {
                         var url = msg.Substring("openUrl:".Length);
@@ -120,6 +127,63 @@ public partial class MainWindow : Window
             }
             _services.GetRequiredService<DiscordRpcService>().Stop();
         };
+    }
+
+    private void ToggleFullscreen()
+    {
+        if (!_isFullscreen)
+        {
+            _preFullscreenState = WindowState;
+            _preFullscreenWidth = Width;
+            _preFullscreenHeight = Height;
+            _preFullscreenLeft = Left;
+            _preFullscreenTop = Top;
+
+            // Must set Normal first so MaxWidth/MaxHeight apply correctly
+            WindowState = WindowState.Normal;
+            ResizeMode = ResizeMode.NoResize;
+
+            var screen = System.Windows.SystemParameters.WorkArea;
+            var hwnd = new WindowInteropHelper(this).Handle;
+            var monitor = MonitorFromWindow(hwnd, 2 /* MONITOR_DEFAULTTONEAREST */);
+            var info = new MONITORINFO { cbSize = (uint)Marshal.SizeOf<MONITORINFO>() };
+            GetMonitorInfo(monitor, ref info);
+
+            Left   = info.rcMonitor.Left / VisualTreeHelper.GetDpi(this).PixelsPerDip;
+            Top    = info.rcMonitor.Top / VisualTreeHelper.GetDpi(this).PixelsPerDip;
+            Width  = (info.rcMonitor.Right - info.rcMonitor.Left) / VisualTreeHelper.GetDpi(this).PixelsPerDip;
+            Height = (info.rcMonitor.Bottom - info.rcMonitor.Top) / VisualTreeHelper.GetDpi(this).PixelsPerDip;
+
+            _isFullscreen = true;
+        }
+        else
+        {
+            ResizeMode = ResizeMode.CanResize;
+            Left   = _preFullscreenLeft;
+            Top    = _preFullscreenTop;
+            Width  = _preFullscreenWidth;
+            Height = _preFullscreenHeight;
+            WindowState = _preFullscreenState;
+            _isFullscreen = false;
+        }
+    }
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr MonitorFromWindow(IntPtr hwnd, uint dwFlags);
+
+    [DllImport("user32.dll")]
+    private static extern bool GetMonitorInfo(IntPtr hMonitor, ref MONITORINFO lpmi);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct RECT { public int Left, Top, Right, Bottom; }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct MONITORINFO
+    {
+        public uint cbSize;
+        public RECT rcMonitor;
+        public RECT rcWork;
+        public uint dwFlags;
     }
 
     private static void EnsureWwwroot()
