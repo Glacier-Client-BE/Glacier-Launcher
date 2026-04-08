@@ -22,7 +22,7 @@
   Show your activity while using the launcher or playing
 
 - 🎨 Customizable Theming  
-  Set your own background, logo, and avatar
+  Set your own background, color, and more in the settings
 
 - 💾 Persistent Settings  
   Your preferences and selections are saved locally
@@ -45,18 +45,6 @@
 
 - 💬 Rich Presence Integration  
   Displays your current activity on Discord
-
----
-
-## 🎨 Customization
-
-Personalize the launcher with your own assets:
-
-- 🖼️ Background – Panorama or static image  
-- 🏷️ Logo – Branding in the top-left corner  
-- 👤 Avatar – Profile image in the footer  
-
-Check the source for setup details.
 
 ---
 
