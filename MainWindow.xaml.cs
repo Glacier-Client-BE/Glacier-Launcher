@@ -77,7 +77,7 @@ public partial class MainWindow : Window
 
         blazorWebView.UrlLoading += (_, e) =>
         {
-            if (e.Url.Scheme == "https" || e.Url.Scheme == "http")
+            if ((e.Url.Scheme == "https" || e.Url.Scheme == "http") && e.Url.Host != "0.0.0.1")
             {
                 e.UrlLoadingStrategy = Microsoft.AspNetCore.Components.WebView.UrlLoadingStrategy.OpenExternally;
             }
