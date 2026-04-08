@@ -51,6 +51,7 @@ public partial class MainWindow : Window
         sc.AddSingleton<OderSoService>();
         sc.AddSingleton<AutoUpdateService>();
         sc.AddSingleton<DiscordRpcService>();
+        sc.AddSingleton<CurseForgeService>();
 
 #if DEBUG
         sc.AddBlazorWebViewDeveloperTools();

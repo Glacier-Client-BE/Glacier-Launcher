@@ -71,6 +71,7 @@ jobs:
         -p:PublishSingleFile=true
         -p:IncludeNativeLibrariesForSelfExtract=true
         -p:Version=${{ steps.versioning.outputs.NEXT_VERSION }}
+        -p:CurseForgeApiKey=${{ secrets.CURSEFORGE_API_KEY }}
         -o "${{ github.workspace }}\publish"
 
     - name: Create and Push Tag

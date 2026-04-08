@@ -35,6 +35,9 @@ public class LauncherSettings
     // ── Custom DLL ──────────────────────────────────────────────
     public string CustomDllPath         { get; set; } = "";
 
+    // ── CurseForge ──────────────────────────────────────────────
+    public string CurseForgeApiKey        { get; set; } = "";
+
     // ── Updates ──────────────────────────────────────────────────
     public bool   CheckUpdatesOnStartup   { get; set; } = true;
     public string SkippedLauncherVersion  { get; set; } = "";

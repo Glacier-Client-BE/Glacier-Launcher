@@ -11,7 +11,15 @@
     <Platforms>x64</Platforms>
     <ApplicationIcon>icon.ico</ApplicationIcon>
     <Version Condition="'$(Version)' == ''">0.0.0-dev</Version>
+    <CurseForgeApiKey Condition="'$(CurseForgeApiKey)' == ''"></CurseForgeApiKey>
   </PropertyGroup>
+
+  <ItemGroup>
+    <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+      <_Parameter1>CurseForgeApiKey</_Parameter1>
+      <_Parameter2>$(CurseForgeApiKey)</_Parameter2>
+    </AssemblyAttribute>
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
