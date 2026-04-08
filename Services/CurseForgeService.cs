@@ -15,12 +15,11 @@ public class CurseForgeService
     private const string BaseUrl = "https://api.curseforge.com";
     private const int MinecraftGameId = 78022;
 
-    // CurseForge class IDs for Minecraft Bedrock (gameId 78022)
-    private const int ClassAddons        = 4984;  // Addons (behavior packs, resource packs, general)
-    private const int ClassMaps          = 6913;  // Maps / worlds
-    private const int ClassSkins         = 6925;  // Skins / skin packs
-    private const int ClassTexturePacks  = 6929;  // Texture packs / resource packs
-    private const int ClassScripts       = 6940;  // Scripts
+    private const int ClassAddons        = 4984;
+    private const int ClassMaps          = 6913;
+    private const int ClassSkins         = 6925;
+    private const int ClassTexturePacks  = 6929;
+    private const int ClassScripts       = 6940;
 
     private static readonly string ComMojangRoot = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
@@ -31,10 +30,13 @@ public class CurseForgeService
     public static string SkinPacksDir     => Path.Combine(ComMojangRoot, "skin_packs");
     public static string WorldsDir        => Path.Combine(ComMojangRoot, "minecraftWorlds");
 
+    // UPDATED: Added .Trim() and .Trim('"') to handle quoted strings from MSBuild/GitHub Actions
     private static readonly string BuiltInApiKey =
-        typeof(CurseForgeService).Assembly
+        (typeof(CurseForgeService).Assembly
             .GetCustomAttributes<AssemblyMetadataAttribute>()
-            .FirstOrDefault(a => a.Key == "CurseForgeApiKey")?.Value ?? "";
+            .FirstOrDefault(a => a.Key == "CurseForgeApiKey")?.Value ?? "")
+            .Trim()
+            .Trim('"');
 
     private readonly HttpClient _http;
     private readonly SettingsService _settings;
@@ -47,9 +49,10 @@ public class CurseForgeService
         _http.DefaultRequestHeaders.Add("Accept", "application/json");
     }
 
+    // UPDATED: Ensure settings-based keys are also trimmed of literal quotes
     private string EffectiveApiKey =>
         !string.IsNullOrWhiteSpace(_settings.Settings.CurseForgeApiKey)
-            ? _settings.Settings.CurseForgeApiKey
+            ? _settings.Settings.CurseForgeApiKey.Trim().Trim('"')
             : BuiltInApiKey;
 
     public bool IsAvailable => !string.IsNullOrWhiteSpace(EffectiveApiKey);
@@ -57,10 +60,11 @@ public class CurseForgeService
     private void EnsureApiKey()
     {
         var key = EffectiveApiKey;
-        if (string.IsNullOrWhiteSpace(key)) throw new InvalidOperationException("CurseForge API key is not set. Add it in Settings.");
-        // Refresh header each call in case user changed it
+        if (string.IsNullOrWhiteSpace(key)) 
+            throw new InvalidOperationException("CurseForge API key is not set. Add it in Settings.");
+
         _http.DefaultRequestHeaders.Remove("x-api-key");
-        _http.DefaultRequestHeaders.Add("x-api-key", key.Trim());
+        _http.DefaultRequestHeaders.Add("x-api-key", key);
     }
 
     // ── Models ────────────────────────────────────────────────
@@ -158,7 +162,6 @@ public class CurseForgeService
     {
         EnsureApiKey();
 
-        // Download to temp
         var tmpPath = Path.Combine(Path.GetTempPath(), file.FileName);
         try
         {
@@ -180,7 +183,6 @@ public class CurseForgeService
             }
             dest.Close();
 
-            // Install based on file extension
             await InstallAddonFileAsync(tmpPath, classId);
         }
         finally
@@ -210,13 +212,11 @@ public class CurseForgeService
                 break;
 
             case ".zip":
-                // Determine destination from classId
                 var dir = GetDirectoryForClass(classId);
                 await ExtractZipAsync(filePath, dir, Path.GetFileNameWithoutExtension(filePath));
                 break;
 
             default:
-                // Try to extract as zip, fall back to resource_packs
                 var fallbackDir = GetDirectoryForClass(classId);
                 await ExtractZipAsync(filePath, fallbackDir, Path.GetFileNameWithoutExtension(filePath));
                 break;
@@ -225,7 +225,6 @@ public class CurseForgeService
 
     private async Task InstallMcPackAsync(string filePath)
     {
-        // .mcpack is a zip — peek inside for manifest.json to determine type
         var targetDir = await DetectPackTypeAsync(filePath);
         var folderName = Path.GetFileNameWithoutExtension(filePath);
         await ExtractZipAsync(filePath, targetDir, folderName);
@@ -233,7 +232,6 @@ public class CurseForgeService
 
     private async Task InstallMcAddonAsync(string filePath)
     {
-        // .mcaddon is a zip containing multiple .mcpack files
         var tmpExtract = Path.Combine(Path.GetTempPath(), "glacier_mcaddon_" + Guid.NewGuid().ToString("N"));
         try
         {
@@ -291,7 +289,6 @@ public class CurseForgeService
             }
             catch { }
 
-            // Default to resource packs
             Directory.CreateDirectory(ResourcePacksDir);
             return ResourcePacksDir;
         });
@@ -304,7 +301,6 @@ public class CurseForgeService
             Directory.CreateDirectory(parentDir);
             var destDir = Path.Combine(parentDir, SanitizeFolderName(folderName));
 
-            // Remove existing folder if present
             if (Directory.Exists(destDir))
                 Directory.Delete(destDir, true);
 
@@ -321,8 +317,8 @@ public class CurseForgeService
         {
             ClassMaps         => WorldsDir,
             ClassTexturePacks => ResourcePacksDir,
-            ClassSkins        => SkinPacksDir,
-            ClassAddons       => ResourcePacksDir,   // addons auto-detect via manifest
+            ClassSkins         => SkinPacksDir,
+            ClassAddons       => ResourcePacksDir,
             ClassScripts      => BehaviorPacksDir,
             _                 => ResourcePacksDir
         };
