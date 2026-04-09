@@ -7,7 +7,6 @@ on:
   workflow_dispatch:
 
 env:
-  # Opt-in to Node 24 to silence deprecation warnings for actions
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
@@ -95,3 +94,10 @@ jobs:
         files: ${{ github.workspace }}/publish/GlacierLauncher.exe
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        
+    - name: Trigger Website Repo
+      if: steps.versioning.outputs.SKIP != 'true'
+      run: |
+        gh api repos/Glacier-Client-BE/Glacier-Website/dispatches -f event_type=launcher-release
+      env:
+          GH_TOKEN: ${{ secrets.DISPATCH_TOKEN }}
