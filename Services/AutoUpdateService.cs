@@ -187,8 +187,6 @@ public class AutoUpdateService
         catch { return false; }
     }
 
-    // ── Version comparison ────────────────────────────────────────
-
     private static bool IsNewerVersion(string remote, string local)
     {
         try
