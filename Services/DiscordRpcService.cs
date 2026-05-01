@@ -83,7 +83,7 @@ public class DiscordRpcService : IDisposable
         "Flarial Client" => "Using Flarial",
         "OderSo Client"  => string.IsNullOrEmpty(versionTag) ? "Using OderSo" : $"Using OderSo · {versionTag}",
         "Custom DLL"     => string.IsNullOrEmpty(versionTag) ? "Using a custom DLL" : $"Using {versionTag}",
-        "Vanilla"        => "Playing Vanilla — no client",
+        "Vanilla"        => "Playing Vanilla",
         _                => string.IsNullOrEmpty(versionTag) ? "Using Latite" : $"Using Latite · {versionTag}",
     };
 

@@ -464,7 +464,10 @@
             <div class="panel-body">
 
                 <div class="settings-section">
-                <span class="panel-section-label">Injection</span>
+                @if (SectionMatch(("Active client","active client injection vanilla"), ("Injection delay","injection delay wait"), ("Auto-inject","auto inject automatic"), ("Close after launch","close minimize launch")))
+                {
+                    <span class="panel-section-label">Injection</span>
+                }
 
                 <div class="setting-row @(SH("Active client","active client injection vanilla"))">
                     <span class="setting-label">Active client</span>
@@ -527,7 +530,10 @@
 
                 </div>
                 <div class="settings-section">
-                <span class="panel-section-label">Appearance</span>
+                @if (SectionMatch(("Accent colour","accent color theme"), ("Theme preset","theme dark midnight slate ocean forest sunset light"), ("Compact mode","compact dense small"), ("Animations","animations smooth motion"), ("Background blur","blur background"), ("Remember window size","window size remember"), ("Custom background wallpaper","background wallpaper image custom")))
+                {
+                    <span class="panel-section-label">Appearance</span>
+                }
 
                 <div class="setting-row @(SH("Accent colour","accent color theme"))">
                     <div class="setting-meta">
@@ -638,7 +644,10 @@
 
                 </div>
                 <div class="settings-section">
-                <span class="panel-section-label">Account</span>
+                @if (SectionMatch(("Display name","username name display account")))
+                {
+                    <span class="panel-section-label">Account</span>
+                }
 
                 <div class="setting-row @(SH("Display name","username name display account"))">
                     <span class="setting-label">Display name</span>
@@ -651,7 +660,10 @@
 
                 </div>
                 <div class="settings-section">
-                <span class="panel-section-label">Social</span>
+                @if (SectionMatch(("Discord Rich Presence","discord rpc social"), ("Discord account","discord login account")))
+                {
+                    <span class="panel-section-label">Social</span>
+                }
 
                 <div class="setting-row clickable @(SH("Discord Rich Presence","discord rpc social"))"
                      @onclick='() => ToggleProp(() => SettingsService.Settings.DiscordRichPresence = !SettingsService.Settings.DiscordRichPresence, true)'>
@@ -675,7 +687,10 @@
 
                 </div>
                 <div class="settings-section">
-                <span class="panel-section-label">Quality of Life</span>
+                @if (SectionMatch(("Show recently launched","recent history"), ("Minimize to tray","tray minimize system"), ("Clear recent history","clear history recent")))
+                {
+                    <span class="panel-section-label">Quality of Life</span>
+                }
 
                 <div class="setting-row clickable @(SH("Show recently launched","recent history"))"
                      @onclick='() => ToggleProp(() => SettingsService.Settings.ShowRecentlyLaunched = !SettingsService.Settings.ShowRecentlyLaunched)'>
@@ -711,7 +726,10 @@
 
                 </div>
                 <div class="settings-section">
-                <span class="panel-section-label">CurseForge</span>
+                @if (SectionMatch(("CurseForge API key","curseforge api key addons")))
+                {
+                    <span class="panel-section-label">CurseForge</span>
+                }
 
                 <div class="setting-row @(SH("CurseForge API key","curseforge api key addons"))">
                     <div class="setting-meta">
@@ -746,7 +764,10 @@
 
                 </div>
                 <div class="settings-section">
-                <span class="panel-section-label">Updates</span>
+                @if (SectionMatch(("Check for updates on startup","update auto check startup"), ("Check for updates now","update manual check")))
+                {
+                    <span class="panel-section-label">Updates</span>
+                }
 
                 <div class="setting-row clickable @(SH("Check for updates on startup","update auto check startup"))"
                      @onclick='() => ToggleProp(() => SettingsService.Settings.CheckUpdatesOnStartup = !SettingsService.Settings.CheckUpdatesOnStartup)'>
@@ -774,7 +795,10 @@
 
                 </div>
                 <div class="settings-section">
-                <span class="panel-section-label">Folders</span>
+                @if (SectionMatch(("Open launcher folder","launcher folder downloads location"), ("Open Minecraft folder","minecraft com mojang folder")))
+                {
+                    <span class="panel-section-label">Folders</span>
+                }
 
                 <div class="setting-row @(SH("Open launcher folder","launcher folder downloads location"))">
                     <div class="setting-meta">
@@ -798,7 +822,10 @@
 
                 </div>
                 <div class="settings-section">
-                <span class="panel-section-label">Backup</span>
+                @if (SectionMatch(("Export settings","export backup settings save"), ("Import settings","import restore settings load"), ("Reset settings","reset default factory settings")))
+                {
+                    <span class="panel-section-label">Backup</span>
+                }
 
                 <div class="setting-row @(SH("Export settings","export backup settings save"))">
                     <div class="setting-meta">
@@ -832,7 +859,10 @@
 
                 </div>
                 <div class="settings-section">
-                <span class="panel-section-label">About</span>
+                @if (SectionMatch(("Keyboard shortcuts","shortcuts keyboard help"), ("Credits","credits about launcher")))
+                {
+                    <span class="panel-section-label">About</span>
+                }
 
                 <div class="setting-row @(SH("Keyboard shortcuts","shortcuts keyboard help"))">
                     <div class="setting-meta">
@@ -2078,6 +2108,14 @@
         return (label.ToLower().Contains(q) || keywords.ToLower().Contains(q)) ? "" : "hidden-by-search";
     }
 
+    // Returns true if the section should be visible (no filter, or any item matches).
+    private bool SectionMatch(params (string l, string k)[] items)
+    {
+        if (string.IsNullOrWhiteSpace(settingsFilter)) return true;
+        var q = settingsFilter.ToLower();
+        return items.Any(i => i.l.ToLower().Contains(q) || i.k.ToLower().Contains(q));
+    }
+
     private void OnDelayChanged(ChangeEventArgs e)
     {
         if (int.TryParse(e.Value?.ToString(), out int v))
@@ -2966,7 +3004,7 @@ private async Task OpenDiscordOAuth()
         {
             "Flarial Client" => "Flarial Client",
             "OderSo Client"  => "OderSo Client",
-            "Vanilla"        => "Vanilla — no client",
+            "Vanilla"        => "Vanilla",
             "Custom DLL"     => !string.IsNullOrEmpty(customDllPath)
                                 ? System.IO.Path.GetFileNameWithoutExtension(customDllPath)
                                 : "Custom DLL",
