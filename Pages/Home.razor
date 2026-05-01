@@ -161,6 +161,36 @@
         </div>
     }
 
+    <!-- ── RESET CONFIRM MODAL ── -->
+    @if (resetConfirmOpen)
+    {
+        <div class="modal-overlay" @onclick="CancelResetSettings">
+            <div class="modal-box" @onclick:stopPropagation>
+                <div class="modal-header">
+                    <span class="modal-title">
+                        <i class="fa-solid fa-triangle-exclamation" style="color:var(--orange);margin-right:8px;"></i>
+                        Reset settings?
+                    </span>
+                    <button class="modal-close-btn" @onclick="CancelResetSettings">
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <p class="modal-desc">
+                        This will clear all your preferences (theme, accent, recently launched, pinned versions, etc).
+                        Discord login and downloaded clients are kept.
+                    </p>
+                    <div class="modal-btn-row" style="margin-top:8px;">
+                        <button class="modal-btn modal-btn-cancel" @onclick="CancelResetSettings">Cancel</button>
+                        <button class="modal-btn modal-btn-disconnect" @onclick="DoResetSettings">
+                            <i class="fa-solid fa-arrow-rotate-left"></i> Reset
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+
     <!-- ── DISCORD MODAL ── -->
     @if (discordModalOpen)
     {
@@ -232,18 +262,26 @@
         <!-- Quick client switcher chip (inline, left of controls) -->
         <div class="topbar-client-chip" @onclick="CycleClient" @onmousedown:stopPropagation
              title="Click to cycle client (@SettingsService.Settings.SelectedClient)">
-            <div class="chip-dot"></div>
-            @if (SettingsService.Settings.SelectedClient == "Custom DLL")
+            <div class="chip-dot @(mcRunning ? "live" : "")"></div>
+            @if (IsImageClient(SettingsService.Settings.SelectedClient))
             {
-                <i class="chip-icon @(GetClientIcon(SettingsService.Settings.SelectedClient))"></i>
+                <img class="chip-icon" src="@GetClientImagePath(SettingsService.Settings.SelectedClient)" style="width:14px;height:14px;object-fit:contain;" alt="" />
             }
             else
             {
-                <img class="chip-icon" src="@GetClientImagePath(SettingsService.Settings.SelectedClient)" style="width:14px;height:14px;object-fit:contain;" alt="" />
+                <i class="chip-icon @(GetClientIcon(SettingsService.Settings.SelectedClient))"></i>
             }
             <span>@SettingsService.Settings.SelectedClient</span>
             <i class="fa-solid fa-chevron-right chip-arrow"></i>
         </div>
+
+        @if (mcRunning)
+        {
+            <div class="mc-running-pill" title="Minecraft is currently running">
+                <i class="fa-solid fa-circle"></i>
+                <span>MC</span>
+            </div>
+        }
 
         <!-- Quick search trigger (inline, left of controls) -->
         <button class="search-trigger" @onclick="OpenSearch" @onmousedown:stopPropagation title="Search (Ctrl+K)">
@@ -427,7 +465,7 @@
 
                 <span class="panel-section-label">Injection</span>
 
-                <div class="setting-row @(SH("Active client","active client injection"))">
+                <div class="setting-row @(SH("Active client","active client injection vanilla"))">
                     <span class="setting-label">Active client</span>
                     <select class="setting-select" value="@SettingsService.Settings.SelectedClient"
                             @onchange="OnClientChanged" @onclick:stopPropagation>
@@ -438,18 +476,26 @@
                         {
                             <option value="Custom DLL">Custom DLL</option>
                         }
+                        <option value="Vanilla">Vanilla (no client)</option>
                     </select>
                 </div>
 
                 <div class="setting-row @(SH("Injection delay","injection delay wait"))">
                     <div class="setting-meta">
                         <span class="setting-label">Injection delay</span>
-                        <span class="setting-hint">How long to wait after game launches before injecting</span>
+                        <span class="setting-hint">
+                            How long to wait after game launches before injecting
+                            @if (SettingsService.Settings.SelectedClient == "Vanilla")
+                            {
+                                <span style="color:var(--text-dim); opacity:0.7;"> · ignored in Vanilla</span>
+                            }
+                        </span>
                     </div>
                     <div style="display:flex; align-items:center; gap:8px;">
-                        <input type="range" min="1000" max="10000" step="500"
+                        <input type="range" min="500" max="15000" step="500"
                                value="@SettingsService.Settings.InjectionDelayMs"
-                               @oninput="OnDelayChanged" />
+                               @oninput="OnDelayChanged"
+                               disabled="@(SettingsService.Settings.SelectedClient == "Vanilla")" />
                         <span style="font-size:11px; color:var(--text-dim); width:38px; text-align:right;">
                             @(SettingsService.Settings.InjectionDelayMs / 1000.0)s
                         </span>
@@ -496,10 +542,10 @@
                     </div>
                 </div>
 
-                <div class="setting-row @(SH("Theme preset","theme dark midnight slate"))">
+                <div class="setting-row @(SH("Theme preset","theme dark midnight slate ocean forest sunset light"))">
                     <div class="setting-meta">
                         <span class="setting-label">Theme preset</span>
-                        <span class="setting-hint">Background darkness level</span>
+                        <span class="setting-hint">Background tone — affects panels and overlays</span>
                     </div>
                     <select class="setting-select" value="@SettingsService.Settings.ThemePreset"
                             @onchange="OnThemeChanged" @onclick:stopPropagation>
@@ -507,7 +553,31 @@
                         <option value="darker">Darker</option>
                         <option value="midnight">Midnight</option>
                         <option value="slate">Slate</option>
+                        <option value="ocean">Ocean</option>
+                        <option value="forest">Forest</option>
+                        <option value="sunset">Sunset</option>
+                        <option value="light">Light</option>
                     </select>
+                </div>
+
+                <div class="setting-row clickable @(SH("Compact mode","compact dense small"))"
+                     @onclick='() => ToggleProp(() => { SettingsService.Settings.CompactMode = !SettingsService.Settings.CompactMode; _ = JS.InvokeVoidAsync("setCompactMode", SettingsService.Settings.CompactMode); })'>
+                    <div class="setting-meta">
+                        <span class="setting-label">Compact mode</span>
+                        <span class="setting-hint">Tighter spacing — fits more on screen</span>
+                    </div>
+                    <Toggle On="SettingsService.Settings.CompactMode"
+                            OnClick='() => ToggleProp(() => { SettingsService.Settings.CompactMode = !SettingsService.Settings.CompactMode; _ = JS.InvokeVoidAsync("setCompactMode", SettingsService.Settings.CompactMode); })' />
+                </div>
+
+                <div class="setting-row clickable @(SH("Animations","animations smooth motion"))"
+                     @onclick='() => ToggleProp(() => { SettingsService.Settings.AnimationsEnabled = !SettingsService.Settings.AnimationsEnabled; _ = JS.InvokeVoidAsync("setAnimationsEnabled", SettingsService.Settings.AnimationsEnabled); })'>
+                    <div class="setting-meta">
+                        <span class="setting-label">Animations</span>
+                        <span class="setting-hint">Disable for low-end devices or reduced motion</span>
+                    </div>
+                    <Toggle On="SettingsService.Settings.AnimationsEnabled"
+                            OnClick='() => ToggleProp(() => { SettingsService.Settings.AnimationsEnabled = !SettingsService.Settings.AnimationsEnabled; _ = JS.InvokeVoidAsync("setAnimationsEnabled", SettingsService.Settings.AnimationsEnabled); })' />
                 </div>
 
                 <div class="setting-row @(SH("Background blur","blur background"))">
@@ -689,12 +759,66 @@
                     </button>
                 </div>
 
+                <span class="panel-section-label">Folders</span>
+
+                <div class="setting-row @(SH("Open launcher folder","launcher folder downloads location"))">
+                    <div class="setting-meta">
+                        <span class="setting-label">Launcher folder</span>
+                        <span class="setting-hint">Settings, downloaded clients and DLLs live here</span>
+                    </div>
+                    <button class="btn-sm" @onclick="OpenLauncherFolder" @onmousedown:stopPropagation>
+                        <i class="fa-solid fa-folder-open"></i> Open
+                    </button>
+                </div>
+
+                <div class="setting-row @(SH("Open Minecraft folder","minecraft com mojang folder"))">
+                    <div class="setting-meta">
+                        <span class="setting-label">Minecraft data folder</span>
+                        <span class="setting-hint">com.mojang — resource packs, worlds, behaviour packs</span>
+                    </div>
+                    <button class="btn-sm" @onclick="OpenMinecraftFolder" @onmousedown:stopPropagation>
+                        <i class="fa-solid fa-cubes"></i> Open
+                    </button>
+                </div>
+
+                <span class="panel-section-label">Backup</span>
+
+                <div class="setting-row @(SH("Export settings","export backup settings save"))">
+                    <div class="setting-meta">
+                        <span class="setting-label">Export settings</span>
+                        <span class="setting-hint">Save your settings as a JSON backup</span>
+                    </div>
+                    <button class="btn-sm" @onclick="ExportSettings" @onmousedown:stopPropagation>
+                        <i class="fa-solid fa-file-export"></i> Export
+                    </button>
+                </div>
+
+                <div class="setting-row @(SH("Import settings","import restore settings load"))">
+                    <div class="setting-meta">
+                        <span class="setting-label">Import settings</span>
+                        <span class="setting-hint">Restore from a previously exported JSON</span>
+                    </div>
+                    <button class="btn-sm" @onclick="ImportSettings" @onmousedown:stopPropagation>
+                        <i class="fa-solid fa-file-import"></i> Import
+                    </button>
+                </div>
+
+                <div class="setting-row @(SH("Reset settings","reset default factory settings"))">
+                    <div class="setting-meta">
+                        <span class="setting-label">Reset to defaults</span>
+                        <span class="setting-hint">Clears all preferences — does not delete clients</span>
+                    </div>
+                    <button class="btn-sm" style="color:var(--red);" @onclick="ConfirmResetSettings" @onmousedown:stopPropagation>
+                        <i class="fa-solid fa-arrow-rotate-left"></i> Reset
+                    </button>
+                </div>
+
                 <span class="panel-section-label">About</span>
 
                 <div class="setting-row @(SH("Keyboard shortcuts","shortcuts keyboard help"))">
                     <div class="setting-meta">
                         <span class="setting-label">Keyboard shortcuts</span>
-                        <span class="setting-hint">Ctrl+K search · Ctrl+L launch · Ctrl+1/2/3 panels · F11 fullscreen · Esc close</span>
+                        <span class="setting-hint">Ctrl+K search · Ctrl+L launch · Ctrl+1/2/3/4 panels · Ctrl+, settings · Ctrl+Tab cycle · F11 fullscreen · Esc close</span>
                     </div>
                     <div class="kbs"><kbd>?</kbd></div>
                 </div>
@@ -758,14 +882,7 @@
                             }
                             @if (flarialDownloading)
                             {
-                                <div class="dl-progress-row">
-                                    @if (flarialProgress > 0)
-                                    {
-                                        <div class="progress-bar-wrap"><div class="progress-bar-fill" style="width:@(flarialProgress.ToString("F0"))%"></div></div>
-                                        <span class="dl-pct">@((int)flarialProgress)%</span>
-                                    }
-                                    <button class="icon-btn" disabled><span class="spinner"></span></button>
-                                </div>
+                                <InlineProgress Progress="flarialProgress" />
                             }
                             else
                             {
@@ -835,14 +952,7 @@
                             }
                             @if (odersoDownloading)
                             {
-                                <div class="dl-progress-row">
-                                    @if (odersoProgress > 0)
-                                    {
-                                        <div class="progress-bar-wrap"><div class="progress-bar-fill" style="width:@(odersoProgress.ToString("F0"))%"></div></div>
-                                        <span class="dl-pct">@((int)odersoProgress)%</span>
-                                    }
-                                    <button class="icon-btn" disabled><span class="spinner"></span></button>
-                                </div>
+                                <InlineProgress Progress="odersoProgress" />
                             }
                             else
                             {
@@ -863,6 +973,28 @@
                     </div>
                     @if (!string.IsNullOrEmpty(odersoError)) { <span class="error-text" style="padding:0 2px;">@odersoError</span> }
                     <p class="client-card-desc">OderSo Client — curated Minecraft Bedrock experience by MasonOderSo.</p>
+                </div>
+
+                <!-- Vanilla — no client -->
+                <div class="client-card @(SettingsService.Settings.SelectedClient == "Vanilla" ? "client-active" : "")">
+                    <div class="client-card-header">
+                        <div class="client-card-icon" style="background:rgba(67,181,129,0.15); color:var(--green);">
+                            <i class="fa-solid fa-cube"></i>
+                        </div>
+                        <div class="client-card-meta">
+                            <span class="client-card-name">Vanilla</span>
+                            <span class="client-card-sub" style="opacity:0.7;">Launches Minecraft with no DLL injection</span>
+                        </div>
+                        <div class="client-card-actions">
+                            @if (SettingsService.Settings.SelectedClient != "Vanilla")
+                            {
+                                <button class="icon-btn" title="Select" @onclick='() => SelectClient("Vanilla")' @onmousedown:stopPropagation>
+                                    <i class="fa-solid fa-check"></i>
+                                </button>
+                            }
+                        </div>
+                    </div>
+                    <p class="client-card-desc">Pure stock Minecraft Bedrock — useful for diagnostics, multiplayer realms, or just playing un-modified.</p>
                 </div>
 
                 <!-- Custom DLL -->
@@ -924,6 +1056,37 @@
                     <div class="panel-title-underline"></div>
                 </div>
                 <div class="panel-header-actions">
+                    <div class="versions-sort-wrap">
+                        <button class="panel-icon-btn @(SettingsService.Settings.ShowOnlyDownloaded ? "active" : "")"
+                                @onclick="ToggleShowOnlyDownloaded" @onmousedown:stopPropagation
+                                title="@(SettingsService.Settings.ShowOnlyDownloaded ? "Show all" : "Show only downloaded")">
+                            <i class="fa-solid @(SettingsService.Settings.ShowOnlyDownloaded ? "fa-eye" : "fa-eye-slash")"></i>
+                        </button>
+                        <button class="panel-icon-btn" @onclick="ToggleSortMenu" @onmousedown:stopPropagation title="Sort">
+                            <i class="fa-solid fa-arrow-down-wide-short"></i>
+                        </button>
+                        @if (sortMenuOpen)
+                        {
+                            <div class="sort-menu" @onclick:stopPropagation>
+                                <button class="sort-menu-item @(SettingsService.Settings.VersionSortMode == "newest" ? "active" : "")"
+                                        @onclick='() => { SetVersionSort("newest"); sortMenuOpen = false; }'>
+                                    <i class="fa-solid fa-arrow-down-9-1"></i> Newest first
+                                </button>
+                                <button class="sort-menu-item @(SettingsService.Settings.VersionSortMode == "oldest" ? "active" : "")"
+                                        @onclick='() => { SetVersionSort("oldest"); sortMenuOpen = false; }'>
+                                    <i class="fa-solid fa-arrow-up-9-1"></i> Oldest first
+                                </button>
+                                <button class="sort-menu-item @(SettingsService.Settings.VersionSortMode == "name" ? "active" : "")"
+                                        @onclick='() => { SetVersionSort("name"); sortMenuOpen = false; }'>
+                                    <i class="fa-solid fa-arrow-down-a-z"></i> Name A–Z
+                                </button>
+                                <button class="sort-menu-item @(SettingsService.Settings.VersionSortMode == "downloaded" ? "active" : "")"
+                                        @onclick='() => { SetVersionSort("downloaded"); sortMenuOpen = false; }'>
+                                    <i class="fa-solid fa-circle-down"></i> Downloaded first
+                                </button>
+                            </div>
+                        }
+                    </div>
                     <button class="panel-icon-btn @((versionsClient == "Latite" ? isLoadingVersions : isLoadingOderSoVersions) ? "spinning" : "")"
                             disabled="@(versionsClient == "Latite" ? isLoadingVersions : isLoadingOderSoVersions)"
                             @onclick="RefreshVersionsAsync" @onmousedown:stopPropagation title="Refresh">
@@ -1078,15 +1241,15 @@
 
             @if (!CurseForge.IsAvailable)
             {
-                <div class="panel-body" style="display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px; text-align:center; padding:40px 20px;">
-                    <i class="fa-solid fa-key" style="font-size:32px; color:var(--accent); opacity:0.6;"></i>
-                    <span style="font-size:14px; color:var(--text);">CurseForge API Key Required</span>
-                    <span style="font-size:11px; color:var(--text-dim); max-width:320px;">
-                        Get a free API key from the CurseForge developer console, then paste it in Settings.
-                    </span>
-                    <button class="btn-sm" style="margin-top:4px;" @onclick="OpenSettingsCurseForge" @onmousedown:stopPropagation>
-                        <i class="fa-solid fa-gear"></i> Open Settings
-                    </button>
+                <div class="panel-body">
+                    <div class="empty-state">
+                        <i class="fa-solid fa-key"></i>
+                        <span>CurseForge API key required</span>
+                        <small>Get a free key from the CurseForge developer console, then paste it in Settings.</small>
+                        <button class="btn-sm" style="margin-top:6px;" @onclick="OpenSettingsCurseForge" @onmousedown:stopPropagation>
+                            <i class="fa-solid fa-gear"></i> Open Settings
+                        </button>
+                    </div>
                 </div>
             }
             else
@@ -1117,7 +1280,8 @@
                 <div class="panel-search-wrap">
                     <i class="fa-solid fa-magnifying-glass"></i>
                     <input class="panel-search-input" placeholder="Search CurseForge addons…"
-                           @bind="cfSearchQuery" @bind:event="oninput"
+                           value="@cfSearchQuery"
+                           @oninput="OnCfSearchInput"
                            @onkeydown="OnCfSearchKeyDown"
                            @onkeydown:stopPropagation />
                 </div>
@@ -1142,16 +1306,18 @@
                     }
                     else if (cfResults.Count == 0 && cfHasSearched)
                     {
-                        <div style="padding:30px; text-align:center; color:var(--text-dim); font-size:12px;">
-                            <i class="fa-solid fa-box-open" style="font-size:24px; opacity:0.4; display:block; margin-bottom:8px;"></i>
-                            No addons found. Try a different search term.
+                        <div class="empty-state">
+                            <i class="fa-solid fa-box-open"></i>
+                            <span>No addons found</span>
+                            <small>Try a different search term or category.</small>
                         </div>
                     }
                     else if (cfResults.Count == 0)
                     {
-                        <div style="padding:30px; text-align:center; color:var(--text-dim); font-size:12px;">
-                            <i class="fa-solid fa-magnifying-glass" style="font-size:24px; opacity:0.4; display:block; margin-bottom:8px;"></i>
-                            Search for Bedrock addons, resource packs, or worlds above.
+                        <div class="empty-state">
+                            <i class="fa-solid fa-magnifying-glass"></i>
+                            <span>Browse CurseForge</span>
+                            <small>Search for Bedrock addons, resource packs, worlds, or skins above.</small>
                         </div>
                     }
                     else
@@ -1185,14 +1351,7 @@
                                     <div class="client-card-actions">
                                         @if (cfDownloadingId == a.Id)
                                         {
-                                            <div class="dl-progress-row">
-                                                @if (cfDownloadProgress > 0)
-                                                {
-                                                    <div class="progress-bar-wrap"><div class="progress-bar-fill" style="width:@(cfDownloadProgress.ToString("F0"))%"></div></div>
-                                                    <span class="dl-pct">@((int)cfDownloadProgress)%</span>
-                                                }
-                                                <button class="icon-btn" disabled><span class="spinner"></span></button>
-                                            </div>
+                                            <InlineProgress Progress="cfDownloadProgress" />
                                         }
                                         else
                                         {
@@ -1362,11 +1521,21 @@
     private double downloadProgress = 0;
     private string versionsFilter = "";
     private string versionsClient = "Latite";
-    private IEnumerable<MinecraftVersion> FilteredVersions =>
-        string.IsNullOrWhiteSpace(versionsFilter)
-            ? versions
-            : versions.Where(v => v.DisplayName.Contains(versionsFilter, StringComparison.OrdinalIgnoreCase)
-                               || v.Tag.Contains(versionsFilter, StringComparison.OrdinalIgnoreCase));
+    private IEnumerable<MinecraftVersion> FilteredVersions
+    {
+        get
+        {
+            IEnumerable<MinecraftVersion> q = versions;
+            if (!string.IsNullOrWhiteSpace(versionsFilter))
+            {
+                q = q.Where(v => v.DisplayName.Contains(versionsFilter, StringComparison.OrdinalIgnoreCase)
+                              || v.Tag.Contains(versionsFilter, StringComparison.OrdinalIgnoreCase));
+            }
+            if (SettingsService.Settings.ShowOnlyDownloaded)
+                q = q.Where(v => v.IsDownloaded);
+            return SortedVersions(q);
+        }
+    }
 
     // ── OderSo multi-version state ────────────────────────────
     private class OderSoDllState
@@ -1459,12 +1628,21 @@
     private record ToastItem(string Message, string Kind, string Icon);
     private List<ToastItem> _toasts = new();
 
+    // ── Minecraft running indicator ──────────────────────────
+    private bool mcRunning = false;
+    private System.Threading.CancellationTokenSource? _mcPollCts;
+
+    // ── Sort menu ─────────────────────────────────────────────
+    private bool sortMenuOpen = false;
+    private void ToggleSortMenu() { sortMenuOpen = !sortMenuOpen; StateHasChanged(); }
+
     // ── JS ref ────────────────────────────────────────────────
     private DotNetObjectReference<Home>? _selfRef;
 
     // ── Static data ───────────────────────────────────────────
     private static readonly string[] _accentSwatches =
-        { "#7289da", "#5865f2", "#3ba55d", "#faa61a", "#f04747", "#eb459e", "#00d8ff", "#ff7043" };
+        { "#7289da", "#5865f2", "#3ba55d", "#faa61a", "#f04747", "#eb459e", "#00d8ff", "#ff7043",
+          "#a855f7", "#22d3ee", "#84cc16", "#f59e0b" };
 
     private record NewsItem(string Icon, string Title, string Subtitle, string Url);
     private static readonly NewsItem[] _newsItems =
@@ -1504,7 +1682,9 @@
             SettingsService.Settings.AccentColor,
             SettingsService.Settings.ThemePreset,
             SettingsService.Settings.BlurIntensity,
-            SettingsService.Settings.CustomBackgroundPath);
+            SettingsService.Settings.CustomBackgroundPath,
+            SettingsService.Settings.CompactMode,
+            SettingsService.Settings.AnimationsEnabled);
         clientsHasBadge = !Flarial.IsDownloaded || !OderSo.IsDownloaded;
 
         if (!string.IsNullOrEmpty(SettingsService.Settings.LastUpdateCheck))
@@ -1513,6 +1693,29 @@
         StateHasChanged();
 
         _ = RunStartupChecksAsync();
+        _ = StartMcPollAsync();
+    }
+
+    private async Task StartMcPollAsync()
+    {
+        _mcPollCts?.Cancel();
+        _mcPollCts = new System.Threading.CancellationTokenSource();
+        var token = _mcPollCts.Token;
+        try
+        {
+            while (!token.IsCancellationRequested)
+            {
+                bool running = false;
+                try { running = GameLauncher.IsMinecraftRunning(); } catch { }
+                if (running != mcRunning)
+                {
+                    mcRunning = running;
+                    await InvokeAsync(StateHasChanged);
+                }
+                await Task.Delay(2500, token);
+            }
+        }
+        catch (TaskCanceledException) { }
     }
 
     private void BuildDefaultSearchResults()
@@ -1530,6 +1733,11 @@
             new("images/clients/flarial.svg",     "Select Flarial",        "Clients",       "Switch active client to Flarial",                 "",       () => { CloseSearch(); SelectClient("Flarial Client"); }),
             new("images/clients/latite.png",      "Select Latite",         "Clients",       "Switch active client to Latite",                  "",       () => { CloseSearch(); SelectClient("Latite Client"); }),
             new("images/clients/oderso.png",      "Select OderSo",         "Clients",       "Switch active client to OderSo",                  "",       () => { CloseSearch(); SelectClient("OderSo Client"); }),
+            new("fa-solid fa-cube",               "Select Vanilla",        "Clients",       "Launch Minecraft with no client",                 "",       () => { CloseSearch(); SelectClient("Vanilla"); }),
+            new("fa-solid fa-folder-open",        "Open Launcher Folder",  "Quick Actions", "Settings, downloads and clients folder",          "",       () => { CloseSearch(); OpenLauncherFolder(); }),
+            new("fa-solid fa-cubes",              "Open Minecraft Folder", "Quick Actions", "com.mojang data folder",                          "",       () => { CloseSearch(); OpenMinecraftFolder(); }),
+            new("fa-solid fa-file-export",        "Export Settings",       "Settings",      "Save settings as a JSON backup",                  "",       () => { CloseSearch(); _ = ExportSettings(); }),
+            new("fa-solid fa-file-import",        "Import Settings",       "Settings",      "Restore from JSON backup",                        "",       () => { CloseSearch(); _ = ImportSettings(); }),
             // Settings — Injection
             new("fa-solid fa-syringe",            "Auto-inject",           "Settings",      "Inject automatically when game is detected",      "",       () => { CloseSearch(); OpenSettings(); settingsFilter = "auto-inject"; StateHasChanged(); }),
             new("fa-solid fa-clock",              "Injection Delay",       "Settings",      "Time to wait before injecting",                   "",       () => { CloseSearch(); OpenSettings(); settingsFilter = "injection delay"; StateHasChanged(); }),
@@ -1576,8 +1784,17 @@
                 case "addons":   if (!searchOpen && currentView != "addons")   OpenAddons(); break;
                 case "versions": if (!searchOpen && currentView != "versions") await OpenVersions(); break;
                 case "fullscreen": await ToggleFullscreen(); break;
+                case "cycle":    if (!searchOpen) CycleClient(); break;
+                case "refresh":
+                    if (currentView == "versions") await RefreshVersionsAsync();
+                    else if (currentView == "clients") await OpenClients();
+                    else if (currentView == "addons" && CurseForge.IsAvailable) await CfSearchAsync();
+                    break;
                 case "escape":
-                    if      (searchOpen)       CloseSearch();
+                    if      (resetConfirmOpen) CancelResetSettings();
+                    else if (sortMenuOpen)     { sortMenuOpen = false; }
+                    else if (searchOpen)       CloseSearch();
+                    else if (launcherUpdateModalOpen) CloseUpdateModal();
                     else if (discordModalOpen) CloseDiscordModal();
                     else if (currentView != "home") GoHome();
                     break;
@@ -1598,7 +1815,16 @@
     private List<SearchResult> GetCurrentSearchList() =>
         searchResults.Count > 0 ? searchResults : _defaultSearchResults;
 
-    public void Dispose() { _selfRef?.Dispose(); _statusCts?.Cancel(); _statusCts?.Dispose(); }
+    public void Dispose()
+    {
+        _selfRef?.Dispose();
+        _statusCts?.Cancel();
+        _statusCts?.Dispose();
+        _mcPollCts?.Cancel();
+        _mcPollCts?.Dispose();
+        _cfDebounceCts?.Cancel();
+        _cfDebounceCts?.Dispose();
+    }
 
     // ── Window ────────────────────────────────────────────────
     private async Task OnDragStart()    => await JS.InvokeVoidAsync("startDrag");
@@ -1677,14 +1903,18 @@
     // ── Launch ────────────────────────────────────────────────
     private async Task HandleLaunch()
     {
-        bool isFlarial = SettingsService.Settings.SelectedClient == "Flarial Client";
-        bool isOderSo  = SettingsService.Settings.SelectedClient == "OderSo Client";
-        bool isCustom  = SettingsService.Settings.SelectedClient == "Custom DLL";
+        var sel        = SettingsService.Settings.SelectedClient;
+        bool isFlarial = sel == "Flarial Client";
+        bool isOderSo  = sel == "OderSo Client";
+        bool isCustom  = sel == "Custom DLL";
+        bool isVanilla = sel == "Vanilla";
         isLaunching = true;
-        await ShowStatus("Starting Minecraft…", clearAfterMs: 30_000);
+        await ShowStatus(isVanilla ? "Starting Minecraft (vanilla)…" : "Starting Minecraft…", clearAfterMs: 30_000);
         try
         {
-            if (isCustom && !string.IsNullOrEmpty(customDllPath))
+            if (isVanilla)
+                await Launcher.LaunchVanillaAsync();
+            else if (isCustom && !string.IsNullOrEmpty(customDllPath))
                 await Launcher.LaunchWithDllAsync(customDllPath);
             else if (isOderSo)
                 await Launcher.LaunchWithDllAsync(OderSo.FilePath);
@@ -1692,17 +1922,19 @@
                 await Launcher.LaunchAsync(useFlarial: isFlarial);
 
             isLaunching = false;
-            var label = isCustom  ? System.IO.Path.GetFileNameWithoutExtension(customDllPath)
+            var label = isVanilla ? "Vanilla"
+                      : isCustom  ? System.IO.Path.GetFileNameWithoutExtension(customDllPath)
                       : isFlarial ? "Flarial"
                       : isOderSo  ? "OderSo"
                       : SettingsService.Settings.LastUsedVersion;
-            Discord.SetInGamePresence(label ?? "", SettingsService.Settings.SelectedClient);
+            Discord.SetInGamePresence(label ?? "", sel);
             AddToRecentlyLaunched(label ?? "");
 
             if (SettingsService.Settings.CloseAfterLaunch) { await CloseWindow(); return; }
 
-            await ShowStatus("Injected! Have fun.", clearAfterMs: 3000);
-            _ = ShowToast("Injection successful!", "success");
+            var doneMsg = isVanilla ? "Minecraft launched. Have fun!" : "Injected! Have fun.";
+            await ShowStatus(doneMsg, clearAfterMs: 3000);
+            _ = ShowToast(isVanilla ? "Minecraft launched!" : "Injection successful!", "success");
         }
         catch (Exception ex)
         {
@@ -1714,7 +1946,7 @@
 
     private async Task QuickLaunchRecent(string label)
     {
-        // Check if it's a known client (Flarial, OderSo, Custom DLL)
+        // Check if it's a known client (Flarial, OderSo, Vanilla, Custom DLL)
         if (label == "Flarial")
         {
             SettingsService.Settings.SelectedClient = "Flarial Client";
@@ -1725,6 +1957,13 @@
         if (label == "OderSo")
         {
             SettingsService.Settings.SelectedClient = "OderSo Client";
+            SettingsService.Save();
+            await HandleLaunch();
+            return;
+        }
+        if (label == "Vanilla")
+        {
+            SettingsService.Settings.SelectedClient = "Vanilla";
             SettingsService.Save();
             await HandleLaunch();
             return;
@@ -1779,9 +2018,10 @@
 
     private void CycleClient()
     {
-        var clients = new List<string> { "Latite Client", "Flarial Client", "OderSo Client" };
+        var clients = new List<string> { "Latite Client", "Flarial Client", "OderSo Client", "Vanilla" };
         if (!string.IsNullOrEmpty(customDllPath)) clients.Add("Custom DLL");
         var idx = clients.IndexOf(SettingsService.Settings.SelectedClient);
+        if (idx < 0) idx = -1;
         SelectClient(clients[(idx + 1) % clients.Count]);
         _ = ShowToast("Active client: " + SettingsService.Settings.SelectedClient, "info");
     }
@@ -1873,7 +2113,7 @@
     {
         var path = await Task.Run(() =>
         {
-            string result = null;
+            string? result = null;
             var thread = new System.Threading.Thread(() =>
             {
                 var dlg = new Microsoft.Win32.OpenFileDialog
@@ -1964,7 +2204,9 @@
         StateHasChanged();
         try
         {
-            await Flarial.DownloadAsync(new Progress<double>(pct => { flarialProgress = pct; InvokeAsync(StateHasChanged); }));
+            var prog = new ThrottledProgress(new Progress<double>(pct =>
+            { flarialProgress = pct; InvokeAsync(StateHasChanged); }));
+            await Flarial.DownloadAsync(prog);
             flarialDownloaded = true;
             flarialUpToDate   = await Flarial.IsUpToDateAsync();
             _ = ShowToast("Flarial downloaded!", "success");
@@ -1988,7 +2230,9 @@
         StateHasChanged();
         try
         {
-            await OderSo.DownloadAsync(new Progress<double>(pct => { odersoProgress = pct; InvokeAsync(StateHasChanged); }));
+            var prog = new ThrottledProgress(new Progress<double>(pct =>
+            { odersoProgress = pct; InvokeAsync(StateHasChanged); }));
+            await OderSo.DownloadAsync(prog);
             odersoDownloaded = true;
             odersoUpToDate   = await OderSo.IsUpToDateAsync();
             _ = ShowToast("OderSo downloaded!", "success");
@@ -2051,8 +2295,9 @@
         StateHasChanged();
         try
         {
-            await OderSo.DownloadEntryAsync(state.Entry,
-                new Progress<double>(pct => { state.Progress = pct; InvokeAsync(StateHasChanged); }));
+            var prog = new ThrottledProgress(new Progress<double>(pct =>
+            { state.Progress = pct; InvokeAsync(StateHasChanged); }));
+            await OderSo.DownloadEntryAsync(state.Entry, prog);
             state.IsDownloaded = true;
             _ = ShowToast(state.DisplayName + " downloaded!", "success");
         }
@@ -2298,7 +2543,9 @@
         v.IsDownloading = true; v.ErrorMessage = null; downloadProgress = 0; StateHasChanged();
         try
         {
-            await Launcher.DownloadVersionAsync(v, new Progress<double>(pct => { downloadProgress = pct; InvokeAsync(StateHasChanged); }));
+            var prog = new ThrottledProgress(new Progress<double>(pct =>
+            { downloadProgress = pct; InvokeAsync(StateHasChanged); }));
+            await Launcher.DownloadVersionAsync(v, prog);
             _ = ShowToast(v.DisplayName + " downloaded!", "success");
         }
         catch (Exception ex) { v.ErrorMessage = ex.Message; }
@@ -2346,7 +2593,17 @@
 
     private async Task OnCfSearchKeyDown(KeyboardEventArgs e)
     {
-        if (e.Key == "Enter") await CfSearchAsync();
+        if (e.Key == "Enter")
+        {
+            _cfDebounceCts?.Cancel();
+            await CfSearchAsync();
+        }
+    }
+
+    private void OnCfSearchInput(ChangeEventArgs e)
+    {
+        cfSearchQuery = e.Value?.ToString() ?? "";
+        _ = DebouncedCfSearch();
     }
 
     private async Task SetCfCategory(string cat)
@@ -2397,8 +2654,9 @@
             var file = files.FirstOrDefault();
             if (file == null) { _ = ShowToast("No downloadable file found.", "error"); return; }
 
-            await CurseForge.DownloadAndInstallAsync(file, addon.ClassId,
-                new Progress<double>(pct => { cfDownloadProgress = pct; InvokeAsync(StateHasChanged); }));
+            var prog = new ThrottledProgress(new Progress<double>(pct =>
+            { cfDownloadProgress = pct; InvokeAsync(StateHasChanged); }));
+            await CurseForge.DownloadAndInstallAsync(file, addon.ClassId, prog);
             _ = ShowToast(addon.Name + " installed!", "success");
         }
         catch (Exception ex) { _ = ShowToast("Download failed: " + ex.Message, "error"); }
@@ -2513,8 +2771,9 @@
         StateHasChanged();
         try
         {
-            await AutoUpdate.ApplyUpdateAsync(launcherUpdateInfo,
-                new Progress<double>(pct => { launcherUpdateProgress = pct; InvokeAsync(StateHasChanged); }));
+            var prog = new ThrottledProgress(new Progress<double>(pct =>
+            { launcherUpdateProgress = pct; InvokeAsync(StateHasChanged); }));
+            await AutoUpdate.ApplyUpdateAsync(launcherUpdateInfo, prog);
         }
         catch (Exception ex)
         {
@@ -2654,6 +2913,7 @@ private async Task OpenDiscordOAuth()
     private static string GetClientIcon(string client) => client switch
     {
         "Custom DLL"     => "fa-solid fa-file-code",
+        "Vanilla"        => "fa-solid fa-cube",
         _                => "",
     };
 
@@ -2663,6 +2923,9 @@ private async Task OpenDiscordOAuth()
         "OderSo Client"  => "images/clients/oderso.png",
         _                => "images/clients/latite.png",
     };
+
+    private static bool IsImageClient(string client) =>
+        client is "Latite Client" or "Flarial Client" or "OderSo Client";
 
     private static string FormatChangelog(string md)
     {
@@ -2683,6 +2946,7 @@ private async Task OpenDiscordOAuth()
         {
             "Flarial Client" => "Flarial Client",
             "OderSo Client"  => "OderSo Client",
+            "Vanilla"        => "Vanilla — no client",
             "Custom DLL"     => !string.IsNullOrEmpty(customDllPath)
                                 ? System.IO.Path.GetFileNameWithoutExtension(customDllPath)
                                 : "Custom DLL",
@@ -2697,5 +2961,217 @@ private async Task OpenDiscordOAuth()
         if (SettingsService.Settings.DiscordLoggedIn && !string.IsNullOrEmpty(SettingsService.Settings.DiscordAvatar))
             return SettingsService.Settings.DiscordAvatar;
         return "images/icon.png";
+    }
+
+    // ── Folder shortcuts ─────────────────────────────────────
+    private void OpenLauncherFolder()
+    {
+        try
+        {
+            var dir = System.IO.Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                "Glacier Launcher");
+            System.IO.Directory.CreateDirectory(dir);
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            { FileName = dir, UseShellExecute = true });
+        }
+        catch (Exception ex) { _ = ShowToast("Couldn't open folder: " + ex.Message, "error"); }
+    }
+
+    private void OpenMinecraftFolder()
+    {
+        try
+        {
+            var dir = System.IO.Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "Packages", "Microsoft.MinecraftUWP_8wekyb3d8bbwe", "LocalState",
+                "games", "com.mojang");
+
+            if (!System.IO.Directory.Exists(dir))
+            {
+                _ = ShowToast("Minecraft data folder not found. Is Minecraft installed?", "error");
+                return;
+            }
+
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            { FileName = dir, UseShellExecute = true });
+        }
+        catch (Exception ex) { _ = ShowToast("Couldn't open folder: " + ex.Message, "error"); }
+    }
+
+    // ── Settings export/import/reset ─────────────────────────
+    private async Task ExportSettings()
+    {
+        try
+        {
+            var path = await Task.Run(() =>
+            {
+                string? result = null;
+                var thread = new System.Threading.Thread(() =>
+                {
+                    var dlg = new Microsoft.Win32.SaveFileDialog
+                    {
+                        Title    = "Export Glacier Launcher settings",
+                        Filter   = "JSON|*.json",
+                        FileName = $"glacier-settings-{DateTime.Now:yyyyMMdd-HHmm}.json"
+                    };
+                    if (dlg.ShowDialog() == true) result = dlg.FileName;
+                });
+                thread.SetApartmentState(System.Threading.ApartmentState.STA);
+                thread.Start();
+                thread.Join();
+                return result;
+            });
+            if (string.IsNullOrEmpty(path)) return;
+
+            var json = System.Text.Json.JsonSerializer.Serialize(SettingsService.Settings,
+                new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+            await System.IO.File.WriteAllTextAsync(path, json);
+            _ = ShowToast("Settings exported.", "success");
+        }
+        catch (Exception ex) { _ = ShowToast("Export failed: " + ex.Message, "error"); }
+    }
+
+    private async Task ImportSettings()
+    {
+        try
+        {
+            var path = await Task.Run(() =>
+            {
+                string? result = null;
+                var thread = new System.Threading.Thread(() =>
+                {
+                    var dlg = new Microsoft.Win32.OpenFileDialog
+                    {
+                        Title  = "Import Glacier Launcher settings",
+                        Filter = "JSON|*.json"
+                    };
+                    if (dlg.ShowDialog() == true) result = dlg.FileName;
+                });
+                thread.SetApartmentState(System.Threading.ApartmentState.STA);
+                thread.Start();
+                thread.Join();
+                return result;
+            });
+            if (string.IsNullOrEmpty(path)) return;
+
+            var json = await System.IO.File.ReadAllTextAsync(path);
+            var imported = System.Text.Json.JsonSerializer.Deserialize<LauncherSettings>(json);
+            if (imported == null) { _ = ShowToast("Invalid settings file.", "error"); return; }
+
+            // Replace and persist
+            SettingsService.Settings.SelectedClient        = imported.SelectedClient;
+            SettingsService.Settings.DiscordRichPresence   = imported.DiscordRichPresence;
+            SettingsService.Settings.LastUsedVersion       = imported.LastUsedVersion;
+            SettingsService.Settings.Username              = imported.Username;
+            SettingsService.Settings.UserHandle            = imported.UserHandle;
+            SettingsService.Settings.CloseAfterLaunch      = imported.CloseAfterLaunch;
+            SettingsService.Settings.AutoInject            = imported.AutoInject;
+            SettingsService.Settings.InjectionDelayMs      = imported.InjectionDelayMs;
+            SettingsService.Settings.AccentColor           = imported.AccentColor;
+            SettingsService.Settings.ThemePreset           = imported.ThemePreset;
+            SettingsService.Settings.BlurIntensity         = imported.BlurIntensity;
+            SettingsService.Settings.BackgroundOpacity     = imported.BackgroundOpacity;
+            SettingsService.Settings.CustomBackgroundPath  = imported.CustomBackgroundPath;
+            SettingsService.Settings.CompactMode           = imported.CompactMode;
+            SettingsService.Settings.AnimationsEnabled     = imported.AnimationsEnabled;
+            SettingsService.Settings.RememberWindowSize    = imported.RememberWindowSize;
+            SettingsService.Settings.MinimizeToTray        = imported.MinimizeToTray;
+            SettingsService.Settings.ShowRecentlyLaunched  = imported.ShowRecentlyLaunched;
+            SettingsService.Settings.RecentlyLaunched      = imported.RecentlyLaunched ?? new();
+            SettingsService.Settings.PinnedVersions        = imported.PinnedVersions   ?? new();
+            SettingsService.Settings.VersionSortMode       = imported.VersionSortMode;
+            SettingsService.Settings.ShowOnlyDownloaded    = imported.ShowOnlyDownloaded;
+            SettingsService.Settings.CheckUpdatesOnStartup = imported.CheckUpdatesOnStartup;
+            SettingsService.Save();
+
+            await JS.InvokeVoidAsync("applyStoredSettings",
+                SettingsService.Settings.AccentColor,
+                SettingsService.Settings.ThemePreset,
+                SettingsService.Settings.BlurIntensity,
+                SettingsService.Settings.CustomBackgroundPath);
+            await JS.InvokeVoidAsync("setCompactMode", SettingsService.Settings.CompactMode);
+            await JS.InvokeVoidAsync("setAnimationsEnabled", SettingsService.Settings.AnimationsEnabled);
+
+            _ = ShowToast("Settings imported.", "success");
+            StateHasChanged();
+        }
+        catch (Exception ex) { _ = ShowToast("Import failed: " + ex.Message, "error"); }
+    }
+
+    private bool resetConfirmOpen = false;
+    private void ConfirmResetSettings() { resetConfirmOpen = true; StateHasChanged(); }
+    private void CancelResetSettings()  { resetConfirmOpen = false; StateHasChanged(); }
+    private async Task DoResetSettings()
+    {
+        var fresh = new LauncherSettings();
+        // Preserve Discord login & username so users don't have to re-link
+        fresh.DiscordLoggedIn = SettingsService.Settings.DiscordLoggedIn;
+        fresh.DiscordUsername = SettingsService.Settings.DiscordUsername;
+        fresh.DiscordAvatar   = SettingsService.Settings.DiscordAvatar;
+        fresh.DiscordToken    = SettingsService.Settings.DiscordToken;
+        fresh.DiscordUserId   = SettingsService.Settings.DiscordUserId;
+
+        // Replace everything via the same path as Import
+        var json = System.Text.Json.JsonSerializer.Serialize(fresh);
+        var copy = System.Text.Json.JsonSerializer.Deserialize<LauncherSettings>(json)!;
+        var dst  = SettingsService.Settings;
+
+        // Apply field-by-field via reflection: simple but effective
+        foreach (var p in typeof(LauncherSettings).GetProperties())
+            if (p.CanWrite) p.SetValue(dst, p.GetValue(copy));
+
+        SettingsService.Save();
+        await JS.InvokeVoidAsync("applyStoredSettings",
+            dst.AccentColor, dst.ThemePreset, dst.BlurIntensity, dst.CustomBackgroundPath);
+        await JS.InvokeVoidAsync("setCompactMode", dst.CompactMode);
+        await JS.InvokeVoidAsync("setAnimationsEnabled", dst.AnimationsEnabled);
+
+        resetConfirmOpen = false;
+        _ = ShowToast("Settings reset.", "success");
+        StateHasChanged();
+    }
+
+    // ── CurseForge search debouncing ─────────────────────────
+    private System.Threading.CancellationTokenSource? _cfDebounceCts;
+
+    private async Task DebouncedCfSearch()
+    {
+        _cfDebounceCts?.Cancel();
+        _cfDebounceCts = new System.Threading.CancellationTokenSource();
+        var token = _cfDebounceCts.Token;
+        try
+        {
+            await Task.Delay(350, token);
+            if (!token.IsCancellationRequested) await CfSearchAsync();
+        }
+        catch (TaskCanceledException) { }
+    }
+
+    // ── Versions sort ──────────────────────────────────────────
+    private IEnumerable<MinecraftVersion> SortedVersions(IEnumerable<MinecraftVersion> src)
+    {
+        var mode = SettingsService.Settings.VersionSortMode;
+        return mode switch
+        {
+            "oldest"     => src.Reverse(),
+            "name"       => src.OrderBy(v => v.DisplayName, StringComparer.OrdinalIgnoreCase),
+            "downloaded" => src.OrderByDescending(v => v.IsDownloaded).ThenBy(v => 0),
+            _            => src // newest (already sorted by API)
+        };
+    }
+
+    private void SetVersionSort(string mode)
+    {
+        SettingsService.Settings.VersionSortMode = mode;
+        SettingsService.Save();
+        StateHasChanged();
+    }
+
+    private void ToggleShowOnlyDownloaded()
+    {
+        SettingsService.Settings.ShowOnlyDownloaded = !SettingsService.Settings.ShowOnlyDownloaded;
+        SettingsService.Save();
+        StateHasChanged();
     }
 }

@@ -1,0 +1,32 @@
+@* Reusable settings row with label, hint and trailing control slot. *@
+<div class="setting-row @(Clickable ? "clickable" : "") @(HiddenClass) @(Class)"
+     @onclick="HandleClick">
+    <div class="setting-meta">
+        <span class="setting-label">@Label</span>
+        @if (!string.IsNullOrEmpty(Hint))
+        {
+            <span class="setting-hint">@Hint</span>
+        }
+        else if (HintContent != null)
+        {
+            <span class="setting-hint">@HintContent</span>
+        }
+    </div>
+    @if (Trailing != null) { @Trailing }
+</div>
+
+@code {
+    [Parameter] public string Label { get; set; } = "";
+    [Parameter] public string Hint  { get; set; } = "";
+    [Parameter] public string Class { get; set; } = "";
+    [Parameter] public string HiddenClass { get; set; } = "";
+    [Parameter] public bool   Clickable { get; set; } = false;
+    [Parameter] public EventCallback OnClick { get; set; }
+    [Parameter] public RenderFragment? HintContent { get; set; }
+    [Parameter] public RenderFragment? Trailing { get; set; }
+
+    private async Task HandleClick()
+    {
+        if (Clickable && OnClick.HasDelegate) await OnClick.InvokeAsync();
+    }
+}

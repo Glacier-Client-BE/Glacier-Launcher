@@ -39,8 +39,7 @@ public class AutoUpdateService
     {
         _flarial = flarial;
         _oderso  = oderso;
-        _http    = new HttpClient();
-        _http.DefaultRequestHeaders.Add("User-Agent", "GlacierLauncher/1.0");
+        _http    = HttpFactory.Shared;
     }
 
     // ── Launcher update check ─────────────────────────────────────

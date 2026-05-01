@@ -1,0 +1,19 @@
+@* Compact inline progress bar with optional spinner button. *@
+<div class="dl-progress-row">
+    @if (Progress > 0)
+    {
+        <div class="progress-bar-wrap">
+            <div class="progress-bar-fill" style="width:@(Progress.ToString("F0"))%"></div>
+        </div>
+        <span class="dl-pct">@((int)Progress)%</span>
+    }
+    @if (ShowSpinner)
+    {
+        <button class="icon-btn" disabled><span class="spinner"></span></button>
+    }
+</div>
+
+@code {
+    [Parameter] public double Progress    { get; set; }
+    [Parameter] public bool   ShowSpinner { get; set; } = true;
+}

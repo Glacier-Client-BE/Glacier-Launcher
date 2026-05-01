@@ -1,0 +1,17 @@
+@* Reusable on/off toggle switch. *@
+<div class="toggle @(On ? "on" : "")"
+     role="switch" aria-checked="@(On ? "true" : "false")"
+     @onclick="HandleClick"
+     @onclick:stopPropagation></div>
+
+@code {
+    [Parameter] public bool On { get; set; }
+    [Parameter] public EventCallback<bool> OnChanged { get; set; }
+    [Parameter] public EventCallback OnClick { get; set; }
+
+    private async Task HandleClick()
+    {
+        if (OnChanged.HasDelegate) await OnChanged.InvokeAsync(!On);
+        if (OnClick.HasDelegate)   await OnClick.InvokeAsync();
+    }
+}

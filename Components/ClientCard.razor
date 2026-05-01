@@ -1,0 +1,50 @@
+@* Reusable client card used in the Clients panel. *@
+<div class="client-card @(Active ? "client-active" : "") @(Class)" style="@Style">
+    <div class="client-card-header">
+        <div class="client-card-icon" style="@IconStyle">
+            @if (!string.IsNullOrEmpty(IconImage))
+            {
+                <img src="@IconImage" style="width:100%;height:100%;object-fit:contain;"/>
+            }
+            else if (!string.IsNullOrEmpty(IconClass))
+            {
+                <i class="@IconClass"></i>
+            }
+        </div>
+        <div class="client-card-meta" style="@MetaStyle">
+            <span class="client-card-name">@Name</span>
+            <span class="client-card-sub">@SubContent</span>
+        </div>
+        <div class="client-card-actions">
+            @Actions
+        </div>
+    </div>
+    @if (!string.IsNullOrEmpty(Error))
+    {
+        <span class="error-text" style="padding:0 2px;">@Error</span>
+    }
+    @if (!string.IsNullOrEmpty(Description))
+    {
+        <p class="client-card-desc">@Description</p>
+    }
+    else if (DescriptionContent != null)
+    {
+        <p class="client-card-desc">@DescriptionContent</p>
+    }
+</div>
+
+@code {
+    [Parameter] public string Name        { get; set; } = "";
+    [Parameter] public string Description { get; set; } = "";
+    [Parameter] public string Error       { get; set; } = "";
+    [Parameter] public string IconImage   { get; set; } = "";
+    [Parameter] public string IconClass   { get; set; } = "";
+    [Parameter] public string IconStyle   { get; set; } = "padding:5px;";
+    [Parameter] public string MetaStyle   { get; set; } = "";
+    [Parameter] public bool   Active      { get; set; } = false;
+    [Parameter] public string Class       { get; set; } = "";
+    [Parameter] public string Style       { get; set; } = "";
+    [Parameter] public RenderFragment? SubContent { get; set; }
+    [Parameter] public RenderFragment? Actions { get; set; }
+    [Parameter] public RenderFragment? DescriptionContent { get; set; }
+}

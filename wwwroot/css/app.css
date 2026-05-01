@@ -28,6 +28,66 @@
 [data-theme="darker"]  { --bg:#1e2124; --bg-panel:#26292c; --overlay-top:rgba(30,33,36,0.65); --overlay-bot:rgba(30,33,36,0.90); }
 [data-theme="midnight"]{ --bg:#141520; --bg-panel:#1c1e30; --overlay-top:rgba(20,21,32,0.65); --overlay-bot:rgba(20,21,32,0.92); }
 [data-theme="slate"]   { --bg:#2a2d35; --bg-panel:#33373f; --overlay-top:rgba(42,45,53,0.55); --overlay-bot:rgba(42,45,53,0.88); }
+[data-theme="ocean"]   { --bg:#0e1f2a; --bg-panel:#13293a; --overlay-top:rgba(14,31,42,0.60); --overlay-bot:rgba(14,31,42,0.92); }
+[data-theme="forest"]  { --bg:#16241a; --bg-panel:#1d2f22; --overlay-top:rgba(22,36,26,0.60); --overlay-bot:rgba(22,36,26,0.90); }
+[data-theme="sunset"]  { --bg:#2a1a26; --bg-panel:#33212f; --overlay-top:rgba(42,26,38,0.60); --overlay-bot:rgba(42,26,38,0.92); }
+[data-theme="light"]   {
+    --bg:#f5f6f8; --bg-panel:#ffffff;
+    --bg-item:rgba(0,0,0,0.04); --bg-item-hover:rgba(0,0,0,0.07);
+    --text:#0e1116; --text-dim:#5b6470;
+    --overlay-top:rgba(245,246,248,0.55); --overlay-mid:rgba(245,246,248,0.20); --overlay-bot:rgba(245,246,248,0.85);
+}
+[data-theme="light"] .panel-overlay { background:rgba(255,255,255,0.97); border-top-color:rgba(0,0,0,0.06); box-shadow:0 -8px 40px rgba(0,0,0,0.18); }
+[data-theme="light"] .panel-overlay::before { background:rgba(0,0,0,0.18); }
+[data-theme="light"] .panel-tabs { background:rgba(0,0,0,0.025); border-top-color:rgba(0,0,0,0.06); }
+[data-theme="light"] .modal-box { background:#ffffff; border-color:rgba(0,0,0,0.10); }
+[data-theme="light"] .search-modal { background:#ffffff; border-color:rgba(0,0,0,0.10); }
+[data-theme="light"] .modal-header { border-bottom-color:rgba(0,0,0,0.06); }
+[data-theme="light"] .panel-search-input,
+[data-theme="light"] .modal-input,
+[data-theme="light"] .setting-input,
+[data-theme="light"] .setting-select { background:rgba(0,0,0,0.03); border-color:rgba(0,0,0,0.10); color:var(--text); }
+[data-theme="light"] .setting-select option { background:#ffffff; color:var(--text); }
+[data-theme="light"] .wnd-btn { background:rgba(0,0,0,0.05); }
+[data-theme="light"] .wnd-btn:hover { color:#000; }
+[data-theme="light"] .toggle { background:rgba(0,0,0,0.18); }
+[data-theme="light"] .news-strip { border-top-color:rgba(0,0,0,0.06); }
+[data-theme="light"] .news-item { border-left-color:rgba(0,0,0,0.06); }
+[data-theme="light"] .topbar-client-chip { background:rgba(0,0,0,0.04); border-color:rgba(0,0,0,0.08); }
+[data-theme="light"] .search-trigger { background:rgba(0,0,0,0.04); border-color:rgba(0,0,0,0.08); }
+[data-theme="light"] .search-trigger kbd { background:rgba(0,0,0,0.06); border-color:rgba(0,0,0,0.10); }
+[data-theme="light"] .panel-tab.active { background:var(--accent-bg); }
+
+/* ── Animations toggle ── */
+.no-animations *,
+.no-animations *::before,
+.no-animations *::after {
+    transition: none !important;
+    animation-duration: 0.001ms !important;
+    animation-delay:    0ms !important;
+}
+
+/* ── Compact mode ── */
+.compact .top-bar       { padding:6px 12px 0; }
+.compact .logo-icon     { width:28px; height:28px; }
+.compact .branding-title{ font-size:12px; }
+.compact .branding-sub  { font-size:9px; }
+.compact .action-btn    { height:42px; }
+.compact .btn-sq        { width:42px; }
+.compact .btn-wide      { width:120px; }
+.compact .footer        { padding:0 12px 10px; }
+.compact .news-track    { padding:4px 0; }
+.compact .news-item     { padding:0 16px; font-size:10px; }
+.compact .panel-overlay { height:80%; }
+.compact .panel-header  { padding:14px 16px 0; }
+.compact .panel-title   { font-size:16px; }
+.compact .panel-body    { padding:10px 14px 12px; gap:6px; }
+.compact .setting-row   { padding:8px 12px; }
+.compact .version-row   { padding:8px 12px; }
+.compact .client-card   { padding:10px 14px; }
+.compact .panel-tabs    { padding:6px 12px 8px; }
+.compact .panel-tab     { height:28px; font-size:10px; }
+.compact .recently-launched .recent-item { padding:2px 8px; font-size:10px; }
 
 html, body {
     width: 100%; height: 100%;
@@ -534,3 +594,155 @@ input[type=range] { appearance: none; -webkit-appearance: none; width: 100px; he
 .update-progress-bar  { flex: 1; height: 6px; border-radius: 3px; background: var(--bg-item); overflow: hidden; }
 .update-progress-fill { height: 100%; border-radius: 3px; background: var(--accent); transition: width 0.2s ease; }
 .update-progress-pct  { font-size: 11px; color: var(--text-dim); width: 34px; text-align: right; }
+
+/* ── MC running pill (top-bar status indicator) ─────────────── */
+.mc-running-pill {
+    display: inline-flex; align-items: center; gap: 4px;
+    height: 22px; padding: 0 8px;
+    border-radius: 20px;
+    background: rgba(67,181,129,0.18);
+    border: 1px solid rgba(67,181,129,0.40);
+    color: var(--green);
+    font-size: 10px; font-weight: 700; letter-spacing: 0.04em;
+    pointer-events: all; flex-shrink: 0;
+    box-shadow: 0 0 10px rgba(67,181,129,0.35);
+    animation: mc-running-pulse 2.4s ease-in-out infinite;
+}
+.mc-running-pill i { font-size: 6px; line-height: 1; animation: pulse-dot 1.6s ease-in-out infinite; }
+@keyframes mc-running-pulse {
+    0%,100% { box-shadow: 0 0 6px rgba(67,181,129,0.30); }
+    50%      { box-shadow: 0 0 16px rgba(67,181,129,0.55); }
+}
+.chip-dot.live { background: var(--green); box-shadow: 0 0 10px rgba(67,181,129,0.85); }
+
+/* ── Sort menu (Versions panel) ─────────────────────────────── */
+.versions-sort-wrap { position: relative; display: inline-flex; gap: 6px; align-items: center; }
+.panel-icon-btn.active { color: var(--accent); background: var(--accent-bg); }
+.sort-menu {
+    position: absolute; top: calc(100% + 6px); right: 0;
+    z-index: 30; min-width: 180px;
+    background: rgba(28,31,35,0.99);
+    border: 1px solid rgba(255,255,255,0.10);
+    border-radius: 10px;
+    padding: 4px;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.55);
+    animation: sort-pop 0.15s cubic-bezier(0.34,1.56,0.64,1);
+}
+@keyframes sort-pop { from{opacity:0;transform:translateY(-4px) scale(0.96)} to{opacity:1;transform:translateY(0) scale(1)} }
+.sort-menu-item {
+    display: flex; align-items: center; gap: 8px;
+    width: 100%; padding: 7px 10px;
+    background: transparent; border: none;
+    color: var(--text-dim); font-family: inherit; font-size: 12px;
+    border-radius: 7px; cursor: pointer; text-align: left;
+    transition: background var(--t), color var(--t);
+}
+.sort-menu-item:hover { background: var(--bg-item-hover); color: var(--text); }
+.sort-menu-item.active { background: var(--accent-bg); color: var(--accent); }
+.sort-menu-item i { width: 14px; text-align: center; }
+
+/* ── Refined focus ring for keyboard nav ───────────────────── */
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+.search-result-item:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
+/* ── Smoother panel-body scrollbar (visible on hover) ───────── */
+.panel-body { scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.10) transparent; }
+.panel-body::-webkit-scrollbar { width: 6px; height: 6px; display: block; }
+.panel-body::-webkit-scrollbar-track { background: transparent; }
+.panel-body::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.10); border-radius: 3px; }
+.panel-body::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.20); }
+[data-theme="light"] .panel-body::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.14); }
+[data-theme="light"] .panel-body::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.24); }
+
+/* ── Soft hover lift for cards ──────────────────────────────── */
+.client-card:hover, .credits-card:hover {
+    transform: translateY(-1px);
+}
+.client-card, .credits-card { transition: background var(--t), border-color var(--t), transform 0.12s ease; }
+
+/* ── Sort menu / MC pill mobile-ish small windows ──────────── */
+@media (max-width: 600px) {
+    .branding-sub { display: none; }
+    .news-item { padding: 0 14px; }
+}
+
+/* ── Improved search-modal animation entry ──────────────────── */
+.search-modal { will-change: transform, opacity; }
+.modal-box   { will-change: transform, opacity; }
+
+/* ── Shimmer effect for in-progress action button ──────────── */
+.action-btn.launching::before {
+    content: ''; position: absolute; inset: 0;
+    background: linear-gradient(90deg,
+        transparent 0%,
+        rgba(255,255,255,0.18) 50%,
+        transparent 100%);
+    transform: translateX(-100%);
+    animation: launch-shimmer 1.4s linear infinite;
+}
+@keyframes launch-shimmer { to { transform: translateX(100%); } }
+
+/* ── Empty-state helper class ───────────────────────────────── */
+.empty-state {
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 10px; padding: 40px 20px; text-align: center;
+}
+.empty-state i      { font-size: 28px; opacity: 0.4; color: var(--accent); }
+.empty-state span   { font-size: 13px; color: var(--text); }
+.empty-state small  { font-size: 11px; color: var(--text-dim); max-width: 280px; }
+
+/* ── Reduced motion respect ─────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
+}
+
+/* ── Subtle accent gradient on the launch button hover halo ── */
+.btn-blue:not(:disabled):hover::after {
+    content: ''; position: absolute; inset: -1px;
+    border-radius: var(--r-sm);
+    background: linear-gradient(135deg,
+        color-mix(in srgb, var(--accent) 70%, transparent),
+        transparent 50%,
+        color-mix(in srgb, var(--accent) 30%, transparent));
+    opacity: 0.4; pointer-events: none;
+    z-index: -1;
+}
+
+/* ── Refine progress fill animation ─────────────────────────── */
+.progress-bar-fill,
+.update-progress-fill {
+    position: relative;
+    overflow: hidden;
+}
+.progress-bar-fill::after,
+.update-progress-fill::after {
+    content: ''; position: absolute; inset: 0;
+    background: linear-gradient(90deg,
+        transparent 0%,
+        rgba(255,255,255,0.30) 50%,
+        transparent 100%);
+    transform: translateX(-100%);
+    animation: progress-shimmer 1.6s ease-in-out infinite;
+}
+@keyframes progress-shimmer { to { transform: translateX(100%); } }
+
+/* ── Card icon refinement: subtle inner shadow ──────────────── */
+.client-card-icon {
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.04);
+}
+
+/* ── Slim toggle when on light theme ────────────────────────── */
+[data-theme="light"] .toggle::after { box-shadow: 0 1px 4px rgba(0,0,0,0.18); }
+
+/* ── Better dim-when-disabled for sliders ───────────────────── */
+input[type=range]:disabled { opacity: 0.45; cursor: not-allowed; }

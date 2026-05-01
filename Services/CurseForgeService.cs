@@ -44,12 +44,9 @@ public class CurseForgeService
     public CurseForgeService(SettingsService settings)
     {
         _settings = settings;
-        _http = new HttpClient();
-        _http.DefaultRequestHeaders.Add("User-Agent", "GlacierLauncher/1.0");
-        _http.DefaultRequestHeaders.Add("Accept", "application/json");
+        _http     = HttpFactory.Shared;
     }
 
-    // UPDATED: Ensure settings-based keys are also trimmed of literal quotes
     private string EffectiveApiKey =>
         !string.IsNullOrWhiteSpace(_settings.Settings.CurseForgeApiKey)
             ? _settings.Settings.CurseForgeApiKey.Trim().Trim('"')
@@ -57,14 +54,24 @@ public class CurseForgeService
 
     public bool IsAvailable => !string.IsNullOrWhiteSpace(EffectiveApiKey);
 
-    private void EnsureApiKey()
+    /// <summary>Builds a request with the API key + Accept header per-call (shared client safe).</summary>
+    private HttpRequestMessage BuildRequest(HttpMethod method, string url)
     {
         var key = EffectiveApiKey;
-        if (string.IsNullOrWhiteSpace(key)) 
+        if (string.IsNullOrWhiteSpace(key))
             throw new InvalidOperationException("CurseForge API key is not set. Add it in Settings.");
+        var req = new HttpRequestMessage(method, url);
+        req.Headers.TryAddWithoutValidation("x-api-key", key);
+        req.Headers.TryAddWithoutValidation("Accept", "application/json");
+        return req;
+    }
 
-        _http.DefaultRequestHeaders.Remove("x-api-key");
-        _http.DefaultRequestHeaders.Add("x-api-key", key);
+    private async Task<string> GetStringWithKeyAsync(string url)
+    {
+        using var req = BuildRequest(HttpMethod.Get, url);
+        using var resp = await _http.SendAsync(req);
+        resp.EnsureSuccessStatusCode();
+        return await resp.Content.ReadAsStringAsync();
     }
 
     // ── Models ────────────────────────────────────────────────
@@ -93,8 +100,6 @@ public class CurseForgeService
 
     public async Task<CfSearchResult> SearchAsync(string query, string category = "all", int pageSize = 20, int page = 0)
     {
-        EnsureApiKey();
-
         var classFilter = category switch
         {
             "texturepacks"  => $"&classId={ClassTexturePacks}",
@@ -109,7 +114,7 @@ public class CurseForgeService
         var url = $"{BaseUrl}/v1/mods/search?gameId={MinecraftGameId}{classFilter}{searchFilter}" +
                   $"&pageSize={pageSize}&index={page * pageSize}&sortField=2&sortOrder=desc";
 
-        var json = await _http.GetStringAsync(url);
+        var json = await GetStringWithKeyAsync(url);
         using var doc = JsonDocument.Parse(json);
 
         var addons = new List<CfAddon>();
@@ -133,9 +138,8 @@ public class CurseForgeService
 
     public async Task<List<CfFile>> GetFilesAsync(int modId)
     {
-        EnsureApiKey();
         var url = $"{BaseUrl}/v1/mods/{modId}/files?pageSize=10";
-        var json = await _http.GetStringAsync(url);
+        var json = await GetStringWithKeyAsync(url);
         using var doc = JsonDocument.Parse(json);
 
         var files = new List<CfFile>();
@@ -160,12 +164,11 @@ public class CurseForgeService
 
     public async Task DownloadAndInstallAsync(CfFile file, int classId, IProgress<double>? progress = null)
     {
-        EnsureApiKey();
-
         var tmpPath = Path.Combine(Path.GetTempPath(), file.FileName);
         try
         {
-            using var resp = await _http.GetAsync(file.DownloadUrl, HttpCompletionOption.ResponseHeadersRead);
+            using var req  = BuildRequest(HttpMethod.Get, file.DownloadUrl);
+            using var resp = await _http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead);
             resp.EnsureSuccessStatusCode();
 
             var total = resp.Content.Headers.ContentLength ?? file.FileLength;

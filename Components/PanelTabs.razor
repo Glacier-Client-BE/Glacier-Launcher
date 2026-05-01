@@ -1,0 +1,34 @@
+@* Reusable panel tab strip — pass the active tab id to highlight. *@
+<div class="panel-tabs">
+    <button class="panel-tab @(Active == "settings" ? "active" : "")"
+            @onclick="@(() => Switch("settings"))" @onmousedown:stopPropagation>
+        <i class="fa-solid fa-gear"></i>Settings
+    </button>
+    <button class="panel-tab @(Active == "clients" ? "active" : "")"
+            @onclick="@(() => Switch("clients"))" @onmousedown:stopPropagation>
+        <i class="fa-solid fa-puzzle-piece"></i>Clients
+    </button>
+    <button class="panel-tab @(Active == "addons" ? "active" : "")"
+            @onclick="@(() => Switch("addons"))" @onmousedown:stopPropagation>
+        <i class="fa-solid fa-cube"></i>Addons
+    </button>
+    <button class="panel-tab @(Active == "versions" ? "active" : "")"
+            @onclick="@(() => Switch("versions"))" @onmousedown:stopPropagation>
+        <i class="fa-solid fa-clock-rotate-left"></i>Versions
+    </button>
+    <button class="panel-tab @(Active == "credits" ? "active" : "")"
+            @onclick="@(() => Switch("credits"))" @onmousedown:stopPropagation>
+        <i class="fa-solid fa-heart"></i>Credits
+    </button>
+</div>
+
+@code {
+    [Parameter] public string Active { get; set; } = "";
+    [Parameter] public EventCallback<string> OnSwitch { get; set; }
+
+    private async Task Switch(string id)
+    {
+        if (id == Active) return;
+        if (OnSwitch.HasDelegate) await OnSwitch.InvokeAsync(id);
+    }
+}
