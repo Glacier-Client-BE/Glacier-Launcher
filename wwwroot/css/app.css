@@ -343,6 +343,10 @@ html, body {
 .panel-section-label { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-dim); padding: 4px 4px 2px; margin-top: 4px; display: flex; align-items: center; gap: 8px; }
 .panel-section-label::after { content: ''; flex: 1; height: 1px; background: rgba(255,255,255,0.07); border-radius: 1px; }
 
+/* Wrapper that lets us hide whole settings sections when every row inside is filtered out. display:contents keeps the existing layout. */
+.settings-section { display: contents; }
+.settings-section:not(:has(.setting-row:not(.hidden-by-search))) { display: none; }
+
 /* ── Setting rows ── */
 .setting-row { display: flex; align-items: center; justify-content: space-between; background: var(--bg-item); border-radius: var(--r-md); padding: 12px 16px; gap: 12px; border-left: 2px solid transparent; transition: background var(--t), border-color var(--t); }
 .setting-row:hover { background: var(--bg-item-hover); border-left-color: var(--accent); }
@@ -619,27 +623,32 @@ input[type=range] { appearance: none; -webkit-appearance: none; width: 100px; he
 .versions-sort-wrap { position: relative; display: inline-flex; gap: 6px; align-items: center; }
 .panel-icon-btn.active { color: var(--accent); background: var(--accent-bg); }
 .sort-menu {
-    position: absolute; top: calc(100% + 6px); right: 0;
-    z-index: 30; min-width: 180px;
-    background: rgba(28,31,35,0.99);
+    position: absolute; top: calc(100% + 8px); right: 0;
+    z-index: 30; min-width: 200px;
+    display: flex; flex-direction: column; gap: 2px;
+    background: rgba(28,31,35,0.98);
     border: 1px solid rgba(255,255,255,0.10);
-    border-radius: 10px;
-    padding: 4px;
-    box-shadow: 0 12px 40px rgba(0,0,0,0.55);
+    border-radius: var(--r-md);
+    padding: 6px;
+    box-shadow: 0 16px 48px rgba(0,0,0,0.55), 0 2px 8px rgba(0,0,0,0.30);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
     animation: sort-pop 0.15s cubic-bezier(0.34,1.56,0.64,1);
+    transform-origin: top right;
 }
 @keyframes sort-pop { from{opacity:0;transform:translateY(-4px) scale(0.96)} to{opacity:1;transform:translateY(0) scale(1)} }
 .sort-menu-item {
-    display: flex; align-items: center; gap: 8px;
-    width: 100%; padding: 7px 10px;
+    display: flex; align-items: center; gap: 10px;
+    width: 100%; padding: 8px 12px;
     background: transparent; border: none;
-    color: var(--text-dim); font-family: inherit; font-size: 12px;
-    border-radius: 7px; cursor: pointer; text-align: left;
+    color: var(--text-dim); font-family: inherit; font-size: 12px; font-weight: 500;
+    border-radius: var(--r-sm); cursor: pointer; text-align: left;
     transition: background var(--t), color var(--t);
 }
 .sort-menu-item:hover { background: var(--bg-item-hover); color: var(--text); }
 .sort-menu-item.active { background: var(--accent-bg); color: var(--accent); }
-.sort-menu-item i { width: 14px; text-align: center; }
+.sort-menu-item i { width: 14px; text-align: center; font-size: 11px; flex-shrink: 0; }
+[data-theme="light"] .sort-menu { background: #ffffff; border-color: rgba(0,0,0,0.10); box-shadow: 0 16px 48px rgba(0,0,0,0.18), 0 2px 8px rgba(0,0,0,0.08); }
 
 /* ── Refined focus ring for keyboard nav ───────────────────── */
 button:focus-visible,
@@ -746,3 +755,47 @@ select:focus-visible,
 
 /* ── Better dim-when-disabled for sliders ───────────────────── */
 input[type=range]:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* ── Custom tooltips (replaces native title attribute) ──────── */
+[data-tooltip] { position: relative; }
+[data-tooltip]::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    top: calc(100% + 8px);
+    left: 50%;
+    transform: translateX(-50%) translateY(-4px);
+    background: rgba(20,22,26,0.97);
+    border: 1px solid rgba(255,255,255,0.10);
+    color: #ffffff;
+    font-family: inherit; font-size: 11px; font-weight: 500;
+    letter-spacing: 0.01em;
+    padding: 6px 10px;
+    border-radius: 6px;
+    white-space: nowrap;
+    pointer-events: none;
+    opacity: 0;
+    z-index: 200;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.45);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    transition: opacity 0.16s ease, transform 0.16s ease;
+}
+[data-tooltip]:hover::after,
+[data-tooltip]:focus-visible::after {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+    transition-delay: 0.35s;
+}
+[data-tooltip=""]:hover::after,
+[data-tooltip=""]:focus-visible::after { opacity: 0; }
+/* Position above with data-tooltip-pos="top" for elements near bottom of viewport */
+[data-tooltip-pos="top"]::after {
+    top: auto;
+    bottom: calc(100% + 8px);
+    transform: translateX(-50%) translateY(4px);
+}
+[data-tooltip-pos="top"]:hover::after,
+[data-tooltip-pos="top"]:focus-visible::after {
+    transform: translateX(-50%) translateY(0);
+}
+[data-theme="light"] [data-tooltip]::after { box-shadow: 0 8px 24px rgba(0,0,0,0.20); }

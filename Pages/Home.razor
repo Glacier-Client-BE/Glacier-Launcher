@@ -244,7 +244,7 @@
             </div>
             @if (launcherUpdateAvailable)
             {
-                <button class="update-pill" @onclick="OpenUpdateModal" @onmousedown:stopPropagation title="Launcher update available — click to update">
+                <button class="update-pill" @onclick="OpenUpdateModal" @onmousedown:stopPropagation data-tooltip="Launcher update available — click to update">
                     <i class="fa-solid fa-arrow-up"></i>
                     <span>Update</span>
                 </button>
@@ -261,7 +261,7 @@
 
         <!-- Quick client switcher chip (inline, left of controls) -->
         <div class="topbar-client-chip" @onclick="CycleClient" @onmousedown:stopPropagation
-             title="Click to cycle client (@SettingsService.Settings.SelectedClient)">
+             data-tooltip="Click to cycle client (@SettingsService.Settings.SelectedClient)">
             <div class="chip-dot @(mcRunning ? "live" : "")"></div>
             @if (IsImageClient(SettingsService.Settings.SelectedClient))
             {
@@ -277,26 +277,26 @@
 
         @if (mcRunning)
         {
-            <div class="mc-running-pill" title="Minecraft is currently running">
+            <div class="mc-running-pill" data-tooltip="Minecraft is currently running">
                 <i class="fa-solid fa-circle"></i>
                 <span>MC</span>
             </div>
         }
 
         <!-- Quick search trigger (inline, left of controls) -->
-        <button class="search-trigger" @onclick="OpenSearch" @onmousedown:stopPropagation title="Search (Ctrl+K)">
+        <button class="search-trigger" @onclick="OpenSearch" @onmousedown:stopPropagation data-tooltip="Search (Ctrl+K)">
             <i class="fa-solid fa-magnifying-glass"></i>
             <kbd>Ctrl K</kbd>
         </button>
 
         <div class="window-controls">
-            <button class="wnd-btn minimize-btn" @onclick="MinimizeWindow" @onmousedown:stopPropagation title="Minimize">
+            <button class="wnd-btn minimize-btn" @onclick="MinimizeWindow" @onmousedown:stopPropagation data-tooltip="Minimize">
                 <i class="fa-solid fa-minus"></i>
             </button>
-            <button class="wnd-btn maximize-btn" @onclick="MaximizeWindow" @onmousedown:stopPropagation title="Maximize">
+            <button class="wnd-btn maximize-btn" @onclick="MaximizeWindow" @onmousedown:stopPropagation data-tooltip="Maximize">
                 <i class="fa-solid fa-square"></i>
             </button>
-            <button class="wnd-btn close-btn" @onclick="CloseWindow" @onmousedown:stopPropagation title="Close">
+            <button class="wnd-btn close-btn" @onclick="CloseWindow" @onmousedown:stopPropagation data-tooltip="Close">
                 <i class="fa-solid fa-xmark"></i>
             </button>
         </div>
@@ -463,6 +463,7 @@
             </div>
             <div class="panel-body">
 
+                <div class="settings-section">
                 <span class="panel-section-label">Injection</span>
 
                 <div class="setting-row @(SH("Active client","active client injection vanilla"))">
@@ -524,6 +525,8 @@
                          @onclick='() => ToggleProp(() => SettingsService.Settings.CloseAfterLaunch = !SettingsService.Settings.CloseAfterLaunch)'></div>
                 </div>
 
+                </div>
+                <div class="settings-section">
                 <span class="panel-section-label">Appearance</span>
 
                 <div class="setting-row @(SH("Accent colour","accent color theme"))">
@@ -535,7 +538,7 @@
                         @foreach (var c in _accentSwatches)
                         {
                             <div class="color-swatch @(SettingsService.Settings.AccentColor == c ? "active" : "")"
-                                 style="background:@c;" title="@c"
+                                 style="background:@c;" data-tooltip="@c"
                                  @onclick='() => SetAccent(c)'
                                  @onmousedown:stopPropagation></div>
                         }
@@ -623,16 +626,18 @@
                     <div style="display:flex; align-items:center; gap:6px;">
                         @if (!string.IsNullOrEmpty(SettingsService.Settings.CustomBackgroundPath))
                         {
-                            <button class="btn-sm" @onclick="ResetWallpaper" @onmousedown:stopPropagation title="Reset to default">
+                            <button class="btn-sm" @onclick="ResetWallpaper" @onmousedown:stopPropagation data-tooltip="Reset to default">
                                 <i class="fa-solid fa-rotate-left"></i> Default
                             </button>
                         }
-                        <button class="btn-sm" @onclick="PickWallpaper" @onmousedown:stopPropagation title="Choose image or drag & drop">
+                        <button class="btn-sm" @onclick="PickWallpaper" @onmousedown:stopPropagation data-tooltip="Choose image or drag & drop">
                             <i class="fa-solid fa-image"></i> Choose
                         </button>
                     </div>
                 </div>
 
+                </div>
+                <div class="settings-section">
                 <span class="panel-section-label">Account</span>
 
                 <div class="setting-row @(SH("Display name","username name display account"))">
@@ -644,6 +649,8 @@
                            @onclick:stopPropagation />
                 </div>
 
+                </div>
+                <div class="settings-section">
                 <span class="panel-section-label">Social</span>
 
                 <div class="setting-row clickable @(SH("Discord Rich Presence","discord rpc social"))"
@@ -666,6 +673,8 @@
                     </button>
                 </div>
 
+                </div>
+                <div class="settings-section">
                 <span class="panel-section-label">Quality of Life</span>
 
                 <div class="setting-row clickable @(SH("Show recently launched","recent history"))"
@@ -700,6 +709,8 @@
                     </button>
                 </div>
 
+                </div>
+                <div class="settings-section">
                 <span class="panel-section-label">CurseForge</span>
 
                 <div class="setting-row @(SH("CurseForge API key","curseforge api key addons"))">
@@ -727,12 +738,14 @@
                                @onchange="OnCfApiKeyChanged"
                                @onclick:stopPropagation
                                @onkeydown:stopPropagation />
-                        <button class="btn-sm" @onclick='() => OpenUrl("https://console.curseforge.com/")' @onmousedown:stopPropagation title="Get API key">
+                        <button class="btn-sm" @onclick='() => OpenUrl("https://console.curseforge.com/")' @onmousedown:stopPropagation data-tooltip="Get API key">
                             <i class="fa-solid fa-arrow-up-right-from-square"></i>
                         </button>
                     </div>
                 </div>
 
+                </div>
+                <div class="settings-section">
                 <span class="panel-section-label">Updates</span>
 
                 <div class="setting-row clickable @(SH("Check for updates on startup","update auto check startup"))"
@@ -759,6 +772,8 @@
                     </button>
                 </div>
 
+                </div>
+                <div class="settings-section">
                 <span class="panel-section-label">Folders</span>
 
                 <div class="setting-row @(SH("Open launcher folder","launcher folder downloads location"))">
@@ -781,6 +796,8 @@
                     </button>
                 </div>
 
+                </div>
+                <div class="settings-section">
                 <span class="panel-section-label">Backup</span>
 
                 <div class="setting-row @(SH("Export settings","export backup settings save"))">
@@ -813,6 +830,8 @@
                     </button>
                 </div>
 
+                </div>
+                <div class="settings-section">
                 <span class="panel-section-label">About</span>
 
                 <div class="setting-row @(SH("Keyboard shortcuts","shortcuts keyboard help"))">
@@ -828,6 +847,7 @@
                     <button class="btn-sm" @onclick="OpenCredits" @onmousedown:stopPropagation>
                         <i class="fa-solid fa-heart"></i> View
                     </button>
+                </div>
                 </div>
 
             </div>
@@ -876,7 +896,7 @@
                         <div class="client-card-actions">
                             @if (SettingsService.Settings.SelectedClient != "Flarial Client" && flarialDownloaded)
                             {
-                                <button class="icon-btn" title="Select" @onclick='() => SelectClient("Flarial Client")' @onmousedown:stopPropagation>
+                                <button class="icon-btn" data-tooltip="Select" @onclick='() => SelectClient("Flarial Client")' @onmousedown:stopPropagation>
                                     <i class="fa-solid fa-check"></i>
                                 </button>
                             }
@@ -888,13 +908,13 @@
                             {
                                 @if (!flarialDownloaded || !flarialUpToDate)
                                 {
-                                    <button class="icon-btn" title="@(flarialDownloaded ? "Update" : "Download")" @onclick="HandleFlarialDownload" @onmousedown:stopPropagation>
+                                    <button class="icon-btn" data-tooltip="@(flarialDownloaded ? "Update" : "Download")" @onclick="HandleFlarialDownload" @onmousedown:stopPropagation>
                                         <i class="fa-solid @(flarialDownloaded ? "fa-arrow-up" : "fa-download")"></i>
                                     </button>
                                 }
                                 @if (flarialDownloaded)
                                 {
-                                    <button class="icon-btn icon-btn-ghost" title="Delete" @onclick="HandleFlarialDelete" @onmousedown:stopPropagation>
+                                    <button class="icon-btn icon-btn-ghost" data-tooltip="Delete" @onclick="HandleFlarialDelete" @onmousedown:stopPropagation>
                                         <i class="fa-solid fa-trash"></i>
                                     </button>
                                 }
@@ -916,11 +936,11 @@
                         <div class="client-card-actions">
                             @if (SettingsService.Settings.SelectedClient != "Latite Client")
                             {
-                                <button class="icon-btn" title="Select" @onclick='() => SelectClient("Latite Client")' @onmousedown:stopPropagation>
+                                <button class="icon-btn" data-tooltip="Select" @onclick='() => SelectClient("Latite Client")' @onmousedown:stopPropagation>
                                     <i class="fa-solid fa-check"></i>
                                 </button>
                             }
-                            <button class="icon-btn icon-btn-ghost" style="background:var(--bg-item);" title="View Versions" @onclick="OpenVersions" @onmousedown:stopPropagation>
+                            <button class="icon-btn icon-btn-ghost" style="background:var(--bg-item);" data-tooltip="View Versions" @onclick="OpenVersions" @onmousedown:stopPropagation>
                                 <i class="fa-solid fa-clock-rotate-left"></i>
                             </button>
                         </div>
@@ -946,7 +966,7 @@
                         <div class="client-card-actions">
                             @if (SettingsService.Settings.SelectedClient != "OderSo Client" && odersoDownloaded)
                             {
-                                <button class="icon-btn" title="Select" @onclick='() => SelectClient("OderSo Client")' @onmousedown:stopPropagation>
+                                <button class="icon-btn" data-tooltip="Select" @onclick='() => SelectClient("OderSo Client")' @onmousedown:stopPropagation>
                                     <i class="fa-solid fa-check"></i>
                                 </button>
                             }
@@ -958,13 +978,13 @@
                             {
                                 @if (!odersoDownloaded || !odersoUpToDate)
                                 {
-                                    <button class="icon-btn" title="@(odersoDownloaded ? "Update" : "Download")" @onclick="HandleOderSoDownload" @onmousedown:stopPropagation>
+                                    <button class="icon-btn" data-tooltip="@(odersoDownloaded ? "Update" : "Download")" @onclick="HandleOderSoDownload" @onmousedown:stopPropagation>
                                         <i class="fa-solid @(odersoDownloaded ? "fa-arrow-up" : "fa-download")"></i>
                                     </button>
                                 }
                                 @if (odersoDownloaded)
                                 {
-                                    <button class="icon-btn icon-btn-ghost" title="Delete" @onclick="HandleOderSoDelete" @onmousedown:stopPropagation>
+                                    <button class="icon-btn icon-btn-ghost" data-tooltip="Delete" @onclick="HandleOderSoDelete" @onmousedown:stopPropagation>
                                         <i class="fa-solid fa-trash"></i>
                                     </button>
                                 }
@@ -988,7 +1008,7 @@
                         <div class="client-card-actions">
                             @if (SettingsService.Settings.SelectedClient != "Vanilla")
                             {
-                                <button class="icon-btn" title="Select" @onclick='() => SelectClient("Vanilla")' @onmousedown:stopPropagation>
+                                <button class="icon-btn" data-tooltip="Select" @onclick='() => SelectClient("Vanilla")' @onmousedown:stopPropagation>
                                     <i class="fa-solid fa-check"></i>
                                 </button>
                             }
@@ -1011,14 +1031,14 @@
                                 <span class="client-card-sub" style="font-size:10px; max-width:190px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">@customDllPath</span>
                             </div>
                             <div class="client-card-actions">
-                                <button class="copy-btn @(copiedDllPath ? "copied" : "")" title="Copy path"
+                                <button class="copy-btn @(copiedDllPath ? "copied" : "")" data-tooltip="Copy path"
                                         @onclick="CopyDllPath" @onmousedown:stopPropagation>
                                     <i class="fa-solid @(copiedDllPath ? "fa-check" : "fa-copy")"></i>
                                 </button>
-                                <button class="icon-btn" title="Select" @onclick='() => SelectClient("Custom DLL")' @onmousedown:stopPropagation>
+                                <button class="icon-btn" data-tooltip="Select" @onclick='() => SelectClient("Custom DLL")' @onmousedown:stopPropagation>
                                     <i class="fa-solid fa-check"></i>
                                 </button>
-                                <button class="icon-btn icon-btn-ghost" title="Remove" @onclick="ClearCustomDll" @onmousedown:stopPropagation>
+                                <button class="icon-btn icon-btn-ghost" data-tooltip="Remove" @onclick="ClearCustomDll" @onmousedown:stopPropagation>
                                     <i class="fa-solid fa-xmark"></i>
                                 </button>
                             </div>
@@ -1059,10 +1079,10 @@
                     <div class="versions-sort-wrap">
                         <button class="panel-icon-btn @(SettingsService.Settings.ShowOnlyDownloaded ? "active" : "")"
                                 @onclick="ToggleShowOnlyDownloaded" @onmousedown:stopPropagation
-                                title="@(SettingsService.Settings.ShowOnlyDownloaded ? "Show all" : "Show only downloaded")">
+                                data-tooltip="@(SettingsService.Settings.ShowOnlyDownloaded ? "Show all" : "Show only downloaded")">
                             <i class="fa-solid @(SettingsService.Settings.ShowOnlyDownloaded ? "fa-eye" : "fa-eye-slash")"></i>
                         </button>
-                        <button class="panel-icon-btn" @onclick="ToggleSortMenu" @onmousedown:stopPropagation title="Sort">
+                        <button class="panel-icon-btn" @onclick="ToggleSortMenu" @onmousedown:stopPropagation data-tooltip="Sort">
                             <i class="fa-solid fa-arrow-down-wide-short"></i>
                         </button>
                         @if (sortMenuOpen)
@@ -1089,7 +1109,7 @@
                     </div>
                     <button class="panel-icon-btn @((versionsClient == "Latite" ? isLoadingVersions : isLoadingOderSoVersions) ? "spinning" : "")"
                             disabled="@(versionsClient == "Latite" ? isLoadingVersions : isLoadingOderSoVersions)"
-                            @onclick="RefreshVersionsAsync" @onmousedown:stopPropagation title="Refresh">
+                            @onclick="RefreshVersionsAsync" @onmousedown:stopPropagation data-tooltip="Refresh">
                         <i class="fa-solid fa-rotate"></i>
                     </button>
                     <button class="panel-back-btn" @onclick="GoHome" @onmousedown:stopPropagation>
@@ -1355,7 +1375,7 @@
                                         }
                                         else
                                         {
-                                            <button class="icon-btn" title="Download &amp; Install"
+                                            <button class="icon-btn" data-tooltip="Download &amp; Install"
                                                     @onclick="() => HandleCfDownload(a)" @onmousedown:stopPropagation>
                                                 <i class="fa-solid fa-download"></i>
                                             </button>
@@ -1415,15 +1435,15 @@
                         <span class="credits-card-sub">Built by Pepe · Glacier Productions</span>
                     </div>
                     <div class="credits-card-actions">
-                        <button class="credits-link-btn" title="GitHub"
+                        <button class="credits-link-btn" data-tooltip="GitHub"
                                 @onclick='() => OpenUrl("https://github.com/Glacier-Client-BE")' @onmousedown:stopPropagation>
                             <i class="fa-brands fa-github"></i>
                         </button>
-                        <button class="credits-link-btn" title="Website"
+                        <button class="credits-link-btn" data-tooltip="Website"
                                 @onclick='() => OpenUrl("https://glacierclient.xyz")' @onmousedown:stopPropagation>
                             <i class="fa-solid fa-globe"></i>
                         </button>
-                        <button class="credits-link-btn" title="Discord"
+                        <button class="credits-link-btn" data-tooltip="Discord"
                                 @onclick='() => OpenUrl("https://discord.glacierclient.xyz")' @onmousedown:stopPropagation>
                             <i class="fa-brands fa-discord"></i>
                         </button>
@@ -1439,11 +1459,11 @@
                         <span class="credits-card-sub">by Imrglop &amp; contributors</span>
                     </div>
                     <div class="credits-card-actions">
-                        <button class="credits-link-btn" title="GitHub Releases"
+                        <button class="credits-link-btn" data-tooltip="GitHub Releases"
                                 @onclick='() => OpenUrl("https://github.com/Imrglop/Latite-Releases")' @onmousedown:stopPropagation>
                             <i class="fa-brands fa-github"></i>
                         </button>
-                        <button class="credits-link-btn" title="Discord"
+                        <button class="credits-link-btn" data-tooltip="Discord"
                                 @onclick='() => OpenUrl("https://discord.gg/latite")' @onmousedown:stopPropagation>
                             <i class="fa-brands fa-discord"></i>
                         </button>
@@ -1457,11 +1477,11 @@
                         <span class="credits-card-sub">by the Flarial team</span>
                     </div>
                     <div class="credits-card-actions">
-                        <button class="credits-link-btn" title="Website"
+                        <button class="credits-link-btn" data-tooltip="Website"
                                 @onclick='() => OpenUrl("https://flarial.xyz")' @onmousedown:stopPropagation>
                             <i class="fa-solid fa-globe"></i>
                         </button>
-                        <button class="credits-link-btn" title="Discord"
+                        <button class="credits-link-btn" data-tooltip="Discord"
                                 @onclick='() => OpenUrl("https://discord.gg/flarial")' @onmousedown:stopPropagation>
                             <i class="fa-brands fa-discord"></i>
                         </button>
@@ -1475,7 +1495,7 @@
                         <span class="credits-card-sub">by MasonOderSo</span>
                     </div>
                     <div class="credits-card-actions">
-                        <button class="credits-link-btn" title="GitHub"
+                        <button class="credits-link-btn" data-tooltip="GitHub"
                                 @onclick='() => OpenUrl("https://github.com/MasonOderSo/oderso-data")' @onmousedown:stopPropagation>
                             <i class="fa-brands fa-github"></i>
                         </button>

@@ -1,6 +1,7 @@
 @* Reusable icon button. *@
 <button class="@(Ghost ? "icon-btn icon-btn-ghost" : "icon-btn") @(Class)"
-        title="@Title"
+        data-tooltip="@Title"
+        aria-label="@Title"
         disabled="@Disabled"
         @onclick="OnClick"
         @onclick:stopPropagation
