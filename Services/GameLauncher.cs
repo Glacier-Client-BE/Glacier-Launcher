@@ -1,11 +1,13 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Net.Http;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using GlacierLauncher.Models;
 
@@ -13,8 +15,11 @@ namespace GlacierLauncher.Services;
 
 public class GameLauncher
 {
-    private const string BaseUrl       = "https://github.com/Imrglop/Latite-Releases/releases/download";
-    private const string ApiUrl        = "https://api.github.com/repos/Imrglop/Latite-Releases/releases";
+    // LatiteClient/Latite is the active source. The old Imrglop/Latite-Releases is
+    // archived and no longer receives builds, so we fetch via the JSON API and use
+    // each asset's browser_download_url (asset names vary: LatiteNightly.dll,
+    // LatiteDebug.dll, etc., and tags like nightly-YYYYMMDD-HHMMSS aren't constructable).
+    private const string ApiUrl        = "https://api.github.com/repos/LatiteClient/Latite/releases";
     private const string UwpAppModelId = "Microsoft.MinecraftUWP_8wekyb3d8bbwe!App";
     private const string ProcessName   = "Minecraft.Windows";
 
@@ -117,17 +122,66 @@ public class GameLauncher
         var versions = new List<MinecraftVersion>();
         try
         {
-            var json = await _httpClient.GetStringAsync(ApiUrl);
+            using var req = new HttpRequestMessage(HttpMethod.Get, ApiUrl + "?per_page=60");
+            req.Headers.Accept.ParseAdd("application/vnd.github+json");
+            req.Headers.TryAddWithoutValidation("X-GitHub-Api-Version", "2022-11-28");
+
+            using var resp = await _httpClient.SendAsync(req);
+            resp.EnsureSuccessStatusCode();
+            var json = await resp.Content.ReadAsStringAsync();
+
             using var doc = JsonDocument.Parse(json);
             foreach (var release in doc.RootElement.EnumerateArray())
             {
-                var tag  = release.GetProperty("tag_name").GetString() ?? "";
-                var name = release.GetProperty("name").GetString() ?? tag;
+                var tag = release.TryGetProperty("tag_name", out var t) ? t.GetString() ?? "" : "";
+                if (string.IsNullOrEmpty(tag)) continue;
+
+                // Skip floating tags — they duplicate the most recent timestamped build.
+                if (tag is "nightly" or "debug" or "latest") continue;
+                if (release.TryGetProperty("draft", out var d) && d.GetBoolean()) continue;
+
+                var name        = release.TryGetProperty("name", out var n) ? n.GetString() ?? tag : tag;
+                var publishedAt = release.TryGetProperty("published_at", out var pa) ? pa.GetString() : null;
+
+                // Pick the runnable .dll. Prefer Release > Nightly > anything; never debug
+                // (giant .pdb-paired builds aren't useful for end users).
+                string? bestUrl = null; long bestSize = 0; string? bestAssetName = null; int bestRank = int.MaxValue;
+                if (release.TryGetProperty("assets", out var assets) && assets.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var asset in assets.EnumerateArray())
+                    {
+                        var aName = asset.TryGetProperty("name", out var an) ? an.GetString() ?? "" : "";
+                        if (!aName.EndsWith(".dll", StringComparison.OrdinalIgnoreCase)) continue;
+                        if (aName.Contains("Debug", StringComparison.OrdinalIgnoreCase)) continue;
+
+                        int rank = aName.Equals("Latite.dll", StringComparison.OrdinalIgnoreCase)        ? 0
+                                 : aName.Contains("Nightly",  StringComparison.OrdinalIgnoreCase)        ? 1
+                                                                                                          : 2;
+                        if (rank < bestRank)
+                        {
+                            bestRank      = rank;
+                            bestAssetName = aName;
+                            bestUrl       = asset.TryGetProperty("browser_download_url", out var u) ? u.GetString() : null;
+                            bestSize      = asset.TryGetProperty("size",                  out var s) ? s.GetInt64() : 0;
+                        }
+                    }
+                }
+
+                if (string.IsNullOrEmpty(bestUrl)) continue; // no usable .dll → skip release
+
+                var variant = bestAssetName!.Contains("Nightly", StringComparison.OrdinalIgnoreCase) ? "Nightly"
+                            : bestAssetName.Contains("Debug",   StringComparison.OrdinalIgnoreCase) ? "Debug"
+                                                                                                    : "Release";
+
                 versions.Add(new MinecraftVersion
                 {
                     Tag          = tag,
-                    DisplayName  = name,
-                    IsDownloaded = File.Exists(GetDllPath(tag))
+                    DisplayName  = FormatLatiteDisplayName(name, tag, publishedAt),
+                    IsDownloaded = File.Exists(GetDllPath(tag)),
+                    DownloadUrl  = bestUrl,
+                    AssetSize    = bestSize,
+                    PublishedAt  = publishedAt,
+                    Variant      = variant
                 });
             }
         }
@@ -139,12 +193,35 @@ public class GameLauncher
         return versions;
     }
 
+    private static readonly Regex _latiteTagRegex =
+        new(@"^(nightly|debug|release)-(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})$",
+            RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    private static string FormatLatiteDisplayName(string apiName, string tag, string? publishedAt)
+    {
+        var m = _latiteTagRegex.Match(tag);
+        if (m.Success)
+        {
+            var variant = char.ToUpperInvariant(m.Groups[1].Value[0]) + m.Groups[1].Value[1..].ToLowerInvariant();
+            var date = $"{m.Groups[2].Value}-{m.Groups[3].Value}-{m.Groups[4].Value} {m.Groups[5].Value}:{m.Groups[6].Value}";
+            return $"Latite {variant} · {date}";
+        }
+        if (!string.IsNullOrEmpty(publishedAt) &&
+            DateTime.TryParse(publishedAt, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var dt))
+        {
+            return $"{apiName} · {dt:yyyy-MM-dd HH:mm}";
+        }
+        return apiName;
+    }
+
     public async Task DownloadVersionAsync(MinecraftVersion version, IProgress<double>? progress = null)
     {
-        var url     = $"{BaseUrl}/{version.Tag}/Latite.dll";
+        if (string.IsNullOrEmpty(version.DownloadUrl))
+            throw new InvalidOperationException("This version has no download URL. Refresh the versions list and try again.");
+
         var dllPath = GetDllPath(version.Tag);
 
-        using var response = await _httpClient.GetAsync(url, HttpCompletionOption.ResponseHeadersRead);
+        using var response = await _httpClient.GetAsync(version.DownloadUrl, HttpCompletionOption.ResponseHeadersRead);
         response.EnsureSuccessStatusCode();
 
         var total = response.Content.Headers.ContentLength ?? -1;

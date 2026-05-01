@@ -1107,32 +1107,38 @@
                 </div>
                 <div class="panel-header-actions">
                     <div class="versions-sort-wrap">
-                        <button class="panel-icon-btn @(SettingsService.Settings.ShowOnlyDownloaded ? "active" : "")"
-                                @onclick="ToggleShowOnlyDownloaded" @onmousedown:stopPropagation
-                                data-tooltip="@(SettingsService.Settings.ShowOnlyDownloaded ? "Show all" : "Show only downloaded")">
-                            <i class="fa-solid @(SettingsService.Settings.ShowOnlyDownloaded ? "fa-eye" : "fa-eye-slash")"></i>
-                        </button>
-                        <button class="panel-icon-btn" @onclick="ToggleSortMenu" @onmousedown:stopPropagation data-tooltip="Sort">
-                            <i class="fa-solid fa-arrow-down-wide-short"></i>
+                        <button class="sort-trigger @(sortMenuOpen ? "open" : "")"
+                                @onclick="ToggleSortMenu" @onmousedown:stopPropagation
+                                data-tooltip="Sort & filter">
+                            <i class="fa-solid @CurrentSortIcon"></i>
+                            <span class="sort-trigger-label">@CurrentSortLabel</span>
+                            <i class="fa-solid fa-chevron-down sort-trigger-chevron"></i>
                         </button>
                         @if (sortMenuOpen)
                         {
+                            <div class="sort-menu-backdrop" @onclick="() => sortMenuOpen = false"></div>
                             <div class="sort-menu" @onclick:stopPropagation>
-                                <button class="sort-menu-item @(SettingsService.Settings.VersionSortMode == "newest" ? "active" : "")"
-                                        @onclick='() => { SetVersionSort("newest"); sortMenuOpen = false; }'>
-                                    <i class="fa-solid fa-arrow-down-9-1"></i> Newest first
-                                </button>
-                                <button class="sort-menu-item @(SettingsService.Settings.VersionSortMode == "oldest" ? "active" : "")"
-                                        @onclick='() => { SetVersionSort("oldest"); sortMenuOpen = false; }'>
-                                    <i class="fa-solid fa-arrow-up-9-1"></i> Oldest first
-                                </button>
-                                <button class="sort-menu-item @(SettingsService.Settings.VersionSortMode == "name" ? "active" : "")"
-                                        @onclick='() => { SetVersionSort("name"); sortMenuOpen = false; }'>
-                                    <i class="fa-solid fa-arrow-down-a-z"></i> Name A–Z
-                                </button>
-                                <button class="sort-menu-item @(SettingsService.Settings.VersionSortMode == "downloaded" ? "active" : "")"
-                                        @onclick='() => { SetVersionSort("downloaded"); sortMenuOpen = false; }'>
-                                    <i class="fa-solid fa-circle-down"></i> Downloaded first
+                                <div class="sort-menu-header">Sort by</div>
+                                @foreach (var opt in _sortOptions)
+                                {
+                                    var key = opt.Key;
+                                    <button class="sort-menu-item @(SettingsService.Settings.VersionSortMode == key ? "active" : "")"
+                                            @onclick='() => { SetVersionSort(key); sortMenuOpen = false; }'>
+                                        <span class="sort-menu-item-icon"><i class="fa-solid @opt.Icon"></i></span>
+                                        <span class="sort-menu-item-label">@opt.Label</span>
+                                        @if (SettingsService.Settings.VersionSortMode == key)
+                                        {
+                                            <i class="fa-solid fa-check sort-menu-item-check"></i>
+                                        }
+                                    </button>
+                                }
+                                <div class="sort-menu-divider"></div>
+                                <div class="sort-menu-header">Filter</div>
+                                <button class="sort-menu-toggle @(SettingsService.Settings.ShowOnlyDownloaded ? "on" : "")"
+                                        @onclick="ToggleShowOnlyDownloaded">
+                                    <span class="sort-menu-item-icon"><i class="fa-solid fa-circle-down"></i></span>
+                                    <span class="sort-menu-item-label">Only downloaded</span>
+                                    <span class="sort-menu-switch" aria-hidden="true"><span class="sort-menu-switch-thumb"></span></span>
                                 </button>
                             </div>
                         }
@@ -1227,6 +1233,16 @@
                     @if (isLoadingOderSoVersions)
                     {
                         <div class="versions-loading"><span class="spinner"></span><span>Fetching OderSo versions…</span></div>
+                    }
+                    else if (!string.IsNullOrEmpty(oderSoFetchError))
+                    {
+                        <div class="versions-loading versions-error">
+                            <i class="fa-solid fa-triangle-exclamation"></i>
+                            <span>@oderSoFetchError</span>
+                            <button class="vcs-btn" style="margin-top:8px;" @onclick="RefreshVersionsAsync">
+                                <i class="fa-solid fa-rotate"></i> Retry
+                            </button>
+                        </div>
                     }
                     else if (oderSoVersions.Count == 0)
                     {
@@ -2334,9 +2350,11 @@
         else StateHasChanged();
     }
 
+    private string? oderSoFetchError = null;
+
     private async Task LoadOderSoVersionsAsync()
     {
-        isLoadingOderSoVersions = true; StateHasChanged();
+        isLoadingOderSoVersions = true; oderSoFetchError = null; StateHasChanged();
         var dlls   = await OderSo.ListDllsAsync();
         var active = OderSo.GetActiveEntry();
         oderSoVersions = dlls.Select(e => new OderSoDllState(e)
@@ -2344,6 +2362,7 @@
             IsDownloaded = OderSo.IsEntryDownloaded(e),
             IsActive     = active?.Name == e.Name
         }).ToList();
+        oderSoFetchError = OderSo.LastError;
         isLoadingOderSoVersions = false; StateHasChanged();
     }
 
@@ -3207,6 +3226,23 @@ private async Task OpenDiscordOAuth()
     }
 
     // ── Versions sort ──────────────────────────────────────────
+    private record SortOption(string Key, string Label, string Icon);
+    private static readonly SortOption[] _sortOptions =
+    {
+        new("newest",     "Newest first",     "fa-arrow-down-9-1"),
+        new("oldest",     "Oldest first",     "fa-arrow-up-9-1"),
+        new("name",       "Name A–Z",         "fa-arrow-down-a-z"),
+        new("downloaded", "Downloaded first", "fa-circle-down"),
+    };
+
+    private string CurrentSortLabel =>
+        _sortOptions.FirstOrDefault(o => o.Key == SettingsService.Settings.VersionSortMode)?.Label
+            ?? "Newest first";
+
+    private string CurrentSortIcon =>
+        _sortOptions.FirstOrDefault(o => o.Key == SettingsService.Settings.VersionSortMode)?.Icon
+            ?? "fa-arrow-down-wide-short";
+
     private IEnumerable<MinecraftVersion> SortedVersions(IEnumerable<MinecraftVersion> src)
     {
         var mode = SettingsService.Settings.VersionSortMode;

@@ -619,31 +619,85 @@ input[type=range] { appearance: none; -webkit-appearance: none; width: 100px; he
 .chip-dot.live { background: var(--green); box-shadow: 0 0 10px rgba(67,181,129,0.85); }
 
 /* ── Sort menu (Versions panel) ─────────────────────────────── */
-.versions-sort-wrap { position: relative; display: inline-flex; gap: 6px; align-items: center; }
+.versions-sort-wrap { position: relative; display: inline-flex; align-items: center; }
 .panel-icon-btn.active { color: var(--accent); background: var(--accent-bg); }
-/* Explicit block layout — no flex on parent, no gap. Items are display:block buttons that stack naturally. */
+
+/* Trigger chip — replaces the two former icon-only buttons. */
+.sort-trigger {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    height: 30px;
+    padding: 0 10px 0 10px;
+    background: var(--bg-item);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 999px;
+    color: var(--text-dim);
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background var(--t), color var(--t), border-color var(--t), transform var(--t);
+}
+.sort-trigger:hover { background: var(--bg-item-hover); color: var(--text); border-color: rgba(255,255,255,0.12); }
+.sort-trigger:active { transform: scale(0.97); }
+.sort-trigger.open { background: var(--accent-bg); color: var(--accent); border-color: var(--accent); }
+.sort-trigger > i:first-child { font-size: 11px; }
+.sort-trigger-label { line-height: 1; max-width: 130px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sort-trigger-chevron { font-size: 9px; opacity: 0.6; transition: transform var(--t); }
+.sort-trigger.open .sort-trigger-chevron { transform: rotate(180deg); }
+[data-theme="light"] .sort-trigger { background: #f3f4f6; border-color: rgba(0,0,0,0.06); }
+[data-theme="light"] .sort-trigger:hover { background: #e5e7eb; border-color: rgba(0,0,0,0.12); }
+
+/* Backdrop captures click-outside to close the menu. */
+.sort-menu-backdrop {
+    position: fixed; inset: 0;
+    z-index: 29;
+    background: transparent;
+}
+
 .sort-menu {
     position: absolute;
     top: calc(100% + 8px);
     right: 0;
     z-index: 30;
-    width: 220px;
+    width: 240px;
     box-sizing: border-box;
     background: #1c1f23;
-    border: 1px solid rgba(255,255,255,0.10);
+    border: 1px solid rgba(255,255,255,0.08);
     border-radius: var(--r-md);
     padding: 6px;
     box-shadow: 0 16px 48px rgba(0,0,0,0.55), 0 2px 8px rgba(0,0,0,0.30);
-    animation: sort-pop 0.15s cubic-bezier(0.34,1.56,0.64,1);
+    animation: sort-pop 0.16s cubic-bezier(0.34,1.56,0.64,1);
     transform-origin: top right;
 }
-@keyframes sort-pop { from{opacity:0;transform:translateY(-4px) scale(0.96)} to{opacity:1;transform:translateY(0) scale(1)} }
-.sort-menu-item {
-    display: block;
+@keyframes sort-pop { from{opacity:0;transform:translateY(-6px) scale(0.96)} to{opacity:1;transform:translateY(0) scale(1)} }
+
+.sort-menu-header {
+    padding: 6px 10px 4px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    opacity: 0.65;
+}
+
+.sort-menu-divider {
+    height: 1px;
+    margin: 6px 4px;
+    background: rgba(255,255,255,0.06);
+}
+
+.sort-menu-item,
+.sort-menu-toggle {
+    display: flex;
+    align-items: center;
+    gap: 10px;
     width: 100%;
     box-sizing: border-box;
     margin: 0;
-    padding: 8px 12px;
+    padding: 8px 10px;
     background: transparent;
     border: 0;
     color: var(--text-dim);
@@ -654,14 +708,61 @@ input[type=range] { appearance: none; -webkit-appearance: none; width: 100px; he
     border-radius: var(--r-sm);
     cursor: pointer;
     text-align: left;
-    white-space: nowrap;
     transition: background var(--t), color var(--t);
 }
-.sort-menu-item + .sort-menu-item { margin-top: 2px; }
-.sort-menu-item:hover { background: var(--bg-item-hover); color: var(--text); }
+.sort-menu-item + .sort-menu-item,
+.sort-menu-item + .sort-menu-toggle,
+.sort-menu-toggle + .sort-menu-toggle { margin-top: 2px; }
+.sort-menu-item:hover,
+.sort-menu-toggle:hover { background: var(--bg-item-hover); color: var(--text); }
 .sort-menu-item.active { background: var(--accent-bg); color: var(--accent); }
-.sort-menu-item i { display: inline-block; width: 14px; margin-right: 10px; text-align: center; font-size: 11px; vertical-align: -1px; }
-[data-theme="light"] .sort-menu { background: #ffffff; border-color: rgba(0,0,0,0.10); box-shadow: 0 16px 48px rgba(0,0,0,0.18), 0 2px 8px rgba(0,0,0,0.08); }
+.sort-menu-item.active .sort-menu-item-icon { color: var(--accent); }
+
+.sort-menu-item-icon {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 18px; height: 18px;
+    flex-shrink: 0;
+    color: var(--text-dim);
+    font-size: 11px;
+}
+.sort-menu-item-label { flex: 1; }
+.sort-menu-item-check { font-size: 10px; color: var(--accent); }
+
+/* Toggle row — inline switch on the right. */
+.sort-menu-switch {
+    flex-shrink: 0;
+    width: 28px; height: 16px;
+    background: rgba(255,255,255,0.10);
+    border-radius: 999px;
+    position: relative;
+    transition: background var(--t);
+}
+.sort-menu-switch-thumb {
+    position: absolute;
+    top: 2px; left: 2px;
+    width: 12px; height: 12px;
+    background: #fff;
+    border-radius: 50%;
+    transition: transform var(--t);
+}
+.sort-menu-toggle.on { color: var(--text); }
+.sort-menu-toggle.on .sort-menu-item-icon { color: var(--accent); }
+.sort-menu-toggle.on .sort-menu-switch { background: var(--accent); }
+.sort-menu-toggle.on .sort-menu-switch-thumb { transform: translateX(12px); }
+
+[data-theme="light"] .sort-menu { background: #ffffff; border-color: rgba(0,0,0,0.08); box-shadow: 0 16px 48px rgba(0,0,0,0.18), 0 2px 8px rgba(0,0,0,0.08); }
+[data-theme="light"] .sort-menu-divider { background: rgba(0,0,0,0.08); }
+[data-theme="light"] .sort-menu-switch { background: rgba(0,0,0,0.15); }
+
+/* Inline error block reused by Latite & OderSo fetch failures. */
+.versions-error {
+    flex-direction: column;
+    gap: 8px;
+    color: var(--red, #f04747);
+    text-align: center;
+    padding: 24px 16px;
+}
+.versions-error i { font-size: 18px; }
 
 /* ── Refined focus ring for keyboard nav ───────────────────── */
 button:focus-visible,

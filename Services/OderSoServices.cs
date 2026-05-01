@@ -62,14 +62,35 @@ public class OderSoService
 
     public record DllEntry(string Name, string Sha, long Size);
 
+    /// <summary>Last fetch error message, or null if last fetch succeeded.</summary>
+    public string? LastError { get; private set; }
+
     /// <summary>Lists all .dll files in the repo root via Contents API.</summary>
     public async Task<List<DllEntry>> ListDllsAsync()
     {
         var result = new List<DllEntry>();
         try
         {
-            var json = await _http.GetStringAsync(ContentsApiUrl);
+            using var req = new HttpRequestMessage(HttpMethod.Get, ContentsApiUrl);
+            req.Headers.Accept.ParseAdd("application/vnd.github+json");
+            req.Headers.TryAddWithoutValidation("X-GitHub-Api-Version", "2022-11-28");
+
+            using var resp = await _http.SendAsync(req);
+            resp.EnsureSuccessStatusCode();
+            var json = await resp.Content.ReadAsStringAsync();
+
             using var doc = JsonDocument.Parse(json);
+            if (doc.RootElement.ValueKind != JsonValueKind.Array)
+            {
+                // GitHub returns an object instead of an array when the path is a single
+                // file or when an error envelope is delivered with a 200 (rare). Surface
+                // the message field if present.
+                LastError = doc.RootElement.TryGetProperty("message", out var msg)
+                    ? msg.GetString() ?? "Unexpected response from GitHub."
+                    : "Unexpected response from GitHub.";
+                return result;
+            }
+
             foreach (var item in doc.RootElement.EnumerateArray())
             {
                 var type = item.TryGetProperty("type", out var t) ? t.GetString() : null;
@@ -80,8 +101,18 @@ public class OderSoService
                 if (type == "file" && name.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
                     result.Add(new DllEntry(name, sha, size));
             }
+            LastError = null;
         }
-        catch { /* return empty — caller handles */ }
+        catch (HttpRequestException ex)
+        {
+            LastError = ex.StatusCode == System.Net.HttpStatusCode.Forbidden
+                ? "GitHub rate limit reached. Try again in a few minutes."
+                : $"Network error: {ex.Message}";
+        }
+        catch (Exception ex)
+        {
+            LastError = ex.Message;
+        }
         result.Sort((a, b) => CompareVersionNames(b.Name, a.Name));
         return result;
     }
