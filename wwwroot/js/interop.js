@@ -102,16 +102,21 @@ document.addEventListener('drop', e => {
 // ── Keyboard shortcuts ────────────────────────────────────────
 document.addEventListener('keydown', e => {
     if (!window._glacierDotNet) return;
-    if (e.ctrlKey && e.key === 'k') { e.preventDefault(); window._glacierDotNet.invokeMethodAsync('KbShortcut', 'search'); return; }
-    if (e.ctrlKey && e.key === 'l') { e.preventDefault(); window._glacierDotNet.invokeMethodAsync('KbShortcut', 'launch'); return; }
-    if (e.ctrlKey && e.key === '1') { e.preventDefault(); window._glacierDotNet.invokeMethodAsync('KbShortcut', 'settings'); return; }
-    if (e.ctrlKey && e.key === '2') { e.preventDefault(); window._glacierDotNet.invokeMethodAsync('KbShortcut', 'clients'); return; }
-    if (e.ctrlKey && e.key === '3') { e.preventDefault(); window._glacierDotNet.invokeMethodAsync('KbShortcut', 'versions'); return; }
-    if (e.key === 'F11')       { e.preventDefault(); window._glacierDotNet.invokeMethodAsync('KbShortcut', 'fullscreen'); return; }
-    if (e.key === 'Escape')    { window._glacierDotNet.invokeMethodAsync('KbShortcut', 'escape'); return; }
-    if (e.key === 'ArrowDown') { window._glacierDotNet.invokeMethodAsync('KbShortcut', 'down'); return; }
-    if (e.key === 'ArrowUp')   { window._glacierDotNet.invokeMethodAsync('KbShortcut', 'up'); return; }
-    if (e.key === 'Enter')     { window._glacierDotNet.invokeMethodAsync('KbShortcut', 'enter'); }
+    const dn = window._glacierDotNet;
+    if (e.ctrlKey && !e.shiftKey && e.key === 'k') { e.preventDefault(); dn.invokeMethodAsync('KbShortcut', 'search');   return; }
+    if (e.ctrlKey && !e.shiftKey && e.key === 'l') { e.preventDefault(); dn.invokeMethodAsync('KbShortcut', 'launch');   return; }
+    if (e.ctrlKey && !e.shiftKey && e.key === '1') { e.preventDefault(); dn.invokeMethodAsync('KbShortcut', 'settings'); return; }
+    if (e.ctrlKey && !e.shiftKey && e.key === '2') { e.preventDefault(); dn.invokeMethodAsync('KbShortcut', 'clients');  return; }
+    if (e.ctrlKey && !e.shiftKey && e.key === '3') { e.preventDefault(); dn.invokeMethodAsync('KbShortcut', 'versions'); return; }
+    if (e.ctrlKey && !e.shiftKey && e.key === '4') { e.preventDefault(); dn.invokeMethodAsync('KbShortcut', 'addons');   return; }
+    if (e.ctrlKey && (e.key === ',' || e.key === '?')) { e.preventDefault(); dn.invokeMethodAsync('KbShortcut', 'settings'); return; }
+    if (e.ctrlKey && (e.key === 'Tab' || e.code === 'Tab')) { e.preventDefault(); dn.invokeMethodAsync('KbShortcut', 'cycle'); return; }
+    if (e.ctrlKey && e.shiftKey && (e.key === 'r' || e.key === 'R')) { e.preventDefault(); dn.invokeMethodAsync('KbShortcut', 'refresh'); return; }
+    if (e.key === 'F11')       { e.preventDefault(); dn.invokeMethodAsync('KbShortcut', 'fullscreen'); return; }
+    if (e.key === 'Escape')    { dn.invokeMethodAsync('KbShortcut', 'escape'); return; }
+    if (e.key === 'ArrowDown') { dn.invokeMethodAsync('KbShortcut', 'down'); return; }
+    if (e.key === 'ArrowUp')   { dn.invokeMethodAsync('KbShortcut', 'up'); return; }
+    if (e.key === 'Enter')     { dn.invokeMethodAsync('KbShortcut', 'enter'); }
 });
 
 // ── Clipboard ─────────────────────────────────────────────────
@@ -154,11 +159,21 @@ window.setCustomBackground = (filePath) => {
     }
 };
 
-window.applyStoredSettings = (accent, theme, blur, customBg) => {
+window.setCompactMode = (enabled) => {
+    document.documentElement.classList.toggle('compact', !!enabled);
+};
+
+window.setAnimationsEnabled = (enabled) => {
+    document.documentElement.classList.toggle('no-animations', !enabled);
+};
+
+window.applyStoredSettings = (accent, theme, blur, customBg, compact, animations) => {
     if (accent) window.setAccentColor(accent);
     if (theme)  window.setTheme(theme);
     if (blur != null) window.setBlurIntensity(blur);
     if (customBg) window.setCustomBackground(customBg);
+    if (compact != null) window.setCompactMode(compact);
+    if (animations != null) window.setAnimationsEnabled(animations);
     applyScale();
 };
 

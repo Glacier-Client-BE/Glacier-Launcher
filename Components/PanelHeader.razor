@@ -1,0 +1,19 @@
+@* Reusable panel header with title, accent underline and back button. *@
+<div class="panel-header">
+    <div class="panel-title-wrap">
+        <span class="panel-title">@Title</span>
+        <div class="panel-title-underline"></div>
+    </div>
+    <div class="panel-header-actions">
+        @ExtraActions
+        <button class="panel-back-btn" @onclick="OnBack" @onmousedown:stopPropagation title="Close panel">
+            <i class="fa-solid fa-chevron-down"></i>
+        </button>
+    </div>
+</div>
+
+@code {
+    [Parameter] public string Title { get; set; } = "";
+    [Parameter] public EventCallback OnBack { get; set; }
+    [Parameter] public RenderFragment? ExtraActions { get; set; }
+}

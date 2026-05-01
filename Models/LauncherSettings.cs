@@ -14,10 +14,12 @@ public class LauncherSettings
 
     // ── Appearance ───────────────────────────────────────────────
     public string AccentColor          { get; set; } = "#7289da";
-    public string ThemePreset          { get; set; } = "dark";   // dark | darker | midnight | slate
+    public string ThemePreset          { get; set; } = "dark";   // dark | darker | midnight | slate | ocean | forest | sunset | light
     public int    BlurIntensity        { get; set; } = 14;       // px, 0-30
     public double BackgroundOpacity    { get; set; } = 0.80;     // 0.0-1.0
     public string CustomBackgroundPath { get; set; } = "";       // empty = default bg
+    public bool   CompactMode          { get; set; } = false;    // tighter spacing throughout
+    public bool   AnimationsEnabled    { get; set; } = true;     // disables some animations on low-end
 
     // ── Window ───────────────────────────────────────────────────
     public double WindowWidth          { get; set; } = 740;
@@ -31,6 +33,10 @@ public class LauncherSettings
 
     // ── Pinned Versions ──────────────────────────────────────────
     public List<string> PinnedVersions { get; set; } = new();
+
+    // ── Versions QoL ─────────────────────────────────────────────
+    public string VersionSortMode     { get; set; } = "newest"; // newest | oldest | name | downloaded
+    public bool   ShowOnlyDownloaded  { get; set; } = false;
 
     // ── Custom DLL ──────────────────────────────────────────────
     public string CustomDllPath         { get; set; } = "";

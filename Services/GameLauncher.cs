@@ -108,8 +108,7 @@ public class GameLauncher
     public GameLauncher(SettingsService settingsService)
     {
         _settingsService = settingsService;
-        _httpClient      = new HttpClient();
-        _httpClient.DefaultRequestHeaders.Add("User-Agent", "GlacierLauncher/1.0");
+        _httpClient      = HttpFactory.Shared;
         Directory.CreateDirectory(LatiteDirectory);
     }
 
@@ -183,6 +182,11 @@ public class GameLauncher
         return LaunchWithPathAsync(dllPath);
     }
 
+    /// <summary>
+    /// Launches Minecraft with no DLL injection at all (vanilla / un-modified).
+    /// </summary>
+    public Task LaunchVanillaAsync() => LaunchWithPathAsync(null);
+
     public async Task LaunchAsync(string? versionTag = null, bool useFlarial = false)
     {
         // Determine DLL path — null means launch MC only, no injection
@@ -217,6 +221,9 @@ public class GameLauncher
 
     public static string GetDllPath(string tag) =>
         Path.Combine(LatiteDirectory, $"Latite_{tag}.dll");
+
+    /// <summary>True if a Minecraft.Windows process is currently running.</summary>
+    public static bool IsMinecraftRunning() => GetMinecraftProcess() != null;
 
     // ── Core launch + inject ─────────────────────────────────────
 

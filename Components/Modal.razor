@@ -1,0 +1,40 @@
+@* Reusable modal shell with backdrop, header and body slot. *@
+@if (Open)
+{
+    <div class="modal-overlay" @onclick="OnBackdropClick">
+        <div class="modal-box @(Class)" @onclick:stopPropagation>
+            <div class="modal-header">
+                <span class="modal-title">
+                    @if (!string.IsNullOrEmpty(Icon))
+                    {
+                        <i class="@Icon" style="color:@(IconColor ?? "var(--accent)");margin-right:8px;"></i>
+                    }
+                    @Title
+                </span>
+                <button class="modal-close-btn" @onclick="HandleClose">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                @ChildContent
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public bool   Open       { get; set; }
+    [Parameter] public string Title      { get; set; } = "";
+    [Parameter] public string Icon       { get; set; } = "";
+    [Parameter] public string? IconColor { get; set; }
+    [Parameter] public string Class      { get; set; } = "";
+    [Parameter] public EventCallback OnClose { get; set; }
+    [Parameter] public bool CloseOnBackdrop { get; set; } = true;
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    private async Task HandleClose() { if (OnClose.HasDelegate) await OnClose.InvokeAsync(); }
+    private async Task OnBackdropClick()
+    {
+        if (CloseOnBackdrop) await HandleClose();
+    }
+}

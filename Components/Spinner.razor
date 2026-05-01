@@ -1,0 +1,16 @@
+@* Reusable loading spinner. *@
+<span class="spinner @(Class)" style="@SizeStyle"></span>
+
+@code {
+    [Parameter] public int? Size { get; set; }
+    [Parameter] public double? BorderWidth { get; set; }
+    [Parameter] public string Class { get; set; } = "";
+
+    private string SizeStyle => (Size, BorderWidth) switch
+    {
+        (null, null)         => "",
+        (int s, null)        => $"width:{s}px;height:{s}px;",
+        (null, double bw)    => $"border-width:{bw}px;",
+        (int s, double bw)   => $"width:{s}px;height:{s}px;border-width:{bw}px;"
+    };
+}

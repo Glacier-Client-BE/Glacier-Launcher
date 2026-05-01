@@ -27,8 +27,7 @@ public class FlarialService
 
     public FlarialService()
     {
-        _http = new HttpClient();
-        _http.DefaultRequestHeaders.Add("User-Agent", "GlacierLauncher/1.0");
+        _http = HttpFactory.Shared;
         Directory.CreateDirectory(FlarialDirectory);
     }
 
