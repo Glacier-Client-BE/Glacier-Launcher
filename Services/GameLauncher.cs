@@ -117,18 +117,18 @@ public class GameLauncher
         Directory.CreateDirectory(LatiteDirectory);
     }
 
+    /// <summary>Last fetch error message (e.g. rate-limit notice). Null if last fetch was clean.</summary>
+    public string? LastVersionsError { get; private set; }
+
     public async Task<List<MinecraftVersion>> GetVersionsAsync()
     {
         var versions = new List<MinecraftVersion>();
+        LastVersionsError = null;
         try
         {
-            using var req = new HttpRequestMessage(HttpMethod.Get, ApiUrl + "?per_page=60");
-            req.Headers.Accept.ParseAdd("application/vnd.github+json");
-            req.Headers.TryAddWithoutValidation("X-GitHub-Api-Version", "2022-11-28");
-
-            using var resp = await _httpClient.SendAsync(req);
-            resp.EnsureSuccessStatusCode();
-            var json = await resp.Content.ReadAsStringAsync();
+            var cached = await GitHubApiCache.GetJsonAsync(_httpClient, ApiUrl + "?per_page=60");
+            LastVersionsError = cached.Error;
+            var json = cached.Body;
 
             using var doc = JsonDocument.Parse(json);
             foreach (var release in doc.RootElement.EnumerateArray())
@@ -185,10 +185,13 @@ public class GameLauncher
                 });
             }
         }
+        catch (HttpRequestException ex) when (ex.StatusCode == System.Net.HttpStatusCode.Forbidden)
+        {
+            LastVersionsError = "GitHub rate limit reached. Try again in a few minutes.";
+        }
         catch (Exception ex)
         {
-            versions.Add(new MinecraftVersion
-            { Tag = "error", DisplayName = $"Failed to fetch: {ex.Message}", ErrorMessage = ex.Message });
+            LastVersionsError = $"Failed to fetch: {ex.Message}";
         }
         return versions;
     }

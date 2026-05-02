@@ -44,16 +44,21 @@ public class AutoUpdateService
 
     // ── Launcher update check ─────────────────────────────────────
 
+    /// <summary>Last status message — cache fallback / rate-limit notice. Null if last fetch was clean.</summary>
+    public string? LastCheckStatus { get; private set; }
+
     /// <summary>
     /// Fetches the latest GitHub release for the launcher.
     /// Returns null if already up-to-date, repo unreachable, or no .exe asset found.
     /// </summary>
     public async Task<LauncherUpdateInfo?> CheckLauncherUpdateAsync()
     {
+        LastCheckStatus = null;
         try
         {
-            var json = await _http.GetStringAsync(LatestReleaseApiUrl);
-            using var doc = JsonDocument.Parse(json);
+            var cached = await GitHubApiCache.GetJsonAsync(_http, LatestReleaseApiUrl);
+            LastCheckStatus = cached.Error;
+            using var doc = JsonDocument.Parse(cached.Body);
             var root = doc.RootElement;
 
             var tag = root.TryGetProperty("tag_name", out var tagProp)
@@ -95,8 +100,9 @@ public class AutoUpdateService
 
             return new LauncherUpdateInfo(tag, downloadUrl, changelog, assetSize);
         }
-        catch
+        catch (Exception ex)
         {
+            LastCheckStatus = $"Update check failed: {ex.Message}";
             return null;
         }
     }

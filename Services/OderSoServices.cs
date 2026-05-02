@@ -71,13 +71,9 @@ public class OderSoService
         var result = new List<DllEntry>();
         try
         {
-            using var req = new HttpRequestMessage(HttpMethod.Get, ContentsApiUrl);
-            req.Headers.Accept.ParseAdd("application/vnd.github+json");
-            req.Headers.TryAddWithoutValidation("X-GitHub-Api-Version", "2022-11-28");
-
-            using var resp = await _http.SendAsync(req);
-            resp.EnsureSuccessStatusCode();
-            var json = await resp.Content.ReadAsStringAsync();
+            var cached = await GitHubApiCache.GetJsonAsync(_http, ContentsApiUrl);
+            LastError = cached.Error;
+            var json = cached.Body;
 
             using var doc = JsonDocument.Parse(json);
             if (doc.RootElement.ValueKind != JsonValueKind.Array)
@@ -101,13 +97,6 @@ public class OderSoService
                 if (type == "file" && name.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
                     result.Add(new DllEntry(name, sha, size));
             }
-            LastError = null;
-        }
-        catch (HttpRequestException ex)
-        {
-            LastError = ex.StatusCode == System.Net.HttpStatusCode.Forbidden
-                ? "GitHub rate limit reached. Try again in a few minutes."
-                : $"Network error: {ex.Message}";
         }
         catch (Exception ex)
         {

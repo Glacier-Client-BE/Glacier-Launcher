@@ -1106,43 +1106,17 @@
                     <div class="panel-title-underline"></div>
                 </div>
                 <div class="panel-header-actions">
-                    <div class="versions-sort-wrap">
-                        <button class="sort-trigger @(sortMenuOpen ? "open" : "")"
-                                @onclick="ToggleSortMenu" @onmousedown:stopPropagation
-                                data-tooltip="Sort & filter">
-                            <i class="fa-solid @CurrentSortIcon"></i>
-                            <span class="sort-trigger-label">@CurrentSortLabel</span>
-                            <i class="fa-solid fa-chevron-down sort-trigger-chevron"></i>
-                        </button>
-                        @if (sortMenuOpen)
-                        {
-                            <div class="sort-menu-backdrop" @onclick="() => sortMenuOpen = false"></div>
-                            <div class="sort-menu" @onclick:stopPropagation>
-                                <div class="sort-menu-header">Sort by</div>
-                                @foreach (var opt in _sortOptions)
-                                {
-                                    var key = opt.Key;
-                                    <button class="sort-menu-item @(SettingsService.Settings.VersionSortMode == key ? "active" : "")"
-                                            @onclick='() => { SetVersionSort(key); sortMenuOpen = false; }'>
-                                        <span class="sort-menu-item-icon"><i class="fa-solid @opt.Icon"></i></span>
-                                        <span class="sort-menu-item-label">@opt.Label</span>
-                                        @if (SettingsService.Settings.VersionSortMode == key)
-                                        {
-                                            <i class="fa-solid fa-check sort-menu-item-check"></i>
-                                        }
-                                    </button>
-                                }
-                                <div class="sort-menu-divider"></div>
-                                <div class="sort-menu-header">Filter</div>
-                                <button class="sort-menu-toggle @(SettingsService.Settings.ShowOnlyDownloaded ? "on" : "")"
-                                        @onclick="ToggleShowOnlyDownloaded">
-                                    <span class="sort-menu-item-icon"><i class="fa-solid fa-circle-down"></i></span>
-                                    <span class="sort-menu-item-label">Only downloaded</span>
-                                    <span class="sort-menu-switch" aria-hidden="true"><span class="sort-menu-switch-thumb"></span></span>
-                                </button>
-                            </div>
-                        }
+                    <div class="topbar-client-chip versions-sort-chip" @onclick="CycleVersionSort" @onmousedown:stopPropagation
+                         data-tooltip="Click to cycle sort (@CurrentSortLabel)">
+                        <i class="chip-icon fa-solid @CurrentSortIcon"></i>
+                        <span>@CurrentSortLabel</span>
+                        <i class="fa-solid fa-chevron-right chip-arrow"></i>
                     </div>
+                    <button class="panel-icon-btn @(SettingsService.Settings.ShowOnlyDownloaded ? "active" : "")"
+                            @onclick="ToggleShowOnlyDownloaded" @onmousedown:stopPropagation
+                            data-tooltip="@(SettingsService.Settings.ShowOnlyDownloaded ? "Show all" : "Only downloaded")">
+                        <i class="fa-solid fa-circle-down"></i>
+                    </button>
                     <button class="panel-icon-btn @((versionsClient == "Latite" ? isLoadingVersions : isLoadingOderSoVersions) ? "spinning" : "")"
                             disabled="@(versionsClient == "Latite" ? isLoadingVersions : isLoadingOderSoVersions)"
                             @onclick="RefreshVersionsAsync" @onmousedown:stopPropagation data-tooltip="Refresh">
@@ -1178,9 +1152,23 @@
                 <!-- ── Latite list ── -->
                 @if (versionsClient == "Latite")
                 {
+                    @if (!string.IsNullOrEmpty(latiteFetchError) && versions.Count > 0)
+                    {
+                        <div class="cache-notice"><i class="fa-solid fa-circle-info"></i><span>@latiteFetchError</span></div>
+                    }
                     @if (isLoadingVersions)
                     {
                         <div class="versions-loading"><span class="spinner"></span><span>Fetching versions…</span></div>
+                    }
+                    else if (versions.Count == 0 && !string.IsNullOrEmpty(latiteFetchError))
+                    {
+                        <div class="versions-loading versions-error">
+                            <i class="fa-solid fa-triangle-exclamation"></i>
+                            <span>@latiteFetchError</span>
+                            <button class="vcs-btn" style="margin-top:8px;" @onclick="RefreshVersionsAsync">
+                                <i class="fa-solid fa-rotate"></i> Retry
+                            </button>
+                        </div>
                     }
                     else if (versions.Count == 0)
                     {
@@ -1230,11 +1218,15 @@
                 <!-- ── OderSo list ── -->
                 @if (versionsClient == "OderSo")
                 {
+                    @if (!string.IsNullOrEmpty(oderSoFetchError) && oderSoVersions.Count > 0)
+                    {
+                        <div class="cache-notice"><i class="fa-solid fa-circle-info"></i><span>@oderSoFetchError</span></div>
+                    }
                     @if (isLoadingOderSoVersions)
                     {
                         <div class="versions-loading"><span class="spinner"></span><span>Fetching OderSo versions…</span></div>
                     }
-                    else if (!string.IsNullOrEmpty(oderSoFetchError))
+                    else if (!string.IsNullOrEmpty(oderSoFetchError) && oderSoVersions.Count == 0)
                     {
                         <div class="versions-loading versions-error">
                             <i class="fa-solid fa-triangle-exclamation"></i>
@@ -1698,9 +1690,6 @@
     private bool mcRunning = false;
     private System.Threading.CancellationTokenSource? _mcPollCts;
 
-    // ── Sort menu ─────────────────────────────────────────────
-    private bool sortMenuOpen = false;
-    private void ToggleSortMenu() { sortMenuOpen = !sortMenuOpen; StateHasChanged(); }
 
     // ── JS ref ────────────────────────────────────────────────
     private DotNetObjectReference<Home>? _selfRef;
@@ -1858,7 +1847,6 @@
                     break;
                 case "escape":
                     if      (resetConfirmOpen) CancelResetSettings();
-                    else if (sortMenuOpen)     { sortMenuOpen = false; }
                     else if (searchOpen)       CloseSearch();
                     else if (launcherUpdateModalOpen) CloseUpdateModal();
                     else if (discordModalOpen) CloseDiscordModal();
@@ -2495,10 +2483,13 @@
         }
     };
 
+    private string? latiteFetchError = null;
+
     private async Task LoadVersionsAsync()
     {
-        isLoadingVersions = true; StateHasChanged();
+        isLoadingVersions = true; latiteFetchError = null; StateHasChanged();
         versions = await Launcher.GetVersionsAsync();
+        latiteFetchError = Launcher.LastVersionsError;
         isLoadingVersions = false; StateHasChanged();
     }
 
@@ -2818,7 +2809,10 @@
         if (flarialUpdate || odersoUpdate)
             clientsHasBadge = true;
 
-        if (info == null && !flarialUpdate && !odersoUpdate)
+        var checkStatus = AutoUpdate.LastCheckStatus;
+        if (!string.IsNullOrEmpty(checkStatus))
+            _ = ShowToast(checkStatus, "info");
+        else if (info == null && !flarialUpdate && !odersoUpdate)
             _ = ShowToast("Everything is up to date!", "success");
         else if (info == null && (flarialUpdate || odersoUpdate))
             _ = ShowToast("Client update available in Clients panel.", "info");
@@ -3260,6 +3254,15 @@ private async Task OpenDiscordOAuth()
         SettingsService.Settings.VersionSortMode = mode;
         SettingsService.Save();
         StateHasChanged();
+    }
+
+    private void CycleVersionSort()
+    {
+        var current = SettingsService.Settings.VersionSortMode ?? "newest";
+        var idx = Array.FindIndex(_sortOptions, o => o.Key == current);
+        if (idx < 0) idx = -1;
+        var next = _sortOptions[(idx + 1) % _sortOptions.Length];
+        SetVersionSort(next.Key);
     }
 
     private void ToggleShowOnlyDownloaded()
