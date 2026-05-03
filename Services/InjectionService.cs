@@ -122,8 +122,13 @@ public static class InjectionService
 
     public static void InjectDll(uint processId, string dllPath)
     {
-        // 1. Grant "ALL APPLICATION PACKAGES" full access to the DLL
+        // 1. Grant "ALL APPLICATION PACKAGES" full access to the DLL and its parent
+        //    directory — some DLLs load dependencies from the same folder, and the
+        //    UWP AppContainer blocks access without explicit permissions.
         GrantUwpAccess(dllPath);
+        var parentDir = System.IO.Path.GetDirectoryName(dllPath);
+        if (!string.IsNullOrEmpty(parentDir))
+            GrantUwpAccess(parentDir);
 
         // 2. Open the target process
         var hProcess = OpenProcess(PROCESS_ALL_ACCESS, false, processId);

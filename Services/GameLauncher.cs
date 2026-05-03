@@ -4,8 +4,6 @@ using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Net.Http;
-using System.Runtime.InteropServices;
-using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
@@ -22,81 +20,6 @@ public class GameLauncher
     private const string ApiUrl        = "https://api.github.com/repos/LatiteClient/Latite/releases";
     private const string UwpAppModelId = "Microsoft.MinecraftUWP_8wekyb3d8bbwe!App";
     private const string ProcessName   = "Minecraft.Windows";
-
-    // ── Kernel32 / Shell32 / Advapi32 ────────────────────────────
-
-    [DllImport("kernel32.dll", SetLastError = true)]
-    private static extern IntPtr OpenProcess(uint access, bool inherit, uint pid);
-
-    [DllImport("kernel32.dll", SetLastError = true)]
-    private static extern IntPtr VirtualAllocEx(IntPtr proc, IntPtr addr, uint size, uint type, uint protect);
-
-    [DllImport("kernel32.dll", SetLastError = true)]
-    private static extern bool WriteProcessMemory(IntPtr proc, IntPtr addr, byte[] buf, uint size, out IntPtr written);
-
-    [DllImport("kernel32.dll")]
-    private static extern IntPtr GetModuleHandle(string mod);
-
-    [DllImport("kernel32.dll")]
-    private static extern IntPtr GetProcAddress(IntPtr mod, string proc);
-
-    [DllImport("kernel32.dll", SetLastError = true)]
-    private static extern IntPtr CreateRemoteThread(IntPtr proc, IntPtr attrs, uint stack,
-        IntPtr start, IntPtr param, uint flags, out IntPtr tid);
-
-    [DllImport("kernel32.dll")]
-    private static extern uint WaitForSingleObject(IntPtr handle, uint ms);
-
-    [DllImport("kernel32.dll")]
-    private static extern bool CloseHandle(IntPtr handle);
-
-    [DllImport("kernel32.dll")]
-    private static extern bool VirtualFreeEx(IntPtr proc, IntPtr addr, uint size, uint type);
-
-    [DllImport("advapi32.dll", CharSet = CharSet.Unicode)]
-    private static extern uint SetEntriesInAclW(uint count,
-        [MarshalAs(UnmanagedType.LPArray)] ExplicitAccess[] entries,
-        IntPtr oldAcl, out IntPtr newAcl);
-
-    [DllImport("advapi32.dll", CharSet = CharSet.Unicode)]
-    private static extern uint SetNamedSecurityInfoW(string name, uint objType, uint secInfo,
-        IntPtr owner, IntPtr group, IntPtr dacl, IntPtr sacl);
-
-    [DllImport("kernel32.dll")]
-    private static extern IntPtr LocalFree(IntPtr p);
-
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
-    private struct Trustee
-    {
-        public IntPtr pMultipleTrustee;
-        public int    MultipleTrusteeOperation;
-        public int    TrusteeForm;
-        public int    TrusteeType;
-        public IntPtr ptstrName;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct ExplicitAccess
-    {
-        public uint    grfAccessPermissions;
-        public int     grfAccessMode;
-        public uint    grfInheritance;
-        public Trustee Trustee;
-    }
-
-    private const uint PROCESS_ALL_ACCESS        = 0x1F0FFF;
-    private const uint MEM_COMMIT                = 0x1000;
-    private const uint MEM_RESERVE               = 0x2000;
-    private const uint MEM_RELEASE               = 0x8000;
-    private const uint PAGE_READWRITE            = 0x04;
-    private const uint INFINITE                  = 0xFFFFFFFF;
-    private const uint SE_FILE_OBJECT            = 1;
-    private const uint DACL_SECURITY_INFORMATION = 0x4;
-    private const uint GENERIC_ALL               = 0x10000000;
-    private const int  SET_ACCESS                = 2;
-    private const uint SUB_CONTAINERS_AND_OBJECTS = 3;
-    private const int  TRUSTEE_IS_NAME           = 1;
-    private const int  TRUSTEE_IS_WELL_KNOWN_GROUP = 5;
 
     // ────────────────────────────────────────────────────────────
 
@@ -311,35 +234,68 @@ public class GameLauncher
     {
         // Check if Minecraft is already running before launching
         var alreadyRunning = GetMinecraftProcess();
+        uint pid = 0;
 
         if (alreadyRunning == null)
         {
-            await TryLaunchMinecraftAsync();
+            // Method 1 (preferred): COM-based IApplicationActivationManager — returns PID instantly
+            try
+            {
+                pid = InjectionService.LaunchMinecraft();
+            }
+            catch
+            {
+                // COM activation failed — fall back to URI protocol
+                pid = 0;
+            }
 
-            // Wait up to 60 seconds — GDK can be very slow on first launch
-            for (int i = 0; i < 120; i++)
+            if (pid == 0)
+            {
+                // Fallback: URI protocol launch + polling
+                await TryLaunchMinecraftAsync();
+            }
+
+            // Wait for the process to be ready (main window handle exists).
+            // Using shorter intervals with smarter readiness check.
+            for (int i = 0; i < 60; i++) // 30 seconds max
             {
                 await Task.Delay(500);
-                if (GetMinecraftProcess() != null) break;
+                var proc = GetMinecraftProcess();
+                if (proc != null)
+                {
+                    pid = (uint)proc.Id;
+                    // Wait until the process has a main window — means the game engine is initialising
+                    if (proc.MainWindowHandle != IntPtr.Zero)
+                        break;
+                }
             }
+        }
+        else
+        {
+            pid = (uint)alreadyRunning.Id;
         }
 
         var mcProcess = GetMinecraftProcess();
         if (mcProcess == null)
             throw new TimeoutException("Minecraft did not start. Please launch Minecraft manually and then click Launch again.");
 
+        pid = (uint)mcProcess.Id;
+
         // If no DLL was provided, just launch MC without injecting
         if (string.IsNullOrEmpty(dllPath)) return;
 
-        // Wait for the game engine to initialise before injecting
+        // Wait for the game engine to initialise before injecting.
+        // The delay is shorter now because we already waited for the main window above.
         await Task.Delay(_settingsService.Settings.InjectionDelayMs);
 
         // Re-acquire — GDK sometimes restarts the process during init
         mcProcess = GetMinecraftProcess()
             ?? throw new TimeoutException("Minecraft exited before injection could complete.");
+        pid = (uint)mcProcess.Id;
 
-        GrantUwpAccess(dllPath);
-        Inject((uint)mcProcess.Id, dllPath);
+        // Grant UWP access to the DLL and its parent directory, then inject
+        // using the consolidated InjectionService which handles all P/Invoke correctly.
+        InjectionService.InjectDll(pid, dllPath);
     }
 
     // Checks all known Minecraft process names
@@ -388,77 +344,5 @@ public class GameLauncher
             return false;
         }
         catch { return false; }
-    }
-
-    private static void GrantUwpAccess(string dllPath)
-    {
-        IntPtr namePtr = Marshal.StringToHGlobalUni("ALL APPLICATION PACKAGES");
-        try
-        {
-            var trustee = new Trustee
-            {
-                pMultipleTrustee         = IntPtr.Zero,
-                MultipleTrusteeOperation = 0,
-                TrusteeForm              = TRUSTEE_IS_NAME,
-                TrusteeType              = TRUSTEE_IS_WELL_KNOWN_GROUP,
-                ptstrName                = namePtr
-            };
-            var entry = new ExplicitAccess
-            {
-                grfAccessPermissions = GENERIC_ALL,
-                grfAccessMode        = SET_ACCESS,
-                grfInheritance       = SUB_CONTAINERS_AND_OBJECTS,
-                Trustee              = trustee
-            };
-
-            uint err = SetEntriesInAclW(1, new[] { entry }, IntPtr.Zero, out IntPtr newAcl);
-            if (err != 0) return;
-            try
-            {
-                SetNamedSecurityInfoW(dllPath, SE_FILE_OBJECT, DACL_SECURITY_INFORMATION,
-                    IntPtr.Zero, IntPtr.Zero, newAcl, IntPtr.Zero);
-            }
-            finally { LocalFree(newAcl); }
-        }
-        finally { Marshal.FreeHGlobal(namePtr); }
-    }
-
-    private static void Inject(uint pid, string dllPath)
-    {
-        IntPtr hProc = OpenProcess(PROCESS_ALL_ACCESS, false, pid);
-        if (hProc == IntPtr.Zero)
-            throw new Exception($"OpenProcess failed (error {Marshal.GetLastWin32Error()}). Try running as Administrator.");
-
-        IntPtr allocAddr = IntPtr.Zero;
-        IntPtr hThread   = IntPtr.Zero;
-
-        try
-        {
-            byte[] pathBytes = Encoding.Unicode.GetBytes(dllPath + "\0");
-            uint   size      = (uint)pathBytes.Length;
-
-            allocAddr = VirtualAllocEx(hProc, IntPtr.Zero, size, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
-            if (allocAddr == IntPtr.Zero)
-                throw new Exception($"VirtualAllocEx failed (error {Marshal.GetLastWin32Error()}).");
-
-            if (!WriteProcessMemory(hProc, allocAddr, pathBytes, size, out _))
-                throw new Exception($"WriteProcessMemory failed (error {Marshal.GetLastWin32Error()}).");
-
-            IntPtr k32      = GetModuleHandle("kernel32.dll");
-            IntPtr loadLibW = GetProcAddress(k32, "LoadLibraryW");
-            if (loadLibW == IntPtr.Zero) throw new Exception("Could not locate LoadLibraryW.");
-
-            hThread = CreateRemoteThread(hProc, IntPtr.Zero, 0, loadLibW, allocAddr, 0, out _);
-            if (hThread == IntPtr.Zero)
-                throw new Exception($"CreateRemoteThread failed (error {Marshal.GetLastWin32Error()}).");
-
-            WaitForSingleObject(hThread, INFINITE);
-        }
-        finally
-        {
-            if (allocAddr != IntPtr.Zero) VirtualFreeEx(hProc, allocAddr, 0, MEM_RELEASE);
-            if (hThread   != IntPtr.Zero) CloseHandle(hThread);
-            CloseHandle(hProc);
-        }
     }
 }

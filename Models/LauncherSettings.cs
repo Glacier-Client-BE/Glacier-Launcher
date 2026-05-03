@@ -10,7 +10,7 @@ public class LauncherSettings
     public string UserHandle           { get; set; } = "";
     public bool   CloseAfterLaunch     { get; set; } = false;
     public bool   AutoInject           { get; set; } = false;
-    public int    InjectionDelayMs     { get; set; } = 4000;
+    public int    InjectionDelayMs     { get; set; } = 2000;
 
     // ── Appearance ───────────────────────────────────────────────
     public string AccentColor          { get; set; } = "#7289da";

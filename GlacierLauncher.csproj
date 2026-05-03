@@ -12,6 +12,13 @@
     <ApplicationIcon>icon.ico</ApplicationIcon>
     <Version Condition="'$(Version)' == ''">0.0.0-dev</Version>
     <CurseForgeApiKey Condition="'$(CurseForgeApiKey)' == ''"></CurseForgeApiKey>
+
+    <!-- ── Publish optimisation ──────────────────────────────── -->
+    <!-- Compress the single-file bundle to shrink the final .exe -->
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+    <!-- Disable ReadyToRun pre-compilation — saves ~30-40% per assembly at the
+         cost of slightly longer cold-start (JIT on first launch). -->
+    <PublishReadyToRun>false</PublishReadyToRun>
   </PropertyGroup>
 
   <ItemGroup>

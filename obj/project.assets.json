@@ -140,7 +140,7 @@
           "buildMultiTargeting/Microsoft.AspNetCore.Components.WebView.props": {}
         }
       },
-      "Microsoft.AspNetCore.Components.WebView.Wpf/10.0.51": {
+      "Microsoft.AspNetCore.Components.WebView.Wpf/10.0.60": {
         "type": "package",
         "dependencies": {
           "Microsoft.AspNetCore.Components.WebView": "10.0.0",
@@ -779,10 +779,10 @@
         "staticwebassets/blazor.webview.js"
       ]
     },
-    "Microsoft.AspNetCore.Components.WebView.Wpf/10.0.51": {
-      "sha512": "HiGa973TvlQq865vILSRwlvZXXTMyYcKT4zDEp9D9aWnN8uN5HF2D3u0/AwXvw/V0ZYZmSf1bYlacBol02Jzow==",
+    "Microsoft.AspNetCore.Components.WebView.Wpf/10.0.60": {
+      "sha512": "T96GxK2qq5Std2EMUwIfs9UkepL9JxY8pbbML+o9C92VyYXvEGbbv7UhjDosR903816W2HO4bOZjFJXDb9Lhnw==",
       "type": "package",
-      "path": "microsoft.aspnetcore.components.webview.wpf/10.0.51",
+      "path": "microsoft.aspnetcore.components.webview.wpf/10.0.60",
       "files": [
         ".nupkg.metadata",
         ".signature.p7s",
@@ -795,7 +795,7 @@
         "lib/net10.0-windows7.0/Microsoft.AspNetCore.Components.WebView.Wpf.dll",
         "lib/net10.0-windows7.0/Microsoft.AspNetCore.Components.WebView.Wpf.pdb",
         "lib/net10.0-windows7.0/Microsoft.AspNetCore.Components.WebView.Wpf.xml",
-        "microsoft.aspnetcore.components.webview.wpf.10.0.51.nupkg.sha512",
+        "microsoft.aspnetcore.components.webview.wpf.10.0.60.nupkg.sha512",
         "microsoft.aspnetcore.components.webview.wpf.nuspec"
       ]
     },
