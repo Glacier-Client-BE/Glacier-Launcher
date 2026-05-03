@@ -461,7 +461,7 @@
                        @bind="settingsFilter" @bind:event="oninput"
                        @onkeydown:stopPropagation />
             </div>
-            <div class="panel-body">
+            <div class="panel-body settings-body">
 
                 <div class="settings-section">
                 @if (SectionMatch(("Active client","active client injection vanilla"), ("Injection delay","injection delay wait"), ("Auto-inject","auto inject automatic"), ("Close after launch","close minimize launch")))
@@ -1106,12 +1106,11 @@
                     <div class="panel-title-underline"></div>
                 </div>
                 <div class="panel-header-actions">
-                    <div class="topbar-client-chip versions-sort-chip" @onclick="CycleVersionSort" @onmousedown:stopPropagation
-                         data-tooltip="Click to cycle sort (@CurrentSortLabel)">
-                        <i class="chip-icon fa-solid @CurrentSortIcon"></i>
+                    <button class="panel-icon-btn versions-sort-btn" @onclick="CycleVersionSort" @onmousedown:stopPropagation
+                            data-tooltip="Click to cycle sort (@CurrentSortLabel)">
+                        <i class="fa-solid @CurrentSortIcon"></i>
                         <span>@CurrentSortLabel</span>
-                        <i class="fa-solid fa-chevron-right chip-arrow"></i>
-                    </div>
+                    </button>
                     <button class="panel-icon-btn @(SettingsService.Settings.ShowOnlyDownloaded ? "active" : "")"
                             @onclick="ToggleShowOnlyDownloaded" @onmousedown:stopPropagation
                             data-tooltip="@(SettingsService.Settings.ShowOnlyDownloaded ? "Show all" : "Only downloaded")">

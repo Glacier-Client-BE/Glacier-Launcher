@@ -618,11 +618,14 @@ input[type=range] { appearance: none; -webkit-appearance: none; width: 100px; he
 }
 .chip-dot.live { background: var(--green); box-shadow: 0 0 10px rgba(67,181,129,0.85); }
 
-/* ── Sort cycler chip (Versions panel) ─────────────────────── */
+/* ── Sort cycler button (Versions panel) ───────────────────── */
 .panel-icon-btn.active { color: var(--accent); background: var(--accent-bg); }
-.versions-sort-chip { font-size: 11px; }
-.versions-sort-chip i.chip-icon { font-size: 11px; opacity: 0.85; }
-.versions-sort-chip > span { line-height: 1; max-width: 130px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.versions-sort-btn { width: auto; padding: 0 10px; gap: 6px; font-size: 11px; font-weight: 600; }
+.versions-sort-btn i { font-size: 11px; opacity: 0.85; }
+.versions-sort-btn > span { line-height: 1; max-width: 130px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ── Settings panel: extra breathing room between cards ────── */
+.panel-body.settings-body { gap: 12px; }
 
 /* Trigger chip — replaces the two former icon-only buttons. */
 .sort-trigger {
