@@ -191,25 +191,25 @@ public partial class MainWindow : Window
     {
         var wwwrootDir = Path.Combine(AppContext.BaseDirectory, "wwwroot");
 
-        // If wwwroot/index.html already exists (dev mode or already extracted), skip
-        if (File.Exists(Path.Combine(wwwrootDir, "index.html")))
-            return;
-
-        // Extract embedded wwwroot.zip (contains app content + _framework files)
-        // Use typeof() instead of GetExecutingAssembly() for single-file compatibility
         using var stream = typeof(MainWindow).Assembly.GetManifestResourceStream("wwwroot.zip");
         if (stream == null)
-        {
-            // Log to file for debugging
-            File.WriteAllText(Path.Combine(AppContext.BaseDirectory, "extraction_error.txt"),
-                $"wwwroot.zip not found. BaseDir={AppContext.BaseDirectory}\n" +
-                $"Resources: {string.Join(", ", typeof(MainWindow).Assembly.GetManifestResourceNames())}");
             return;
-        }
 
-        Directory.CreateDirectory(wwwrootDir);
-        using var archive = new ZipArchive(stream, ZipArchiveMode.Read);
-        archive.ExtractToDirectory(wwwrootDir, overwriteFiles: true);
+        try
+        {
+            Directory.CreateDirectory(wwwrootDir);
+            using var archive = new ZipArchive(stream, ZipArchiveMode.Read);
+            archive.ExtractToDirectory(wwwrootDir, overwriteFiles: true);
+        }
+        catch (IOException)
+        {
+            // If a file is locked (e.g. by another running instance), we ignore it.
+            // The existing files will just be used.
+        }
+        catch (UnauthorizedAccessException)
+        {
+            // Ignore access errors
+        }
     }
 
     private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)

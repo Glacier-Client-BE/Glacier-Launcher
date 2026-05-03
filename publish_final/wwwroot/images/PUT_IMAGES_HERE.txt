@@ -1,0 +1,6 @@
+Place your image files here:
+  bg.jpg    – background panorama (460 × 370 px)
+  icon.png  – top-left logo        (28 × 28 px)
+  avatar.png – footer avatar        (34 × 34 px)
+
+See README.md for full details.
