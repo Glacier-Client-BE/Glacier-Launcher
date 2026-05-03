@@ -130,35 +130,49 @@ public partial class MainWindow : Window
         };
     }
 
+    private System.Windows.Shell.WindowChrome? _origChrome;
+
     private void ToggleFullscreen()
     {
         if (!_isFullscreen)
         {
+            // Save state so we can restore it later
             _preFullscreenState = WindowState;
             _preFullscreenWidth = Width;
             _preFullscreenHeight = Height;
             _preFullscreenLeft = Left;
             _preFullscreenTop = Top;
+            _origChrome = System.Windows.Shell.WindowChrome.GetWindowChrome(this);
 
-            // Must set Normal first so MaxWidth/MaxHeight apply correctly
+            // Drop the resize border so the window is truly edge-to-edge
+            System.Windows.Shell.WindowChrome.SetWindowChrome(this, null);
+
+            // Must set Normal first so manual sizing applies
             WindowState = WindowState.Normal;
             ResizeMode = ResizeMode.NoResize;
 
-            var screen = System.Windows.SystemParameters.WorkArea;
             var hwnd = new WindowInteropHelper(this).Handle;
             var monitor = MonitorFromWindow(hwnd, 2 /* MONITOR_DEFAULTTONEAREST */);
             var info = new MONITORINFO { cbSize = (uint)Marshal.SizeOf<MONITORINFO>() };
             GetMonitorInfo(monitor, ref info);
 
-            Left   = info.rcMonitor.Left / VisualTreeHelper.GetDpi(this).PixelsPerDip;
-            Top    = info.rcMonitor.Top / VisualTreeHelper.GetDpi(this).PixelsPerDip;
-            Width  = (info.rcMonitor.Right - info.rcMonitor.Left) / VisualTreeHelper.GetDpi(this).PixelsPerDip;
-            Height = (info.rcMonitor.Bottom - info.rcMonitor.Top) / VisualTreeHelper.GetDpi(this).PixelsPerDip;
+            // info.rcMonitor covers the FULL monitor including the taskbar (vs. rcWork
+            // which excludes it). With WindowStyle=None and no chrome, the window now
+            // sits over the taskbar like a real fullscreen app.
+            var dpi = VisualTreeHelper.GetDpi(this).PixelsPerDip;
+            Left   = info.rcMonitor.Left / dpi;
+            Top    = info.rcMonitor.Top / dpi;
+            Width  = (info.rcMonitor.Right - info.rcMonitor.Left) / dpi;
+            Height = (info.rcMonitor.Bottom - info.rcMonitor.Top) / dpi;
 
             _isFullscreen = true;
         }
         else
         {
+            // Restore chrome FIRST so the resize border is back when we re-apply size
+            if (_origChrome != null)
+                System.Windows.Shell.WindowChrome.SetWindowChrome(this, _origChrome);
+
             ResizeMode = ResizeMode.CanResize;
             Left   = _preFullscreenLeft;
             Top    = _preFullscreenTop;
@@ -167,6 +181,18 @@ public partial class MainWindow : Window
             WindowState = _preFullscreenState;
             _isFullscreen = false;
         }
+
+        NotifyFullscreenState();
+    }
+
+    private void NotifyFullscreenState()
+    {
+        try
+        {
+            blazorWebView.WebView?.CoreWebView2?.PostWebMessageAsString(
+                _isFullscreen ? "fullscreen:on" : "fullscreen:off");
+        }
+        catch { /* webview may not be initialised yet */ }
     }
 
     [DllImport("user32.dll")]

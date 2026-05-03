@@ -238,25 +238,36 @@ public class GameLauncher
 
         if (alreadyRunning == null)
         {
-            // Method 1 (preferred): COM-based IApplicationActivationManager — returns PID instantly
-            try
+            bool launched = false;
+
+            // 1. Try COM-based IApplicationActivationManager (InjectionService)
+            try { pid = InjectionService.LaunchMinecraft(); } catch { pid = 0; }
+            
+            // Wait briefly to see if process actually spawns
+            for (int i = 0; i < 6; i++) // 3 seconds
             {
-                pid = InjectionService.LaunchMinecraft();
-            }
-            catch
-            {
-                // COM activation failed — fall back to URI protocol
-                pid = 0;
+                await Task.Delay(500);
+                if (GetMinecraftProcess() != null) { launched = true; break; }
             }
 
-            if (pid == 0)
+            if (!launched)
             {
-                // Fallback: URI protocol launch + polling
-                await TryLaunchMinecraftAsync();
+                // 2. Fallback: Try URI and cmd methods (GameLauncher Service)
+                launched = await TryLaunchMinecraftAsync();
+            }
+
+            if (!launched)
+            {
+                // 3. Vice versa fallback: Try COM again just in case the system was busy
+                try { pid = InjectionService.LaunchMinecraft(); } catch { pid = 0; }
+                for (int i = 0; i < 6; i++) // 3 seconds
+                {
+                    await Task.Delay(500);
+                    if (GetMinecraftProcess() != null) { launched = true; break; }
+                }
             }
 
             // Wait for the process to be ready (main window handle exists).
-            // Using shorter intervals with smarter readiness check.
             for (int i = 0; i < 60; i++) // 30 seconds max
             {
                 await Task.Delay(500);
@@ -310,24 +321,26 @@ public class GameLauncher
     }
 
     // Tries each launch method in order, silently moving to the next on failure
-    private static async Task TryLaunchMinecraftAsync()
+    private static async Task<bool> TryLaunchMinecraftAsync()
     {
         // Method 1: minecraft:// URI — standard protocol, works on UWP and GDK
         if (await TryLaunchAsync(() =>
             Process.Start(new ProcessStartInfo("minecraft:")
             {
                 UseShellExecute = true
-            }))) return;
+            }))) return true;
 
         // Method 2: start command via cmd — fallback if URI handler isn't registered
-        await TryLaunchAsync(() =>
+        if (await TryLaunchAsync(() =>
             Process.Start(new ProcessStartInfo("cmd.exe")
             {
                 Arguments       = "/c start minecraft:",
                 UseShellExecute = false,
                 CreateNoWindow  = true,
                 WindowStyle     = ProcessWindowStyle.Hidden
-            }));
+            }))) return true;
+
+        return false;
     }
 
     private static async Task<bool> TryLaunchAsync(Func<Process?> launcher)

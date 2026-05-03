@@ -12,7 +12,7 @@
 @implements IDisposable
 
 <div class="window">
-    <div class="window-bg"></div>
+    <div class="window-bg" style="background-image: url('images/bg.png');"></div>
     <div class="drag-zone" @onmousedown="OnDragStart"></div>
 
     <!-- Drop overlay -->
@@ -293,6 +293,9 @@
             <button class="wnd-btn minimize-btn" @onclick="MinimizeWindow" @onmousedown:stopPropagation data-tooltip="Minimize">
                 <i class="fa-solid fa-minus"></i>
             </button>
+            <button class="wnd-btn fullscreen-btn" @onclick="ToggleFullscreen" @onmousedown:stopPropagation data-tooltip="@(_isFullscreen ? "Exit fullscreen" : "Fullscreen (F11)")">
+                <i class="fa-solid @(_isFullscreen ? "fa-compress" : "fa-expand")"></i>
+            </button>
             <button class="wnd-btn maximize-btn" @onclick="MaximizeWindow" @onmousedown:stopPropagation data-tooltip="Maximize">
                 <i class="fa-solid fa-square"></i>
             </button>
@@ -444,6 +447,7 @@
     @if (currentView == "settings")
     {
         <div class="panel-overlay">
+            <div class="panel-handle"></div>
             <div class="panel-header">
                 <div class="panel-title-wrap">
                     <span class="panel-title">Settings</span>
@@ -895,6 +899,7 @@
     @if (currentView == "clients")
     {
         <div class="panel-overlay">
+            <div class="panel-handle"></div>
             <div class="panel-header">
                 <div class="panel-title-wrap">
                     <span class="panel-title">Clients</span>
@@ -1100,6 +1105,7 @@
     @if (currentView == "versions")
     {
         <div class="panel-overlay">
+            <div class="panel-handle"></div>
             <div class="panel-header">
                 <div class="panel-title-wrap">
                     <span class="panel-title">Versions</span>
@@ -1284,6 +1290,7 @@
     @if (currentView == "addons")
     {
         <div class="panel-overlay">
+            <div class="panel-handle"></div>
             <div class="panel-header">
                 <div class="panel-title-wrap">
                     <span class="panel-title">Addons</span>
@@ -1450,6 +1457,7 @@
     @if (currentView == "credits")
     {
         <div class="panel-overlay">
+            <div class="panel-handle"></div>
             <div class="panel-header">
                 <div class="panel-title-wrap">
                     <span class="panel-title">Credits</span>
@@ -1689,6 +1697,8 @@
     private bool mcRunning = false;
     private System.Threading.CancellationTokenSource? _mcPollCts;
 
+    // ── Fullscreen state (synced from WPF host) ──────────────
+    private bool _isFullscreen = false;
 
     // ── JS ref ────────────────────────────────────────────────
     private DotNetObjectReference<Home>? _selfRef;
@@ -1821,6 +1831,13 @@
         customDllPath = path;
         SelectClient("Custom DLL");
         currentView = "clients";
+        InvokeAsync(StateHasChanged);
+    }
+
+    [JSInvokable]
+    public void OnFullscreenChanged(bool isFullscreen)
+    {
+        _isFullscreen = isFullscreen;
         InvokeAsync(StateHasChanged);
     }
 

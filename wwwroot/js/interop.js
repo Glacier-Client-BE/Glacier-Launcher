@@ -39,7 +39,28 @@ window.glacierRegisterDropHandler = (dotNetRef) => {
     window._glacierDotNet = dotNetRef;
     // Re-apply scale now that .NET is ready
     applyScale();
+    // Push the most-recent fullscreen state we know about (host may have sent it
+    // before .NET was ready to receive callbacks)
+    if (window._glacierFullscreen != null) {
+        try { dotNetRef.invokeMethodAsync('OnFullscreenChanged', !!window._glacierFullscreen); } catch { }
+    }
 };
+
+// Host → page bridge: WPF posts "fullscreen:on" / "fullscreen:off" when the window
+// enters or exits fullscreen mode. We buffer the latest value and forward it to
+// .NET so the maximize/fullscreen icons can update.
+if (window.chrome?.webview) {
+    window.chrome.webview.addEventListener('message', e => {
+        const msg = e.data;
+        if (typeof msg !== 'string') return;
+        if (msg === 'fullscreen:on' || msg === 'fullscreen:off') {
+            window._glacierFullscreen = (msg === 'fullscreen:on');
+            if (window._glacierDotNet) {
+                try { window._glacierDotNet.invokeMethodAsync('OnFullscreenChanged', window._glacierFullscreen); } catch { }
+            }
+        }
+    });
+}
 
 // ── File picker (DLL) ─────────────────────────────────────────
 window.pickDllFile = async (dotNetRef) => {
@@ -155,7 +176,9 @@ window.setCustomBackground = (filePath) => {
     if (filePath) {
         bg.style.backgroundImage = `url('file:///${filePath.replace(/\\/g, '/')}')`;
     } else {
-        bg.style.backgroundImage = "url('../images/bg.png')";
+        // Document-relative form: matches the inline style set in Razor and
+        // resolves the same way under both `dotnet run` and the published exe.
+        bg.style.backgroundImage = "url('images/bg.png')";
     }
 };
 
@@ -186,3 +209,73 @@ window.openDiscordOAuth = (clientId) => {
 window.focusSearchInput = () => {
     setTimeout(() => { const el = document.querySelector('.search-modal-input'); if (el) el.focus(); }, 50);
 };
+
+// ── Panel drag handle (resize / dismiss via the top bar) ─────
+// Uses event delegation so it works for any .panel-handle that ever
+// appears in the DOM, including ones added later by Blazor.
+(function () {
+    const SNAP_POINTS_PCT = [40, 78, 95];   // sane heights to snap to
+    const DISMISS_PCT     = 18;             // drag below this → close panel
+    const MIN_PCT         = 12;             // never let the panel get smaller than this mid-drag
+
+    let drag = null;
+
+    document.addEventListener('pointerdown', e => {
+        if (e.button !== 0) return;
+        const handle = e.target.closest('.panel-handle');
+        if (!handle) return;
+        const overlay = handle.closest('.panel-overlay');
+        if (!overlay) return;
+
+        e.preventDefault();
+        drag = {
+            overlay,
+            handle,
+            pointerId: e.pointerId,
+            startY: e.clientY,
+            startH: overlay.getBoundingClientRect().height,
+            viewportH: window.innerHeight,
+        };
+        try { handle.setPointerCapture(e.pointerId); } catch { }
+        overlay.classList.add('dragging');
+    });
+
+    document.addEventListener('pointermove', e => {
+        if (!drag || e.pointerId !== drag.pointerId) return;
+        const dy = e.clientY - drag.startY;          // positive = moved down
+        const newH = drag.startH - dy;               // shrink as user drags down
+        const pct = Math.max(0, (newH / drag.viewportH) * 100);
+        // clamp visually so we don't draw a sub-zero panel — actual dismissal happens on release
+        drag.overlay.style.height = Math.max(MIN_PCT, Math.min(95, pct)) + '%';
+        drag.lastPct = pct;
+    });
+
+    function endDrag(e) {
+        if (!drag) return;
+        if (e && e.pointerId !== drag.pointerId) return;
+        const overlay = drag.overlay;
+        const pct = drag.lastPct ?? (overlay.getBoundingClientRect().height / drag.viewportH) * 100;
+        overlay.classList.remove('dragging');
+        try { drag.handle.releasePointerCapture(drag.pointerId); } catch { }
+        drag = null;
+
+        if (pct < DISMISS_PCT) {
+            // Animate out and close. Easiest path: route through KbShortcut('escape')
+            // which already handles closing the active panel.
+            overlay.style.height = '';
+            if (window._glacierDotNet) {
+                try { window._glacierDotNet.invokeMethodAsync('KbShortcut', 'escape'); } catch { }
+            }
+            return;
+        }
+        // Snap to the nearest sensible height
+        const snap = SNAP_POINTS_PCT.reduce(
+            (best, p) => Math.abs(p - pct) < Math.abs(best - pct) ? p : best,
+            SNAP_POINTS_PCT[0]
+        );
+        overlay.style.height = snap + '%';
+    }
+
+    document.addEventListener('pointerup', endDrag);
+    document.addEventListener('pointercancel', endDrag);
+})();

@@ -19,6 +19,13 @@
     <!-- Disable ReadyToRun pre-compilation — saves ~30-40% per assembly at the
          cost of slightly longer cold-start (JIT on first launch). -->
     <PublishReadyToRun>false</PublishReadyToRun>
+    <!-- Strip API XML doc files (Microsoft.Web.WebView2.*.xml etc.) from publish output. -->
+    <CopyDocumentationFilesFromPackages>false</CopyDocumentationFilesFromPackages>
+    <!-- Don't emit a separate .pdb next to the exe in Release; embed it instead so the
+         single .exe is the entire deliverable. -->
+    <DebugType Condition="'$(Configuration)' == 'Release'">embedded</DebugType>
+    <!-- Drop all non-en localisation satellite assemblies (~50 sub-folders × ~30 KB each). -->
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
   </PropertyGroup>
 
   <ItemGroup>

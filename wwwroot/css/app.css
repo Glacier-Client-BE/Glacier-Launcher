@@ -91,8 +91,12 @@
     box-shadow: 0 -8px 40px rgba(0, 0, 0, 0.18);
 }
 
-[data-theme="light"] .panel-overlay::before {
-    background: rgba(0, 0, 0, 0.18);
+[data-theme="light"] .panel-handle::after {
+    background: rgba(0, 0, 0, 0.40);
+}
+
+[data-theme="light"] .panel-handle:hover::after {
+    background: rgba(0, 0, 0, 0.60);
 }
 
 [data-theme="light"] .panel-tabs {
@@ -292,7 +296,10 @@ body {
 .window-bg {
     position: absolute;
     inset: 0;
-    background-image: url('../images/bg.png');
+    /* Background image is set inline on the element (and updated via JS for custom
+       backgrounds). Inline URLs resolve against the document base, which is identical
+       in `dotnet run` and the published .exe — CSS-relative URLs are not, due to
+       differences in how BlazorWebView serves /css/* in dev vs publish. */
     background-size: cover;
     background-position: center;
     background-color: var(--bg);
@@ -922,16 +929,53 @@ body {
     }
 }
 
-.panel-overlay::before {
-    content: '';
+/* Drag handle for resizing / closing the panel.
+   Larger hit-area than the visible bar so it's easy to grab on touch + mouse. */
+.panel-handle {
     position: absolute;
-    top: 8px;
+    top: 0;
     left: 50%;
     transform: translateX(-50%);
-    width: 36px;
+    width: 80px;
+    height: 18px;
+    cursor: grab;
+    z-index: 21;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    touch-action: none;
+}
+
+.panel-handle::after {
+    content: '';
+    width: 44px;
     height: 4px;
     border-radius: 2px;
-    background: rgba(255, 255, 255, 0.14);
+    /* Always visible — strong enough to read at rest, gets brighter on hover/drag. */
+    background: rgba(255, 255, 255, 0.38);
+    transition: background var(--t), width var(--t), height var(--t);
+}
+
+.panel-handle:hover::after {
+    background: rgba(255, 255, 255, 0.60);
+    width: 52px;
+}
+
+.panel-overlay.dragging .panel-handle::after {
+    background: var(--accent);
+    width: 56px;
+    height: 5px;
+}
+
+.panel-overlay.dragging {
+    transition: none;
+    animation: none;
+    cursor: grabbing;
+    user-select: none;
+}
+
+.panel-overlay.dragging .panel-handle {
+    cursor: grabbing;
 }
 
 .panel-header {
@@ -2324,7 +2368,13 @@ input[type=range] {
     text-transform: uppercase;
     box-shadow: 0 0 10px color-mix(in srgb, var(--accent) 60%, transparent);
     animation: pulse-pill 2.4s ease-in-out infinite;
-    pointer-events: all;
+    /* Stack above the drag-zone (z-index: 1) and explicitly opt back into pointer events
+       — .branding is pointer-events:none so children must opt in. Without the explicit
+       z-index/position the drag-zone occasionally won the hit-test under WebView2 and
+       the click was eaten as a window-drag. */
+    position: relative;
+    z-index: 11;
+    pointer-events: auto;
     transition: filter var(--t);
 }
 

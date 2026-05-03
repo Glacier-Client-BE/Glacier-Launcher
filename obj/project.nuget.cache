@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "dgSpecHash": "GbhURs+0KQU=",
+  "dgSpecHash": "kv/NqFi0jn0=",
   "success": true,
   "projectFilePath": "C:\\Users\\User\\MinecraftLauncher\\GlacierLauncher.csproj",
   "expectedPackageFiles": [
@@ -35,12 +35,8 @@
     "C:\\Users\\User\\.nuget\\packages\\microsoft.extensions.primitives\\10.0.0\\microsoft.extensions.primitives.10.0.0.nupkg.sha512",
     "C:\\Users\\User\\.nuget\\packages\\microsoft.extensions.validation\\10.0.0\\microsoft.extensions.validation.10.0.0.nupkg.sha512",
     "C:\\Users\\User\\.nuget\\packages\\microsoft.jsinterop\\10.0.0\\microsoft.jsinterop.10.0.0.nupkg.sha512",
-    "C:\\Users\\User\\.nuget\\packages\\microsoft.net.illink.tasks\\10.0.5\\microsoft.net.illink.tasks.10.0.5.nupkg.sha512",
     "C:\\Users\\User\\.nuget\\packages\\microsoft.web.webview2\\1.0.3179.45\\microsoft.web.webview2.1.0.3179.45.nupkg.sha512",
     "C:\\Users\\User\\.nuget\\packages\\newtonsoft.json\\13.0.4\\newtonsoft.json.13.0.4.nupkg.sha512",
-    "C:\\Users\\User\\.nuget\\packages\\microsoft.netcore.app.runtime.win-x64\\10.0.5\\microsoft.netcore.app.runtime.win-x64.10.0.5.nupkg.sha512",
-    "C:\\Users\\User\\.nuget\\packages\\microsoft.windowsdesktop.app.runtime.win-x64\\10.0.5\\microsoft.windowsdesktop.app.runtime.win-x64.10.0.5.nupkg.sha512",
-    "C:\\Users\\User\\.nuget\\packages\\microsoft.aspnetcore.app.runtime.win-x64\\10.0.5\\microsoft.aspnetcore.app.runtime.win-x64.10.0.5.nupkg.sha512",
     "C:\\Users\\User\\.nuget\\packages\\microsoft.windows.sdk.net.ref\\10.0.17763.57\\microsoft.windows.sdk.net.ref.10.0.17763.57.nupkg.sha512"
   ],
   "logs": []
