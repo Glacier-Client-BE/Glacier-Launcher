@@ -190,6 +190,35 @@ public class GameLauncher
     /// </summary>
     public Task LaunchVanillaAsync() => LaunchWithPathAsync(null);
 
+    /// <summary>
+    /// Launches MC + injects (if a DLL is given), then asks Minecraft to add the
+    /// server to the user's external-server list via the well-known
+    /// <c>minecraft://?addExternalServer=Name|Host:Port</c> URI scheme. This
+    /// pops the server up at the top of the Servers list so the user only has
+    /// to click once to join.
+    /// </summary>
+    public async Task LaunchServerAsync(string? dllPath, string serverName, string host, int port)
+    {
+        await LaunchWithPathAsync(dllPath);
+
+        // Bedrock's URI handler accepts `addExternalServer=<DisplayName>|<Host>:<Port>`.
+        // We URL-encode Name/Host because both can contain spaces, special chars,
+        // or IPv6 brackets that would otherwise break the query string.
+        var encodedName = Uri.EscapeDataString(string.IsNullOrWhiteSpace(serverName) ? host : serverName);
+        var encodedHost = Uri.EscapeDataString(host);
+        var uri = $"minecraft://?addExternalServer={encodedName}|{encodedHost}:{port}";
+        try
+        {
+            Process.Start(new ProcessStartInfo(uri) { UseShellExecute = true });
+        }
+        catch
+        {
+            // Some shells don't honour the URI handler the same way — fall back to cmd start.
+            try { Process.Start(new ProcessStartInfo("cmd.exe") { Arguments = $"/c start \"\" \"{uri}\"", UseShellExecute = false, CreateNoWindow = true, WindowStyle = ProcessWindowStyle.Hidden }); }
+            catch { }
+        }
+    }
+
     public async Task LaunchAsync(string? versionTag = null, bool useFlarial = false)
     {
         // Determine DLL path — null means launch MC only, no injection

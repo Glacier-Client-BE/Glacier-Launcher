@@ -47,10 +47,13 @@ public static class InjectionService
     [DllImport("kernel32.dll", SetLastError = true)]
     private static extern bool WriteProcessMemory(IntPtr hProcess, IntPtr lpBaseAddress, byte[] lpBuffer, nuint nSize, out nuint lpNumberOfBytesWritten);
 
-    [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
-    private static extern IntPtr GetProcAddress(IntPtr hModule, string lpProcName);
+    // GetProcAddress takes LPCSTR (ANSI) — there is no Unicode "GetProcAddressW".
+    // Marshalling the function name as wide chars looks up "L\0o\0a\0d\0…" and
+    // returns NULL, which is the bug we're fixing here.
+    [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Ansi, ExactSpelling = true, BestFitMapping = false)]
+    private static extern IntPtr GetProcAddress(IntPtr hModule, [MarshalAs(UnmanagedType.LPStr)] string lpProcName);
 
-    [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+    [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode, EntryPoint = "GetModuleHandleW")]
     private static extern IntPtr GetModuleHandle(string lpModuleName);
 
     [DllImport("kernel32.dll", SetLastError = true)]

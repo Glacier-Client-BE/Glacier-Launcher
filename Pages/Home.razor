@@ -321,6 +321,14 @@
                     else { <i class="fa-solid fa-play"></i> }
                 </button>
 
+                @if (isLaunching)
+                {
+                    <button class="action-btn btn-sq force-close-btn" data-tooltip="Force close launch"
+                            @onclick="ForceCloseLaunch" @onmousedown:stopPropagation>
+                        <i class="fa-solid fa-stop"></i>
+                    </button>
+                }
+
                 <div class="btn-badge-wrap">
                     <button class="action-btn @(hoveredBtn == "settings" ? "btn-wide" : "btn-sq")"
                             @onmouseenter='() => SetHover("settings")' @onmouseleave="ClearHover"
@@ -350,13 +358,12 @@
                 </div>
 
                 <div class="btn-badge-wrap">
-                    <button class="action-btn @(hoveredBtn == "versions" ? "btn-wide" : "btn-sq")"
-                            @onmouseenter='() => SetHover("versions")' @onmouseleave="ClearHover"
-                            @onclick="OpenVersions" @onmousedown:stopPropagation>
-                        @if (hoveredBtn == "versions") { <span>Versions</span> }
-                        else { <i class="fa-solid fa-clock-rotate-left"></i> }
+                    <button class="action-btn @(hoveredBtn == "servers" ? "btn-wide" : "btn-sq")"
+                            @onmouseenter='() => SetHover("servers")' @onmouseleave="ClearHover"
+                            @onclick="OpenServers" @onmousedown:stopPropagation>
+                        @if (hoveredBtn == "servers") { <span>Servers</span> }
+                        else { <i class="fa-solid fa-server"></i> }
                     </button>
-                    @if (versionsHasBadge) { <span class="notification-badge"></span> }
                 </div>
             </div>
 
@@ -459,6 +466,30 @@
                     </button>
                 </div>
             </div>
+
+            <div class="versions-client-switcher">
+                <button class="vcs-btn @(settingsCategory == "all" ? "active" : "")"
+                        @onclick='() => SetSettingsCategory("all")' @onmousedown:stopPropagation>
+                    <i class="fa-solid fa-layer-group"></i> All
+                </button>
+                <button class="vcs-btn @(settingsCategory == "injection" ? "active" : "")"
+                        @onclick='() => SetSettingsCategory("injection")' @onmousedown:stopPropagation>
+                    <i class="fa-solid fa-syringe"></i> Inject
+                </button>
+                <button class="vcs-btn @(settingsCategory == "appearance" ? "active" : "")"
+                        @onclick='() => SetSettingsCategory("appearance")' @onmousedown:stopPropagation>
+                    <i class="fa-solid fa-palette"></i> Looks
+                </button>
+                <button class="vcs-btn @(settingsCategory == "account" ? "active" : "")"
+                        @onclick='() => SetSettingsCategory("account")' @onmousedown:stopPropagation>
+                    <i class="fa-solid fa-user"></i> Account
+                </button>
+                <button class="vcs-btn @(settingsCategory == "system" ? "active" : "")"
+                        @onclick='() => SetSettingsCategory("system")' @onmousedown:stopPropagation>
+                    <i class="fa-solid fa-gear"></i> System
+                </button>
+            </div>
+
             <div class="panel-search-wrap">
                 <i class="fa-solid fa-magnifying-glass"></i>
                 <input class="panel-search-input" placeholder="Filter settings…"
@@ -467,6 +498,8 @@
             </div>
             <div class="panel-body settings-body">
 
+                @if (CategoryMatches("injection"))
+                {
                 <div class="settings-section">
                 @if (SectionMatch(("Active client","active client injection vanilla"), ("Injection delay","injection delay wait"), ("Auto-inject","auto inject automatic"), ("Close after launch","close minimize launch")))
                 {
@@ -533,6 +566,10 @@
                 </div>
 
                 </div>
+                }
+
+                @if (CategoryMatches("appearance"))
+                {
                 <div class="settings-section">
                 @if (SectionMatch(("Accent colour","accent color theme"), ("Theme preset","theme dark midnight slate ocean forest sunset light"), ("Compact mode","compact dense small"), ("Animations","animations smooth motion"), ("Background blur","blur background"), ("Remember window size","window size remember"), ("Custom background wallpaper","background wallpaper image custom")))
                 {
@@ -647,6 +684,10 @@
                 </div>
 
                 </div>
+                }
+
+                @if (CategoryMatches("account"))
+                {
                 <div class="settings-section">
                 @if (SectionMatch(("Display name","username name display account")))
                 {
@@ -690,6 +731,10 @@
                 </div>
 
                 </div>
+                }
+
+                @if (CategoryMatches("system"))
+                {
                 <div class="settings-section">
                 @if (SectionMatch(("Show recently launched","recent history"), ("Minimize to tray","tray minimize system"), ("Clear recent history","clear history recent")))
                 {
@@ -729,6 +774,10 @@
                 </div>
 
                 </div>
+                }
+
+                @if (CategoryMatches("account"))
+                {
                 <div class="settings-section">
                 @if (SectionMatch(("CurseForge API key","curseforge api key addons")))
                 {
@@ -767,6 +816,10 @@
                 </div>
 
                 </div>
+                }
+
+                @if (CategoryMatches("system"))
+                {
                 <div class="settings-section">
                 @if (SectionMatch(("Check for updates on startup","update auto check startup"), ("Check for updates now","update manual check")))
                 {
@@ -871,7 +924,7 @@
                 <div class="setting-row @(SH("Keyboard shortcuts","shortcuts keyboard help"))">
                     <div class="setting-meta">
                         <span class="setting-label">Keyboard shortcuts</span>
-                        <span class="setting-hint">Ctrl+K search · Ctrl+L launch · Ctrl+1/2/3/4 panels · Ctrl+, settings · Ctrl+Tab cycle · F11 fullscreen · Esc close</span>
+                        <span class="setting-hint">Ctrl+K search · Ctrl+L launch · Ctrl+1/2/3/4/5 panels · Ctrl+, settings · Ctrl+Tab cycle · F11 fullscreen · Esc close</span>
                     </div>
                     <div class="kbs"><kbd>?</kbd></div>
                 </div>
@@ -883,13 +936,14 @@
                     </button>
                 </div>
                 </div>
+                }
 
             </div>
             <div class="panel-tabs">
                 <button class="panel-tab active" @onmousedown:stopPropagation><i class="fa-solid fa-gear"></i>Settings</button>
                 <button class="panel-tab" @onclick="OpenClients" @onmousedown:stopPropagation><i class="fa-solid fa-puzzle-piece"></i>Clients</button>
                 <button class="panel-tab" @onclick="OpenAddons" @onmousedown:stopPropagation><i class="fa-solid fa-cube"></i>Addons</button>
-                <button class="panel-tab" @onclick="OpenVersions" @onmousedown:stopPropagation><i class="fa-solid fa-clock-rotate-left"></i>Versions</button>
+                <button class="panel-tab" @onclick="OpenServers" @onmousedown:stopPropagation><i class="fa-solid fa-server"></i>Servers</button>
                 <button class="panel-tab" @onclick="OpenCredits" @onmousedown:stopPropagation><i class="fa-solid fa-heart"></i>Credits</button>
             </div>
         </div>
@@ -906,6 +960,12 @@
                     <div class="panel-title-underline"></div>
                 </div>
                 <div class="panel-header-actions">
+                    <button class="panel-icon-btn versions-sort-btn" @onclick="OpenVersions" @onmousedown:stopPropagation
+                            data-tooltip="Browse Latite/OderSo versions">
+                        <i class="fa-solid fa-clock-rotate-left"></i>
+                        <span>Versions</span>
+                        @if (versionsHasBadge) { <span class="notification-badge"></span> }
+                    </button>
                     <button class="panel-back-btn" @onclick="GoHome" @onmousedown:stopPropagation>
                         <i class="fa-solid fa-chevron-down"></i>
                     </button>
@@ -1095,7 +1155,7 @@
                 <button class="panel-tab" @onclick="OpenSettings" @onmousedown:stopPropagation><i class="fa-solid fa-gear"></i>Settings</button>
                 <button class="panel-tab active" @onmousedown:stopPropagation><i class="fa-solid fa-puzzle-piece"></i>Clients</button>
                 <button class="panel-tab" @onclick="OpenAddons" @onmousedown:stopPropagation><i class="fa-solid fa-cube"></i>Addons</button>
-                <button class="panel-tab" @onclick="OpenVersions" @onmousedown:stopPropagation><i class="fa-solid fa-clock-rotate-left"></i>Versions</button>
+                <button class="panel-tab" @onclick="OpenServers" @onmousedown:stopPropagation><i class="fa-solid fa-server"></i>Servers</button>
                 <button class="panel-tab" @onclick="OpenCredits" @onmousedown:stopPropagation><i class="fa-solid fa-heart"></i>Credits</button>
             </div>
         </div>
@@ -1127,8 +1187,8 @@
                             @onclick="RefreshVersionsAsync" @onmousedown:stopPropagation data-tooltip="Refresh">
                         <i class="fa-solid fa-rotate"></i>
                     </button>
-                    <button class="panel-back-btn" @onclick="GoHome" @onmousedown:stopPropagation>
-                        <i class="fa-solid fa-chevron-down"></i>
+                    <button class="panel-back-btn" @onclick="BackFromVersions" @onmousedown:stopPropagation data-tooltip="Back">
+                        <i class="fa-solid fa-chevron-left"></i>
                     </button>
                 </div>
             </div>
@@ -1275,13 +1335,6 @@
                     }
                 }
 
-            </div>
-            <div class="panel-tabs">
-                <button class="panel-tab" @onclick="OpenSettings" @onmousedown:stopPropagation><i class="fa-solid fa-gear"></i>Settings</button>
-                <button class="panel-tab" @onclick="OpenClients" @onmousedown:stopPropagation><i class="fa-solid fa-puzzle-piece"></i>Clients</button>
-                <button class="panel-tab" @onclick="OpenAddons" @onmousedown:stopPropagation><i class="fa-solid fa-cube"></i>Addons</button>
-                <button class="panel-tab active" @onmousedown:stopPropagation><i class="fa-solid fa-clock-rotate-left"></i>Versions</button>
-                <button class="panel-tab" @onclick="OpenCredits" @onmousedown:stopPropagation><i class="fa-solid fa-heart"></i>Credits</button>
             </div>
         </div>
     }
@@ -1447,8 +1500,169 @@
                 <button class="panel-tab" @onclick="OpenSettings" @onmousedown:stopPropagation><i class="fa-solid fa-gear"></i>Settings</button>
                 <button class="panel-tab" @onclick="OpenClients" @onmousedown:stopPropagation><i class="fa-solid fa-puzzle-piece"></i>Clients</button>
                 <button class="panel-tab active" @onmousedown:stopPropagation><i class="fa-solid fa-cube"></i>Addons</button>
-                <button class="panel-tab" @onclick="OpenVersions" @onmousedown:stopPropagation><i class="fa-solid fa-clock-rotate-left"></i>Versions</button>
+                <button class="panel-tab" @onclick="OpenServers" @onmousedown:stopPropagation><i class="fa-solid fa-server"></i>Servers</button>
                 <button class="panel-tab" @onclick="OpenCredits" @onmousedown:stopPropagation><i class="fa-solid fa-heart"></i>Credits</button>
+            </div>
+        </div>
+    }
+
+    <!-- ── SERVERS PANEL ── -->
+    @if (currentView == "servers")
+    {
+        <div class="panel-overlay">
+            <div class="panel-handle"></div>
+            <div class="panel-header">
+                <div class="panel-title-wrap">
+                    <span class="panel-title">Servers</span>
+                    <div class="panel-title-underline"></div>
+                </div>
+                <div class="panel-header-actions">
+                    <button class="panel-icon-btn versions-sort-btn" @onclick="OpenAddServerModal" @onmousedown:stopPropagation
+                            data-tooltip="Add a new server">
+                        <i class="fa-solid fa-plus"></i>
+                        <span>Add</span>
+                    </button>
+                    <button class="panel-back-btn" @onclick="GoHome" @onmousedown:stopPropagation>
+                        <i class="fa-solid fa-chevron-down"></i>
+                    </button>
+                </div>
+            </div>
+
+            <div class="panel-body">
+                @if (SettingsService.Settings.SavedServers.Count == 0)
+                {
+                    <div class="empty-state" style="padding:20px 20px 8px;">
+                        <i class="fa-solid fa-server"></i>
+                        <span>No saved servers yet</span>
+                        <small>Add a Minecraft Bedrock server to quick-launch into it. The current client will be injected before connecting.</small>
+                        <button class="btn-sm" style="margin-top:8px;" @onclick="OpenAddServerModal" @onmousedown:stopPropagation>
+                            <i class="fa-solid fa-plus"></i> Add server
+                        </button>
+                    </div>
+                }
+                else
+                {
+                    @foreach (var server in SettingsService.Settings.SavedServers)
+                    {
+                        var s = server;
+                        <div class="server-row">
+                            <div class="server-icon" style="@GetServerIconStyle(s)">
+                                <i class="@GetServerIconClass(s)"></i>
+                            </div>
+                            <div class="server-meta">
+                                <span class="server-name">@s.Name</span>
+                                <span class="server-sub">@s.Address:@s.Port</span>
+                            </div>
+                            <div class="version-actions">
+                                <button class="icon-btn icon-btn-ghost" data-tooltip="Edit"
+                                        @onclick="() => OpenEditServerModal(s)" @onmousedown:stopPropagation>
+                                    <i class="fa-solid fa-pen"></i>
+                                </button>
+                                <button class="icon-btn icon-btn-ghost" data-tooltip="Delete"
+                                        @onclick="() => DeleteServer(s)" @onmousedown:stopPropagation>
+                                    <i class="fa-solid fa-trash"></i>
+                                </button>
+                                <button class="copy-btn" data-tooltip="Copy address"
+                                        @onclick="() => CopyServerAddress(s)" @onmousedown:stopPropagation>
+                                    <i class="fa-solid fa-copy"></i>
+                                </button>
+                                <button class="icon-btn" data-tooltip="Launch &amp; connect"
+                                        @onclick="() => LaunchServer(s)" @onmousedown:stopPropagation
+                                        disabled="@isLaunching">
+                                    <i class="fa-solid fa-play"></i>
+                                </button>
+                            </div>
+                        </div>
+                    }
+                }
+
+                @{ var unsavedSuggestions = _serverSuggestions.Where(IsSuggestionUnsaved).ToList(); }
+                @if (unsavedSuggestions.Count > 0)
+                {
+                    <span class="panel-section-label">Popular</span>
+                    @foreach (var sug in unsavedSuggestions)
+                    {
+                        var s = sug;
+                        <div class="server-row">
+                            <div class="server-icon" style="@GetServerIconStyle(s)">
+                                <i class="@GetServerIconClass(s)"></i>
+                            </div>
+                            <div class="server-meta">
+                                <span class="server-name">@s.Name</span>
+                                <span class="server-sub">@s.Address:@s.Port</span>
+                            </div>
+                            <div class="version-actions">
+                                <button class="copy-btn" data-tooltip="Copy address"
+                                        @onclick="() => CopyServerAddress(s)" @onmousedown:stopPropagation>
+                                    <i class="fa-solid fa-copy"></i>
+                                </button>
+                                <button class="icon-btn" data-tooltip="Save"
+                                        @onclick="() => SaveSuggestedServer(s)" @onmousedown:stopPropagation>
+                                    <i class="fa-solid fa-bookmark"></i>
+                                </button>
+                                <button class="icon-btn" data-tooltip="Launch &amp; connect"
+                                        @onclick="() => LaunchServer(s)" @onmousedown:stopPropagation
+                                        disabled="@isLaunching">
+                                    <i class="fa-solid fa-play"></i>
+                                </button>
+                            </div>
+                        </div>
+                    }
+                }
+            </div>
+
+            <div class="panel-tabs">
+                <button class="panel-tab" @onclick="OpenSettings" @onmousedown:stopPropagation><i class="fa-solid fa-gear"></i>Settings</button>
+                <button class="panel-tab" @onclick="OpenClients" @onmousedown:stopPropagation><i class="fa-solid fa-puzzle-piece"></i>Clients</button>
+                <button class="panel-tab" @onclick="OpenAddons" @onmousedown:stopPropagation><i class="fa-solid fa-cube"></i>Addons</button>
+                <button class="panel-tab active" @onmousedown:stopPropagation><i class="fa-solid fa-server"></i>Servers</button>
+                <button class="panel-tab" @onclick="OpenCredits" @onmousedown:stopPropagation><i class="fa-solid fa-heart"></i>Credits</button>
+            </div>
+        </div>
+    }
+
+    <!-- ── ADD/EDIT SERVER MODAL ── -->
+    @if (serverModalOpen)
+    {
+        <div class="modal-overlay" @onclick="CloseServerModal">
+            <div class="modal-box" @onclick:stopPropagation>
+                <div class="modal-header">
+                    <span class="modal-title">
+                        <i class="fa-solid fa-server" style="color:var(--accent);margin-right:8px;"></i>
+                        @(editingServer == null ? "Add server" : "Edit server")
+                    </span>
+                    <button class="modal-close-btn" @onclick="CloseServerModal">
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <label class="modal-input-label">Display name</label>
+                    <input class="modal-input" placeholder="My Server"
+                           @bind="serverInputName" @bind:event="oninput"
+                           @onkeydown:stopPropagation />
+
+                    <label class="modal-input-label" style="margin-top:8px;">Address (IP or hostname)</label>
+                    <input class="modal-input" placeholder="play.example.com"
+                           @bind="serverInputAddress" @bind:event="oninput"
+                           @onkeydown:stopPropagation />
+
+                    <label class="modal-input-label" style="margin-top:8px;">Port</label>
+                    <input class="modal-input" type="number" placeholder="19132"
+                           @bind="serverInputPort" @bind:event="oninput"
+                           @onkeydown:stopPropagation />
+
+                    @if (!string.IsNullOrEmpty(serverInputError))
+                    {
+                        <span class="error-text" style="display:block;margin-top:6px;">@serverInputError</span>
+                    }
+
+                    <div class="modal-btn-row" style="margin-top:14px;">
+                        <button class="modal-btn modal-btn-cancel" @onclick="CloseServerModal">Cancel</button>
+                        <button class="modal-btn modal-btn-confirm" @onclick="SaveServerModal">
+                            <i class="fa-solid fa-floppy-disk"></i> Save
+                        </button>
+                    </div>
+                </div>
             </div>
         </div>
     }
@@ -1562,7 +1776,7 @@
                 <button class="panel-tab" @onclick="OpenSettings" @onmousedown:stopPropagation><i class="fa-solid fa-gear"></i>Settings</button>
                 <button class="panel-tab" @onclick="OpenClients" @onmousedown:stopPropagation><i class="fa-solid fa-puzzle-piece"></i>Clients</button>
                 <button class="panel-tab" @onclick="OpenAddons" @onmousedown:stopPropagation><i class="fa-solid fa-cube"></i>Addons</button>
-                <button class="panel-tab" @onclick="OpenVersions" @onmousedown:stopPropagation><i class="fa-solid fa-clock-rotate-left"></i>Versions</button>
+                <button class="panel-tab" @onclick="OpenServers" @onmousedown:stopPropagation><i class="fa-solid fa-server"></i>Servers</button>
                 <button class="panel-tab active" @onmousedown:stopPropagation><i class="fa-solid fa-heart"></i>Credits</button>
             </div>
         </div>
@@ -1669,6 +1883,7 @@
 
     // ── Settings filter ───────────────────────────────────────
     private string settingsFilter = "";
+    private string settingsCategory = "all";
 
     // ── Discord modal ─────────────────────────────────────────
     private bool   discordModalOpen     = false;
@@ -1791,7 +2006,8 @@
             new("fa-solid fa-gear",               "Open Settings",         "Quick Actions", "Injection, Appearance, Account",                  "Ctrl+1", () => { CloseSearch(); OpenSettings(); }),
             new("fa-solid fa-puzzle-piece",       "Manage Clients",        "Quick Actions", "Flarial, Latite, OderSo, Custom DLL",             "Ctrl+2", () => { CloseSearch(); _ = OpenClients(); }),
             new("fa-solid fa-cube",               "Browse Addons",         "Quick Actions", "CurseForge MCBE resource packs, worlds",         "Ctrl+4", () => { CloseSearch(); OpenAddons(); }),
-            new("fa-solid fa-clock-rotate-left",  "Browse Versions",       "Quick Actions", "Download & manage Latite versions",               "Ctrl+3", () => { CloseSearch(); _ = OpenVersions(); }),
+            new("fa-solid fa-server",             "Servers",               "Quick Actions", "Quick-launch into saved Bedrock servers",        "Ctrl+5", () => { CloseSearch(); OpenServers(); }),
+            new("fa-solid fa-clock-rotate-left",  "Browse Versions",       "Quick Actions", "Download & manage Latite versions",               "",       () => { CloseSearch(); _ = OpenVersions(); }),
             new("fa-brands fa-discord",           "Discord Account",       "Account",       "Connect or manage Discord",                       "",       () => { CloseSearch(); OpenDiscordModal(); }),
             // Clients
             new("images/clients/flarial.svg",     "Select Flarial",        "Clients",       "Switch active client to Flarial",                 "",       () => { CloseSearch(); SelectClient("Flarial Client"); }),
@@ -1853,6 +2069,7 @@
                 case "settings": if (!searchOpen && currentView != "settings") OpenSettings(); break;
                 case "clients":  if (!searchOpen && currentView != "clients")  await OpenClients(); break;
                 case "addons":   if (!searchOpen && currentView != "addons")   OpenAddons(); break;
+                case "servers":  if (!searchOpen && currentView != "servers")  OpenServers(); break;
                 case "versions": if (!searchOpen && currentView != "versions") await OpenVersions(); break;
                 case "fullscreen": await ToggleFullscreen(); break;
                 case "cycle":    if (!searchOpen) CycleClient(); break;
@@ -1863,9 +2080,11 @@
                     break;
                 case "escape":
                     if      (resetConfirmOpen) CancelResetSettings();
+                    else if (serverModalOpen)  CloseServerModal();
                     else if (searchOpen)       CloseSearch();
                     else if (launcherUpdateModalOpen) CloseUpdateModal();
                     else if (discordModalOpen) CloseDiscordModal();
+                    else if (currentView == "versions") await BackFromVersions();
                     else if (currentView != "home") GoHome();
                     break;
                 case "down":  if (searchOpen) searchSelIdx = Math.Min(searchSelIdx + 1, GetCurrentSearchList().Count - 1); break;
@@ -1894,6 +2113,8 @@
         _mcPollCts?.Dispose();
         _cfDebounceCts?.Cancel();
         _cfDebounceCts?.Dispose();
+        _launchCts?.Cancel();
+        _launchCts?.Dispose();
     }
 
     // ── Window ────────────────────────────────────────────────
@@ -1971,6 +2192,12 @@
     }
 
     // ── Launch ────────────────────────────────────────────────
+    // Tracks an in-flight launch so the "Force close" button can abort it. The
+    // launch task itself still finishes on its own thread — we just stop waiting
+    // on it and reset UI state, then kill any MC process the launch spawned.
+    private System.Threading.CancellationTokenSource? _launchCts;
+    private bool _launchForceCancelled = false;
+
     private async Task HandleLaunch()
     {
         var sel        = SettingsService.Settings.SelectedClient;
@@ -1979,17 +2206,26 @@
         bool isCustom  = sel == "Custom DLL";
         bool isVanilla = sel == "Vanilla";
         isLaunching = true;
+        _launchForceCancelled = false;
+        _launchCts?.Cancel();
+        _launchCts = new System.Threading.CancellationTokenSource();
+        var token = _launchCts.Token;
         await ShowStatus(isVanilla ? "Starting Minecraft (vanilla)…" : "Starting Minecraft…", clearAfterMs: 30_000);
         try
         {
-            if (isVanilla)
-                await Launcher.LaunchVanillaAsync();
-            else if (isCustom && !string.IsNullOrEmpty(customDllPath))
-                await Launcher.LaunchWithDllAsync(customDllPath);
-            else if (isOderSo)
-                await Launcher.LaunchWithDllAsync(OderSo.FilePath);
-            else
-                await Launcher.LaunchAsync(useFlarial: isFlarial);
+            Task launchTask = isVanilla ? Launcher.LaunchVanillaAsync()
+                            : (isCustom && !string.IsNullOrEmpty(customDllPath)) ? Launcher.LaunchWithDllAsync(customDllPath)
+                            : isOderSo ? Launcher.LaunchWithDllAsync(OderSo.FilePath)
+                            : Launcher.LaunchAsync(useFlarial: isFlarial);
+
+            // Race the actual launch against cancellation so the user can hit the
+            // force-close button without waiting for the 30-second timeouts inside
+            // GameLauncher to expire.
+            var done = await Task.WhenAny(launchTask, Task.Delay(System.Threading.Timeout.Infinite, token));
+            if (done != launchTask)
+                throw new OperationCanceledException();
+
+            await launchTask; // surface any exceptions
 
             isLaunching = false;
             var label = isVanilla ? "Vanilla"
@@ -2006,12 +2242,43 @@
             await ShowStatus(doneMsg, clearAfterMs: 3000);
             _ = ShowToast(isVanilla ? "Minecraft launched!" : "Injection successful!", "success");
         }
+        catch (OperationCanceledException)
+        {
+            isLaunching = false;
+            await ShowStatus("Launch cancelled.", error: false, clearAfterMs: 3000);
+        }
         catch (Exception ex)
         {
             isLaunching = false;
-            await ShowStatus(ex.Message, error: true, clearAfterMs: 8000);
-            _ = ShowToast(ex.Message, "error");
+            // If the user force-cancelled, an exception from the abandoned task isn't useful
+            if (!_launchForceCancelled)
+            {
+                await ShowStatus(ex.Message, error: true, clearAfterMs: 8000);
+                _ = ShowToast(ex.Message, "error");
+            }
         }
+    }
+
+    private void ForceCloseLaunch()
+    {
+        _launchForceCancelled = true;
+        _launchCts?.Cancel();
+        isLaunching = false;
+        // Best-effort kill of any Minecraft process the launch may have started — without
+        // this, a half-launched MC keeps running while the launcher pretends nothing happened.
+        try
+        {
+            foreach (var name in new[] { "Minecraft.Windows", "Minecraft", "MinecraftUWP" })
+            {
+                foreach (var p in System.Diagnostics.Process.GetProcessesByName(name))
+                {
+                    try { p.Kill(entireProcessTree: true); } catch { }
+                }
+            }
+        }
+        catch { }
+        _ = ShowToast("Launch cancelled", "info");
+        StateHasChanged();
     }
 
     private async Task QuickLaunchRecent(string label)
@@ -2074,7 +2341,18 @@
     }
 
     // ── Clients ───────────────────────────────────────────────
-    private void OpenSettings() { currentView = "settings"; settingsFilter = ""; }
+    private void OpenSettings() { currentView = "settings"; settingsFilter = ""; settingsCategory = "all"; }
+
+    private void SetSettingsCategory(string cat)
+    {
+        settingsCategory = cat;
+        StateHasChanged();
+    }
+
+    private bool CategoryMatches(string section)
+    {
+        return settingsCategory == "all" || settingsCategory == section;
+    }
 
     private void OnClientChanged(ChangeEventArgs e) => SelectClient(e.Value?.ToString() ?? "Latite Client");
 
@@ -2329,15 +2607,235 @@
     }
 
     // ── Versions ─────────────────────────────────────────────
+    private string versionsBackTarget = "home";
+
     private async Task OpenVersions()
     {
+        if (currentView != "versions") versionsBackTarget = currentView;
         currentView = "versions"; versionsFilter = "";
         versionsHasBadge = false;
         if (versionsClient == "Latite" && versions.Count == 0) await LoadVersionsAsync();
         else if (versionsClient == "OderSo" && oderSoVersions.Count == 0) await LoadOderSoVersionsAsync();
     }
 
+    private async Task BackFromVersions()
+    {
+        switch (versionsBackTarget)
+        {
+            case "clients": await OpenClients(); break;
+            case "settings": OpenSettings(); break;
+            case "addons":   OpenAddons(); break;
+            case "servers":  OpenServers(); break;
+            case "credits":  OpenCredits(); break;
+            default:         GoHome(); break;
+        }
+    }
+
     private void OpenCredits() => currentView = "credits";
+
+    // ── Servers ───────────────────────────────────────────────
+    private bool   serverModalOpen   = false;
+    private SavedServer? editingServer = null;
+    private string serverInputName    = "";
+    private string serverInputAddress = "";
+    private int    serverInputPort    = 19132;
+    private string serverInputError   = "";
+
+    // A curated list of well-known Bedrock servers. Each carries a custom icon/color
+    // so the panel reads as a quick-pick gallery rather than a blank list.
+    private static readonly SavedServer[] _serverSuggestions =
+    {
+        new() { Name = "NetherGames",   Address = "play.nethergames.org",    Port = 19132, Icon = "fa-solid fa-fire",       IconColor = "#ff6b35" },
+        new() { Name = "Hive",          Address = "geo.hivebedrock.network", Port = 19132, Icon = "fa-solid fa-hexagon-nodes", IconColor = "#f5a623" },
+        new() { Name = "CubeCraft",     Address = "play.cubecraft.net",      Port = 19132, Icon = "fa-solid fa-cube",       IconColor = "#4a90e2" },
+        new() { Name = "Mineplex",      Address = "mco.mineplex.com",        Port = 19132, Icon = "fa-solid fa-tower-cell", IconColor = "#e94e4e" },
+        new() { Name = "Lifeboat",      Address = "play.lbsg.net",           Port = 19132, Icon = "fa-solid fa-life-ring",  IconColor = "#00bcd4" },
+        new() { Name = "Galaxite",      Address = "play.galaxite.net",       Port = 19132, Icon = "fa-solid fa-star",       IconColor = "#9b51e0" },
+    };
+
+    private void OpenServers() { currentView = "servers"; }
+
+    private void OpenAddServerModal()
+    {
+        editingServer       = null;
+        serverInputName     = "";
+        serverInputAddress  = "";
+        serverInputPort     = 19132;
+        serverInputError    = "";
+        serverModalOpen     = true;
+        StateHasChanged();
+    }
+
+    private void OpenEditServerModal(SavedServer s)
+    {
+        editingServer       = s;
+        serverInputName     = s.Name;
+        serverInputAddress  = s.Address;
+        serverInputPort     = s.Port;
+        serverInputError    = "";
+        serverModalOpen     = true;
+        StateHasChanged();
+    }
+
+    private void CloseServerModal()
+    {
+        serverModalOpen = false;
+        editingServer   = null;
+        StateHasChanged();
+    }
+
+    private void SaveServerModal()
+    {
+        if (string.IsNullOrWhiteSpace(serverInputAddress))
+        {
+            serverInputError = "Address is required.";
+            return;
+        }
+        if (serverInputPort <= 0 || serverInputPort > 65535)
+        {
+            serverInputError = "Port must be between 1 and 65535.";
+            return;
+        }
+
+        var name = string.IsNullOrWhiteSpace(serverInputName) ? serverInputAddress : serverInputName.Trim();
+
+        if (editingServer == null)
+        {
+            SettingsService.Settings.SavedServers.Add(new SavedServer
+            {
+                Name    = name,
+                Address = serverInputAddress.Trim(),
+                Port    = serverInputPort
+            });
+        }
+        else
+        {
+            editingServer.Name    = name;
+            editingServer.Address = serverInputAddress.Trim();
+            editingServer.Port    = serverInputPort;
+        }
+        SettingsService.Save();
+        CloseServerModal();
+        _ = ShowToast(editingServer == null ? "Server saved" : "Server updated", "success");
+    }
+
+    private void DeleteServer(SavedServer s)
+    {
+        SettingsService.Settings.SavedServers.Remove(s);
+        SettingsService.Save();
+        StateHasChanged();
+    }
+
+    private void SaveSuggestedServer(SavedServer s)
+    {
+        // Don't double-add — match by host:port since a user could rename a saved entry
+        if (SettingsService.Settings.SavedServers.Any(x =>
+                string.Equals(x.Address, s.Address, StringComparison.OrdinalIgnoreCase) && x.Port == s.Port))
+        {
+            _ = ShowToast(s.Name + " is already saved", "info");
+            return;
+        }
+        SettingsService.Settings.SavedServers.Add(new SavedServer
+        {
+            Name      = s.Name,
+            Address   = s.Address,
+            Port      = s.Port,
+            Icon      = s.Icon,
+            IconColor = s.IconColor
+        });
+        SettingsService.Save();
+        _ = ShowToast(s.Name + " saved", "success");
+        StateHasChanged();
+    }
+
+    private bool IsSuggestionUnsaved(SavedServer s) =>
+        !SettingsService.Settings.SavedServers.Any(x =>
+            string.Equals(x.Address, s.Address, StringComparison.OrdinalIgnoreCase) && x.Port == s.Port);
+
+    private static string GetServerIconClass(SavedServer s) =>
+        string.IsNullOrWhiteSpace(s.Icon) ? "fa-solid fa-server" : s.Icon;
+
+    private string GetServerIconStyle(SavedServer s)
+    {
+        var color = string.IsNullOrWhiteSpace(s.IconColor) ? SettingsService.Settings.AccentColor : s.IconColor;
+        return $"background:{color};";
+    }
+
+    private async Task CopyServerAddress(SavedServer s)
+    {
+        await JS.InvokeVoidAsync("copyToClipboard", $"{s.Address}:{s.Port}");
+        _ = ShowToast($"Copied {s.Address}:{s.Port}", "info");
+    }
+
+    private async Task LaunchServer(SavedServer s)
+    {
+        if (isLaunching) return;
+
+        var sel        = SettingsService.Settings.SelectedClient;
+        bool isFlarial = sel == "Flarial Client";
+        bool isOderSo  = sel == "OderSo Client";
+        bool isCustom  = sel == "Custom DLL";
+        bool isVanilla = sel == "Vanilla";
+
+        string? dllPath = null;
+        try
+        {
+            if (isCustom && !string.IsNullOrEmpty(customDllPath)) dllPath = customDllPath;
+            else if (isOderSo)                                    dllPath = OderSo.FilePath;
+            else if (isFlarial)                                   dllPath = FlarialService.FilePath;
+            else if (!isVanilla)
+            {
+                var tag = SettingsService.Settings.LastUsedVersion;
+                if (!string.IsNullOrEmpty(tag))
+                {
+                    var p = GameLauncher.GetDllPath(tag);
+                    dllPath = System.IO.File.Exists(p) ? p : null;
+                }
+            }
+        }
+        catch { dllPath = null; }
+
+        // For non-vanilla clients, the DLL must already exist or we'd fail mid-launch
+        if (!isVanilla && !string.IsNullOrEmpty(dllPath) && !System.IO.File.Exists(dllPath))
+            dllPath = null;
+
+        isLaunching = true;
+        _launchForceCancelled = false;
+        _launchCts?.Cancel();
+        _launchCts = new System.Threading.CancellationTokenSource();
+        var token = _launchCts.Token;
+        await ShowStatus($"Launching → {s.Name}…", clearAfterMs: 30_000);
+        try
+        {
+            var launchTask = Launcher.LaunchServerAsync(dllPath, s.Name, s.Address, s.Port);
+            var done = await Task.WhenAny(launchTask, Task.Delay(System.Threading.Timeout.Infinite, token));
+            if (done != launchTask) throw new OperationCanceledException();
+            await launchTask;
+
+            isLaunching = false;
+            Discord.SetInGamePresence(s.Name, sel);
+            AddToRecentlyLaunched(s.Name);
+
+            if (SettingsService.Settings.CloseAfterLaunch) { await CloseWindow(); return; }
+
+            await ShowStatus($"Connected to {s.Name}!", clearAfterMs: 3000);
+            _ = ShowToast($"Joining {s.Name}", "success");
+        }
+        catch (OperationCanceledException)
+        {
+            isLaunching = false;
+            await ShowStatus("Launch cancelled.", clearAfterMs: 3000);
+        }
+        catch (Exception ex)
+        {
+            isLaunching = false;
+            if (!_launchForceCancelled)
+            {
+                await ShowStatus(ex.Message, error: true, clearAfterMs: 8000);
+                _ = ShowToast(ex.Message, "error");
+            }
+        }
+    }
 
     private async Task RefreshVersionsAsync()
     {
@@ -3167,6 +3665,7 @@ private async Task OpenDiscordOAuth()
             SettingsService.Settings.ShowRecentlyLaunched  = imported.ShowRecentlyLaunched;
             SettingsService.Settings.RecentlyLaunched      = imported.RecentlyLaunched ?? new();
             SettingsService.Settings.PinnedVersions        = imported.PinnedVersions   ?? new();
+            SettingsService.Settings.SavedServers          = imported.SavedServers     ?? new();
             SettingsService.Settings.VersionSortMode       = imported.VersionSortMode;
             SettingsService.Settings.ShowOnlyDownloaded    = imported.ShowOnlyDownloaded;
             SettingsService.Settings.CheckUpdatesOnStartup = imported.CheckUpdatesOnStartup;

@@ -93,6 +93,23 @@ public partial class MainWindow : Window
         {
             await blazorWebView.WebView.EnsureCoreWebView2Async();
             blazorWebView.WebView.DefaultBackgroundColor = System.Drawing.Color.FromArgb(255, 35, 39, 42);
+
+            // Map the user's Glacier Launcher folder to a virtual host so the WebView can load
+            // local files (custom wallpaper, etc.) without falling foul of WebView2's same-origin
+            // policy on file:// URLs. The page can request https://glacier-files.local/<file>.
+            try
+            {
+                var glacierFolder = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                    "Glacier Launcher");
+                Directory.CreateDirectory(glacierFolder);
+                blazorWebView.WebView.CoreWebView2.SetVirtualHostNameToFolderMapping(
+                    "glacier-files.local",
+                    glacierFolder,
+                    Microsoft.Web.WebView2.Core.CoreWebView2HostResourceAccessKind.Allow);
+            }
+            catch { /* best effort — feature is available since WebView2 1.0.864.35 */ }
+
             blazorWebView.WebView.CoreWebView2.WebMessageReceived += (_, args) =>
             {
                 var msg = args.TryGetWebMessageAsString();

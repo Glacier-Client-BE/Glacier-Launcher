@@ -55,4 +55,16 @@ public class LauncherSettings
     public string DiscordUsername  { get; set; } = "";
     public string DiscordAvatar    { get; set; } = "";
     public string DiscordToken     { get; set; } = "";
+
+    // ── Saved Servers ────────────────────────────────────────────
+    public List<SavedServer> SavedServers { get; set; } = new();
+}
+
+public class SavedServer
+{
+    public string Name      { get; set; } = "";
+    public string Address   { get; set; } = "";
+    public int    Port      { get; set; } = 19132; // Bedrock default
+    public string Icon      { get; set; } = "";    // Font Awesome class, e.g. "fa-solid fa-cube". Empty = generic server icon.
+    public string IconColor { get; set; } = "";    // Hex color for the icon background tile. Empty = accent.
 }

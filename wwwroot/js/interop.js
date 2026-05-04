@@ -130,6 +130,7 @@ document.addEventListener('keydown', e => {
     if (e.ctrlKey && !e.shiftKey && e.key === '2') { e.preventDefault(); dn.invokeMethodAsync('KbShortcut', 'clients');  return; }
     if (e.ctrlKey && !e.shiftKey && e.key === '3') { e.preventDefault(); dn.invokeMethodAsync('KbShortcut', 'versions'); return; }
     if (e.ctrlKey && !e.shiftKey && e.key === '4') { e.preventDefault(); dn.invokeMethodAsync('KbShortcut', 'addons');   return; }
+    if (e.ctrlKey && !e.shiftKey && e.key === '5') { e.preventDefault(); dn.invokeMethodAsync('KbShortcut', 'servers');  return; }
     if (e.ctrlKey && (e.key === ',' || e.key === '?')) { e.preventDefault(); dn.invokeMethodAsync('KbShortcut', 'settings'); return; }
     if (e.ctrlKey && (e.key === 'Tab' || e.code === 'Tab')) { e.preventDefault(); dn.invokeMethodAsync('KbShortcut', 'cycle'); return; }
     if (e.ctrlKey && e.shiftKey && (e.key === 'r' || e.key === 'R')) { e.preventDefault(); dn.invokeMethodAsync('KbShortcut', 'refresh'); return; }
@@ -174,11 +175,16 @@ window.setCustomBackground = (filePath) => {
     const bg = document.querySelector('.window-bg');
     if (!bg) return;
     if (filePath) {
-        bg.style.backgroundImage = `url('file:///${filePath.replace(/\\/g, '/')}')`;
+        // Custom backgrounds are saved into ~/Glacier Launcher, which the WPF host
+        // maps to https://glacier-files.local/ — file:// URLs are blocked by WebView2,
+        // so we serve through the virtual host instead. Cache-bust by mtime stand-in
+        // (Date.now()) so picking a new image with the same filename refreshes.
+        const fileName = filePath.replace(/\\/g, '/').split('/').pop();
+        bg.style.backgroundImage = `url('https://glacier-files.local/${encodeURIComponent(fileName)}?t=${Date.now()}')`;
     } else {
         // Document-relative form: matches the inline style set in Razor and
         // resolves the same way under both `dotnet run` and the published exe.
-        bg.style.backgroundImage = "url('images/bg.png')";
+        bg.style.backgroundImage = "url('../images/bg.png')";
     }
 };
 
