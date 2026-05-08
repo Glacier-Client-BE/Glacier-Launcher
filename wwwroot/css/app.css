@@ -3193,3 +3193,37 @@ input[type=range]:disabled {
 [data-theme="light"] [data-tooltip]::after {
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.20);
 }
+
+/* ── MC Versions Panel (Vanilla Version Switcher) ────────── */
+
+.mcv-info-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    font-size: 11px;
+    color: var(--text-dim);
+    background: rgba(114, 137, 218, 0.08);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+    flex-shrink: 0;
+}
+
+.mcv-info-bar i {
+    color: var(--accent);
+    font-size: 12px;
+    flex-shrink: 0;
+}
+
+.mcv-active-row {
+    border-left: 2px solid var(--accent);
+    background: rgba(114, 137, 218, 0.06);
+}
+
+.mcv-switch-btn {
+    background: var(--accent) !important;
+    color: #fff !important;
+}
+
+.mcv-switch-btn:hover {
+    background: var(--accent-hover) !important;
+}
