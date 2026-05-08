@@ -38,6 +38,9 @@ public class LauncherSettings
     public string VersionSortMode     { get; set; } = "newest"; // newest | oldest | name | downloaded
     public bool   ShowOnlyDownloaded  { get; set; } = false;
 
+    // ── Vanilla Version Switcher ────────────────────────────────
+    public string ActiveVanillaVersion  { get; set; } = "";
+
     // ── Custom DLL ──────────────────────────────────────────────
     public string CustomDllPath         { get; set; } = "";
 

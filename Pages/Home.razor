@@ -8,6 +8,7 @@
 @inject SettingsService SettingsService
 @inject DiscordRpcService Discord
 @inject CurseForgeService CurseForge
+@inject VanillaVersionService VanillaVersions
 @inject IJSRuntime JS
 @implements IDisposable
 
@@ -363,6 +364,15 @@
                             @onclick="OpenServers" @onmousedown:stopPropagation>
                         @if (hoveredBtn == "servers") { <span>Servers</span> }
                         else { <i class="fa-solid fa-server"></i> }
+                    </button>
+                </div>
+
+                <div class="btn-badge-wrap">
+                    <button class="action-btn @(hoveredBtn == "mcversions" ? "btn-wide" : "btn-sq")"
+                            @onmouseenter='() => SetHover("mcversions")' @onmouseleave="ClearHover"
+                            @onclick="OpenMcVersions" @onmousedown:stopPropagation>
+                        @if (hoveredBtn == "mcversions") { <span>MC Versions</span> }
+                        else { <i class="fa-solid fa-box-archive"></i> }
                     </button>
                 </div>
             </div>
@@ -944,6 +954,7 @@
                 <button class="panel-tab" @onclick="OpenClients" @onmousedown:stopPropagation><i class="fa-solid fa-puzzle-piece"></i>Clients</button>
                 <button class="panel-tab" @onclick="OpenAddons" @onmousedown:stopPropagation><i class="fa-solid fa-cube"></i>Addons</button>
                 <button class="panel-tab" @onclick="OpenServers" @onmousedown:stopPropagation><i class="fa-solid fa-server"></i>Servers</button>
+                <button class="panel-tab" @onclick="OpenMcVersions" @onmousedown:stopPropagation><i class="fa-solid fa-box-archive"></i>MC Versions</button>
                 <button class="panel-tab" @onclick="OpenCredits" @onmousedown:stopPropagation><i class="fa-solid fa-heart"></i>Credits</button>
             </div>
         </div>
@@ -1156,6 +1167,7 @@
                 <button class="panel-tab active" @onmousedown:stopPropagation><i class="fa-solid fa-puzzle-piece"></i>Clients</button>
                 <button class="panel-tab" @onclick="OpenAddons" @onmousedown:stopPropagation><i class="fa-solid fa-cube"></i>Addons</button>
                 <button class="panel-tab" @onclick="OpenServers" @onmousedown:stopPropagation><i class="fa-solid fa-server"></i>Servers</button>
+                <button class="panel-tab" @onclick="OpenMcVersions" @onmousedown:stopPropagation><i class="fa-solid fa-box-archive"></i>MC Versions</button>
                 <button class="panel-tab" @onclick="OpenCredits" @onmousedown:stopPropagation><i class="fa-solid fa-heart"></i>Credits</button>
             </div>
         </div>
@@ -1501,6 +1513,7 @@
                 <button class="panel-tab" @onclick="OpenClients" @onmousedown:stopPropagation><i class="fa-solid fa-puzzle-piece"></i>Clients</button>
                 <button class="panel-tab active" @onmousedown:stopPropagation><i class="fa-solid fa-cube"></i>Addons</button>
                 <button class="panel-tab" @onclick="OpenServers" @onmousedown:stopPropagation><i class="fa-solid fa-server"></i>Servers</button>
+                <button class="panel-tab" @onclick="OpenMcVersions" @onmousedown:stopPropagation><i class="fa-solid fa-box-archive"></i>MC Versions</button>
                 <button class="panel-tab" @onclick="OpenCredits" @onmousedown:stopPropagation><i class="fa-solid fa-heart"></i>Credits</button>
             </div>
         </div>
@@ -1616,6 +1629,7 @@
                 <button class="panel-tab" @onclick="OpenClients" @onmousedown:stopPropagation><i class="fa-solid fa-puzzle-piece"></i>Clients</button>
                 <button class="panel-tab" @onclick="OpenAddons" @onmousedown:stopPropagation><i class="fa-solid fa-cube"></i>Addons</button>
                 <button class="panel-tab active" @onmousedown:stopPropagation><i class="fa-solid fa-server"></i>Servers</button>
+                <button class="panel-tab" @onclick="OpenMcVersions" @onmousedown:stopPropagation><i class="fa-solid fa-box-archive"></i>MC Versions</button>
                 <button class="panel-tab" @onclick="OpenCredits" @onmousedown:stopPropagation><i class="fa-solid fa-heart"></i>Credits</button>
             </div>
         </div>
@@ -1663,6 +1677,122 @@
                         </button>
                     </div>
                 </div>
+            </div>
+        </div>
+    }
+
+    <!-- ── MC VERSIONS PANEL (Vanilla Version Switcher) ── -->
+    @if (currentView == "mcversions")
+    {
+        <div class="panel-overlay">
+            <div class="panel-handle"></div>
+            <div class="panel-header">
+                <div class="panel-title-wrap">
+                    <span class="panel-title">MC Versions</span>
+                    <div class="panel-title-underline"></div>
+                </div>
+                <div class="panel-header-actions">
+                    <button class="panel-icon-btn @(isLoadingMcVersions ? "spinning" : "")"
+                            disabled="@isLoadingMcVersions"
+                            @onclick="RefreshMcVersionsAsync" @onmousedown:stopPropagation data-tooltip="Refresh">
+                        <i class="fa-solid fa-rotate"></i>
+                    </button>
+                    <button class="panel-back-btn" @onclick="GoHome" @onmousedown:stopPropagation data-tooltip="Back">
+                        <i class="fa-solid fa-chevron-down"></i>
+                    </button>
+                </div>
+            </div>
+
+            <div class="mcv-info-bar">
+                <i class="fa-solid fa-circle-info"></i>
+                <span>Switch between Minecraft Bedrock versions. Requires Developer Mode enabled in Windows Settings.</span>
+            </div>
+
+            <div class="panel-search-wrap">
+                <i class="fa-solid fa-magnifying-glass"></i>
+                <input class="panel-search-input" placeholder="Filter Minecraft versions…"
+                       @bind="mcVersionsFilter" @bind:event="oninput"
+                       @onkeydown:stopPropagation />
+            </div>
+
+            <div class="panel-body">
+                @if (isLoadingMcVersions)
+                {
+                    <div class="versions-loading"><span class="spinner"></span><span>Fetching Minecraft versions…</span></div>
+                }
+                else if (mcVersionsList.Count == 0 && !string.IsNullOrEmpty(mcVersionsError))
+                {
+                    <div class="versions-loading versions-error">
+                        <i class="fa-solid fa-triangle-exclamation"></i>
+                        <span>@mcVersionsError</span>
+                        <button class="vcs-btn" style="margin-top:8px;" @onclick="RefreshMcVersionsAsync">
+                            <i class="fa-solid fa-rotate"></i> Retry
+                        </button>
+                    </div>
+                }
+                else if (mcVersionsList.Count == 0)
+                {
+                    <div class="versions-loading"><span style="opacity:0.5;">No versions found.</span></div>
+                }
+                else
+                {
+                    @if (!string.IsNullOrEmpty(mcVersionsError) && mcVersionsList.Count > 0)
+                    {
+                        <div class="cache-notice"><i class="fa-solid fa-circle-info"></i><span>@mcVersionsError</span></div>
+                    }
+
+                    var filtered = FilteredMcVersions.ToList();
+
+                    @if (filtered.Count == 0)
+                    {
+                        <div class="versions-loading"><span style="opacity:0.5;">No results for "@mcVersionsFilter"</span></div>
+                    }
+
+                    var activeList = filtered.Where(v => v.IsActive).ToList();
+                    var restList   = filtered.Where(v => !v.IsActive).ToList();
+
+                    @if (activeList.Count > 0)
+                    {
+                        <span class="panel-section-label">Active</span>
+                        @foreach (var v in activeList)
+                        {
+                            <div class="version-row mcv-active-row">
+                                <div class="version-meta">
+                                    <div style="display:flex; align-items:center; gap:6px;">
+                                        <span class="version-name">Minecraft @v.Version</span>
+                                        <span class="tag-active">Active</span>
+                                    </div>
+                                    @if (!string.IsNullOrEmpty(v.ErrorMessage)) { <span class="error-text">@v.ErrorMessage</span> }
+                                    else if (v.IsDownloaded) { <span class="version-sub">Ready · @v.SizeLabel</span> }
+                                </div>
+                                @McVersionActions(v)
+                            </div>
+                        }
+                        <span class="panel-section-label">All Versions</span>
+                    }
+
+                    @foreach (var v in restList)
+                    {
+                        <div class="version-row @(!string.IsNullOrEmpty(v.ErrorMessage) ? "error-row" : "")">
+                            <div class="version-meta">
+                                <span class="version-name">Minecraft @v.Version</span>
+                                @if (!string.IsNullOrEmpty(v.ErrorMessage)) { <span class="error-text">@v.ErrorMessage</span> }
+                                else if (v.IsDownloaded && !v.IsDownloading) { <span class="version-sub">Ready · @v.SizeLabel</span> }
+                                else if (!v.IsDownloaded && !v.IsDownloading) { <span class="version-sub">@v.SizeLabel</span> }
+                            </div>
+                            @McVersionActions(v)
+                        </div>
+                    }
+                }
+            </div>
+
+            <div class="panel-tabs">
+                <button class="panel-tab" @onclick="OpenSettings" @onmousedown:stopPropagation><i class="fa-solid fa-gear"></i>Settings</button>
+                <button class="panel-tab" @onclick="OpenClients" @onmousedown:stopPropagation><i class="fa-solid fa-puzzle-piece"></i>Clients</button>
+                <button class="panel-tab" @onclick="OpenAddons" @onmousedown:stopPropagation><i class="fa-solid fa-cube"></i>Addons</button>
+                <button class="panel-tab" @onclick="OpenServers" @onmousedown:stopPropagation><i class="fa-solid fa-server"></i>Servers</button>
+                <button class="panel-tab active" @onmousedown:stopPropagation><i class="fa-solid fa-box-archive"></i>MC Versions</button>
+                <button class="panel-tab" @onclick="OpenCredits" @onmousedown:stopPropagation><i class="fa-solid fa-heart"></i>Credits</button>
             </div>
         </div>
     }
@@ -1777,6 +1907,7 @@
                 <button class="panel-tab" @onclick="OpenClients" @onmousedown:stopPropagation><i class="fa-solid fa-puzzle-piece"></i>Clients</button>
                 <button class="panel-tab" @onclick="OpenAddons" @onmousedown:stopPropagation><i class="fa-solid fa-cube"></i>Addons</button>
                 <button class="panel-tab" @onclick="OpenServers" @onmousedown:stopPropagation><i class="fa-solid fa-server"></i>Servers</button>
+                <button class="panel-tab" @onclick="OpenMcVersions" @onmousedown:stopPropagation><i class="fa-solid fa-box-archive"></i>MC Versions</button>
                 <button class="panel-tab active" @onmousedown:stopPropagation><i class="fa-solid fa-heart"></i>Credits</button>
             </div>
         </div>
@@ -1840,6 +1971,23 @@
     }
     private List<OderSoDllState>  oderSoVersions          = new();
     private bool                  isLoadingOderSoVersions = false;
+
+    // ── MC Versions (Vanilla Version Switcher) ──────────────────
+    private bool   isLoadingMcVersions = false;
+    private List<VanillaVersion> mcVersionsList = new();
+    private string mcVersionsFilter = "";
+    private string? mcVersionsError = null;
+
+    private IEnumerable<VanillaVersion> FilteredMcVersions
+    {
+        get
+        {
+            IEnumerable<VanillaVersion> q = mcVersionsList;
+            if (!string.IsNullOrWhiteSpace(mcVersionsFilter))
+                q = q.Where(v => v.Version.Contains(mcVersionsFilter, StringComparison.OrdinalIgnoreCase));
+            return q;
+        }
+    }
 
     // ── CurseForge Addons ───────────────────────────────────────
     private string cfSearchQuery      = "";
@@ -2008,6 +2156,7 @@
             new("fa-solid fa-cube",               "Browse Addons",         "Quick Actions", "CurseForge MCBE resource packs, worlds",         "Ctrl+4", () => { CloseSearch(); OpenAddons(); }),
             new("fa-solid fa-server",             "Servers",               "Quick Actions", "Quick-launch into saved Bedrock servers",        "Ctrl+5", () => { CloseSearch(); OpenServers(); }),
             new("fa-solid fa-clock-rotate-left",  "Browse Versions",       "Quick Actions", "Download & manage Latite versions",               "",       () => { CloseSearch(); _ = OpenVersions(); }),
+            new("fa-solid fa-box-archive",         "MC Versions",           "Quick Actions", "Switch Minecraft Bedrock versions",               "",       () => { CloseSearch(); _ = OpenMcVersions(); }),
             new("fa-brands fa-discord",           "Discord Account",       "Account",       "Connect or manage Discord",                       "",       () => { CloseSearch(); OpenDiscordModal(); }),
             // Clients
             new("images/clients/flarial.svg",     "Select Flarial",        "Clients",       "Switch active client to Flarial",                 "",       () => { CloseSearch(); SelectClient("Flarial Client"); }),
@@ -2071,6 +2220,7 @@
                 case "addons":   if (!searchOpen && currentView != "addons")   OpenAddons(); break;
                 case "servers":  if (!searchOpen && currentView != "servers")  OpenServers(); break;
                 case "versions": if (!searchOpen && currentView != "versions") await OpenVersions(); break;
+                case "mcversions": if (!searchOpen && currentView != "mcversions") await OpenMcVersions(); break;
                 case "fullscreen": await ToggleFullscreen(); break;
                 case "cycle":    if (!searchOpen) CycleClient(); break;
                 case "refresh":
@@ -2654,6 +2804,158 @@
     };
 
     private void OpenServers() { currentView = "servers"; }
+
+    // ── MC Versions (Vanilla Switcher) ────────────────────────
+    private async Task OpenMcVersions()
+    {
+        currentView = "mcversions";
+        mcVersionsFilter = "";
+        if (mcVersionsList.Count == 0) await LoadMcVersionsAsync();
+    }
+
+    private async Task RefreshMcVersionsAsync() => await LoadMcVersionsAsync();
+
+    private async Task LoadMcVersionsAsync()
+    {
+        isLoadingMcVersions = true; mcVersionsError = null; StateHasChanged();
+        mcVersionsList = await VanillaVersions.GetVersionsAsync();
+        mcVersionsError = VanillaVersions.LastError;
+        isLoadingMcVersions = false; StateHasChanged();
+    }
+
+    private async Task HandleMcVersionDownload(VanillaVersion v)
+    {
+        v.IsDownloading = true; v.ErrorMessage = null; v.Progress = 0; StateHasChanged();
+        try
+        {
+            var prog = new ThrottledProgress(new Progress<double>(pct =>
+            { v.Progress = pct; InvokeAsync(StateHasChanged); }));
+            await VanillaVersions.DownloadVersionAsync(v, prog);
+            _ = ShowToast($"Minecraft {v.Version} downloaded!", "success");
+        }
+        catch (Exception ex) { v.ErrorMessage = ex.Message; }
+        finally { v.IsDownloading = false; v.Progress = 0; }
+        StateHasChanged();
+    }
+
+    private async Task HandleMcVersionSwitch(VanillaVersion v)
+    {
+        v.IsSwitching = true; v.ErrorMessage = null; StateHasChanged();
+        try
+        {
+            var result = await VanillaVersions.SwitchVersionAsync(v);
+            if (!string.IsNullOrEmpty(result))
+            {
+                v.ErrorMessage = result;
+                _ = ShowToast(result, "error");
+            }
+            else
+            {
+                foreach (var mv in mcVersionsList) mv.IsActive = (mv.Version == v.Version);
+                _ = ShowToast($"Switched to Minecraft {v.Version}!", "success");
+            }
+        }
+        catch (Exception ex) { v.ErrorMessage = ex.Message; _ = ShowToast(ex.Message, "error"); }
+        finally { v.IsSwitching = false; }
+        StateHasChanged();
+    }
+
+    private void HandleMcVersionDelete(VanillaVersion v)
+    {
+        VanillaVersions.DeleteVersion(v);
+        if (v.IsActive)
+            foreach (var mv in mcVersionsList) mv.IsActive = false;
+        StateHasChanged();
+    }
+
+    private RenderFragment McVersionActions(VanillaVersion v) => b =>
+    {
+        if (v.IsDownloading)
+        {
+            b.OpenElement(0, "div");
+            b.AddAttribute(1, "class", "dl-progress-row");
+            if (v.Progress > 0)
+            {
+                b.OpenElement(2, "div");
+                b.AddAttribute(3, "class", "progress-bar-wrap");
+                b.OpenElement(4, "div");
+                b.AddAttribute(5, "class", "progress-bar-fill");
+                b.AddAttribute(6, "style", $"width:{v.Progress:F0}%");
+                b.CloseElement();
+                b.CloseElement();
+                b.OpenElement(7, "span");
+                b.AddAttribute(8, "class", "dl-pct");
+                b.AddContent(9, $"{(int)v.Progress}%");
+                b.CloseElement();
+            }
+            b.OpenElement(10, "button");
+            b.AddAttribute(11, "class", "icon-btn");
+            b.AddAttribute(12, "disabled", true);
+            b.OpenElement(13, "span");
+            b.AddAttribute(14, "class", "spinner");
+            b.CloseElement();
+            b.CloseElement();
+            b.CloseElement();
+        }
+        else if (v.IsSwitching)
+        {
+            b.OpenElement(0, "div");
+            b.AddAttribute(1, "class", "version-actions");
+            b.OpenElement(2, "button");
+            b.AddAttribute(3, "class", "icon-btn");
+            b.AddAttribute(4, "disabled", true);
+            b.OpenElement(5, "span");
+            b.AddAttribute(6, "class", "spinner");
+            b.CloseElement();
+            b.CloseElement();
+            b.CloseElement();
+        }
+        else
+        {
+            b.OpenElement(20, "div");
+            b.AddAttribute(21, "class", "version-actions");
+
+            if (v.IsDownloaded)
+            {
+                // Delete
+                b.OpenElement(30, "button");
+                b.AddAttribute(31, "class", "icon-btn icon-btn-ghost");
+                b.AddAttribute(32, "title", "Delete");
+                b.AddAttribute(33, "onclick", Microsoft.AspNetCore.Components.EventCallback.Factory.Create(this, () => HandleMcVersionDelete(v)));
+                b.OpenElement(34, "i");
+                b.AddAttribute(35, "class", "fa-solid fa-trash");
+                b.CloseElement();
+                b.CloseElement();
+
+                if (!v.IsActive)
+                {
+                    // Switch
+                    b.OpenElement(40, "button");
+                    b.AddAttribute(41, "class", "icon-btn mcv-switch-btn");
+                    b.AddAttribute(42, "title", "Switch to this version");
+                    b.AddAttribute(43, "onclick", Microsoft.AspNetCore.Components.EventCallback.Factory.Create(this, async () => await HandleMcVersionSwitch(v)));
+                    b.OpenElement(44, "i");
+                    b.AddAttribute(45, "class", "fa-solid fa-right-left");
+                    b.CloseElement();
+                    b.CloseElement();
+                }
+            }
+            else
+            {
+                // Download
+                b.OpenElement(50, "button");
+                b.AddAttribute(51, "class", "icon-btn");
+                b.AddAttribute(52, "title", "Download");
+                b.AddAttribute(53, "onclick", Microsoft.AspNetCore.Components.EventCallback.Factory.Create(this, async () => await HandleMcVersionDownload(v)));
+                b.OpenElement(54, "i");
+                b.AddAttribute(55, "class", "fa-solid fa-download");
+                b.CloseElement();
+                b.CloseElement();
+            }
+
+            b.CloseElement();
+        }
+    };
 
     private void OpenAddServerModal()
     {
@@ -3668,6 +3970,7 @@ private async Task OpenDiscordOAuth()
             SettingsService.Settings.SavedServers          = imported.SavedServers     ?? new();
             SettingsService.Settings.VersionSortMode       = imported.VersionSortMode;
             SettingsService.Settings.ShowOnlyDownloaded    = imported.ShowOnlyDownloaded;
+            SettingsService.Settings.ActiveVanillaVersion  = imported.ActiveVanillaVersion;
             SettingsService.Settings.CheckUpdatesOnStartup = imported.CheckUpdatesOnStartup;
             SettingsService.Save();
 
