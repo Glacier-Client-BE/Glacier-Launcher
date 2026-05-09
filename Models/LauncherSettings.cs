@@ -52,6 +52,14 @@ public class LauncherSettings
     public string SkippedLauncherVersion  { get; set; } = "";
     public string LastUpdateCheck         { get; set; } = "";
 
+    // ── Xbox Profile ────────────────────────────────────────────────
+    public string XboxGamertag        { get; set; } = "";
+    public string XboxXuid            { get; set; } = "";
+    public string XboxGamerPictureUrl { get; set; } = "";
+    public string XboxGamerscore      { get; set; } = "";
+    public string XboxAccountTier     { get; set; } = "";
+    public string XboxBio             { get; set; } = "";
+
     // ── Discord ──────────────────────────────────────────────────
     public bool   DiscordLoggedIn  { get; set; } = false;
     public string DiscordUserId    { get; set; } = "";

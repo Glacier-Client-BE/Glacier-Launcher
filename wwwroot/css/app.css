@@ -172,7 +172,7 @@
 }
 
 /* ── Animations toggle ── */
-.no-animations *,
+.no-animations *:not(.news-track),
 .no-animations *::before,
 .no-animations *::after {
     transition: none !important;
@@ -534,6 +534,7 @@ body {
     flex: 1;
     display: flex;
     flex-direction: column;
+    pointer-events: none;
     align-items: center;
     justify-content: center;
     gap: 10px;
@@ -544,6 +545,16 @@ body {
     display: flex;
     align-items: center;
     gap: 8px;
+    pointer-events: auto;
+}
+
+.main-content .status-msg,
+.main-content .recently-launched {
+    pointer-events: auto;
+}
+
+.main-content.panel-open {
+    z-index: 1;
 }
 
 .action-btn {
@@ -850,6 +861,419 @@ body {
     color: var(--green);
     font-size: 11px;
 }
+
+/* ── Xbox profile ── */
+.xbox-connect-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    background: rgba(16, 124, 16, 0.18);
+    border: 1px solid rgba(16, 124, 16, 0.35);
+    border-radius: 8px;
+    padding: 5px 10px;
+    font-size: 11px;
+    font-weight: 600;
+    color: #107c10;
+    cursor: pointer;
+    font-family: inherit;
+    transition: background var(--t), border-color var(--t), box-shadow var(--t);
+}
+
+.xbox-connect-btn:hover {
+    background: rgba(16, 124, 16, 0.30);
+    border-color: rgba(16, 124, 16, 0.60);
+    box-shadow: 0 0 12px rgba(16, 124, 16, 0.35);
+}
+
+.xbox-connect-btn i {
+    font-size: 12px;
+}
+
+.xbox-connected-pill {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    font-size: 11px;
+    color: var(--text-dim);
+    background: rgba(16, 124, 16, 0.12);
+    border: 1px solid rgba(16, 124, 16, 0.25);
+    border-radius: 8px;
+    padding: 4px 9px;
+    cursor: pointer;
+    transition: background var(--t), border-color var(--t);
+}
+
+.xbox-connected-pill:hover {
+    background: rgba(16, 124, 16, 0.25);
+    border-color: rgba(16, 124, 16, 0.45);
+}
+
+.xbox-connected-pill i {
+    color: #107c10;
+    font-size: 11px;
+}
+
+.avatar.xbox-connected {
+    border: 2px solid #107c10;
+    box-shadow: 0 0 8px rgba(16, 124, 16, 0.4);
+}
+
+.xbox-signin-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    width: 100%;
+    padding: 10px 16px;
+    background: #107c10;
+    border: none;
+    border-radius: 8px;
+    color: #fff;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: inherit;
+    transition: background var(--t), box-shadow var(--t);
+}
+
+.xbox-signin-btn:hover {
+    background: #0e6b0e;
+    box-shadow: 0 0 16px rgba(16, 124, 16, 0.4);
+}
+
+.xbox-signin-btn.disabled {
+    opacity: 0.6;
+    pointer-events: none;
+}
+
+.xbox-profile-card {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 14px;
+    background: rgba(16, 124, 16, 0.08);
+    border: 1px solid rgba(16, 124, 16, 0.2);
+    border-radius: 10px;
+    margin-bottom: 16px;
+}
+
+.xbox-avatar {
+    width: 52px;
+    height: 52px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid rgba(16, 124, 16, 0.4);
+}
+
+.xbox-avatar-placeholder {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(16, 124, 16, 0.15);
+    color: #107c10;
+    font-size: 22px;
+}
+
+.xbox-profile-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.xbox-gamertag {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--text);
+}
+
+.xbox-gamerscore {
+    font-size: 12px;
+    color: var(--text-dim);
+}
+
+.xbox-tier {
+    font-size: 11px;
+    color: var(--text-dim);
+    opacity: 0.7;
+}
+
+/* ── Xbox enhanced modal stats ── */
+.xbox-tier-badge {
+    display: inline-block;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #107c10;
+    background: rgba(16, 124, 16, 0.15);
+    border: 1px solid rgba(16, 124, 16, 0.3);
+    border-radius: 4px;
+    padding: 2px 7px;
+    margin-top: 2px;
+    width: fit-content;
+}
+
+.xbox-bio-section {
+    margin-bottom: 14px;
+    padding: 10px 12px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 8px;
+}
+
+.xbox-bio-label {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-dim);
+    display: block;
+    margin-bottom: 4px;
+}
+
+.xbox-bio-text {
+    font-size: 12px;
+    color: var(--text);
+    line-height: 1.5;
+    margin: 0;
+    opacity: 0.85;
+}
+
+.xbox-stats-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-bottom: 16px;
+}
+
+.xbox-stat-card {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 8px;
+}
+
+.xbox-stat-card i {
+    font-size: 18px;
+    opacity: 0.9;
+}
+
+.xbox-stat-detail {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    min-width: 0;
+}
+
+.xbox-stat-value {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text);
+}
+
+.xbox-xuid-val {
+    font-size: 11px;
+    font-family: monospace;
+    letter-spacing: 0.03em;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.xbox-stat-label {
+    font-size: 10px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-weight: 600;
+}
+
+/* ── Xbox hover card (footer profile) ── */
+.footer-profile-area {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    position: relative;
+    cursor: pointer;
+}
+
+.xbox-hover-card {
+    position: absolute;
+    bottom: calc(100% + 12px);
+    left: 0;
+    min-width: 260px;
+    max-width: 300px;
+    background: rgba(18, 20, 24, 0.97);
+    border: 1px solid rgba(16, 124, 16, 0.25);
+    border-radius: 12px;
+    padding: 14px;
+    pointer-events: none;
+    opacity: 0;
+    transform: translateY(6px);
+    transition: opacity 0.18s ease, transform 0.18s ease;
+    z-index: 500;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55), 0 0 20px rgba(16, 124, 16, 0.08);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+}
+
+.footer-profile-area:hover .xbox-hover-card {
+    opacity: 1;
+    transform: translateY(0);
+    transition-delay: 0.3s;
+    pointer-events: auto;
+}
+
+.xbox-hover-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+.xbox-hover-avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid rgba(16, 124, 16, 0.4);
+    flex-shrink: 0;
+}
+
+.xbox-hover-avatar-placeholder {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(16, 124, 16, 0.15);
+    color: #107c10;
+    font-size: 16px;
+}
+
+.xbox-hover-identity {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    min-width: 0;
+}
+
+.xbox-hover-gamertag {
+    font-size: 14px;
+    font-weight: 700;
+    color: #fff;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.xbox-hover-tier-badge {
+    display: inline-block;
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #107c10;
+    background: rgba(16, 124, 16, 0.15);
+    border: 1px solid rgba(16, 124, 16, 0.3);
+    border-radius: 3px;
+    padding: 1px 6px;
+    width: fit-content;
+}
+
+.xbox-hover-bio {
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.6);
+    line-height: 1.45;
+    margin: 0 0 10px 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+}
+
+.xbox-hover-stats {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 10px;
+}
+
+.xbox-hover-stat {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 9px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 7px;
+}
+
+.xbox-hover-stat i {
+    font-size: 13px;
+    flex-shrink: 0;
+}
+
+.xbox-hover-stat-val {
+    font-size: 12px;
+    font-weight: 700;
+    color: #fff;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.xbox-hover-xuid {
+    font-size: 9px;
+    font-family: monospace;
+    letter-spacing: 0.02em;
+}
+
+.xbox-hover-stat-lbl {
+    font-size: 9px;
+    color: rgba(255, 255, 255, 0.35);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-weight: 600;
+    display: none;
+}
+
+.xbox-hover-footer {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 10px;
+    color: rgba(255, 255, 255, 0.35);
+    padding-top: 8px;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.xbox-hover-footer i {
+    font-size: 11px;
+}
+
+.xbox-hover-dot {
+    opacity: 0.4;
+}
+
+[data-theme="light"] .xbox-hover-card {
+    background: rgba(255, 255, 255, 0.97);
+    border-color: rgba(16, 124, 16, 0.2);
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15), 0 0 20px rgba(16, 124, 16, 0.05);
+}
+
+[data-theme="light"] .xbox-hover-gamertag { color: #1a1a1a; }
+[data-theme="light"] .xbox-hover-bio { color: rgba(0, 0, 0, 0.55); }
+[data-theme="light"] .xbox-hover-stat-val { color: #1a1a1a; }
+[data-theme="light"] .xbox-hover-stat { background: rgba(0, 0, 0, 0.03); border-color: rgba(0, 0, 0, 0.06); }
+[data-theme="light"] .xbox-hover-footer { color: rgba(0, 0, 0, 0.35); border-color: rgba(0, 0, 0, 0.06); }
+
+[data-theme="light"] .xbox-bio-section { background: rgba(0, 0, 0, 0.02); border-color: rgba(0, 0, 0, 0.06); }
+[data-theme="light"] .xbox-stat-card { background: rgba(0, 0, 0, 0.02); border-color: rgba(0, 0, 0, 0.06); }
 
 /* ── News ticker ── */
 .news-strip {
@@ -3070,7 +3494,7 @@ select:focus-visible,
 /* ── Reduced motion respect ─────────────────────────────────── */
 @media (prefers-reduced-motion: reduce) {
 
-    *,
+    *:not(.news-track),
     *::before,
     *::after {
         animation-duration: 0.01ms !important;

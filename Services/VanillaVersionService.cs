@@ -17,10 +17,12 @@ namespace GlacierLauncher.Services;
 public class VanillaVersionService
 {
     private const string WuCategoryId = "d25480ca-36aa-46e6-b76b-39608d49558c";
-    private const string McProductId  = "9NBLGGH2JHXJ";
 
     private static readonly XNamespace Soap = "http://www.w3.org/2003/05/soap-envelope";
     private static readonly XNamespace Wuws = "http://www.microsoft.com/SoftwareDistribution/Server/ClientWebService";
+
+    private const string VersionDbUrl =
+        "https://raw.githubusercontent.com/ddf8196/mc-w10-versiondb-auto-update/master/versions.txt";
 
     private readonly SettingsService _settingsService;
     private readonly HttpClient      _httpClient;
@@ -46,41 +48,42 @@ public class VanillaVersionService
     {
         LastError = null;
         var versions = new List<VanillaVersion>();
+
         try
         {
-            var cookie = await GetAuthCookieAsync();
-            var updates = await FetchUpdatesAsync(cookie);
-            var active  = _settingsService.Settings.ActiveVanillaVersion;
-
-            foreach (var u in updates)
-            {
-                var ver = ParseVersionFromPackage(u.PackageName);
-                if (string.IsNullOrEmpty(ver)) continue;
-
-                var versionDir = Path.Combine(VersionsDirectory, ver);
-                var manifest   = Path.Combine(versionDir, "AppxManifest.xml");
-
-                versions.Add(new VanillaVersion
-                {
-                    Version      = ver,
-                    UpdateId     = u.UpdateId,
-                    PackageName  = u.PackageName,
-                    IsDownloaded = File.Exists(manifest),
-                    IsActive     = ver == active,
-                    SizeBytes    = u.Size
-                });
-            }
-
-            versions = versions
-                .OrderByDescending(v => TryParseVersion(v.Version))
-                .ToList();
-
-            SaveVersionCache(versions);
+            versions = await FetchFromCommunityDbAsync();
         }
         catch (Exception ex)
         {
-            LastError = ex.Message;
-            versions = LoadVersionCache();
+            LastError = $"Community DB failed: {ex.Message}";
+        }
+
+        if (versions.Count == 0)
+        {
+            try
+            {
+                versions = await FetchFromStoreApiAsync();
+                LastError = null;
+            }
+            catch (Exception ex)
+            {
+                var storeErr = $"Store API failed: {ex.Message}";
+                LastError = LastError != null ? $"{LastError} | {storeErr}" : storeErr;
+            }
+        }
+
+        if (versions.Count > 0)
+        {
+            SaveVersionCache(versions);
+        }
+        else
+        {
+            var cached = LoadVersionCache();
+            if (cached.Count > 0)
+            {
+                versions = cached;
+                LastError = (LastError ?? "Could not fetch versions.") + " (showing cached data)";
+            }
         }
 
         var activeVer = _settingsService.Settings.ActiveVanillaVersion;
@@ -94,13 +97,87 @@ public class VanillaVersionService
         return versions;
     }
 
+    // ── Community Version Database ─────────────────────────────────
+
+    private async Task<List<VanillaVersion>> FetchFromCommunityDbAsync()
+    {
+        var resp = await _httpClient.GetAsync(VersionDbUrl);
+        resp.EnsureSuccessStatusCode();
+        var text = await resp.Content.ReadAsStringAsync();
+
+        var seen = new Dictionary<string, VanillaVersion>();
+
+        foreach (var line in text.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (line.StartsWith("Releases", StringComparison.OrdinalIgnoreCase) ||
+                line.StartsWith("Betas", StringComparison.OrdinalIgnoreCase) ||
+                line.StartsWith("Previews", StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            var parts = line.Trim().Split(' ', 2, StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length < 2) continue;
+
+            var updateId    = parts[0];
+            var packageName = parts[1];
+
+            if (!packageName.Contains("x64", StringComparison.OrdinalIgnoreCase)) continue;
+            if (packageName.Contains(".EAppx", StringComparison.OrdinalIgnoreCase)) continue;
+
+            var ver = ParseVersionFromPackage(packageName);
+            if (string.IsNullOrEmpty(ver)) continue;
+
+            if (!seen.ContainsKey(ver))
+            {
+                seen[ver] = new VanillaVersion
+                {
+                    Version     = ver,
+                    UpdateId    = updateId,
+                    PackageName = packageName,
+                };
+            }
+        }
+
+        return seen.Values
+            .OrderByDescending(v => TryParseVersion(v.Version))
+            .ToList();
+    }
+
+    // ── Microsoft Store SOAP API (fallback) ────────────────────────
+
+    private async Task<List<VanillaVersion>> FetchFromStoreApiAsync()
+    {
+        var cookie  = await GetAuthCookieAsync();
+        var updates = await FetchUpdatesAsync(cookie);
+
+        var versions = new List<VanillaVersion>();
+        foreach (var u in updates)
+        {
+            var ver = ParseVersionFromPackage(u.PackageName);
+            if (string.IsNullOrEmpty(ver)) continue;
+
+            versions.Add(new VanillaVersion
+            {
+                Version     = ver,
+                UpdateId    = u.UpdateId,
+                PackageName = u.PackageName,
+                SizeBytes   = u.Size
+            });
+        }
+
+        return versions
+            .OrderByDescending(v => TryParseVersion(v.Version))
+            .ToList();
+    }
+
+    // ── Download / Switch / Delete ─────────────────────────────────
+
     public async Task DownloadVersionAsync(VanillaVersion version, IProgress<double>? progress = null)
     {
         var downloadUrl = await GetDownloadUrlAsync(version.UpdateId);
         if (string.IsNullOrEmpty(downloadUrl))
             throw new InvalidOperationException("Could not resolve download URL for this version.");
 
-        var tempFile = Path.Combine(VersionsDirectory, version.Version + ".appx.tmp");
+        var tempFile   = Path.Combine(VersionsDirectory, version.Version + ".appx.tmp");
         var versionDir = Path.Combine(VersionsDirectory, version.Version);
 
         try
