@@ -220,19 +220,52 @@ public class VanillaVersionService
 
     private record UpdateInfo(string UpdateId, string PackageName, long Size);
 
+    private static readonly int[] InstalledNonLeafUpdateIDs =
+    {
+        1, 2, 3, 11, 19, 2359974, 5169044, 8788830, 23110993, 23110994,
+        54341900, 59830006, 59830007, 59830008, 60484010, 62450018, 62450019,
+        62450020, 98959022, 98959023, 98959024, 98959025, 98959026, 104433538,
+        129905029, 130040031, 132387090, 132393049, 133399034, 138537048,
+        140377312, 143747671, 158941041, 158941042, 158941043, 158941044,
+        159123858, 159130928, 164836897, 164847386, 164848327, 164852241,
+        164852246, 164852253
+    };
+
+    private static string SecurityHeader()
+    {
+        var now     = DateTime.UtcNow;
+        var expires = now.AddMinutes(5);
+        return $@"<o:Security s:mustUnderstand=""1""
+                xmlns:o=""http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-secext-1.0.xsd"">
+            <Timestamp xmlns=""http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-utility-1.0.xsd"">
+                <Created>{now:yyyy-MM-ddTHH:mm:ss.fffffffZ}</Created>
+                <Expires>{expires:yyyy-MM-ddTHH:mm:ss.fffffffZ}</Expires>
+            </Timestamp>
+            <wuws:WindowsUpdateTicketsToken wsu:id=""ClientMSA""
+                xmlns:wuws=""http://schemas.microsoft.com/msus/2014/10/WindowsUpdateAuthorization""
+                xmlns:wsu=""http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-utility-1.0.xsd"">
+                <TicketType Name=""MSA"" Version=""1.0"" Policy=""MBI_SSL"">
+                    <User/>
+                </TicketType>
+            </wuws:WindowsUpdateTicketsToken>
+        </o:Security>";
+    }
+
     private async Task<string> GetAuthCookieAsync()
     {
-        var body = @"<s:Envelope xmlns:s=""http://www.w3.org/2003/05/soap-envelope""
+        var body = $@"<s:Envelope xmlns:s=""http://www.w3.org/2003/05/soap-envelope""
             xmlns:a=""http://www.w3.org/2005/08/addressing"">
             <s:Header>
                 <a:Action s:mustUnderstand=""1"">http://www.microsoft.com/SoftwareDistribution/Server/ClientWebService/GetCookie</a:Action>
                 <a:To s:mustUnderstand=""1"">https://fe3.delivery.mp.microsoft.com/ClientWebService/client.asmx</a:To>
+                {SecurityHeader()}
             </s:Header>
             <s:Body>
                 <GetCookie xmlns=""http://www.microsoft.com/SoftwareDistribution/Server/ClientWebService"">
+                    <oldCookie></oldCookie>
                     <lastChange>2015-10-21T17:01:07.1472913Z</lastChange>
-                    <currentTime>2025-01-01T00:00:00.0000000Z</currentTime>
-                    <protocolVersion>2.0</protocolVersion>
+                    <currentTime>{DateTime.UtcNow:yyyy-MM-ddTHH:mm:ss.fffffffZ}</currentTime>
+                    <protocolVersion>1.40</protocolVersion>
                 </GetCookie>
             </s:Body>
         </s:Envelope>";
@@ -244,11 +277,14 @@ public class VanillaVersionService
 
     private async Task<List<UpdateInfo>> FetchUpdatesAsync(string cookie)
     {
+        var idsXml = string.Join("\n", InstalledNonLeafUpdateIDs.Select(i => $"<int>{i}</int>"));
+
         var body = $@"<s:Envelope xmlns:s=""http://www.w3.org/2003/05/soap-envelope""
             xmlns:a=""http://www.w3.org/2005/08/addressing"">
             <s:Header>
                 <a:Action s:mustUnderstand=""1"">http://www.microsoft.com/SoftwareDistribution/Server/ClientWebService/SyncUpdates</a:Action>
                 <a:To s:mustUnderstand=""1"">https://fe3.delivery.mp.microsoft.com/ClientWebService/client.asmx</a:To>
+                {SecurityHeader()}
             </s:Header>
             <s:Body>
                 <SyncUpdates xmlns=""http://www.microsoft.com/SoftwareDistribution/Server/ClientWebService"">
@@ -259,10 +295,7 @@ public class VanillaVersionService
                     <parameters>
                         <ExpressQuery>false</ExpressQuery>
                         <InstalledNonLeafUpdateIDs>
-                            <int>1</int>
-                            <int>10</int>
-                            <int>105939029</int>
-                            <int>105995585</int>
+                            {idsXml}
                         </InstalledNonLeafUpdateIDs>
                         <OtherCachedUpdateIDs/>
                         <SkipSoftwareSync>false</SkipSoftwareSync>
@@ -272,25 +305,22 @@ public class VanillaVersionService
                                 <Id>{WuCategoryId}</Id>
                             </CategoryIdentifier>
                         </FilterAppCategoryIds>
+                        <TreatAppCategoryIdsAsInstalled>true</TreatAppCategoryIdsAsInstalled>
                         <AlsoPerformRegularSync>false</AlsoPerformRegularSync>
                         <ComputerSpec/>
                         <ExtendedUpdateInfoParameters>
                             <XmlUpdateFragmentTypes>
                                 <XmlUpdateFragmentType>Extended</XmlUpdateFragmentType>
+                                <XmlUpdateFragmentType>LocalizedProperties</XmlUpdateFragmentType>
                             </XmlUpdateFragmentTypes>
                             <Locales><string>en-US</string></Locales>
                         </ExtendedUpdateInfoParameters>
                         <ClientPreferredLanguages/>
                         <ProductsParameters>
                             <SyncCurrentVersionOnly>false</SyncCurrentVersionOnly>
-                            <DeviceAttributes>BranchReadinessLevel=CB;CurrentBranch=rs1_release;OEMModel=Virtual Machine;FlightRing=Retail;AttrDataVer=264;InstallLanguage=en-US;OSUILocale=en-US;InstallationType=Client;FirmwareVersion=Hyper-V UEFI Release v4.1;ProcessorIdentifier=Intel64 Family 6 Model 85 Stepping 7;OEMName_Uncleaned=Microsoft Corporation;OSSkuId=48;OSArchitecture=AMD64;OSVersion=10.0.22621.1;OSBranch=ni_release;</DeviceAttributes>
+                            <DeviceAttributes>E:BranchReadinessLevel=CBServicingBranch&amp;AttrDataVer=264&amp;FlightRing=Retail&amp;FlightContent=Mainline&amp;InstallLanguage=en-US&amp;OSUILocale=en-US&amp;InstallationType=Client&amp;OSArchitecture=AMD64&amp;OSVersion=10.0.22621.1&amp;OSSkuId=48&amp;App=WU&amp;IsFlightingEnabled=1&amp;IsDeviceRetailDemo=0</DeviceAttributes>
                             <CallerAttributes>Interactive=1;IsSeeker=1;</CallerAttributes>
-                            <Products>
-                                <Product>
-                                    <ProductId>{McProductId}</ProductId>
-                                    <SkuId>0016</SkuId>
-                                </Product>
-                            </Products>
+                            <Products/>
                         </ProductsParameters>
                     </parameters>
                 </SyncUpdates>
@@ -354,6 +384,7 @@ public class VanillaVersionService
             <s:Header>
                 <a:Action s:mustUnderstand=""1"">http://www.microsoft.com/SoftwareDistribution/Server/ClientWebService/GetExtendedUpdateInfo2</a:Action>
                 <a:To s:mustUnderstand=""1"">https://fe3.delivery.mp.microsoft.com/ClientWebService/client.asmx/secured</a:To>
+                {SecurityHeader()}
             </s:Header>
             <s:Body>
                 <GetExtendedUpdateInfo2 xmlns=""http://www.microsoft.com/SoftwareDistribution/Server/ClientWebService"">
@@ -365,8 +396,9 @@ public class VanillaVersionService
                     </updateIDs>
                     <infoTypes>
                         <XmlUpdateFragmentType>FileUrl</XmlUpdateFragmentType>
+                        <XmlUpdateFragmentType>FileDecryption</XmlUpdateFragmentType>
                     </infoTypes>
-                    <deviceAttributes>BranchReadinessLevel=CB;CurrentBranch=rs1_release;OEMModel=Virtual Machine;FlightRing=Retail;AttrDataVer=264;InstallLanguage=en-US;OSUILocale=en-US;InstallationType=Client;FirmwareVersion=Hyper-V UEFI Release v4.1;ProcessorIdentifier=Intel64 Family 6 Model 85 Stepping 7;OEMName_Uncleaned=Microsoft Corporation;OSSkuId=48;OSArchitecture=AMD64;OSVersion=10.0.22621.1;OSBranch=ni_release;</deviceAttributes>
+                    <deviceAttributes>E:BranchReadinessLevel=CBServicingBranch&amp;AttrDataVer=264&amp;FlightRing=Retail&amp;FlightContent=Mainline&amp;InstallLanguage=en-US&amp;OSUILocale=en-US&amp;InstallationType=Client&amp;OSArchitecture=AMD64&amp;OSVersion=10.0.22621.1&amp;OSSkuId=48&amp;App=WU&amp;IsFlightingEnabled=1&amp;IsDeviceRetailDemo=0</deviceAttributes>
                 </GetExtendedUpdateInfo2>
             </s:Body>
         </s:Envelope>";
