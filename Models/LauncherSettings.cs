@@ -70,6 +70,13 @@ public class LauncherSettings
     public string DiscordAvatar    { get; set; } = "";
     public string DiscordToken     { get; set; } = "";
 
+    // ── Footer Profile Display ───────────────────────────────────
+    // Which account to show in the bottom-left profile area.
+    //   "auto"    — Xbox if signed in, otherwise Discord, otherwise local user
+    //   "xbox"    — always prefer Xbox (falls back to none if not signed in)
+    //   "discord" — always prefer Discord (falls back to none if not signed in)
+    public string ProfileDisplayMode { get; set; } = "auto";
+
     // ── Saved Servers ────────────────────────────────────────────
     public List<SavedServer> SavedServers { get; set; } = new();
 }

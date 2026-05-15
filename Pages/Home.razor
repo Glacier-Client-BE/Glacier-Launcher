@@ -484,14 +484,33 @@
 
     <!-- ── FOOTER ── -->
     <div class="footer">
-        <div class="footer-profile-area" @onclick="OpenXboxModal" @onmousedown:stopPropagation>
-            <img class="avatar @(Xbox.IsSignedIn ? "xbox-connected" : SettingsService.Settings.DiscordLoggedIn ? "discord-connected" : "")"
+        @{
+            var footerProfile = EffectiveProfile();
+            var footerName    = footerProfile == "xbox"    ? Xbox.CurrentProfile?.Gamertag ?? ""
+                              : footerProfile == "discord" ? SettingsService.Settings.DiscordUsername
+                              :                              displayName;
+            var footerHandle  = footerProfile == "xbox"    ? "Xbox Live"
+                              : footerProfile == "discord" ? "Discord"
+                              :                              displayHandle;
+            var footerAvatar  = footerProfile == "xbox"    ? "xbox-connected"
+                              : footerProfile == "discord" ? "discord-connected"
+                              :                              "";
+        }
+        <div class="footer-profile-area" @onclick="OpenActiveProfileModal" @onmousedown:stopPropagation>
+            <img class="avatar @footerAvatar"
                  src="@(GetAvatarSrc())" alt="" />
             <div class="user-info">
-                <span class="username">@(Xbox.IsSignedIn ? Xbox.CurrentProfile?.Gamertag : displayName)</span>
-                <span class="user-handle">@(Xbox.IsSignedIn ? "Xbox Live" : displayHandle)</span>
+                <span class="username">@footerName</span>
+                <span class="user-handle">@footerHandle</span>
             </div>
-            @if (Xbox.IsSignedIn)
+            <button class="profile-switch-btn"
+                    title="@ProfileSwitchTooltip()"
+                    @onclick:stopPropagation
+                    @onclick="CycleProfileDisplay"
+                    @onmousedown:stopPropagation>
+                <i class="fa-solid fa-arrows-rotate"></i>
+            </button>
+            @if (footerProfile == "xbox" && Xbox.IsSignedIn)
             {
                 <div class="xbox-hover-card">
                     <div class="xbox-hover-header">
@@ -530,6 +549,30 @@
                     <div class="xbox-hover-footer">
                         <i class="fa-solid fa-gamepad" style="color:#107c10;"></i>
                         <span>Xbox Live</span>
+                        <span class="xbox-hover-dot">•</span>
+                        <span>Click to manage</span>
+                    </div>
+                </div>
+            }
+            else if (footerProfile == "discord" && SettingsService.Settings.DiscordLoggedIn)
+            {
+                <div class="xbox-hover-card">
+                    <div class="xbox-hover-header">
+                        @if (!string.IsNullOrEmpty(SettingsService.Settings.DiscordAvatar))
+                        {
+                            <img class="xbox-hover-avatar" src="@SettingsService.Settings.DiscordAvatar" alt="" />
+                        }
+                        else
+                        {
+                            <div class="xbox-hover-avatar xbox-hover-avatar-placeholder"><i class="fa-brands fa-discord"></i></div>
+                        }
+                        <div class="xbox-hover-identity">
+                            <span class="xbox-hover-gamertag">@SettingsService.Settings.DiscordUsername</span>
+                        </div>
+                    </div>
+                    <div class="xbox-hover-footer">
+                        <i class="fa-brands fa-discord" style="color:#5865f2;"></i>
+                        <span>Discord</span>
                         <span class="xbox-hover-dot">•</span>
                         <span>Click to manage</span>
                     </div>
@@ -650,8 +693,39 @@
                 <input class="panel-search-input" placeholder="Filter settings…"
                        @bind="settingsFilter" @bind:event="oninput"
                        @onkeydown:stopPropagation />
+                @if (!string.IsNullOrEmpty(settingsFilter))
+                {
+                    <button class="panel-search-clear" title="Clear filter" @onclick="ClearSettingsFilter" @onmousedown:stopPropagation>
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>
+                }
             </div>
             <div class="panel-body settings-body">
+
+                @{ var visibleCount = VisibleSettingsCount(); }
+                @if (visibleCount == 0)
+                {
+                    <div class="settings-empty">
+                        <i class="fa-regular fa-folder-open"></i>
+                        <span class="settings-empty-title">No matching settings</span>
+                        <span class="settings-empty-sub">
+                            @if (!string.IsNullOrWhiteSpace(settingsFilter))
+                            {
+                                @($"Nothing matches \"{settingsFilter}\".")
+                            }
+                            else
+                            {
+                                @("This category is empty.")
+                            }
+                        </span>
+                        @if (!string.IsNullOrWhiteSpace(settingsFilter))
+                        {
+                            <button class="vcs-btn" @onclick="ClearSettingsFilter" @onmousedown:stopPropagation>
+                                <i class="fa-solid fa-xmark"></i> Clear filter
+                            </button>
+                        }
+                    </div>
+                }
 
                 @if (CategoryMatches("injection"))
                 {
@@ -844,7 +918,7 @@
                 @if (CategoryMatches("account"))
                 {
                 <div class="settings-section">
-                @if (SectionMatch(("Display name","username name display account")))
+                @if (SectionMatch(("Display name","username name display account"), ("Profile display","profile display footer xbox discord switch which")))
                 {
                     <span class="panel-section-label">Account</span>
                 }
@@ -856,6 +930,19 @@
                            placeholder="@System.Environment.UserName"
                            @onchange="OnUsernameChanged"
                            @onclick:stopPropagation />
+                </div>
+
+                <div class="setting-row @(SH("Profile display","profile display footer xbox discord switch which"))">
+                    <div class="setting-meta">
+                        <span class="setting-label">Profile display</span>
+                        <span class="setting-hint">Which account fills the bottom-left avatar &amp; name.</span>
+                    </div>
+                    <select class="setting-select" value="@SettingsService.Settings.ProfileDisplayMode"
+                            @onchange="OnProfileDisplayChanged" @onclick:stopPropagation>
+                        <option value="auto">Auto (prefer Xbox)</option>
+                        <option value="xbox">Xbox</option>
+                        <option value="discord">Discord</option>
+                    </select>
                 </div>
 
                 </div>
@@ -943,48 +1030,6 @@
                 </div>
                 }
 
-                @if (CategoryMatches("account"))
-                {
-                <div class="settings-section">
-                @if (SectionMatch(("CurseForge API key","curseforge api key addons")))
-                {
-                    <span class="panel-section-label">CurseForge</span>
-                }
-
-                <div class="setting-row @(SH("CurseForge API key","curseforge api key addons"))">
-                    <div class="setting-meta">
-                        <span class="setting-label">CurseForge API key</span>
-                        <span class="setting-hint">
-                            @if (!string.IsNullOrWhiteSpace(SettingsService.Settings.CurseForgeApiKey))
-                            {
-                                <span style="color:var(--accent);"><i class="fa-solid fa-circle-check"></i> Custom key set</span>
-                            }
-                            else if (CurseForge.IsAvailable)
-                            {
-                                <span style="color:var(--accent);"><i class="fa-solid fa-circle-check"></i> Using built-in key</span>
-                            }
-                            else
-                            {
-                                @("Required for Addons tab — get one free from CurseForge")
-                            }
-                        </span>
-                    </div>
-                    <div style="display:flex; align-items:center; gap:6px;">
-                        <input class="setting-input" style="width:160px; font-size:10px;" type="password"
-                               value="@SettingsService.Settings.CurseForgeApiKey"
-                               placeholder="Paste API key…"
-                               @onchange="OnCfApiKeyChanged"
-                               @onclick:stopPropagation
-                               @onkeydown:stopPropagation />
-                        <button class="btn-sm" @onclick='() => OpenUrl("https://console.curseforge.com/")' @onmousedown:stopPropagation data-tooltip="Get API key">
-                            <i class="fa-solid fa-arrow-up-right-from-square"></i>
-                        </button>
-                    </div>
-                </div>
-
-                </div>
-                }
-
                 @if (CategoryMatches("system"))
                 {
                 <div class="settings-section">
@@ -1042,6 +1087,44 @@
                     <button class="btn-sm" @onclick="OpenMinecraftFolder" @onmousedown:stopPropagation>
                         <i class="fa-solid fa-cubes"></i> Open
                     </button>
+                </div>
+
+                </div>
+                <div class="settings-section">
+                @if (SectionMatch(("CurseForge API key","curseforge api key addons")))
+                {
+                    <span class="panel-section-label">CurseForge</span>
+                }
+
+                <div class="setting-row @(SH("CurseForge API key","curseforge api key addons"))">
+                    <div class="setting-meta">
+                        <span class="setting-label">CurseForge API key</span>
+                        <span class="setting-hint">
+                            @if (!string.IsNullOrWhiteSpace(SettingsService.Settings.CurseForgeApiKey))
+                            {
+                                <span style="color:var(--accent);"><i class="fa-solid fa-circle-check"></i> Custom key set</span>
+                            }
+                            else if (CurseForge.IsAvailable)
+                            {
+                                <span style="color:var(--accent);"><i class="fa-solid fa-circle-check"></i> Using built-in key</span>
+                            }
+                            else
+                            {
+                                @("Required for Addons tab — get one free from CurseForge")
+                            }
+                        </span>
+                    </div>
+                    <div style="display:flex; align-items:center; gap:6px;">
+                        <input class="setting-input" style="width:160px; font-size:10px;" type="password"
+                               value="@SettingsService.Settings.CurseForgeApiKey"
+                               placeholder="Paste API key…"
+                               @onchange="OnCfApiKeyChanged"
+                               @onclick:stopPropagation
+                               @onkeydown:stopPropagation />
+                        <button class="btn-sm" @onclick='() => OpenUrl("https://console.curseforge.com/")' @onmousedown:stopPropagation data-tooltip="Get API key">
+                            <i class="fa-solid fa-arrow-up-right-from-square"></i>
+                        </button>
+                    </div>
                 </div>
 
                 </div>
@@ -2699,6 +2782,9 @@
 
     private bool CategoryMatches(string section)
     {
+        // When the user is actively searching, ignore category tabs so the
+        // filter is global. Otherwise gate by the selected tab.
+        if (!string.IsNullOrWhiteSpace(settingsFilter)) return true;
         return settingsCategory == "all" || settingsCategory == section;
     }
 
@@ -2746,20 +2832,82 @@
         StateHasChanged();
     }
 
-    // Short alias to reduce verbosity in markup
+    // Per-row visibility class. Returns "" (visible) or "hidden-by-search"
+    // (filtered out). Filter is matched against the row's own label + keyword
+    // string — the surrounding `@if (CategoryMatches(...))` block handles tab
+    // gating, and CategoryMatches itself bypasses the gate while a search is
+    // active so search is global across all categories.
     private string SH(string label, string keywords)
     {
-        if (string.IsNullOrWhiteSpace(settingsFilter)) return "";
-        var q = settingsFilter.ToLower();
+        var q = (settingsFilter ?? "").Trim().ToLower();
+        if (q.Length == 0) return "";
         return (label.ToLower().Contains(q) || keywords.ToLower().Contains(q)) ? "" : "hidden-by-search";
     }
 
-    // Returns true if the section should be visible (no filter, or any item matches).
+    // Whether a section header should render. Hidden when the filter has zero
+    // matching items within the section.
     private bool SectionMatch(params (string l, string k)[] items)
     {
-        if (string.IsNullOrWhiteSpace(settingsFilter)) return true;
-        var q = settingsFilter.ToLower();
+        var q = (settingsFilter ?? "").Trim().ToLower();
+        if (q.Length == 0) return true;
         return items.Any(i => i.l.ToLower().Contains(q) || i.k.ToLower().Contains(q));
+    }
+
+    // Catalog of all setting rows in the panel — single source of truth for the
+    // search "no results" check. Keep in sync with the markup; misses just make
+    // the no-results state slightly inaccurate (real rows still render).
+    private static readonly (string Cat, string Label, string Keywords)[] _settingDefs =
+    {
+        ("injection",  "Active client",                  "active client injection vanilla"),
+        ("injection",  "Injection delay",                "injection delay wait"),
+        ("injection",  "Auto-inject",                    "auto inject automatic"),
+        ("injection",  "Close after launch",             "close minimize launch"),
+
+        ("appearance", "Accent colour",                  "accent color theme"),
+        ("appearance", "Theme preset",                   "theme dark midnight slate ocean forest sunset light"),
+        ("appearance", "Compact mode",                   "compact dense small"),
+        ("appearance", "Animations",                     "animations smooth motion"),
+        ("appearance", "Background blur",                "blur background"),
+        ("appearance", "Remember window size",           "window size remember"),
+        ("appearance", "Custom background wallpaper",    "background wallpaper image custom"),
+
+        ("account",    "Display name",                   "username name display account"),
+        ("account",    "Profile display",                "profile display footer xbox discord switch which"),
+        ("account",    "Discord Rich Presence",          "discord rpc social"),
+        ("account",    "Discord account",                "discord login account"),
+        ("account",    "Xbox profile",                   "xbox gamertag account microsoft"),
+
+        ("system",     "Show recently launched",         "recent history"),
+        ("system",     "Minimize to tray",               "tray minimize system"),
+        ("system",     "Clear recent history",           "clear history recent"),
+        ("system",     "Check for updates on startup",   "update auto check startup"),
+        ("system",     "Check for updates now",          "update manual check"),
+        ("system",     "Open launcher folder",           "launcher folder downloads location"),
+        ("system",     "Open Minecraft folder",          "minecraft com mojang folder"),
+        ("system",     "CurseForge API key",             "curseforge api key addons"),
+        ("system",     "Export settings",                "export backup settings save"),
+        ("system",     "Import settings",                "import restore settings load"),
+        ("system",     "Reset settings",                 "reset default factory settings"),
+        ("system",     "Keyboard shortcuts",             "shortcuts keyboard help"),
+        ("system",     "Credits",                        "credits about launcher"),
+    };
+
+    private int VisibleSettingsCount()
+    {
+        var q = (settingsFilter ?? "").Trim().ToLower();
+        var hasFilter = q.Length > 0;
+        return _settingDefs.Count(s =>
+        {
+            if (!hasFilter && settingsCategory != "all" && settingsCategory != s.Cat) return false;
+            if (hasFilter && !s.Label.ToLower().Contains(q) && !s.Keywords.ToLower().Contains(q)) return false;
+            return true;
+        });
+    }
+
+    private void ClearSettingsFilter()
+    {
+        settingsFilter = "";
+        StateHasChanged();
     }
 
     private void OnDelayChanged(ChangeEventArgs e)
@@ -2773,6 +2921,15 @@
         var val = e.Value?.ToString() ?? "";
         SettingsService.Settings.Username = val;
         displayName = string.IsNullOrEmpty(val) ? System.Environment.UserName : val;
+        SettingsService.Save();
+        StateHasChanged();
+    }
+
+    private void OnProfileDisplayChanged(ChangeEventArgs e)
+    {
+        var val = e.Value?.ToString() ?? "auto";
+        if (val != "auto" && val != "xbox" && val != "discord") val = "auto";
+        SettingsService.Settings.ProfileDisplayMode = val;
         SettingsService.Save();
         StateHasChanged();
     }
@@ -4120,11 +4277,70 @@ private async Task OpenDiscordOAuth()
 
     private string GetAvatarSrc()
     {
-        if (Xbox.IsSignedIn && !string.IsNullOrEmpty(Xbox.CurrentProfile?.GamerPictureUrl))
+        var which = EffectiveProfile();
+        if (which == "xbox" && !string.IsNullOrEmpty(Xbox.CurrentProfile?.GamerPictureUrl))
             return Xbox.CurrentProfile.GamerPictureUrl;
-        if (SettingsService.Settings.DiscordLoggedIn && !string.IsNullOrEmpty(SettingsService.Settings.DiscordAvatar))
+        if (which == "discord" && !string.IsNullOrEmpty(SettingsService.Settings.DiscordAvatar))
             return SettingsService.Settings.DiscordAvatar;
         return "images/icon.png";
+    }
+
+    // Which profile owns the footer avatar/name right now. "auto" prefers Xbox,
+    // then Discord, then falls back to the local username. Explicit modes return
+    // "none" when their underlying account isn't connected — UI then shows the
+    // local user as a graceful fallback.
+    private string EffectiveProfile()
+    {
+        var mode = SettingsService.Settings.ProfileDisplayMode;
+        switch (mode)
+        {
+            case "xbox":    return Xbox.IsSignedIn ? "xbox" : "none";
+            case "discord": return SettingsService.Settings.DiscordLoggedIn ? "discord" : "none";
+            default:
+                if (Xbox.IsSignedIn) return "xbox";
+                if (SettingsService.Settings.DiscordLoggedIn) return "discord";
+                return "none";
+        }
+    }
+
+    private void CycleProfileDisplay()
+    {
+        var next = SettingsService.Settings.ProfileDisplayMode switch
+        {
+            "auto"    => "xbox",
+            "xbox"    => "discord",
+            "discord" => "auto",
+            _          => "auto"
+        };
+        SettingsService.Settings.ProfileDisplayMode = next;
+        SettingsService.Save();
+        _ = ShowToast(next switch
+        {
+            "xbox"    => "Footer profile: Xbox",
+            "discord" => "Footer profile: Discord",
+            _          => "Footer profile: Auto"
+        }, "info");
+        StateHasChanged();
+    }
+
+    private string ProfileSwitchTooltip() => SettingsService.Settings.ProfileDisplayMode switch
+    {
+        "xbox"    => "Showing Xbox — click to switch to Discord",
+        "discord" => "Showing Discord — click to switch to Auto",
+        _          => "Auto (prefers Xbox) — click to switch to Xbox"
+    };
+
+    private void OpenActiveProfileModal()
+    {
+        // Click the avatar → manage whichever account is currently shown. Falls
+        // back to opening the Xbox modal so the user has a way to sign in even
+        // when nothing is connected yet.
+        switch (EffectiveProfile())
+        {
+            case "discord": OpenDiscordModal(); break;
+            case "xbox":
+            default:        OpenXboxModal();    break;
+        }
     }
 
     // ── Xbox Profile ─────────────────────────────────────────
