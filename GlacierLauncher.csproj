@@ -40,7 +40,9 @@
     <PackageReference Include="DiscordRichPresence" Version="1.2.1.24" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
     <PackageReference Include="Microsoft.AspNetCore.Components.WebView.Wpf" Version="10.0.*-*" />
-    <PackageReference Include="Microsoft.Identity.Client" Version="4.*" />
+    <!-- Microsoft.Identity.Client removed: Xbox sign-in now goes through the
+         Live OAuth desktop flow (client 00000000402b5328 / MBI_SSL) handled by
+         LiveAuthService + LiveAuthWindow. -->
   </ItemGroup>
 
   <ItemGroup>

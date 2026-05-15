@@ -53,12 +53,15 @@ public class LauncherSettings
     public string LastUpdateCheck         { get; set; } = "";
 
     // ── Xbox Profile ────────────────────────────────────────────────
-    public string XboxGamertag        { get; set; } = "";
-    public string XboxXuid            { get; set; } = "";
-    public string XboxGamerPictureUrl { get; set; } = "";
-    public string XboxGamerscore      { get; set; } = "";
-    public string XboxAccountTier     { get; set; } = "";
-    public string XboxBio             { get; set; } = "";
+    public string XboxGamertag         { get; set; } = "";
+    public string XboxXuid             { get; set; } = "";
+    public string XboxGamerPictureUrl  { get; set; } = "";
+    public string XboxGamerscore       { get; set; } = "";
+    public string XboxAccountTier      { get; set; } = "";
+    public string XboxBio              { get; set; } = "";
+    // Live OAuth refresh token (00000000402b5328 / MBI_SSL) — enables silent
+    // re-auth without prompting the user again.
+    public string XboxLiveRefreshToken { get; set; } = "";
 
     // ── Discord ──────────────────────────────────────────────────
     public bool   DiscordLoggedIn  { get; set; } = false;

@@ -6,3 +6,8 @@ obj/
 .claude/
 wwwroot.zip
 publish_test/
+publish_final/
+publish/
+crash.txt
+crash_domain.txt
+run_output.txt

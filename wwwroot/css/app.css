@@ -3643,6 +3643,47 @@ input[type=range]:disabled {
     background: rgba(114, 137, 218, 0.06);
 }
 
+/* Microsoft Store install row (BedrockUpdater pattern) */
+.mcv-store-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 16px;
+    background: rgba(0, 120, 212, 0.06);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+    flex-shrink: 0;
+}
+
+.mcv-store-meta {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-width: 0;
+}
+
+.mcv-store-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text);
+    display: flex;
+    align-items: center;
+}
+
+.mcv-store-sub {
+    font-size: 10.5px;
+    color: var(--text-dim);
+    margin-top: 1px;
+}
+
+.mcv-store-row .progress-bar-wrap {
+    width: 110px;
+}
+
+.mcv-store-row .vcs-btn-ghost {
+    background: rgba(255, 255, 255, 0.06) !important;
+    color: var(--text) !important;
+}
+
 .mcv-switch-btn {
     background: var(--accent) !important;
     color: #fff !important;

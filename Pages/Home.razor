@@ -9,6 +9,7 @@
 @inject DiscordRpcService Discord
 @inject CurseForgeService CurseForge
 @inject VanillaVersionService VanillaVersions
+@inject StoreInstallService StoreInstall
 @inject XboxProfileService Xbox
 @inject IJSRuntime JS
 @implements IDisposable
@@ -236,7 +237,7 @@
         </div>
     }
 <!-- ── XBOX PROFILE MODAL ── -->
-<!-- 
+
     @if (xboxModalOpen)
     {
         <div class="modal-overlay" @onclick="CloseXboxModal">
@@ -318,7 +319,7 @@
             </div>
         </div>
     }
--->
+
     <!-- ── TOP BAR ── -->
     <div class="top-bar">
         <div class="branding">
@@ -536,7 +537,6 @@
             }
         </div>
         <div class="footer-right">
-        <!--
             @if (Xbox.IsSignedIn)
             {
                 <div class="xbox-connected-pill" @onclick="OpenXboxModal" style="cursor:pointer;">
@@ -551,7 +551,7 @@
                     Xbox
                 </button>
             }
-            -->
+            
             @if (SettingsService.Settings.DiscordLoggedIn)
             {
                 <div class="discord-connected-pill" @onclick="OpenDiscordModal" style="cursor:pointer;">
@@ -884,7 +884,7 @@
                         @(SettingsService.Settings.DiscordLoggedIn ? "Manage" : "Connect")
                     </button>
                 </div>
-<!-- 
+ 
                 <div class="setting-row clickable @(SH("Xbox profile","xbox gamertag account microsoft"))"
                      @onclick="OpenXboxModal">
                     <div class="setting-meta">
@@ -896,7 +896,7 @@
                         @(Xbox.IsSignedIn ? "Manage" : "Sign in")
                     </button>
                 </div>
--->
+
                 </div>
                 }
 
@@ -1862,7 +1862,36 @@
 
             <div class="mcv-info-bar">
                 <i class="fa-solid fa-circle-info"></i>
-                <span>Switch between Minecraft Bedrock versions. Requires Developer Mode enabled in Windows Settings.</span>
+                <span>Switch between Minecraft Bedrock versions. Sideload requires Developer Mode; the Microsoft Store option below does not.</span>
+            </div>
+
+            <!-- ── Microsoft Store install (BedrockUpdater method) ── -->
+            <div class="mcv-store-row">
+                <div class="mcv-store-meta">
+                    @if (storeInstallBusy)
+                    {
+                        <span class="mcv-store-title">@storeInstallStage</span>
+                        <span class="mcv-store-sub">@storeInstallDetail</span>
+                    }
+                    else
+                    {
+                        <span class="mcv-store-title"><i class="fa-brands fa-microsoft" style="margin-right:6px;"></i>Install latest from Microsoft Store</span>
+                        <span class="mcv-store-sub">No Developer Mode required. Installs the current Release or Preview.</span>
+                    }
+                </div>
+                @if (storeInstallBusy)
+                {
+                    <div class="progress-bar-wrap">
+                        <div class="progress-bar-fill" style="width:@($"{storeInstallPct:F0}%")"></div>
+                    </div>
+                    <span class="dl-pct">@($"{(int)storeInstallPct}%")</span>
+                    <button class="vcs-btn vcs-btn-ghost" @onclick="CancelStoreInstall" @onmousedown:stopPropagation>Cancel</button>
+                }
+                else
+                {
+                    <button class="vcs-btn" @onclick='() => InstallFromStoreAsync(false)' @onmousedown:stopPropagation>Release</button>
+                    <button class="vcs-btn vcs-btn-ghost" @onclick='() => InstallFromStoreAsync(true)' @onmousedown:stopPropagation>Preview</button>
+                }
             </div>
 
             <div class="panel-search-wrap">
@@ -2134,6 +2163,12 @@
     private List<VanillaVersion> mcVersionsList = new();
     private string mcVersionsFilter = "";
     private string? mcVersionsError = null;
+
+    // ── Microsoft Store install (BedrockUpdater pattern) ────────
+    private bool   storeInstallBusy   = false;
+    private double storeInstallPct    = 0;
+    private string storeInstallStage  = "";
+    private string storeInstallDetail = "";
 
     private IEnumerable<VanillaVersion> FilteredMcVersions
     {
@@ -3029,6 +3064,83 @@
         if (v.IsActive)
             foreach (var mv in mcVersionsList) mv.IsActive = false;
         StateHasChanged();
+    }
+
+    // ── Microsoft Store install (BedrockUpdater method) ────────
+    // Installs the current Release or Preview through AppInstallManager. Works
+    // without Developer Mode and replaces any sideloaded Minecraft package.
+    private async Task InstallFromStoreAsync(bool preview)
+    {
+        if (storeInstallBusy) return;
+        storeInstallBusy   = true;
+        storeInstallPct    = 0;
+        storeInstallStage  = preview ? "Installing Minecraft Preview…" : "Installing Minecraft…";
+        storeInstallDetail = "Talking to the Microsoft Store…";
+        StateHasChanged();
+
+        var product = preview
+            ? StoreInstallService.Product.MinecraftPreview
+            : StoreInstallService.Product.MinecraftRelease;
+
+        var progress = new Progress<StoreInstallService.InstallProgress>(p =>
+        {
+            storeInstallPct    = p.Percent;
+            storeInstallStage  = $"{p.Stage} {p.ProductName}";
+            storeInstallDetail = p.BytesTotal > 0
+                ? $"{FormatSize(p.BytesDownloaded)} of {FormatSize(p.BytesTotal)}"
+                : "Preparing…";
+            InvokeAsync(StateHasChanged);
+        });
+
+        try
+        {
+            var finalState = await StoreInstall.InstallAsync(product, progress);
+
+            if (finalState == Windows.ApplicationModel.Store.Preview.InstallControl.AppInstallState.Completed)
+            {
+                _ = ShowToast($"{product.DisplayName} installed from the Store.", "success");
+                // The Store install reasserts the official package — drop the
+                // sideload pointer so the UI no longer claims a custom version
+                // is active.
+                if (!string.IsNullOrEmpty(SettingsService.Settings.ActiveVanillaVersion))
+                {
+                    SettingsService.Settings.ActiveVanillaVersion = "";
+                    SettingsService.Save();
+                    foreach (var mv in mcVersionsList) mv.IsActive = false;
+                }
+            }
+            else
+            {
+                _ = ShowToast($"Install ended: {finalState}", "info");
+            }
+        }
+        catch (Exception ex)
+        {
+            _ = ShowToast($"Store install failed: {ex.Message}. You can still sideload a build below.", "error");
+        }
+        finally
+        {
+            storeInstallBusy   = false;
+            storeInstallPct    = 0;
+            storeInstallStage  = "";
+            storeInstallDetail = "";
+            StateHasChanged();
+        }
+    }
+
+    private void CancelStoreInstall()
+    {
+        StoreInstall.Cancel();
+    }
+
+    private static string FormatSize(long bytes)
+    {
+        if (bytes <= 0) return "0 B";
+        string[] units = { "B", "KB", "MB", "GB" };
+        double value = bytes;
+        int unit = 0;
+        while (value >= 1024 && unit < units.Length - 1) { value /= 1024; unit++; }
+        return $"{value:0.##} {units[unit]}";
     }
 
     private RenderFragment McVersionActions(VanillaVersion v) => b =>

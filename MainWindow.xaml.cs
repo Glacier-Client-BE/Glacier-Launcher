@@ -53,6 +53,8 @@ public partial class MainWindow : Window
         sc.AddSingleton<DiscordRpcService>();
         sc.AddSingleton<CurseForgeService>();
         sc.AddSingleton<VanillaVersionService>();
+        sc.AddSingleton<StoreInstallService>();
+        sc.AddSingleton<LiveAuthService>();
         sc.AddSingleton<XboxProfileService>();
 
 #if DEBUG
