@@ -27,8 +27,10 @@ public class AutoUpdateService
     private const string LauncherOrg  = "Glacier-Client-BE";
     private const string LauncherRepo = "Glacier-Launcher";
 
-    private static string LatestReleaseApiUrl =>
-        $"https://api.github.com/repos/{LauncherOrg}/{LauncherRepo}/releases/latest";
+    // We list all releases (not /releases/latest) so hotfixes that weren't promoted
+    // to "Latest" on GitHub — or were published as pre-releases — still get picked up.
+    private static string ReleasesApiUrl =>
+        $"https://api.github.com/repos/{LauncherOrg}/{LauncherRepo}/releases?per_page=30";
 
     // ── Injected services ─────────────────────────────────────────
     private readonly FlarialService _flarial;
@@ -56,19 +58,40 @@ public class AutoUpdateService
         LastCheckStatus = null;
         try
         {
-            var cached = await GitHubApiCache.GetJsonAsync(_http, LatestReleaseApiUrl);
+            var cached = await GitHubApiCache.GetJsonAsync(_http, ReleasesApiUrl);
             LastCheckStatus = cached.Error;
             using var doc = JsonDocument.Parse(cached.Body);
             var root = doc.RootElement;
 
-            var tag = root.TryGetProperty("tag_name", out var tagProp)
-                ? tagProp.GetString()?.TrimStart('v') ?? ""
-                : "";
+            if (root.ValueKind != JsonValueKind.Array) return null;
 
-            if (string.IsNullOrEmpty(tag)) return null;
-            if (!IsNewerVersion(tag, CurrentVersion)) return null;
+            // Walk every release and keep the highest semver. Skips drafts but
+            // includes pre-releases so hotfixes published that way still apply.
+            JsonElement? bestRelease = null;
+            string       bestTag     = "";
 
-            var changelog = root.TryGetProperty("body", out var bodyProp)
+            foreach (var release in root.EnumerateArray())
+            {
+                if (release.TryGetProperty("draft", out var draftProp) && draftProp.GetBoolean())
+                    continue;
+
+                var tag = release.TryGetProperty("tag_name", out var tagProp)
+                    ? tagProp.GetString()?.TrimStart('v', 'V') ?? ""
+                    : "";
+                if (string.IsNullOrEmpty(tag)) continue;
+
+                if (bestRelease == null || IsNewerVersion(tag, bestTag))
+                {
+                    bestRelease = release;
+                    bestTag     = tag;
+                }
+            }
+
+            if (bestRelease == null) return null;
+            if (!IsNewerVersion(bestTag, CurrentVersion)) return null;
+
+            var picked = bestRelease.Value;
+            var changelog = picked.TryGetProperty("body", out var bodyProp)
                 ? bodyProp.GetString() ?? ""
                 : "";
 
@@ -76,7 +99,7 @@ public class AutoUpdateService
             string? downloadUrl = null;
             long    assetSize   = 0;
 
-            if (root.TryGetProperty("assets", out var assets))
+            if (picked.TryGetProperty("assets", out var assets))
             {
                 foreach (var asset in assets.EnumerateArray())
                 {
@@ -98,7 +121,7 @@ public class AutoUpdateService
 
             if (string.IsNullOrEmpty(downloadUrl)) return null;
 
-            return new LauncherUpdateInfo(tag, downloadUrl, changelog, assetSize);
+            return new LauncherUpdateInfo(bestTag, downloadUrl, changelog, assetSize);
         }
         catch (Exception ex)
         {
