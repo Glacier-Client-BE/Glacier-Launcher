@@ -1,0 +1,186 @@
+<Window x:Class="GlacierLauncher.GameConsoleWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Game Console"
+        Width="860" Height="540"
+        MinWidth="520" MinHeight="280"
+        WindowStartupLocation="CenterOwner"
+        Background="#23272a"
+        Foreground="#ffffff"
+        ResizeMode="CanResize"
+        TextOptions.TextFormattingMode="Display"
+        UseLayoutRounding="True">
+    <Window.Resources>
+        <!-- Launcher palette (default theme — defaults match :root in app.css) -->
+        <SolidColorBrush x:Key="Bg"          Color="#23272a"/>
+        <SolidColorBrush x:Key="BgPanel"     Color="#2c2f33"/>
+        <SolidColorBrush x:Key="BgItem"      Color="#0Affffff"/> <!-- 4% white -->
+        <SolidColorBrush x:Key="BgItemHover" Color="#13ffffff"/> <!-- 7.5% white -->
+        <SolidColorBrush x:Key="Border"      Color="#14ffffff"/> <!-- 8% white -->
+        <SolidColorBrush x:Key="Text"        Color="#ffffff"/>
+        <SolidColorBrush x:Key="TextDim"     Color="#99aab5"/>
+        <SolidColorBrush x:Key="TextDimmer"  Color="#6b7280"/>
+        <SolidColorBrush x:Key="Red"         Color="#f04747"/>
+        <SolidColorBrush x:Key="Green"       Color="#43b581"/>
+        <SolidColorBrush x:Key="Orange"      Color="#faa61a"/>
+        <!-- Default accent — overridden at runtime by SetAccent() so the window
+             follows the user's launcher accent color. -->
+        <SolidColorBrush x:Key="Accent"      Color="#7289da"/>
+        <SolidColorBrush x:Key="AccentSoft"  Color="#1a7289da"/>
+
+        <!-- Launcher-style pill button — mirrors .vcs-btn / .btn-sm in app.css. -->
+        <Style x:Key="PillButton" TargetType="Button">
+            <Setter Property="Background" Value="{StaticResource BgItem}"/>
+            <Setter Property="Foreground" Value="{StaticResource TextDim}"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="11,5"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="FontFamily" Value="Segoe UI, sans-serif"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="SnapsToDevicePixels" Value="True"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd"
+                                Background="{TemplateBinding Background}"
+                                CornerRadius="8"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"
+                                              TextElement.Foreground="{TemplateBinding Foreground}"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource BgItemHover}"/>
+                                <Setter Property="Foreground" Value="{StaticResource Text}"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource AccentSoft}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- "Toggled" variant for the auto-scroll button when active. -->
+        <Style x:Key="PillButtonActive" TargetType="Button" BasedOn="{StaticResource PillButton}">
+            <Setter Property="Background" Value="{StaticResource Accent}"/>
+            <Setter Property="Foreground" Value="{StaticResource Text}"/>
+        </Style>
+
+        <!-- Danger variant for Stop. -->
+        <Style x:Key="DangerButton" TargetType="Button" BasedOn="{StaticResource PillButton}">
+            <Setter Property="Background" Value="#22f04747"/>
+            <Setter Property="Foreground" Value="#fecaca"/>
+        </Style>
+    </Window.Resources>
+
+    <Grid Background="{StaticResource Bg}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Header -->
+        <Border Grid.Row="0" Background="{StaticResource BgPanel}" Padding="14,10"
+                BorderBrush="{StaticResource Border}" BorderThickness="0,0,0,1">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Ellipse x:Name="StatusDot" Width="9" Height="9" Margin="0,0,10,0"
+                             Fill="{StaticResource Orange}"/>
+                    <StackPanel>
+                        <TextBlock x:Name="TitleLabel"  Text="Minecraft"
+                                   FontFamily="Segoe UI, sans-serif"
+                                   FontSize="13" FontWeight="SemiBold"
+                                   Foreground="{StaticResource Text}"/>
+                        <TextBlock x:Name="StatusLabel" Text="Starting…"
+                                   FontFamily="Segoe UI, sans-serif"
+                                   FontSize="11"
+                                   Foreground="{StaticResource TextDim}"
+                                   Margin="0,2,0,0"/>
+                    </StackPanel>
+                </StackPanel>
+
+                <TextBlock Grid.Column="1" x:Name="PidLabel"
+                           Text="" FontFamily="Consolas, Cascadia Mono"
+                           FontSize="11"
+                           Foreground="{StaticResource TextDimmer}"
+                           HorizontalAlignment="Right" VerticalAlignment="Center"
+                           Margin="0,0,12,0"/>
+
+                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button x:Name="AutoCloseBtn"   Content="Auto-close"   Margin="0,0,6,0"
+                            Style="{StaticResource PillButton}"  Click="AutoCloseBtn_Click"
+                            ToolTip="Close this window automatically when the game exits"/>
+                    <Button x:Name="AutoScrollBtn"  Content="Auto-scroll" Margin="0,0,6,0"
+                            Style="{StaticResource PillButton}"  Click="AutoScrollBtn_Click"/>
+                    <Button x:Name="WrapBtn"        Content="Wrap"         Margin="0,0,6,0"
+                            Style="{StaticResource PillButton}"  Click="WrapBtn_Click"/>
+                    <Button Content="Clear" Margin="0,0,6,0"
+                            Style="{StaticResource PillButton}"  Click="ClearBtn_Click"/>
+                    <Button Content="Copy"  Margin="0,0,6,0"
+                            Style="{StaticResource PillButton}"  Click="CopyBtn_Click"/>
+                    <Button Content="Save"  Margin="0,0,6,0"
+                            Style="{StaticResource PillButton}"  Click="SaveBtn_Click"/>
+                    <Button x:Name="StopBtn" Content="Stop"
+                            Style="{StaticResource DangerButton}" Click="StopBtn_Click"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- Log body -->
+        <Border Grid.Row="1" Background="{StaticResource Bg}" Padding="0">
+            <ScrollViewer x:Name="LogScroll"
+                          VerticalScrollBarVisibility="Auto"
+                          HorizontalScrollBarVisibility="Auto"
+                          Background="Transparent" Padding="0">
+                <RichTextBox x:Name="LogBox"
+                             IsReadOnly="True"
+                             IsDocumentEnabled="False"
+                             Background="Transparent"
+                             Foreground="{StaticResource TextDim}"
+                             BorderThickness="0"
+                             FontFamily="Consolas, Cascadia Mono, Courier New"
+                             FontSize="12"
+                             Padding="14,12"
+                             VerticalScrollBarVisibility="Disabled"
+                             HorizontalScrollBarVisibility="Disabled">
+                    <RichTextBox.Resources>
+                        <Style TargetType="{x:Type Paragraph}">
+                            <Setter Property="Margin" Value="0"/>
+                        </Style>
+                    </RichTextBox.Resources>
+                </RichTextBox>
+            </ScrollViewer>
+        </Border>
+
+        <!-- Footer -->
+        <Border Grid.Row="2" Background="{StaticResource BgPanel}" Padding="14,7"
+                BorderBrush="{StaticResource Border}" BorderThickness="0,1,0,0">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" x:Name="FooterLabel" Text="0 lines"
+                           FontFamily="Segoe UI, sans-serif" FontSize="11"
+                           Foreground="{StaticResource TextDimmer}"
+                           VerticalAlignment="Center"/>
+                <TextBlock Grid.Column="1" Text="GLACIER LAUNCHER · GAME CONSOLE"
+                           FontFamily="Segoe UI, sans-serif" FontSize="9"
+                           Foreground="{StaticResource TextDimmer}"
+                           Opacity="0.55"
+                           VerticalAlignment="Center"
+                           Margin="0,0,2,0"/>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>

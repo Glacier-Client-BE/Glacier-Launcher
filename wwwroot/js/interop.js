@@ -169,6 +169,10 @@ window.setTheme = (preset) => {
 
 window.setBlurIntensity = (px) => {
     document.documentElement.style.setProperty('--blur', px + 'px');
+    // 0 px backdrop-filter still triggers a GPU layer + readback on every paint.
+    // Toggling the no-blur class strips the property entirely so integrated
+    // graphics don't pay for an effect the user can't see anyway.
+    document.documentElement.classList.toggle('no-blur', Number(px) <= 0);
 };
 
 window.setCustomBackground = (filePath) => {

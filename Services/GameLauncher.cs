@@ -25,6 +25,7 @@ public class GameLauncher
 
     private readonly SettingsService _settingsService;
     private readonly HttpClient      _httpClient;
+    private readonly GameConsoleService? _console;
 
     public static string DownloadsDirectory =>
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
@@ -33,10 +34,11 @@ public class GameLauncher
     public static string LatiteDirectory =>
         Path.Combine(DownloadsDirectory, "Latite");
 
-    public GameLauncher(SettingsService settingsService)
+    public GameLauncher(SettingsService settingsService, GameConsoleService console)
     {
         _settingsService = settingsService;
         _httpClient      = HttpFactory.Shared;
+        _console         = console;
         Directory.CreateDirectory(LatiteDirectory);
     }
 
@@ -261,6 +263,23 @@ public class GameLauncher
 
     private async Task LaunchWithPathAsync(string? dllPath)
     {
+        var clientName = string.IsNullOrEmpty(dllPath) ? "Vanilla" : Path.GetFileName(dllPath);
+        var console = _console?.Open($"Minecraft Bedrock · {clientName}");
+        try
+        {
+            await LaunchWithPathCoreAsync(dllPath, console);
+            console?.Info("Launch flow complete.");
+        }
+        catch (Exception ex)
+        {
+            console?.Error(ex.Message);
+            console?.MarkFailed(ex.Message.Length > 60 ? ex.Message[..60] + "…" : ex.Message);
+            throw;
+        }
+    }
+
+    private async Task LaunchWithPathCoreAsync(string? dllPath, GameConsoleHandle? console)
+    {
         // Check if Minecraft is already running before launching
         var alreadyRunning = GetMinecraftProcess();
         uint pid = 0;
@@ -268,10 +287,12 @@ public class GameLauncher
         if (alreadyRunning == null)
         {
             bool launched = false;
+            console?.Info("Minecraft not running — launching via COM ApplicationActivationManager…");
 
             // 1. Try COM-based IApplicationActivationManager (InjectionService)
-            try { pid = InjectionService.LaunchMinecraft(); } catch { pid = 0; }
-            
+            try { pid = InjectionService.LaunchMinecraft(); }
+            catch (Exception ex) { pid = 0; console?.Stderr("COM activation failed: " + ex.Message); }
+
             // Wait briefly to see if process actually spawns
             for (int i = 0; i < 6; i++) // 3 seconds
             {
@@ -281,12 +302,14 @@ public class GameLauncher
 
             if (!launched)
             {
+                console?.Info("COM didn't spawn a process — falling back to minecraft:// URI.");
                 // 2. Fallback: Try URI and cmd methods (GameLauncher Service)
                 launched = await TryLaunchMinecraftAsync();
             }
 
             if (!launched)
             {
+                console?.Info("URI fallback failed — retrying COM activation.");
                 // 3. Vice versa fallback: Try COM again just in case the system was busy
                 try { pid = InjectionService.LaunchMinecraft(); } catch { pid = 0; }
                 for (int i = 0; i < 6; i++) // 3 seconds
@@ -295,6 +318,8 @@ public class GameLauncher
                     if (GetMinecraftProcess() != null) { launched = true; break; }
                 }
             }
+
+            console?.Info("Waiting for Minecraft main window…");
 
             // Wait for the process to be ready (main window handle exists).
             for (int i = 0; i < 60; i++) // 30 seconds max
@@ -306,13 +331,17 @@ public class GameLauncher
                     pid = (uint)proc.Id;
                     // Wait until the process has a main window — means the game engine is initialising
                     if (proc.MainWindowHandle != IntPtr.Zero)
+                    {
+                        console?.Info($"Main window appeared after {((i + 1) * 0.5):F1}s.");
                         break;
+                    }
                 }
             }
         }
         else
         {
             pid = (uint)alreadyRunning.Id;
+            console?.Info($"Minecraft already running (PID {pid}). Reusing.");
         }
 
         var mcProcess = GetMinecraftProcess();
@@ -320,9 +349,17 @@ public class GameLauncher
             throw new TimeoutException("Minecraft did not start. Please launch Minecraft manually and then click Launch again.");
 
         pid = (uint)mcProcess.Id;
+        console?.SetPid((int)pid);
+        console?.MarkRunning();
 
         // If no DLL was provided, just launch MC without injecting
-        if (string.IsNullOrEmpty(dllPath)) return;
+        if (string.IsNullOrEmpty(dllPath))
+        {
+            console?.Info("No client DLL configured — leaving Minecraft vanilla.");
+            return;
+        }
+
+        console?.Info($"Sleeping {_settingsService.Settings.InjectionDelayMs} ms before injection (settings → Injection delay).");
 
         // Wait for the game engine to initialise before injecting.
         // The delay is shorter now because we already waited for the main window above.
@@ -332,19 +369,28 @@ public class GameLauncher
         mcProcess = GetMinecraftProcess()
             ?? throw new TimeoutException("Minecraft exited before injection could complete.");
         pid = (uint)mcProcess.Id;
+        console?.SetPid((int)pid);
+
+        console?.Info($"Injecting {dllPath} into PID {pid}…");
 
         // Grant UWP access to the DLL and its parent directory, then inject
         // using the consolidated InjectionService which handles all P/Invoke correctly.
         InjectionService.InjectDll(pid, dllPath);
+        console?.Info("Injection call returned successfully.");
     }
 
-    // Checks all known Minecraft process names
+    // Checks all known Minecraft process names. We dispose any extra Process
+    // handles we open as part of the scan — GetProcessesByName keeps an OS
+    // handle per element until the GC runs, and on low-end machines that
+    // accumulates fast when the launcher polls this on a timer.
     private static Process? GetMinecraftProcess()
     {
         foreach (var name in new[] { "Minecraft.Windows", "Minecraft", "MinecraftUWP" })
         {
             var procs = Process.GetProcessesByName(name);
-            if (procs.Length > 0) return procs[0];
+            if (procs.Length == 0) continue;
+            for (int i = 1; i < procs.Length; i++) procs[i].Dispose();
+            return procs[0];
         }
         return null;
     }

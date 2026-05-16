@@ -11,6 +11,10 @@
 @inject VanillaVersionService VanillaVersions
 @inject StoreInstallService StoreInstall
 @inject XboxProfileService Xbox
+@inject JavaVersionService JavaVersions
+@inject JavaGameLauncher JavaLauncher
+@inject JavaInstallService JavaInstaller
+@inject LunarBadlionService LunarBadlion
 @inject IJSRuntime JS
 @implements IDisposable
 
@@ -345,7 +349,23 @@
 
         <div class="top-bar-spacer"></div>
 
+        <!-- Edition switcher (Bedrock / Java) -->
+        <div class="edition-switcher" @onmousedown:stopPropagation data-tooltip="Switch Minecraft edition">
+            <button class="edition-tab @(IsBedrock ? "active" : "")"
+                    @onclick='() => SetEdition("bedrock")'>
+                <i class="fa-solid fa-cube"></i>
+                <span>Bedrock</span>
+            </button>
+            <button class="edition-tab @(IsJava ? "active" : "")"
+                    @onclick='() => SetEdition("java")'>
+                <i class="fa-brands fa-java"></i>
+                <span>Java</span>
+            </button>
+        </div>
+
         <!-- Quick client switcher chip (inline, left of controls) -->
+        @if (IsBedrock)
+        {
         <div class="topbar-client-chip" @onclick="CycleClient" @onmousedown:stopPropagation
              data-tooltip="Click to cycle client (@SettingsService.Settings.SelectedClient)">
             <div class="chip-dot @(mcRunning ? "live" : "")"></div>
@@ -360,6 +380,7 @@
             <span>@SettingsService.Settings.SelectedClient</span>
             <i class="fa-solid fa-chevron-right chip-arrow"></i>
         </div>
+        }
 
         @if (mcRunning)
         {
@@ -422,59 +443,92 @@
                 </button>
             </div>
 
-            <div class="btn-badge-wrap">
-                <button class="action-btn @(hoveredBtn == "clients" ? "btn-wide" : "btn-sq")"
-                        @onmouseenter='() => SetHover("clients")' @onmouseleave="ClearHover"
-                        @onclick="OpenClients" @onmousedown:stopPropagation>
-                    @if (hoveredBtn == "clients") { <span>Clients</span> }
-                    else { <i class="fa-solid fa-puzzle-piece"></i> }
-                </button>
-                @if (clientsHasBadge) { <span class="notification-badge"></span> }
-            </div>
+            @if (IsBedrock)
+            {
+                <div class="btn-badge-wrap">
+                    <button class="action-btn @(hoveredBtn == "clients" ? "btn-wide" : "btn-sq")"
+                            @onmouseenter='() => SetHover("clients")' @onmouseleave="ClearHover"
+                            @onclick="OpenClients" @onmousedown:stopPropagation>
+                        @if (hoveredBtn == "clients") { <span>Clients</span> }
+                        else { <i class="fa-solid fa-puzzle-piece"></i> }
+                    </button>
+                    @if (clientsHasBadge) { <span class="notification-badge"></span> }
+                </div>
 
-            <div class="btn-badge-wrap">
-                <button class="action-btn @(hoveredBtn == "addons" ? "btn-wide" : "btn-sq")"
-                        @onmouseenter='() => SetHover("addons")' @onmouseleave="ClearHover"
-                        @onclick="OpenAddons" @onmousedown:stopPropagation>
-                    @if (hoveredBtn == "addons") { <span>Addons</span> }
-                    else { <i class="fa-solid fa-cube"></i> }
-                </button>
-            </div>
+                <div class="btn-badge-wrap">
+                    <button class="action-btn @(hoveredBtn == "addons" ? "btn-wide" : "btn-sq")"
+                            @onmouseenter='() => SetHover("addons")' @onmouseleave="ClearHover"
+                            @onclick="OpenAddons" @onmousedown:stopPropagation>
+                        @if (hoveredBtn == "addons") { <span>Addons</span> }
+                        else { <i class="fa-solid fa-cube"></i> }
+                    </button>
+                </div>
 
-            <div class="btn-badge-wrap">
-                <button class="action-btn @(hoveredBtn == "servers" ? "btn-wide" : "btn-sq")"
-                        @onmouseenter='() => SetHover("servers")' @onmouseleave="ClearHover"
-                        @onclick="OpenServers" @onmousedown:stopPropagation>
-                    @if (hoveredBtn == "servers") { <span>Servers</span> }
-                    else { <i class="fa-solid fa-server"></i> }
-                </button>
-            </div>
+                <div class="btn-badge-wrap">
+                    <button class="action-btn @(hoveredBtn == "servers" ? "btn-wide" : "btn-sq")"
+                            @onmouseenter='() => SetHover("servers")' @onmouseleave="ClearHover"
+                            @onclick="OpenServers" @onmousedown:stopPropagation>
+                        @if (hoveredBtn == "servers") { <span>Servers</span> }
+                        else { <i class="fa-solid fa-server"></i> }
+                    </button>
+                </div>
 
-            <div class="btn-badge-wrap">
-                <button class="action-btn @(hoveredBtn == "mcversions" ? "btn-wide" : "btn-sq")"
-                        @onmouseenter='() => SetHover("mcversions")' @onmouseleave="ClearHover"
-                        @onclick="OpenMcVersions" @onmousedown:stopPropagation>
-                    @if (hoveredBtn == "mcversions") { <span>MC Versions</span> }
-                    else { <i class="fa-solid fa-box-archive"></i> }
-                </button>
-            </div>
+                <div class="btn-badge-wrap">
+                    <button class="action-btn @(hoveredBtn == "mcversions" ? "btn-wide" : "btn-sq")"
+                            @onmouseenter='() => SetHover("mcversions")' @onmouseleave="ClearHover"
+                            @onclick="OpenMcVersions" @onmousedown:stopPropagation>
+                        @if (hoveredBtn == "mcversions") { <span>MC Versions</span> }
+                        else { <i class="fa-solid fa-box-archive"></i> }
+                    </button>
+                </div>
+            }
+            else
+            {
+                <div class="btn-badge-wrap">
+                    <button class="action-btn @(hoveredBtn == "javaclients" ? "btn-wide" : "btn-sq")"
+                            @onmouseenter='() => SetHover("javaclients")' @onmouseleave="ClearHover"
+                            @onclick="OpenJavaClients" @onmousedown:stopPropagation>
+                        @if (hoveredBtn == "javaclients") { <span>Launchers</span> }
+                        else { <i class="fa-solid fa-rocket"></i> }
+                    </button>
+                </div>
+
+                <div class="btn-badge-wrap">
+                    <button class="action-btn @(hoveredBtn == "addons" ? "btn-wide" : "btn-sq")"
+                            @onmouseenter='() => SetHover("addons")' @onmouseleave="ClearHover"
+                            @onclick="OpenAddons" @onmousedown:stopPropagation>
+                        @if (hoveredBtn == "addons") { <span>Mods</span> }
+                        else { <i class="fa-solid fa-puzzle-piece"></i> }
+                    </button>
+                </div>
+
+                <div class="btn-badge-wrap">
+                    <button class="action-btn @(hoveredBtn == "javaversions" ? "btn-wide" : "btn-sq")"
+                            @onmouseenter='() => SetHover("javaversions")' @onmouseleave="ClearHover"
+                            @onclick="OpenJavaVersions" @onmousedown:stopPropagation>
+                        @if (hoveredBtn == "javaversions") { <span>Versions</span> }
+                        else { <i class="fa-solid fa-box-archive"></i> }
+                    </button>
+                </div>
+            }
         </div>
 
         @if (currentView == "home")
         {
             <p class="status-msg @(isError ? "error" : "") @(statusVisible ? "visible" : "")">@statusMessage</p>
 
-            @if (SettingsService.Settings.ShowRecentlyLaunched && SettingsService.Settings.RecentlyLaunched.Count > 0)
+            var editionRecents = RecentsForCurrentEdition();
+            @if (SettingsService.Settings.ShowRecentlyLaunched && editionRecents.Count > 0)
             {
                 <div class="recently-launched">
                     <span class="recently-label">Recent:</span>
-                    @foreach (var item in SettingsService.Settings.RecentlyLaunched.Take(3))
+                    @foreach (var item in editionRecents.Take(3))
                     {
                         var itemCopy = item;
                         <button class="recent-item"
                                 @onclick="() => QuickLaunchRecent(itemCopy)"
                                 @onmousedown:stopPropagation>
-                            <i class="fa-solid fa-clock-rotate-left"></i>@item
+                            <i class="fa-solid fa-clock-rotate-left"></i>@RecentDisplayLabel(itemCopy)
                         </button>
                     }
                 </div>
@@ -670,10 +724,20 @@
                         @onclick='() => SetSettingsCategory("all")' @onmousedown:stopPropagation>
                     <i class="fa-solid fa-layer-group"></i> All
                 </button>
-                <button class="vcs-btn @(settingsCategory == "injection" ? "active" : "")"
-                        @onclick='() => SetSettingsCategory("injection")' @onmousedown:stopPropagation>
-                    <i class="fa-solid fa-syringe"></i> Inject
-                </button>
+                @if (IsBedrock)
+                {
+                    <button class="vcs-btn @(settingsCategory == "injection" ? "active" : "")"
+                            @onclick='() => SetSettingsCategory("injection")' @onmousedown:stopPropagation>
+                        <i class="fa-solid fa-syringe"></i> Inject
+                    </button>
+                }
+                else
+                {
+                    <button class="vcs-btn @(settingsCategory == "java" ? "active" : "")"
+                            @onclick='() => SetSettingsCategory("java")' @onmousedown:stopPropagation>
+                        <i class="fa-brands fa-java"></i> Java
+                    </button>
+                }
                 <button class="vcs-btn @(settingsCategory == "appearance" ? "active" : "")"
                         @onclick='() => SetSettingsCategory("appearance")' @onmousedown:stopPropagation>
                     <i class="fa-solid fa-palette"></i> Looks
@@ -792,6 +856,121 @@
                     <div class="toggle @(SettingsService.Settings.CloseAfterLaunch ? "on" : "")"
                          @onclick:stopPropagation
                          @onclick='() => ToggleProp(() => SettingsService.Settings.CloseAfterLaunch = !SettingsService.Settings.CloseAfterLaunch)'></div>
+                </div>
+
+                </div>
+                }
+
+                @if (CategoryMatches("java"))
+                {
+                <div class="settings-section">
+                @if (SectionMatch(("Maximum RAM","ram memory java heap"), ("Minecraft folder","minecraft folder dot directory"), ("Java runtime","java runtime jre jdk javaw")))
+                {
+                    <span class="panel-section-label">Java Edition</span>
+                }
+
+                <div class="setting-row @(SH("Maximum RAM","ram memory java heap"))">
+                    <div class="setting-meta">
+                        <span class="setting-label">Maximum RAM</span>
+                        <span class="setting-hint">Heap size cap for the Minecraft JVM (-Xmx)</span>
+                    </div>
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        <input type="range" min="1024" max="16384" step="512"
+                               value="@SettingsService.Settings.JavaMaxRamMb"
+                               @oninput="OnJavaRamChanged" />
+                        <span style="font-size:11px; color:var(--text-dim); width:50px; text-align:right;">
+                            @(SettingsService.Settings.JavaMaxRamMb) MB
+                        </span>
+                    </div>
+                </div>
+
+                <div class="setting-row @(SH("Minecraft folder","minecraft folder dot directory"))">
+                    <div class="setting-meta">
+                        <span class="setting-label">Minecraft folder</span>
+                        <span class="setting-hint">Leave empty for the default %APPDATA%\.minecraft</span>
+                    </div>
+                    <input class="setting-input" type="text"
+                           placeholder="%APPDATA%\.minecraft"
+                           value="@SettingsService.Settings.JavaMinecraftDir"
+                           @onchange="OnJavaMinecraftDirChanged"
+                           @onkeydown:stopPropagation />
+                </div>
+
+                <div class="setting-row @(SH("Java runtime","java runtime jre jdk javaw"))">
+                    <div class="setting-meta">
+                        <span class="setting-label">Java runtime (javaw.exe)</span>
+                        <span class="setting-hint">Auto-detected from runtime/JAVA_HOME/PATH/registry when blank</span>
+                    </div>
+                    <input class="setting-input" type="text"
+                           placeholder="C:\Program Files\Java\jdk-21\bin\javaw.exe"
+                           value="@SettingsService.Settings.JavaRuntimePath"
+                           @onchange="OnJavaRuntimeChanged"
+                           @onkeydown:stopPropagation />
+                </div>
+
+                <div class="setting-row clickable @(SH("Show snapshots","snapshots experimental"))"
+                     @onclick='() => ToggleProp(() => SettingsService.Settings.JavaShowSnapshots = !SettingsService.Settings.JavaShowSnapshots)'>
+                    <div class="setting-meta">
+                        <span class="setting-label">Show snapshots</span>
+                        <span class="setting-hint">Include experimental builds in the Versions list</span>
+                    </div>
+                    <div class="toggle @(SettingsService.Settings.JavaShowSnapshots ? "on" : "")"
+                         @onclick:stopPropagation
+                         @onclick='() => ToggleProp(() => SettingsService.Settings.JavaShowSnapshots = !SettingsService.Settings.JavaShowSnapshots)'></div>
+                </div>
+
+                <div class="setting-row clickable @(SH("Show beta and alpha","beta alpha historical old"))"
+                     @onclick='() => ToggleProp(() => SettingsService.Settings.JavaShowHistorical = !SettingsService.Settings.JavaShowHistorical)'>
+                    <div class="setting-meta">
+                        <span class="setting-label">Show beta &amp; alpha</span>
+                        <span class="setting-hint">Include the original pre-release builds</span>
+                    </div>
+                    <div class="toggle @(SettingsService.Settings.JavaShowHistorical ? "on" : "")"
+                         @onclick:stopPropagation
+                         @onclick='() => ToggleProp(() => SettingsService.Settings.JavaShowHistorical = !SettingsService.Settings.JavaShowHistorical)'></div>
+                </div>
+
+                <div class="setting-row clickable @(SH("Close after launch","close minimize launch java"))"
+                     @onclick='() => ToggleProp(() => SettingsService.Settings.CloseAfterLaunch = !SettingsService.Settings.CloseAfterLaunch)'>
+                    <div class="setting-meta">
+                        <span class="setting-label">Close after launch</span>
+                        <span class="setting-hint">Minimise the launcher once the game starts</span>
+                    </div>
+                    <div class="toggle @(SettingsService.Settings.CloseAfterLaunch ? "on" : "")"
+                         @onclick:stopPropagation
+                         @onclick='() => ToggleProp(() => SettingsService.Settings.CloseAfterLaunch = !SettingsService.Settings.CloseAfterLaunch)'></div>
+                </div>
+
+                <div class="setting-row @(SH("Custom JVM args","jvm args java options garbage collector gc"))">
+                    <div class="setting-meta">
+                        <span class="setting-label">Custom JVM args</span>
+                        <span class="setting-hint">Appended after -Xmx (e.g. -XX:+UseG1GC -Dfile.encoding=UTF-8)</span>
+                    </div>
+                    <input class="setting-input" type="text"
+                           placeholder="(none)"
+                           value="@SettingsService.Settings.JavaCustomJvmArgs"
+                           @onchange="OnJavaJvmArgsChanged"
+                           @onkeydown:stopPropagation />
+                </div>
+
+                <div class="setting-row @(SH("Open Minecraft folder","minecraft folder dot directory open"))">
+                    <div class="setting-meta">
+                        <span class="setting-label">Open .minecraft folder</span>
+                        <span class="setting-hint">@JavaVersions.MinecraftDir</span>
+                    </div>
+                    <button class="btn-sm" @onclick="OpenJavaMinecraftFolder" @onmousedown:stopPropagation>
+                        <i class="fa-solid fa-folder-open"></i> Open
+                    </button>
+                </div>
+
+                <div class="setting-row @(SH("Latest crash report","crash report log latest open view java"))">
+                    <div class="setting-meta">
+                        <span class="setting-label">Latest crash report</span>
+                        <span class="setting-hint">@(LatestJavaCrashLabel())</span>
+                    </div>
+                    <button class="btn-sm" @onclick="OpenLatestJavaCrash" @onmousedown:stopPropagation disabled="@(LatestJavaCrashFile() == null)">
+                        <i class="fa-solid fa-bug"></i> Open
+                    </button>
                 </div>
 
                 </div>
@@ -1006,6 +1185,17 @@
                          @onclick='() => ToggleProp(() => SettingsService.Settings.ShowRecentlyLaunched = !SettingsService.Settings.ShowRecentlyLaunched)'></div>
                 </div>
 
+                <div class="setting-row clickable @(SH("Show launch console","console log launch window java bedrock output stdout"))"
+                     @onclick='() => ToggleProp(() => SettingsService.Settings.ShowLaunchConsole = !SettingsService.Settings.ShowLaunchConsole)'>
+                    <div class="setting-meta">
+                        <span class="setting-label">Show launch console</span>
+                        <span class="setting-hint">Pops a window with live game output (Java) or launcher events (Bedrock) on every launch</span>
+                    </div>
+                    <div class="toggle @(SettingsService.Settings.ShowLaunchConsole ? "on" : "")"
+                         @onclick:stopPropagation
+                         @onclick='() => ToggleProp(() => SettingsService.Settings.ShowLaunchConsole = !SettingsService.Settings.ShowLaunchConsole)'></div>
+                </div>
+
                 <div class="setting-row clickable @(SH("Minimize to tray","tray minimize system"))"
                      @onclick='() => ToggleProp(() => SettingsService.Settings.MinimizeToTray = !SettingsService.Settings.MinimizeToTray)'>
                     <div class="setting-meta">
@@ -1191,10 +1381,19 @@
             </div>
             <div class="panel-tabs">
                 <button class="panel-tab active" @onmousedown:stopPropagation><i class="fa-solid fa-gear"></i>Settings</button>
-                <button class="panel-tab" @onclick="OpenClients" @onmousedown:stopPropagation><i class="fa-solid fa-puzzle-piece"></i>Clients</button>
-                <button class="panel-tab" @onclick="OpenAddons" @onmousedown:stopPropagation><i class="fa-solid fa-cube"></i>Addons</button>
-                <button class="panel-tab" @onclick="OpenServers" @onmousedown:stopPropagation><i class="fa-solid fa-server"></i>Servers</button>
-                <button class="panel-tab" @onclick="OpenMcVersions" @onmousedown:stopPropagation><i class="fa-solid fa-box-archive"></i>MC Versions</button>
+                @if (IsBedrock)
+                {
+                    <button class="panel-tab" @onclick="OpenClients" @onmousedown:stopPropagation><i class="fa-solid fa-puzzle-piece"></i>Clients</button>
+                    <button class="panel-tab" @onclick="OpenAddons" @onmousedown:stopPropagation><i class="fa-solid fa-cube"></i>Addons</button>
+                    <button class="panel-tab" @onclick="OpenServers" @onmousedown:stopPropagation><i class="fa-solid fa-server"></i>Servers</button>
+                    <button class="panel-tab" @onclick="OpenMcVersions" @onmousedown:stopPropagation><i class="fa-solid fa-box-archive"></i>MC Versions</button>
+                }
+                else
+                {
+                    <button class="panel-tab" @onclick="OpenJavaClients" @onmousedown:stopPropagation><i class="fa-solid fa-rocket"></i>Launchers</button>
+                    <button class="panel-tab" @onclick="OpenAddons" @onmousedown:stopPropagation><i class="fa-solid fa-puzzle-piece"></i>Mods</button>
+                    <button class="panel-tab" @onclick="OpenJavaVersions" @onmousedown:stopPropagation><i class="fa-solid fa-box-archive"></i>Versions</button>
+                }
                 <button class="panel-tab" @onclick="OpenCredits" @onmousedown:stopPropagation><i class="fa-solid fa-heart"></i>Credits</button>
             </div>
         </div>
@@ -1598,7 +1797,7 @@
             <div class="panel-handle"></div>
             <div class="panel-header">
                 <div class="panel-title-wrap">
-                    <span class="panel-title">Addons</span>
+                    <span class="panel-title">@(IsJava ? "Mods & Addons" : "Addons")</span>
                     <div class="panel-title-underline"></div>
                 </div>
                 <div class="panel-header-actions">
@@ -1624,31 +1823,19 @@
             else
             {
                 <div class="versions-client-switcher">
-                    <button class="vcs-btn @(cfCategory == "all" ? "active" : "")"
-                            @onclick='() => SetCfCategory("all")' @onmousedown:stopPropagation>
-                        <i class="fa-solid fa-layer-group"></i> All
-                    </button>
-                    <button class="vcs-btn @(cfCategory == "addons" ? "active" : "")"
-                            @onclick='() => SetCfCategory("addons")' @onmousedown:stopPropagation>
-                        <i class="fa-solid fa-puzzle-piece"></i> Addons
-                    </button>
-                    <button class="vcs-btn @(cfCategory == "texturepacks" ? "active" : "")"
-                            @onclick='() => SetCfCategory("texturepacks")' @onmousedown:stopPropagation>
-                        <i class="fa-solid fa-palette"></i> Textures
-                    </button>
-                    <button class="vcs-btn @(cfCategory == "worlds" ? "active" : "")"
-                            @onclick='() => SetCfCategory("worlds")' @onmousedown:stopPropagation>
-                        <i class="fa-solid fa-earth-americas"></i> Maps
-                    </button>
-                    <button class="vcs-btn @(cfCategory == "skins" ? "active" : "")"
-                            @onclick='() => SetCfCategory("skins")' @onmousedown:stopPropagation>
-                        <i class="fa-solid fa-user"></i> Skins
-                    </button>
+                    @foreach (var cat in CurseForge.AvailableCategories)
+                    {
+                        var key = cat.Key;
+                        <button class="vcs-btn @(cfCategory == key ? "active" : "")"
+                                @onclick='() => SetCfCategory(key)' @onmousedown:stopPropagation>
+                            <i class="@cat.Icon"></i> @cat.Label
+                        </button>
+                    }
                 </div>
 
                 <div class="panel-search-wrap">
                     <i class="fa-solid fa-magnifying-glass"></i>
-                    <input class="panel-search-input" placeholder="Search CurseForge addons…"
+                    <input class="panel-search-input" placeholder="@(IsJava ? "Search CurseForge for Java mods, modpacks, shaders…" : "Search CurseForge addons…")"
                            value="@cfSearchQuery"
                            @oninput="OnCfSearchInput"
                            @onkeydown="OnCfSearchKeyDown"
@@ -1750,10 +1937,19 @@
 
             <div class="panel-tabs">
                 <button class="panel-tab" @onclick="OpenSettings" @onmousedown:stopPropagation><i class="fa-solid fa-gear"></i>Settings</button>
-                <button class="panel-tab" @onclick="OpenClients" @onmousedown:stopPropagation><i class="fa-solid fa-puzzle-piece"></i>Clients</button>
-                <button class="panel-tab active" @onmousedown:stopPropagation><i class="fa-solid fa-cube"></i>Addons</button>
-                <button class="panel-tab" @onclick="OpenServers" @onmousedown:stopPropagation><i class="fa-solid fa-server"></i>Servers</button>
-                <button class="panel-tab" @onclick="OpenMcVersions" @onmousedown:stopPropagation><i class="fa-solid fa-box-archive"></i>MC Versions</button>
+                @if (IsBedrock)
+                {
+                    <button class="panel-tab" @onclick="OpenClients" @onmousedown:stopPropagation><i class="fa-solid fa-puzzle-piece"></i>Clients</button>
+                    <button class="panel-tab active" @onmousedown:stopPropagation><i class="fa-solid fa-cube"></i>Addons</button>
+                    <button class="panel-tab" @onclick="OpenServers" @onmousedown:stopPropagation><i class="fa-solid fa-server"></i>Servers</button>
+                    <button class="panel-tab" @onclick="OpenMcVersions" @onmousedown:stopPropagation><i class="fa-solid fa-box-archive"></i>MC Versions</button>
+                }
+                else
+                {
+                    <button class="panel-tab" @onclick="OpenJavaClients" @onmousedown:stopPropagation><i class="fa-solid fa-rocket"></i>Launchers</button>
+                    <button class="panel-tab active" @onmousedown:stopPropagation><i class="fa-solid fa-puzzle-piece"></i>Mods</button>
+                    <button class="panel-tab" @onclick="OpenJavaVersions" @onmousedown:stopPropagation><i class="fa-solid fa-box-archive"></i>Versions</button>
+                }
                 <button class="panel-tab" @onclick="OpenCredits" @onmousedown:stopPropagation><i class="fa-solid fa-heart"></i>Credits</button>
             </div>
         </div>
@@ -2066,6 +2262,270 @@
         </div>
     }
 
+    <!-- ── JAVA LAUNCHERS PANEL ── -->
+    @if (currentView == "javaclients")
+    {
+        <div class="panel-overlay">
+            <div class="panel-handle"></div>
+            <div class="panel-header">
+                <div class="panel-title-wrap">
+                    <span class="panel-title">Launchers</span>
+                    <div class="panel-title-underline"></div>
+                </div>
+                <div class="panel-header-actions">
+                    <button class="panel-icon-btn" @onclick="RefreshJavaClients" @onmousedown:stopPropagation data-tooltip="Re-detect">
+                        <i class="fa-solid fa-rotate"></i>
+                    </button>
+                    <button class="panel-back-btn" @onclick="GoHome" @onmousedown:stopPropagation data-tooltip="Back">
+                        <i class="fa-solid fa-chevron-down"></i>
+                    </button>
+                </div>
+            </div>
+
+            <div class="mcv-info-bar">
+                <i class="fa-solid fa-circle-info"></i>
+                <span>Vanilla launches through Glacier directly. Lunar and Badlion launch via their own installed apps — we don't proxy through them.</span>
+            </div>
+
+            <div class="panel-body">
+                <span class="panel-section-label">Built-in</span>
+                <div class="credits-card credits-card-glacier">
+                    <div class="credits-card-icon" style="background:var(--accent-bg); color:var(--accent);">
+                        <i class="fa-brands fa-java"></i>
+                    </div>
+                    <div class="credits-card-meta">
+                        <span class="credits-card-name">Vanilla (Glacier built-in)</span>
+                        <span class="credits-card-sub">Launches Mojang's Java client directly. Pick a version in the Versions panel.</span>
+                    </div>
+                    <div class="credits-card-actions">
+                        <button class="vcs-btn" @onclick="OpenJavaVersions" @onmousedown:stopPropagation>
+                            <i class="fa-solid fa-box-archive"></i> Versions
+                        </button>
+                    </div>
+                </div>
+
+                <span class="panel-section-label">Third-party</span>
+
+                @{
+                    var lbInstalled = LunarBadlion.LunarInstalled || LunarBadlion.BadlionInstalled;
+                    var canDirect   = LunarBadlion.CanDirectLaunchLunar;
+                }
+                <div class="credits-card">
+                    <div class="credits-card-icon" style="background:#06b6d422; color:#22d3ee;">
+                        <i class="fa-solid fa-moon"></i>
+                    </div>
+                    <div class="credits-card-meta">
+                        <span class="credits-card-name">Lunar Client <span style="opacity:0.55; font-weight:500;">incl. Badlion</span></span>
+                        <span class="credits-card-sub">
+                            @if (lbInstalled && canDirect)
+                            {
+                                <text>Direct launch ready · @(LunarBadlion.LunarInstalledVersions.Length) version(s) installed offline</text>
+                            }
+                            else if (lbInstalled)
+                            {
+                                <text>Detected · @(LunarBadlion.LunarExePath ?? LunarBadlion.BadlionExePath) — first launch may show the Lunar splash</text>
+                            }
+                            else
+                            {
+                                <text>Not installed — download from lunarclient.com (Lunar's purchase of Badlion lets one app cover both)</text>
+                            }
+                        </span>
+                    </div>
+                    <div class="credits-card-actions">
+                        @if (lbInstalled && canDirect)
+                        {
+                            <select class="setting-select" @bind="lunarSelectedVersion" @onclick:stopPropagation>
+                                @foreach (var lv in LunarBadlion.LunarInstalledVersions)
+                                {
+                                    <option value="@lv">@lv</option>
+                                }
+                            </select>
+                            <button class="vcs-btn" @onclick='() => LaunchLunarDirect()' @onmousedown:stopPropagation>
+                                <i class="fa-solid fa-bolt"></i> Launch
+                            </button>
+                        }
+                        else if (lbInstalled)
+                        {
+                            <button class="vcs-btn" @onclick='() => LaunchLunar()' @onmousedown:stopPropagation>
+                                <i class="fa-solid fa-play"></i> Launch
+                            </button>
+                        }
+                        else
+                        {
+                            <button class="vcs-btn vcs-btn-ghost" @onclick='() => OpenUrl("https://www.lunarclient.com")' @onmousedown:stopPropagation>
+                                <i class="fa-solid fa-arrow-up-right-from-square"></i> Get it
+                            </button>
+                        }
+                    </div>
+                </div>
+            </div>
+
+            <div class="panel-tabs">
+                <button class="panel-tab" @onclick="OpenSettings" @onmousedown:stopPropagation><i class="fa-solid fa-gear"></i>Settings</button>
+                <button class="panel-tab active" @onmousedown:stopPropagation><i class="fa-solid fa-rocket"></i>Launchers</button>
+                <button class="panel-tab" @onclick="OpenAddons" @onmousedown:stopPropagation><i class="fa-solid fa-puzzle-piece"></i>Mods</button>
+                <button class="panel-tab" @onclick="OpenJavaVersions" @onmousedown:stopPropagation><i class="fa-solid fa-box-archive"></i>Versions</button>
+                <button class="panel-tab" @onclick="OpenCredits" @onmousedown:stopPropagation><i class="fa-solid fa-heart"></i>Credits</button>
+            </div>
+        </div>
+    }
+
+    <!-- ── JAVA VERSIONS PANEL ── -->
+    @if (currentView == "javaversions")
+    {
+        <div class="panel-overlay">
+            <div class="panel-handle"></div>
+            <div class="panel-header">
+                <div class="panel-title-wrap">
+                    <span class="panel-title">Versions</span>
+                    <div class="panel-title-underline"></div>
+                </div>
+                <div class="panel-header-actions">
+                    <button class="panel-icon-btn @(SettingsService.Settings.JavaShowSnapshots ? "active" : "")"
+                            @onclick="ToggleJavaSnapshots" @onmousedown:stopPropagation
+                            data-tooltip="@(SettingsService.Settings.JavaShowSnapshots ? "Hide snapshots" : "Show snapshots")">
+                        <i class="fa-solid fa-flask"></i>
+                    </button>
+                    <button class="panel-icon-btn @(SettingsService.Settings.JavaShowHistorical ? "active" : "")"
+                            @onclick="ToggleJavaHistorical" @onmousedown:stopPropagation
+                            data-tooltip="@(SettingsService.Settings.JavaShowHistorical ? "Hide beta/alpha" : "Show beta/alpha")">
+                        <i class="fa-solid fa-clock-rotate-left"></i>
+                    </button>
+                    <button class="panel-icon-btn @(isLoadingJavaVersions ? "spinning" : "")"
+                            disabled="@isLoadingJavaVersions"
+                            @onclick="RefreshJavaVersionsAsync" @onmousedown:stopPropagation data-tooltip="Refresh">
+                        <i class="fa-solid fa-rotate"></i>
+                    </button>
+                    <button class="panel-back-btn" @onclick="GoHome" @onmousedown:stopPropagation data-tooltip="Back">
+                        <i class="fa-solid fa-chevron-down"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Edition switcher (mirrors the Latite/OderSo pattern of the Bedrock panel) -->
+            <div class="versions-client-switcher">
+                <button class="vcs-btn active" @onmousedown:stopPropagation>
+                    <i class="fa-brands fa-java"></i> Vanilla
+                </button>
+            </div>
+
+            <div class="panel-search-wrap">
+                <i class="fa-solid fa-magnifying-glass"></i>
+                <input class="panel-search-input" placeholder="Filter Java versions (e.g. 1.21, 1.8.9)…"
+                       @bind="javaVersionsFilter" @bind:event="oninput"
+                       @onkeydown:stopPropagation />
+            </div>
+
+            <div class="panel-body">
+                @if (isLoadingJavaVersions)
+                {
+                    <div class="versions-loading"><span class="spinner"></span><span>Fetching Java versions…</span></div>
+                }
+                else if (javaVersionsList.Count == 0 && !string.IsNullOrEmpty(javaVersionsError))
+                {
+                    <div class="versions-loading versions-error">
+                        <i class="fa-solid fa-triangle-exclamation"></i>
+                        <span>@javaVersionsError</span>
+                        <button class="vcs-btn" style="margin-top:8px;" @onclick="RefreshJavaVersionsAsync">
+                            <i class="fa-solid fa-rotate"></i> Retry
+                        </button>
+                    </div>
+                }
+                else
+                {
+                    @if (!string.IsNullOrEmpty(javaVersionsError) && javaVersionsList.Count > 0)
+                    {
+                        <div class="cache-notice"><i class="fa-solid fa-circle-info"></i><span>@javaVersionsError</span></div>
+                    }
+
+                    var filtered = FilteredJavaVersions.ToList();
+                    var installed = filtered.Where(v => v.IsInstalled).ToList();
+                    var others    = filtered.Where(v => !v.IsInstalled).ToList();
+
+                    @if (installed.Count > 0)
+                    {
+                        <span class="panel-section-label">Installed (@installed.Count)</span>
+                        @foreach (var v in installed)
+                        {
+                            <div class="version-row @(v.IsActive ? "mcv-active-row" : "")">
+                                <div class="version-meta">
+                                    <div style="display:flex; align-items:center; gap:6px;">
+                                        <span class="version-name">Minecraft @v.Id</span>
+                                        @if (v.IsActive) { <span class="tag-active">Active</span> }
+                                        <span class="version-sub" style="opacity:0.6;">@v.TypeLabel</span>
+                                    </div>
+                                    @if (!string.IsNullOrEmpty(v.ErrorMessage)) { <span class="error-text">@v.ErrorMessage</span> }
+                                    else if (v.HasJar) { <span class="version-sub">Ready to launch</span> }
+                                    else { <span class="version-sub" style="color:var(--orange);">Profile present but jar missing — open in official launcher once</span> }
+                                </div>
+                                <button class="vcs-btn" @onclick='() => HandleJavaLaunch(v)'
+                                        disabled="@(v.IsLaunching || !v.HasJar)" @onmousedown:stopPropagation>
+                                    @if (v.IsLaunching) { <span class="spinner"></span><span>Launching…</span> }
+                                    else { <i class="fa-solid fa-play"></i><span>&nbsp;Launch</span> }
+                                </button>
+                                <button class="vcs-btn vcs-btn-ghost" @onclick='() => SetActiveJavaVersion(v)'
+                                        @onmousedown:stopPropagation data-tooltip="Set as default">
+                                    <i class="fa-solid fa-thumbtack"></i>
+                                </button>
+                            </div>
+                        }
+                    }
+
+                    @if (others.Count > 0)
+                    {
+                        <span class="panel-section-label">Available (@others.Count)</span>
+                        @foreach (var v in others)
+                        {
+                            <div class="version-row @(!string.IsNullOrEmpty(v.ErrorMessage) ? "error-row" : "")">
+                                <div class="version-meta">
+                                    <span class="version-name">Minecraft @v.Id</span>
+                                    @if (!string.IsNullOrEmpty(v.ErrorMessage))
+                                    {
+                                        <span class="error-text">@v.ErrorMessage</span>
+                                    }
+                                    else if (v.IsInstalling)
+                                    {
+                                        <span class="version-sub">@v.InstallStage</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="version-sub" style="opacity:0.6;">@v.TypeLabel @(string.IsNullOrEmpty(v.ReleaseTime) ? "" : "· " + v.ReleaseTime[..Math.Min(10, v.ReleaseTime.Length)])</span>
+                                    }
+                                </div>
+                                @if (v.IsInstalling)
+                                {
+                                    <div class="progress-bar-wrap">
+                                        <div class="progress-bar-fill" style="width:@($"{v.InstallPercent:F0}%")"></div>
+                                    </div>
+                                    <span class="dl-pct">@($"{(int)v.InstallPercent}%")</span>
+                                }
+                                else
+                                {
+                                    <button class="vcs-btn" @onclick='() => HandleJavaInstall(v)' @onmousedown:stopPropagation>
+                                        <i class="fa-solid fa-download"></i>&nbsp;Install
+                                    </button>
+                                }
+                            </div>
+                        }
+                    }
+
+                    @if (installed.Count == 0 && others.Count == 0)
+                    {
+                        <div class="versions-loading"><span style="opacity:0.5;">No results for "@javaVersionsFilter"</span></div>
+                    }
+                }
+            </div>
+
+            <div class="panel-tabs">
+                <button class="panel-tab" @onclick="OpenSettings" @onmousedown:stopPropagation><i class="fa-solid fa-gear"></i>Settings</button>
+                <button class="panel-tab" @onclick="OpenJavaClients" @onmousedown:stopPropagation><i class="fa-solid fa-rocket"></i>Launchers</button>
+                <button class="panel-tab" @onclick="OpenAddons" @onmousedown:stopPropagation><i class="fa-solid fa-puzzle-piece"></i>Mods</button>
+                <button class="panel-tab active" @onmousedown:stopPropagation><i class="fa-solid fa-box-archive"></i>Versions</button>
+                <button class="panel-tab" @onclick="OpenCredits" @onmousedown:stopPropagation><i class="fa-solid fa-heart"></i>Credits</button>
+            </div>
+        </div>
+    }
+
     <!-- ── CREDITS PANEL ── -->
     @if (currentView == "credits")
     {
@@ -2173,10 +2633,19 @@
             </div>
             <div class="panel-tabs">
                 <button class="panel-tab" @onclick="OpenSettings" @onmousedown:stopPropagation><i class="fa-solid fa-gear"></i>Settings</button>
-                <button class="panel-tab" @onclick="OpenClients" @onmousedown:stopPropagation><i class="fa-solid fa-puzzle-piece"></i>Clients</button>
-                <button class="panel-tab" @onclick="OpenAddons" @onmousedown:stopPropagation><i class="fa-solid fa-cube"></i>Addons</button>
-                <button class="panel-tab" @onclick="OpenServers" @onmousedown:stopPropagation><i class="fa-solid fa-server"></i>Servers</button>
-                <button class="panel-tab" @onclick="OpenMcVersions" @onmousedown:stopPropagation><i class="fa-solid fa-box-archive"></i>MC Versions</button>
+                @if (IsBedrock)
+                {
+                    <button class="panel-tab" @onclick="OpenClients" @onmousedown:stopPropagation><i class="fa-solid fa-puzzle-piece"></i>Clients</button>
+                    <button class="panel-tab" @onclick="OpenAddons" @onmousedown:stopPropagation><i class="fa-solid fa-cube"></i>Addons</button>
+                    <button class="panel-tab" @onclick="OpenServers" @onmousedown:stopPropagation><i class="fa-solid fa-server"></i>Servers</button>
+                    <button class="panel-tab" @onclick="OpenMcVersions" @onmousedown:stopPropagation><i class="fa-solid fa-box-archive"></i>MC Versions</button>
+                }
+                else
+                {
+                    <button class="panel-tab" @onclick="OpenJavaClients" @onmousedown:stopPropagation><i class="fa-solid fa-rocket"></i>Launchers</button>
+                    <button class="panel-tab" @onclick="OpenAddons" @onmousedown:stopPropagation><i class="fa-solid fa-puzzle-piece"></i>Mods</button>
+                    <button class="panel-tab" @onclick="OpenJavaVersions" @onmousedown:stopPropagation><i class="fa-solid fa-box-archive"></i>Versions</button>
+                }
                 <button class="panel-tab active" @onmousedown:stopPropagation><i class="fa-solid fa-heart"></i>Credits</button>
             </div>
         </div>
@@ -2260,6 +2729,30 @@
             IEnumerable<VanillaVersion> q = mcVersionsList;
             if (!string.IsNullOrWhiteSpace(mcVersionsFilter))
                 q = q.Where(v => v.Version.Contains(mcVersionsFilter, StringComparison.OrdinalIgnoreCase));
+            return q;
+        }
+    }
+
+    // ── Java Edition ────────────────────────────────────────────
+    private bool   isLoadingJavaVersions = false;
+    private List<JavaVersion> javaVersionsList = new();
+    private string javaVersionsFilter = "";
+    private string? javaVersionsError = null;
+
+    private bool IsBedrock => !IsJava;
+    private bool IsJava    => string.Equals(SettingsService.Settings.Edition, "java", StringComparison.OrdinalIgnoreCase);
+
+    private IEnumerable<JavaVersion> FilteredJavaVersions
+    {
+        get
+        {
+            IEnumerable<JavaVersion> q = javaVersionsList;
+            if (!SettingsService.Settings.JavaShowSnapshots)
+                q = q.Where(v => v.Type != "snapshot");
+            if (!SettingsService.Settings.JavaShowHistorical)
+                q = q.Where(v => v.Type != "old_beta" && v.Type != "old_alpha");
+            if (!string.IsNullOrWhiteSpace(javaVersionsFilter))
+                q = q.Where(v => v.Id.Contains(javaVersionsFilter, StringComparison.OrdinalIgnoreCase));
             return q;
         }
     }
@@ -2412,13 +2905,23 @@
             while (!token.IsCancellationRequested)
             {
                 bool running = false;
-                try { running = GameLauncher.IsMinecraftRunning(); } catch { }
+                try
+                {
+                    running = IsBedrock
+                        ? GameLauncher.IsMinecraftRunning()
+                        : JavaGameLauncher.IsRunning();
+                }
+                catch { }
                 if (running != mcRunning)
                 {
                     mcRunning = running;
                     await InvokeAsync(StateHasChanged);
                 }
-                await Task.Delay(2500, token);
+                // 4 s when we're idle, 2 s once we've seen MC running. Process
+                // enumeration on Windows isn't free — keeping the idle interval long
+                // is meaningful on low-end hardware where the launcher otherwise
+                // does several process scans per minute for a UI indicator only.
+                await Task.Delay(running ? 2500 : 4000, token);
             }
         }
         catch (TaskCanceledException) { }
@@ -2586,16 +3089,88 @@
         if (string.IsNullOrWhiteSpace(searchQuery)) { searchResults.Clear(); return; }
 
         var q = searchQuery.ToLower();
-        searchResults = _defaultSearchResults
-            .Concat(SettingsService.Settings.RecentlyLaunched.Select(r =>
-                new SearchResult("fa-solid fa-clock-rotate-left", r, "Recent", "Quick-launch",
-                    () => { CloseSearch(); _ = QuickLaunchRecent(r); })))
-            .Concat(versions.Select(v =>
-                new SearchResult("fa-solid fa-download", v.DisplayName, "Versions",
-                    v.IsDownloaded ? "Downloaded" : "Not downloaded",
-                    () => { CloseSearch(); _ = (v.IsDownloaded ? HandleVersionLaunch(v) : HandleVersionDownload(v)); })))
+        searchResults = BuildDynamicSearchPool()
             .Where(r => r.Label.ToLower().Contains(q) || r.Sub.ToLower().Contains(q) || r.Category.ToLower().Contains(q))
-            .Take(8).ToList();
+            .Take(10).ToList();
+    }
+
+    /// <summary>
+    /// Builds the full set of searchable actions on every keystroke. Static
+    /// entries live in <c>_defaultSearchResults</c>; this method layers in
+    /// everything that depends on current launcher state (installed versions,
+    /// saved servers, recent items, third-party launchers, mc-versions). Cheap
+    /// to recompute — all sources are already in memory.
+    /// </summary>
+    private IEnumerable<SearchResult> BuildDynamicSearchPool()
+    {
+        foreach (var s in _defaultSearchResults) yield return s;
+
+        // Recents (edition-aware)
+        foreach (var r in RecentsForCurrentEdition())
+        {
+            var raw = r;
+            yield return new SearchResult("fa-solid fa-clock-rotate-left", RecentDisplayLabel(raw),
+                "Recent", "Quick-launch",
+                () => { CloseSearch(); _ = QuickLaunchRecent(raw); });
+        }
+
+        if (IsBedrock)
+        {
+            // Bedrock client versions list
+            foreach (var v in versions)
+            {
+                var local = v;
+                yield return new SearchResult("fa-solid fa-download", local.DisplayName, "Versions",
+                    local.IsDownloaded ? "Downloaded" : "Not downloaded",
+                    () => { CloseSearch(); _ = (local.IsDownloaded ? HandleVersionLaunch(local) : HandleVersionDownload(local)); });
+            }
+            // Bedrock MC versions (sideload list)
+            foreach (var mc in mcVersionsList)
+            {
+                var local = mc;
+                yield return new SearchResult("fa-solid fa-box-archive", $"Minecraft {local.Version}",
+                    "MC Versions", local.IsDownloaded ? "Downloaded" : "Not downloaded",
+                    () => { CloseSearch(); _ = OpenMcVersions(); });
+            }
+            // Saved servers
+            foreach (var srv in SettingsService.Settings.SavedServers)
+            {
+                var local = srv;
+                yield return new SearchResult("fa-solid fa-server", local.Name, "Servers",
+                    $"{local.Address}:{local.Port}",
+                    () => { CloseSearch(); _ = LaunchServer(local); });
+            }
+        }
+        else
+        {
+            // Java versions — list installed first, then everything from the manifest
+            foreach (var v in javaVersionsList)
+            {
+                var local = v;
+                yield return new SearchResult("fa-brands fa-java", $"Minecraft {local.Id}",
+                    local.IsInstalled ? "Java · Installed" : $"Java · {local.TypeLabel}",
+                    local.IsInstalled ? "Launch" : "Install",
+                    () => { CloseSearch(); _ = (local.IsInstalled ? HandleJavaLaunch(local) : HandleJavaInstall(local)); });
+            }
+            // Lunar offline versions (skip-splash launches)
+            foreach (var lv in LunarBadlion.LunarInstalledVersions)
+            {
+                var local = lv;
+                yield return new SearchResult("fa-solid fa-moon", $"Lunar {local}", "Launchers",
+                    "Direct game launch",
+                    () => { CloseSearch(); lunarSelectedVersion = local; LaunchLunarDirect(); });
+            }
+            // Always include the third-party launcher cards as searchable entries
+            yield return new SearchResult("fa-solid fa-moon", "Lunar Client", "Launchers",
+                LunarBadlion.LunarInstalled ? "Detected" : "Not installed",
+                () => { CloseSearch(); LaunchLunar(); });
+            if (LunarBadlion.BadlionInstalled)
+            {
+                yield return new SearchResult("fa-solid fa-shield", "Badlion Client", "Launchers",
+                    "Detected",
+                    () => { CloseSearch(); LaunchBadlion(); });
+            }
+        }
     }
 
     // ── Status ────────────────────────────────────────────────
@@ -2631,6 +3206,12 @@
 
     private async Task HandleLaunch()
     {
+        if (IsJava)
+        {
+            await HandleJavaLaunchFromHome();
+            return;
+        }
+
         var sel        = SettingsService.Settings.SelectedClient;
         bool isFlarial = sel == "Flarial Client";
         bool isOderSo  = sel == "OderSo Client";
@@ -2690,6 +3271,45 @@
         }
     }
 
+    private async Task HandleJavaLaunchFromHome()
+    {
+        // Pick the user's pinned default; if none, fall back to last-used; if still
+        // nothing, open the Java versions panel so they can choose explicitly.
+        var s   = SettingsService.Settings;
+        var ver = !string.IsNullOrEmpty(s.JavaActiveVersion) ? s.JavaActiveVersion
+                : !string.IsNullOrEmpty(s.JavaLastUsedVersion) ? s.JavaLastUsedVersion
+                : "";
+
+        if (string.IsNullOrEmpty(ver))
+        {
+            await ShowStatus("Pick a Java version first.", clearAfterMs: 3000);
+            await OpenJavaVersions();
+            return;
+        }
+
+        isLaunching = true;
+        await ShowStatus($"Starting Minecraft Java {ver}…", clearAfterMs: 30_000);
+        try
+        {
+            await JavaLauncher.LaunchAsync(ver);
+            AddToRecentlyLaunched("Java " + ver);
+            Discord.SetJavaInGamePresence(ver);
+            await ShowStatus("Minecraft launching!", clearAfterMs: 3000);
+            _ = ShowToast($"Minecraft Java {ver} launching!", "success");
+            if (SettingsService.Settings.CloseAfterLaunch) { await CloseWindow(); }
+        }
+        catch (Exception ex)
+        {
+            await ShowStatus(ex.Message, error: true, clearAfterMs: 8000);
+            _ = ShowToast(ex.Message, "error");
+        }
+        finally
+        {
+            isLaunching = false;
+            StateHasChanged();
+        }
+    }
+
     private void ForceCloseLaunch()
     {
         _launchForceCancelled = true;
@@ -2712,8 +3332,53 @@
         StateHasChanged();
     }
 
+    /// <summary>Recents stored by Java launches are prefixed "Java ". Bedrock has no prefix.</summary>
+    private List<string> RecentsForCurrentEdition()
+    {
+        var all = SettingsService.Settings.RecentlyLaunched;
+        if (IsJava)
+            return all.Where(r => r.StartsWith("Java ", StringComparison.Ordinal)).ToList();
+        return all.Where(r => !r.StartsWith("Java ", StringComparison.Ordinal)).ToList();
+    }
+
+    /// <summary>Strips the "Java " prefix from the chip label so the user sees "1.21.4", not "Java 1.21.4".</summary>
+    private string RecentDisplayLabel(string raw) =>
+        raw.StartsWith("Java ", StringComparison.Ordinal) ? raw[5..] : raw;
+
     private async Task QuickLaunchRecent(string label)
     {
+        // Java recents are stored prefixed with "Java " to keep them separate
+        // from the bedrock list. Strip the prefix and route through the Java
+        // launcher.
+        if (label.StartsWith("Java ", StringComparison.Ordinal))
+        {
+            var ver = label[5..];
+            var jv = javaVersionsList.FirstOrDefault(x => x.Id == ver);
+            if (jv != null)
+            {
+                await HandleJavaLaunch(jv);
+                return;
+            }
+            // Fall through and try a direct launch by id — works even if the
+            // Java versions panel hasn't been opened yet (so the list is empty).
+            try
+            {
+                isLaunching = true; StateHasChanged();
+                await JavaLauncher.LaunchAsync(ver);
+                AddToRecentlyLaunched("Java " + ver);
+                _ = ShowToast($"Minecraft Java {ver} launching!", "success");
+            }
+            catch (Exception ex)
+            {
+                await ShowStatus(ex.Message, error: true, clearAfterMs: 8000);
+            }
+            finally
+            {
+                isLaunching = false; StateHasChanged();
+            }
+            return;
+        }
+
         // Check if it's a known client (Flarial, OderSo, Vanilla, Custom DLL)
         if (label == "Flarial")
         {
@@ -2782,6 +3447,12 @@
 
     private bool CategoryMatches(string section)
     {
+        // Edition gate: the bedrock-only injection block is hidden entirely in
+        // Java mode (and vice-versa for the Java settings block) so the user
+        // doesn't see settings that can't apply to their current edition.
+        if (IsJava    && section == "injection") return false;
+        if (IsBedrock && section == "java")      return false;
+
         // When the user is actively searching, ignore category tabs so the
         // filter is global. Otherwise gate by the selected tab.
         if (!string.IsNullOrWhiteSpace(settingsFilter)) return true;
@@ -2863,6 +3534,16 @@
         ("injection",  "Auto-inject",                    "auto inject automatic"),
         ("injection",  "Close after launch",             "close minimize launch"),
 
+        ("java",       "Maximum RAM",                    "ram memory java heap"),
+        ("java",       "Minecraft folder",               "minecraft folder dot directory"),
+        ("java",       "Java runtime",                   "java runtime jre jdk javaw"),
+        ("java",       "Show snapshots",                 "snapshots experimental"),
+        ("java",       "Show beta and alpha",            "beta alpha historical old"),
+        ("java",       "Close after launch",             "close minimize launch java"),
+        ("java",       "Custom JVM args",                "jvm args java options garbage collector gc"),
+        ("java",       "Open Minecraft folder",          "minecraft folder dot directory open"),
+        ("java",       "Latest crash report",            "crash report log latest open view java"),
+
         ("appearance", "Accent colour",                  "accent color theme"),
         ("appearance", "Theme preset",                   "theme dark midnight slate ocean forest sunset light"),
         ("appearance", "Compact mode",                   "compact dense small"),
@@ -2878,6 +3559,7 @@
         ("account",    "Xbox profile",                   "xbox gamertag account microsoft"),
 
         ("system",     "Show recently launched",         "recent history"),
+        ("system",     "Show launch console",            "console log launch window java bedrock output stdout"),
         ("system",     "Minimize to tray",               "tray minimize system"),
         ("system",     "Clear recent history",           "clear history recent"),
         ("system",     "Check for updates on startup",   "update auto check startup"),
@@ -2898,6 +3580,10 @@
         var hasFilter = q.Length > 0;
         return _settingDefs.Count(s =>
         {
+            // Apply the same edition gating CategoryMatches() does so the
+            // empty-state count agrees with what's actually rendered.
+            if (IsJava    && s.Cat == "injection") return false;
+            if (IsBedrock && s.Cat == "java")      return false;
             if (!hasFilter && settingsCategory != "all" && settingsCategory != s.Cat) return false;
             if (hasFilter && !s.Label.ToLower().Contains(q) && !s.Keywords.ToLower().Contains(q)) return false;
             return true;
@@ -3221,6 +3907,309 @@
         if (v.IsActive)
             foreach (var mv in mcVersionsList) mv.IsActive = false;
         StateHasChanged();
+    }
+
+    // ── Edition switcher ───────────────────────────────────────
+    private void SetEdition(string ed)
+    {
+        if (string.Equals(SettingsService.Settings.Edition, ed, StringComparison.OrdinalIgnoreCase))
+            return;
+
+        SettingsService.Settings.Edition = ed;
+        SettingsService.Save();
+
+        // The CurseForge category list is per-edition; the previously-selected
+        // bedrock-only key like "skins" doesn't exist for Java and would render
+        // as nothing-active until the user clicks again.
+        cfCategory = "all";
+        cfResults.Clear();
+        cfHasSearched = false;
+        // Settings categories are also per-edition ("injection" vs. "java"). If
+        // the user was on a tab that no longer exists in the new edition we
+        // bounce them back to All instead of leaving a stale selection.
+        settingsCategory = "all";
+
+        // Bounce the user back home so they aren't stranded on a panel that's
+        // edition-specific (e.g. the Clients panel doesn't exist for Java).
+        currentView = "home";
+        hoveredBtn  = "";
+        StateHasChanged();
+    }
+
+    // ── Java versions ──────────────────────────────────────────
+    private async Task OpenJavaVersions()
+    {
+        currentView = "javaversions";
+        javaVersionsFilter = "";
+        if (javaVersionsList.Count == 0) await LoadJavaVersionsAsync();
+    }
+
+    private async Task RefreshJavaVersionsAsync() => await LoadJavaVersionsAsync();
+
+    private async Task LoadJavaVersionsAsync()
+    {
+        isLoadingJavaVersions = true; javaVersionsError = null; StateHasChanged();
+        try
+        {
+            var fromManifest = await JavaVersions.GetVersionsAsync();
+            var known        = fromManifest.Select(v => v.Id).ToList();
+            var custom       = JavaVersions.ScanCustomInstalledVersions(known);
+            // Custom profiles (Fabric/Forge/old) sit at the top of the list — users care about those first.
+            javaVersionsList = custom.Concat(fromManifest).ToList();
+            javaVersionsError = JavaVersions.LastError;
+        }
+        catch (Exception ex)
+        {
+            javaVersionsError = ex.Message;
+        }
+        finally
+        {
+            isLoadingJavaVersions = false;
+            StateHasChanged();
+        }
+    }
+
+    private void ToggleJavaSnapshots()
+    {
+        SettingsService.Settings.JavaShowSnapshots = !SettingsService.Settings.JavaShowSnapshots;
+        SettingsService.Save();
+        StateHasChanged();
+    }
+
+    private void ToggleJavaHistorical()
+    {
+        SettingsService.Settings.JavaShowHistorical = !SettingsService.Settings.JavaShowHistorical;
+        SettingsService.Save();
+        StateHasChanged();
+    }
+
+    private void SetActiveJavaVersion(JavaVersion v)
+    {
+        foreach (var jv in javaVersionsList) jv.IsActive = false;
+        v.IsActive = true;
+        SettingsService.Settings.JavaActiveVersion = v.Id;
+        SettingsService.Save();
+        _ = ShowToast($"Default Java version: {v.Id}", "success");
+        StateHasChanged();
+    }
+
+    private void OnJavaRamChanged(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var v))
+        {
+            SettingsService.Settings.JavaMaxRamMb = Math.Clamp(v, 512, 16384);
+            SettingsService.Save();
+        }
+    }
+
+    private void OpenJavaClients()
+    {
+        LunarBadlion.Detect();
+        if (string.IsNullOrEmpty(lunarSelectedVersion))
+            lunarSelectedVersion = LunarBadlion.LunarInstalledVersions.FirstOrDefault() ?? "";
+        currentView = "javaclients";
+        StateHasChanged();
+    }
+
+    private void RefreshJavaClients()
+    {
+        LunarBadlion.Detect();
+        if (!LunarBadlion.LunarInstalledVersions.Contains(lunarSelectedVersion))
+            lunarSelectedVersion = LunarBadlion.LunarInstalledVersions.FirstOrDefault() ?? "";
+        StateHasChanged();
+    }
+
+    private string lunarSelectedVersion = "";
+
+    private void LaunchLunar()
+    {
+        try
+        {
+            LunarBadlion.LaunchLunar();
+            Discord.SetJavaInGamePresence(lunarSelectedVersion, "Lunar");
+            AddToRecentlyLaunched("Java Lunar");
+            _ = ShowToast("Lunar Client launching…", "success");
+        }
+        catch (Exception ex) { _ = ShowToast(ex.Message, "error"); }
+    }
+
+    private void LaunchLunarDirect()
+    {
+        // Picks the first installed version if the user hasn't touched the dropdown.
+        var ver = !string.IsNullOrEmpty(lunarSelectedVersion)
+            ? lunarSelectedVersion
+            : LunarBadlion.LunarInstalledVersions.FirstOrDefault() ?? "";
+        try
+        {
+            LunarBadlion.LaunchLunar(ver);
+            Discord.SetJavaInGamePresence(ver, "Lunar");
+            AddToRecentlyLaunched("Java Lunar " + ver);
+            _ = ShowToast(
+                string.IsNullOrEmpty(ver)
+                    ? "Lunar Client launching…"
+                    : $"Lunar {ver} launching (skip-splash)…",
+                "success");
+        }
+        catch (Exception ex) { _ = ShowToast(ex.Message, "error"); }
+    }
+
+    private void LaunchBadlion()
+    {
+        try
+        {
+            LunarBadlion.LaunchBadlion();
+            Discord.SetJavaInGamePresence("", "Badlion");
+            AddToRecentlyLaunched("Java Badlion");
+            _ = ShowToast("Badlion Client launching…", "success");
+        }
+        catch (Exception ex) { _ = ShowToast(ex.Message, "error"); }
+    }
+
+    private void OnJavaMinecraftDirChanged(ChangeEventArgs e)
+    {
+        var v = (e.Value?.ToString() ?? "").Trim().Trim('"');
+        SettingsService.Settings.JavaMinecraftDir = v;
+        SettingsService.Save();
+        javaVersionsList.Clear(); // installed-detection re-runs on next OpenJavaVersions
+        StateHasChanged();
+    }
+
+    private void OnJavaRuntimeChanged(ChangeEventArgs e)
+    {
+        var v = (e.Value?.ToString() ?? "").Trim().Trim('"');
+        SettingsService.Settings.JavaRuntimePath = v;
+        SettingsService.Save();
+        StateHasChanged();
+    }
+
+    private void OnJavaJvmArgsChanged(ChangeEventArgs e)
+    {
+        SettingsService.Settings.JavaCustomJvmArgs = (e.Value?.ToString() ?? "").Trim();
+        SettingsService.Save();
+        StateHasChanged();
+    }
+
+    private void OpenJavaMinecraftFolder()
+    {
+        try
+        {
+            var dir = JavaVersions.MinecraftDir;
+            System.IO.Directory.CreateDirectory(dir);
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = dir,
+                UseShellExecute = true
+            });
+        }
+        catch (Exception ex) { _ = ShowToast(ex.Message, "error"); }
+    }
+
+    /// <summary>
+    /// Returns the most-recently-modified crash report file in the user's
+    /// .minecraft/crash-reports/ directory, or null if there are none.
+    /// </summary>
+    private string? LatestJavaCrashFile()
+    {
+        try
+        {
+            var dir = System.IO.Path.Combine(JavaVersions.MinecraftDir, "crash-reports");
+            if (!System.IO.Directory.Exists(dir)) return null;
+            return System.IO.Directory.EnumerateFiles(dir, "crash-*.txt")
+                .OrderByDescending(System.IO.File.GetLastWriteTimeUtc)
+                .FirstOrDefault();
+        }
+        catch { return null; }
+    }
+
+    private string LatestJavaCrashLabel()
+    {
+        var p = LatestJavaCrashFile();
+        if (p == null) return "No crash reports yet";
+        try
+        {
+            var when = System.IO.File.GetLastWriteTime(p);
+            return $"{System.IO.Path.GetFileName(p)} · {FormatRelativeTime(when.ToUniversalTime().ToString("o"))}";
+        }
+        catch { return System.IO.Path.GetFileName(p) ?? ""; }
+    }
+
+    private void OpenLatestJavaCrash()
+    {
+        var p = LatestJavaCrashFile();
+        if (p == null) { _ = ShowToast("No crash reports found.", "info"); return; }
+        try
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = p,
+                UseShellExecute = true
+            });
+        }
+        catch (Exception ex) { _ = ShowToast(ex.Message, "error"); }
+    }
+
+    private async Task HandleJavaInstall(JavaVersion v)
+    {
+        if (v.IsInstalling) return;
+        v.IsInstalling = true; v.InstallPercent = 0; v.InstallStage = "Starting…"; v.ErrorMessage = null;
+        StateHasChanged();
+        try
+        {
+            // Throttle progress updates so we don't trigger a Blazor re-render
+            // for every one of ~3500 files in an install.
+            var lastTick = 0L;
+            await JavaInstaller.InstallAsync(v, p =>
+            {
+                v.InstallPercent = p.Percent;
+                v.InstallStage   = p.Stage;
+                var now = Environment.TickCount64;
+                if (now - lastTick >= 80 || p.Percent >= 100)
+                {
+                    lastTick = now;
+                    InvokeAsync(StateHasChanged);
+                }
+            });
+            v.IsInstalled = true;
+            v.HasJar      = true;
+            _ = ShowToast($"Minecraft Java {v.Id} installed!", "success");
+        }
+        catch (Exception ex)
+        {
+            v.ErrorMessage = ex.Message;
+            _ = ShowToast(ex.Message, "error");
+        }
+        finally
+        {
+            v.IsInstalling = false;
+            // Reload the list so the freshly-installed version moves into the
+            // Installed section without the user having to hit Refresh.
+            _ = LoadJavaVersionsAsync();
+            StateHasChanged();
+        }
+    }
+
+    private async Task HandleJavaLaunch(JavaVersion v)
+    {
+        if (v.IsLaunching) return;
+        v.IsLaunching = true; v.ErrorMessage = null; StateHasChanged();
+        try
+        {
+            await JavaLauncher.LaunchAsync(v.Id);
+            _ = ShowToast($"Minecraft Java {v.Id} launching…", "success");
+            AddToRecentlyLaunched("Java " + v.Id);
+            Discord.SetJavaInGamePresence(v.Id);
+            if (SettingsService.Settings.CloseAfterLaunch) await CloseWindow();
+        }
+        catch (Exception ex)
+        {
+            v.ErrorMessage = ex.Message;
+            _ = ShowToast(ex.Message, "error");
+        }
+        finally
+        {
+            v.IsLaunching = false;
+            StateHasChanged();
+        }
     }
 
     // ── Microsoft Store install (BedrockUpdater method) ────────

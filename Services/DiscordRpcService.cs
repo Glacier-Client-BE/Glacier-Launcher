@@ -89,18 +89,47 @@ public class DiscordRpcService : IDisposable
 
     _client.SetPresence(new RichPresence
     {
-        Details    = "Playing Minecraft",
+        Details    = "Playing Minecraft Bedrock",
         State      = state,
         Assets     = new Assets
         {
             LargeImageKey  = "minecraft_icon",
-            LargeImageText = "Minecraft",
+            LargeImageText = "Minecraft Bedrock",
             SmallImageKey  = "glacier_logo",
             SmallImageText = "Glacier Launcher"
         },
         Timestamps = Timestamps.Now
     });
 }
+
+    public void SetJavaInGamePresence(string versionId, string? variant = null)
+    {
+        if (!_running || _client == null) return;
+
+        // Variant lets callers distinguish vanilla / Lunar / Badlion launches
+        // for the State line. The Details line stays "Minecraft Java Edition"
+        // so the Discord activity bucket is consistent regardless of client.
+        var state = variant switch
+        {
+            "Lunar"   => string.IsNullOrEmpty(versionId) ? "Using Lunar Client" : $"Lunar · {versionId}",
+            "Badlion" => string.IsNullOrEmpty(versionId) ? "Using Badlion"       : $"Badlion · {versionId}",
+            _         => string.IsNullOrEmpty(versionId) ? "In the menu"         : $"Playing {versionId}",
+        };
+
+        _client.SetPresence(new RichPresence
+        {
+            Details    = "Playing Minecraft Java",
+            State      = state,
+            Assets     = new Assets
+            {
+                LargeImageKey  = "minecraft_java",
+                LargeImageText = $"Minecraft Java {versionId}".TrimEnd(),
+                SmallImageKey  = "glacier_logo",
+                SmallImageText = "Glacier Launcher"
+            },
+            Timestamps = Timestamps.Now
+        });
+    }
 
     public void Dispose() => Stop();
 }

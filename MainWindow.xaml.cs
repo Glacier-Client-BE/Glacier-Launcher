@@ -46,6 +46,7 @@ public partial class MainWindow : Window
         var sc = new ServiceCollection();
         sc.AddWpfBlazorWebView();
         sc.AddSingleton<SettingsService>();
+        sc.AddSingleton<GameConsoleService>();
         sc.AddSingleton<GameLauncher>();
         sc.AddSingleton<FlarialService>();
         sc.AddSingleton<OderSoService>();
@@ -56,6 +57,10 @@ public partial class MainWindow : Window
         sc.AddSingleton<StoreInstallService>();
         sc.AddSingleton<LiveAuthService>();
         sc.AddSingleton<XboxProfileService>();
+        sc.AddSingleton<JavaVersionService>();
+        sc.AddSingleton<JavaGameLauncher>();
+        sc.AddSingleton<JavaInstallService>();
+        sc.AddSingleton<LunarBadlionService>();
 
 #if DEBUG
         sc.AddBlazorWebViewDeveloperTools();
@@ -73,7 +78,10 @@ public partial class MainWindow : Window
             Height = settings.WindowHeight;
         }
 
-        _services.GetRequiredService<DiscordRpcService>().Start();
+        // Defer Discord IPC init off the ctor path — its named-pipe handshake can
+        // add a noticeable hitch to cold start before the window paints.
+        Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.ApplicationIdle,
+            new Action(() => _services!.GetRequiredService<DiscordRpcService>().Start()));
 
         SourceInitialized += (_, _) =>
         {
@@ -237,16 +245,35 @@ public partial class MainWindow : Window
     private static void EnsureWwwroot()
     {
         var wwwrootDir = Path.Combine(AppContext.BaseDirectory, "wwwroot");
+        var stampFile  = Path.Combine(AppContext.BaseDirectory, "wwwroot.stamp");
 
         using var stream = typeof(MainWindow).Assembly.GetManifestResourceStream("wwwroot.zip");
         if (stream == null)
             return;
+
+        // Build a cheap stamp (length + first 256 bytes' CRC-ish). The single-file
+        // host extracts the embedded zip into a new temp folder on every build, so
+        // a length-only check is enough to detect a rebuild without paying for the
+        // ~1.2 MB ExtractToDirectory call on every cold start.
+        long zipLen = stream.Length;
+        var stamp = "len=" + zipLen.ToString();
+
+        try
+        {
+            if (Directory.Exists(wwwrootDir) && File.Exists(stampFile)
+                && File.ReadAllText(stampFile) == stamp)
+            {
+                return; // already extracted for this build
+            }
+        }
+        catch { /* fall through and re-extract */ }
 
         try
         {
             Directory.CreateDirectory(wwwrootDir);
             using var archive = new ZipArchive(stream, ZipArchiveMode.Read);
             archive.ExtractToDirectory(wwwrootDir, overwriteFiles: true);
+            try { File.WriteAllText(stampFile, stamp); } catch { }
         }
         catch (IOException)
         {

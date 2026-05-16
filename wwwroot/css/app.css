@@ -171,13 +171,50 @@
     background: var(--accent-bg);
 }
 
-/* ── Animations toggle ── */
+/* ── Animations toggle ──
+   When the user disables animations we treat the launcher as "low-end mode":
+   kill transitions, animations, blur, and the will-change hints that force GPU
+   layers. Backdrop-filter in particular is the single most expensive thing on
+   the page for integrated GPUs — dropping it cuts panel scroll cost dramatically. */
 .no-animations *:not(.news-track),
 .no-animations *::before,
 .no-animations *::after {
     transition: none !important;
     animation-duration: 0.001ms !important;
     animation-delay: 0ms !important;
+    will-change: auto !important;
+}
+
+.no-animations .panel-overlay,
+.no-animations .modal-overlay .modal-box,
+.no-animations .search-modal,
+.no-animations .xbox-hover-card,
+.no-animations .action-btn,
+.no-animations .topbar-client-chip,
+.no-animations .search-trigger,
+.no-animations .edition-switcher,
+.no-animations .footer,
+.no-animations .footer-profile-area,
+.no-animations .toast,
+.no-animations .recently-launched,
+.no-animations .dropdown-menu {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+}
+
+/* Solidify backgrounds that previously relied on the blur for readability. */
+.no-animations .panel-overlay {
+    background: #1e2124 !important;
+}
+.no-animations .modal-overlay {
+    background: rgba(0, 0, 0, 0.7) !important;
+}
+
+/* When the user dials Background Blur to 0 we strip backdrop-filter completely
+   (a 0 px filter still creates a compositor layer on most GPUs). */
+.no-blur * {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
 }
 
 /* ── Compact mode ── */
@@ -379,6 +416,56 @@ body {
 .top-bar-spacer {
     flex: 1;
     min-width: 8px;
+}
+
+/* ── Edition switcher (Bedrock / Java) ─────────────────────── */
+.edition-switcher {
+    display: inline-flex;
+    align-items: center;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 16px;
+    padding: 2px;
+    pointer-events: all;
+    flex-shrink: 0;
+    gap: 2px;
+}
+
+.edition-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 11px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-dim);
+    background: transparent;
+    border: 0;
+    border-radius: 14px;
+    cursor: pointer;
+    font-family: inherit;
+    transition: background var(--t), color var(--t), box-shadow var(--t);
+    white-space: nowrap;
+}
+
+.edition-tab i {
+    font-size: 10px;
+    opacity: 0.85;
+}
+
+.edition-tab:hover:not(.active) {
+    color: var(--text);
+    background: rgba(255, 255, 255, 0.04);
+}
+
+.edition-tab.active {
+    color: #fff;
+    background: var(--accent);
+    box-shadow: 0 0 8px var(--accent-glow);
+}
+
+.edition-tab.active i {
+    opacity: 1;
 }
 
 /* ── Inline client chip (top bar) ── */
@@ -1144,8 +1231,8 @@ body {
     transition: opacity 0.18s ease, transform 0.18s ease;
     z-index: 500;
     box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55), 0 0 20px rgba(16, 124, 16, 0.08);
-    backdrop-filter: blur(24px);
-    -webkit-backdrop-filter: blur(24px);
+    backdrop-filter: blur(var(--blur, 14px));
+    -webkit-backdrop-filter: blur(var(--blur, 14px));
 }
 
 .footer-profile-area:hover .xbox-hover-card {
@@ -1377,8 +1464,11 @@ body {
     background: rgba(30, 33, 36, 0.97);
     border-top: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 16px 16px 0 0;
-    backdrop-filter: blur(28px);
-    -webkit-backdrop-filter: blur(28px);
+    /* Respect the user's Background Blur setting (--blur). At 0 we drop the
+       backdrop-filter entirely, which is the single biggest GPU saving for
+       integrated graphics. */
+    backdrop-filter: blur(var(--blur, 14px));
+    -webkit-backdrop-filter: blur(var(--blur, 14px));
     animation: slideUp 0.24s cubic-bezier(0.25, 0.46, 0.45, 0.94);
     overflow: hidden;
     box-shadow: 0 -8px 40px rgba(0, 0, 0, 0.55);
@@ -1617,6 +1707,18 @@ body {
     flex-direction: column;
     gap: 8px;
     scrollbar-width: none;
+    /* Tell the browser this subtree's paint/layout doesn't affect anything outside.
+       Long Minecraft-version lists become cheap to scroll on low-end GPUs. */
+    contain: layout paint style;
+}
+
+.panel-body .version-row,
+.panel-body .credits-card,
+.panel-body .setting-row,
+.panel-body .client-card {
+    /* Each row is its own paint/layout island, so scrolling only repaints the
+       visible rows instead of the whole list. */
+    contain: layout paint style;
 }
 
 .panel-body::-webkit-scrollbar {
@@ -1741,6 +1843,29 @@ body {
     gap: 1px;
     flex: 1;
     min-width: 0;
+}
+
+.setting-input {
+    background: rgba(255, 255, 255, 0.07);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 6px;
+    color: var(--text);
+    font-family: inherit;
+    font-size: 11px;
+    padding: 5px 10px;
+    outline: none;
+    flex: 0 0 240px;
+    min-width: 180px;
+    transition: border-color var(--t);
+}
+
+.setting-input:focus {
+    border-color: var(--accent);
+}
+
+.setting-input::placeholder {
+    color: var(--text-dim);
+    opacity: 0.55;
 }
 
 .setting-select {
@@ -2884,8 +3009,17 @@ input[type=range] {
 .credits-card-actions {
     display: flex;
     align-items: center;
-    gap: 4px;
+    gap: 6px;
     flex-shrink: 0;
+}
+
+/* Wider action buttons inside credits cards (Launchers panel). The vcs-btn
+   default is content-width; here we want a uniform clickable area without
+   bumping the label/icon size. */
+.credits-card-actions .vcs-btn {
+    flex: 0 0 auto;
+    min-width: 130px;
+    padding: 0 18px;
 }
 
 .credits-link-btn {
@@ -3662,8 +3796,8 @@ input[type=range]:disabled {
     opacity: 0;
     z-index: 200;
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
+    backdrop-filter: blur(var(--blur, 14px));
+    -webkit-backdrop-filter: blur(var(--blur, 14px));
     transition: opacity 0.16s ease, transform 0.16s ease;
 }
 

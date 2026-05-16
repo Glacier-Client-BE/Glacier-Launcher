@@ -13,13 +13,25 @@ namespace GlacierLauncher.Services;
 public class CurseForgeService
 {
     private const string BaseUrl = "https://api.curseforge.com";
-    private const int MinecraftGameId = 78022;
 
-    private const int ClassAddons        = 4984;
-    private const int ClassMaps          = 6913;
-    private const int ClassSkins         = 6925;
-    private const int ClassTexturePacks  = 6929;
-    private const int ClassScripts       = 6940;
+    // CurseForge game IDs — 78022 is the bespoke "Minecraft Bedrock" game; 432
+    // is the original "Minecraft" (Java Edition).
+    private const int GameIdBedrock = 78022;
+    private const int GameIdJava    = 432;
+
+    // Bedrock class ids (Minecraft Bedrock game).
+    private const int BedrockClassAddons        = 4984;
+    private const int BedrockClassMaps          = 6913;
+    private const int BedrockClassSkins         = 6925;
+    private const int BedrockClassTexturePacks  = 6929;
+    private const int BedrockClassScripts       = 6940;
+
+    // Java class ids (Minecraft Java game).
+    private const int JavaClassMods             = 6;
+    private const int JavaClassModpacks         = 4471;
+    private const int JavaClassResourcePacks    = 12;
+    private const int JavaClassWorlds           = 17;
+    private const int JavaClassShaderPacks      = 6552;
 
     private static readonly string ComMojangRoot = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
@@ -29,6 +41,11 @@ public class CurseForgeService
     public static string BehaviorPacksDir => Path.Combine(ComMojangRoot, "behaviour_packs");
     public static string SkinPacksDir     => Path.Combine(ComMojangRoot, "skin_packs");
     public static string WorldsDir        => Path.Combine(ComMojangRoot, "minecraftWorlds");
+
+    // Java paths resolve against the JavaVersionService's MinecraftDir at
+    // install time — we don't capture them statically because the user can
+    // point the launcher at a non-default .minecraft folder.
+    private readonly JavaVersionService? _javaVersions;
 
     // UPDATED: Added .Trim() and .Trim('"') to handle quoted strings from MSBuild/GitHub Actions
     private static readonly string BuiltInApiKey =
@@ -41,11 +58,36 @@ public class CurseForgeService
     private readonly HttpClient _http;
     private readonly SettingsService _settings;
 
-    public CurseForgeService(SettingsService settings)
+    public CurseForgeService(SettingsService settings, JavaVersionService javaVersions)
     {
-        _settings = settings;
-        _http     = HttpFactory.Shared;
+        _settings     = settings;
+        _javaVersions = javaVersions;
+        _http         = HttpFactory.Shared;
     }
+
+    /// <summary>Active edition routed off the launcher's edition toggle.</summary>
+    private bool IsJava => string.Equals(_settings.Settings.Edition, "java", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>Categories the UI knows about for the active edition.</summary>
+    public IReadOnlyList<(string Key, string Label, string Icon)> AvailableCategories => IsJava
+        ? new (string, string, string)[]
+        {
+            ("all",          "All",            "fa-solid fa-layer-group"),
+            ("mods",         "Mods",           "fa-solid fa-puzzle-piece"),
+            ("modpacks",     "Modpacks",       "fa-solid fa-cubes"),
+            ("texturepacks", "Resource Packs", "fa-solid fa-palette"),
+            ("shaders",      "Shaders",        "fa-solid fa-droplet"),
+            ("worlds",       "Worlds",         "fa-solid fa-globe"),
+        }
+        : new (string, string, string)[]
+        {
+            ("all",          "All",          "fa-solid fa-layer-group"),
+            ("texturepacks", "Texture Packs","fa-solid fa-palette"),
+            ("worlds",       "Worlds",       "fa-solid fa-globe"),
+            ("addons",       "Add-ons",      "fa-solid fa-puzzle-piece"),
+            ("skins",        "Skins",        "fa-solid fa-user"),
+            ("scripts",      "Scripts",      "fa-solid fa-code"),
+        };
 
     private string EffectiveApiKey =>
         !string.IsNullOrWhiteSpace(_settings.Settings.CurseForgeApiKey)
@@ -100,18 +142,25 @@ public class CurseForgeService
 
     public async Task<CfSearchResult> SearchAsync(string query, string category = "all", int pageSize = 20, int page = 0)
     {
-        var classFilter = category switch
+        var gameId = IsJava ? GameIdJava : GameIdBedrock;
+        var classFilter = (IsJava, category) switch
         {
-            "texturepacks"  => $"&classId={ClassTexturePacks}",
-            "worlds"        => $"&classId={ClassMaps}",
-            "addons"        => $"&classId={ClassAddons}",
-            "skins"         => $"&classId={ClassSkins}",
-            "scripts"       => $"&classId={ClassScripts}",
-            _               => ""
+            (true,  "mods")         => $"&classId={JavaClassMods}",
+            (true,  "modpacks")     => $"&classId={JavaClassModpacks}",
+            (true,  "texturepacks") => $"&classId={JavaClassResourcePacks}",
+            (true,  "shaders")      => $"&classId={JavaClassShaderPacks}",
+            (true,  "worlds")       => $"&classId={JavaClassWorlds}",
+
+            (false, "texturepacks") => $"&classId={BedrockClassTexturePacks}",
+            (false, "worlds")       => $"&classId={BedrockClassMaps}",
+            (false, "addons")       => $"&classId={BedrockClassAddons}",
+            (false, "skins")        => $"&classId={BedrockClassSkins}",
+            (false, "scripts")      => $"&classId={BedrockClassScripts}",
+            _                       => ""
         };
 
         var searchFilter = string.IsNullOrWhiteSpace(query) ? "" : $"&searchFilter={Uri.EscapeDataString(query)}";
-        var url = $"{BaseUrl}/v1/mods/search?gameId={MinecraftGameId}{classFilter}{searchFilter}" +
+        var url = $"{BaseUrl}/v1/mods/search?gameId={gameId}{classFilter}{searchFilter}" +
                   $"&pageSize={pageSize}&index={page * pageSize}&sortField=2&sortOrder=desc";
 
         var json = await GetStringWithKeyAsync(url);
@@ -200,6 +249,12 @@ public class CurseForgeService
     {
         var ext = Path.GetExtension(filePath).ToLowerInvariant();
 
+        if (IsJava)
+        {
+            await InstallJavaAddonAsync(filePath, classId, ext);
+            return;
+        }
+
         switch (ext)
         {
             case ".mcworld":
@@ -224,6 +279,74 @@ public class CurseForgeService
                 await ExtractZipAsync(filePath, fallbackDir, Path.GetFileNameWithoutExtension(filePath));
                 break;
         }
+    }
+
+    // ── Java install paths ─────────────────────────────────────
+
+    private string JavaMinecraftDir =>
+        _javaVersions?.MinecraftDir ?? Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+            ".minecraft");
+
+    private string JavaModsDir          => Path.Combine(JavaMinecraftDir, "mods");
+    private string JavaResourcePacksDir => Path.Combine(JavaMinecraftDir, "resourcepacks");
+    private string JavaShaderPacksDir   => Path.Combine(JavaMinecraftDir, "shaderpacks");
+    private string JavaSavesDir         => Path.Combine(JavaMinecraftDir, "saves");
+
+    private async Task InstallJavaAddonAsync(string filePath, int classId, string ext)
+    {
+        switch (classId)
+        {
+            case JavaClassMods:
+                // .jar files drop straight into the mods folder; that's the entire
+                // Forge/Fabric install contract.
+                Directory.CreateDirectory(JavaModsDir);
+                File.Copy(filePath, Path.Combine(JavaModsDir, Path.GetFileName(filePath)), overwrite: true);
+                break;
+
+            case JavaClassResourcePacks:
+                // Resource packs are zips that go in resourcepacks/ verbatim — DON'T
+                // extract them; the game expects the zip itself.
+                Directory.CreateDirectory(JavaResourcePacksDir);
+                File.Copy(filePath, Path.Combine(JavaResourcePacksDir, SanitizeFileName(Path.GetFileName(filePath))), overwrite: true);
+                break;
+
+            case JavaClassShaderPacks:
+                Directory.CreateDirectory(JavaShaderPacksDir);
+                File.Copy(filePath, Path.Combine(JavaShaderPacksDir, SanitizeFileName(Path.GetFileName(filePath))), overwrite: true);
+                break;
+
+            case JavaClassWorlds:
+                // Worlds are zipped folders — extract into saves/.
+                Directory.CreateDirectory(JavaSavesDir);
+                await ExtractZipAsync(filePath, JavaSavesDir, Path.GetFileNameWithoutExtension(filePath));
+                break;
+
+            case JavaClassModpacks:
+                // CurseForge modpacks ship as a .zip with manifest.json + overrides/.
+                // A real installer would resolve every mod listed in manifest.json from
+                // CurseForge and download it; that's a substantial project on its own.
+                // For now we just copy the pack to a "modpacks" folder and surface a
+                // toast so the user knows to import it via a modpack manager.
+                var modpacksDir = Path.Combine(JavaMinecraftDir, "modpacks");
+                Directory.CreateDirectory(modpacksDir);
+                File.Copy(filePath, Path.Combine(modpacksDir, Path.GetFileName(filePath)), overwrite: true);
+                throw new InvalidOperationException(
+                    "Modpack saved to .minecraft\\modpacks. Import it via your modpack manager (e.g. Prism, ATLauncher) — Glacier's modpack installer lands later.");
+
+            default:
+                // Unknown class — drop next to the mods folder so it's not lost.
+                Directory.CreateDirectory(JavaModsDir);
+                File.Copy(filePath, Path.Combine(JavaModsDir, Path.GetFileName(filePath)), overwrite: true);
+                break;
+        }
+    }
+
+    private static string SanitizeFileName(string name)
+    {
+        foreach (var c in Path.GetInvalidFileNameChars())
+            name = name.Replace(c, '_');
+        return name;
     }
 
     private async Task InstallMcPackAsync(string filePath)
@@ -318,12 +441,12 @@ public class CurseForgeService
     {
         var dir = classId switch
         {
-            ClassMaps         => WorldsDir,
-            ClassTexturePacks => ResourcePacksDir,
-            ClassSkins         => SkinPacksDir,
-            ClassAddons       => ResourcePacksDir,
-            ClassScripts      => BehaviorPacksDir,
-            _                 => ResourcePacksDir
+            BedrockClassMaps         => WorldsDir,
+            BedrockClassTexturePacks => ResourcePacksDir,
+            BedrockClassSkins        => SkinPacksDir,
+            BedrockClassAddons       => ResourcePacksDir,
+            BedrockClassScripts      => BehaviorPacksDir,
+            _                        => ResourcePacksDir
         };
         Directory.CreateDirectory(dir);
         return dir;
