@@ -35,16 +35,29 @@ public sealed class JavaGameLauncher
         _console  = console;
     }
 
-    /// <summary>True if a javaw.exe process is currently running.</summary>
+    // Processes Glacier itself has launched. Scanning the whole system for
+    // javaw.exe false-positives on anything Java-based the user is running
+    // (IDEs, build tools, other launchers), so we only count our own children.
+    private static readonly List<Process> _tracked = new();
+    private static readonly object        _trackedLock = new();
+
+    /// <summary>True if any Minecraft instance Glacier launched is still running.</summary>
     public static bool IsRunning()
     {
-        // Name-only fingerprint — looking at the command line on Windows requires
-        // WMI which is too slow for a poll loop. False positives are rare and the
-        // UI signal is informational. Dispose every handle so the polling loop
-        // doesn't accumulate kernel handles.
-        var procs = Process.GetProcessesByName("javaw");
-        try { return procs.Length > 0; }
-        finally { foreach (var p in procs) p.Dispose(); }
+        lock (_trackedLock)
+        {
+            for (int i = _tracked.Count - 1; i >= 0; i--)
+            {
+                try { if (_tracked[i].HasExited) _tracked.RemoveAt(i); }
+                catch { _tracked.RemoveAt(i); }
+            }
+            return _tracked.Count > 0;
+        }
+    }
+
+    private static void TrackProcess(Process p)
+    {
+        lock (_trackedLock) _tracked.Add(p);
     }
 
     public async Task LaunchAsync(string versionId)
@@ -137,6 +150,7 @@ public sealed class JavaGameLauncher
 
         if (proc != null)
         {
+            TrackProcess(proc);
             console?.Info($"Started PID {proc.Id}");
             console?.SetPid(proc.Id);
             console?.MarkRunning();
@@ -406,6 +420,13 @@ public sealed class JavaGameLauncher
             ["classpath"]         = "<set-by-cp-flag>",
         };
 
+        // Strip JVM args that the chosen Java is too old to understand. Mojang ships
+        // some of these unconditionally in arguments.jvm even when javaVersion still
+        // declares an older major (e.g. 1.21.6+ includes --sun-misc-unsafe-memory-access=allow
+        // alongside javaVersion.majorVersion=21, but the flag was only added in Java 23
+        // so a Java 21 runtime hard-crashes with "Unrecognized option").
+        int javaMajor = int.TryParse(profile.MinJavaMajor, out var m) ? m : 8;
+
         if (profile.JvmArgs.Count > 0)
         {
             foreach (var raw in profile.JvmArgs)
@@ -413,6 +434,7 @@ public sealed class JavaGameLauncher
                 var v = Substitute(raw, subs);
                 // We supply -cp ourselves outside this list, so skip Mojang's classpath placeholder.
                 if (v.Contains("${classpath}", StringComparison.Ordinal)) continue;
+                if (!IsJvmArgCompatible(v, javaMajor)) continue;
                 sb.Append(' ').Append(Quote(v));
             }
         }
@@ -499,6 +521,15 @@ public sealed class JavaGameLauncher
             ? "\"" + v.Replace("\"", "\\\"") + "\""
             : v;
 
+    private static bool IsJvmArgCompatible(string arg, int javaMajor)
+    {
+        // --sun-misc-unsafe-memory-access was introduced in JEP 498 (Java 23).
+        // Older JVMs reject it as "Unrecognized option" and refuse to start.
+        if (javaMajor < 23 && arg.StartsWith("--sun-misc-unsafe-memory-access", StringComparison.Ordinal))
+            return false;
+        return true;
+    }
+
     /// <summary>
     /// Returns the command line with the auth access token masked, so users
     /// can paste console output into bug reports without leaking their MSA
@@ -527,53 +558,14 @@ public sealed class JavaGameLauncher
             return new AuthValues(s.JavaUsername, s.JavaUuid, s.JavaAccessToken, "msa");
         }
 
-        // Fall back to the official launcher's launcher_accounts.json so users who
-        // have already signed in there don't need to re-auth inside Glacier.
-        var fromOfficial = TryReadOfficialLauncherAccount();
-        if (fromOfficial != null) return fromOfficial;
-
         // Offline mode — use the launcher's username if set, else a sensible default.
+        // We deliberately DO NOT read the official launcher's launcher_accounts.json
+        // here: reaching into another launcher's credential store is a malware tell
+        // and gets Glacier flagged by AV. Users without a Glacier MSA sign-in get
+        // offline-mode worlds tied to their chosen name.
         var name = !string.IsNullOrWhiteSpace(s.Username) ? s.Username : "Player";
         var uuid = OfflineUuid(name);
         return new AuthValues(name, uuid, "0", "legacy");
-    }
-
-    private AuthValues? TryReadOfficialLauncherAccount()
-    {
-        try
-        {
-            var path = Path.Combine(_versions.MinecraftDir, "launcher_accounts.json");
-            if (!File.Exists(path)) return null;
-
-            using var doc = JsonDocument.Parse(File.ReadAllText(path));
-            var root = doc.RootElement;
-            if (!root.TryGetProperty("accounts", out var accounts)) return null;
-
-            string? activeId = root.TryGetProperty("activeAccountLocalId", out var a) ? a.GetString() : null;
-
-            JsonElement chosen = default;
-            bool found = false;
-            foreach (var acc in accounts.EnumerateObject())
-            {
-                if (activeId == null
-                    || string.Equals(acc.Name, activeId, StringComparison.OrdinalIgnoreCase))
-                {
-                    chosen = acc.Value;
-                    found  = true;
-                    break;
-                }
-            }
-            if (!found) return null;
-
-            var name  = chosen.TryGetProperty("minecraftProfile", out var mp) && mp.TryGetProperty("name", out var n) ? n.GetString() ?? "" : "";
-            var uuid  = mp.ValueKind == JsonValueKind.Object && mp.TryGetProperty("id", out var u) ? u.GetString() ?? "" : "";
-            var token = chosen.TryGetProperty("accessToken", out var tk) ? tk.GetString() ?? "" : "";
-
-            if (string.IsNullOrEmpty(name) || string.IsNullOrEmpty(uuid) || string.IsNullOrEmpty(token))
-                return null;
-            return new AuthValues(name, uuid, token, "msa");
-        }
-        catch { return null; }
     }
 
     private static string OfflineUuid(string name)
@@ -606,17 +598,15 @@ public sealed class JavaGameLauncher
             foreach (var component in Directory.EnumerateDirectories(runtimeRoot))
             {
                 // The official layout is runtime\<component>\<os>\<arch>\<...>\bin\javaw.exe
+                if (!string.IsNullOrEmpty(profile.MinJavaMajor)
+                    && !ComponentMatchesMajor(component, profile.MinJavaMajor))
+                    continue;
                 foreach (var javaw in EnumerateJavawUnder(component))
-                {
-                    if (string.IsNullOrEmpty(profile.MinJavaMajor)
-                        || javaw.Contains(profile.MinJavaMajor)
-                        || ComponentMatchesMajor(component, profile.MinJavaMajor))
-                    {
-                        return javaw;
-                    }
-                }
+                    return javaw;
             }
-            // No major-version match — return whatever we found first.
+            // No major-version match — return whatever we found first so the user
+            // at least gets a launch attempt (and a clear error in the console)
+            // rather than a silent "Java not found".
             foreach (var component in Directory.EnumerateDirectories(runtimeRoot))
                 foreach (var javaw in EnumerateJavawUnder(component))
                     return javaw;
@@ -687,16 +677,21 @@ public sealed class JavaGameLauncher
     private static bool ComponentMatchesMajor(string componentDir, string major)
     {
         var name = Path.GetFileName(componentDir);
-        // Official launcher names them like "java-runtime-gamma" (J17), "java-runtime-delta" (J21),
-        // "java-runtime-alpha" (J16), "jre-legacy" (J8). Map by the file structure: prefer a
-        // directory whose name contains the major number, fall back to letters.
-        if (name.Contains(major)) return true;
+        // Official launcher names them with Greek codenames, not version numbers:
+        //   jre-legacy → Java 8
+        //   java-runtime-alpha → Java 16
+        //   java-runtime-beta / java-runtime-gamma → Java 17
+        //   java-runtime-delta → Java 21
+        //   java-runtime-epsilon → Java 25 (anticipated, not yet shipped)
+        // Matching by raw major-number substring was wrong — "21" doesn't appear
+        // anywhere in delta's path, and "16" would false-match "java-runtime-…".
         return major switch
         {
             "8"  => name.Contains("legacy"),
             "16" => name.Contains("alpha"),
             "17" => name.Contains("beta") || name.Contains("gamma"),
             "21" => name.Contains("delta"),
+            "25" => name.Contains("epsilon"),
             _    => false
         };
     }
