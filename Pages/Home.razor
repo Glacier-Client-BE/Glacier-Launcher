@@ -1931,6 +1931,8 @@
                     </button>
                 </div>
 
+                @if (javaModsTab != "curseforge" && javaModsTab != "modrinth")
+                {
                 <div class="panel-body" style="padding-top:6px;">
                     @if (javaModsTab == "loaders")
                     {
@@ -2166,6 +2168,7 @@
                         </div>
                     }
                 </div>
+                }
             }
 
             @if (!IsJava || javaModsTab == "curseforge")
@@ -2185,27 +2188,27 @@
             }
             else
             {
-                <div class="versions-client-switcher">
-                    @foreach (var cat in CurseForge.AvailableCategories)
-                    {
-                        var key = cat.Key;
-                        <button class="vcs-btn @(cfCategory == key ? "active" : "")"
-                                @onclick='() => SetCfCategory(key)' @onmousedown:stopPropagation>
-                            <i class="@cat.Icon"></i> @cat.Label
-                        </button>
-                    }
-                </div>
-
-                <div class="panel-search-wrap">
-                    <i class="fa-solid fa-magnifying-glass"></i>
-                    <input class="panel-search-input" placeholder="@(IsJava ? "Search CurseForge for Java mods, modpacks, shaders..." : "Search CurseForge addons...")"
-                           value="@cfSearchQuery"
-                           @oninput="OnCfSearchInput"
-                           @onkeydown="OnCfSearchKeyDown"
-                           @onkeydown:stopPropagation />
-                </div>
-
                 <div class="panel-body">
+                    <div class="versions-client-switcher">
+                        @foreach (var cat in CurseForge.AvailableCategories)
+                        {
+                            var key = cat.Key;
+                            <button class="vcs-btn @(cfCategory == key ? "active" : "")"
+                                    @onclick='() => SetCfCategory(key)' @onmousedown:stopPropagation>
+                                <i class="@cat.Icon"></i> @cat.Label
+                            </button>
+                        }
+                    </div>
+
+                    <div class="panel-search-wrap">
+                        <i class="fa-solid fa-magnifying-glass"></i>
+                        <input class="panel-search-input" placeholder="@(IsJava ? "Search CurseForge for Java mods, modpacks, shaders..." : "Search CurseForge addons...")"
+                               value="@cfSearchQuery"
+                               @oninput="OnCfSearchInput"
+                               @onkeydown="OnCfSearchKeyDown"
+                               @onkeydown:stopPropagation />
+                    </div>
+
                     @if (cfSearching)
                     {
                         <div style="display:flex; align-items:center; justify-content:center; padding:30px;">
@@ -2301,27 +2304,27 @@
 
             @if (IsJava && javaModsTab == "modrinth")
             {
-                <div class="versions-client-switcher">
-                    @foreach (var cat in Modrinth.AvailableCategories)
-                    {
-                        var key = cat.Key;
-                        <button class="vcs-btn @(mrCategory == key ? "active" : "")"
-                                @onclick='() => SetMrCategory(key)' @onmousedown:stopPropagation>
-                            <i class="@cat.Icon"></i> @cat.Label
-                        </button>
-                    }
-                </div>
-
-                <div class="panel-search-wrap">
-                    <i class="fa-solid fa-magnifying-glass"></i>
-                    <input class="panel-search-input" placeholder="Search Modrinth for mods, modpacks, shaders..."
-                           value="@mrSearchQuery"
-                           @oninput="OnMrSearchInput"
-                           @onkeydown="OnMrSearchKeyDown"
-                           @onkeydown:stopPropagation />
-                </div>
-
                 <div class="panel-body">
+                    <div class="versions-client-switcher">
+                        @foreach (var cat in Modrinth.AvailableCategories)
+                        {
+                            var key = cat.Key;
+                            <button class="vcs-btn @(mrCategory == key ? "active" : "")"
+                                    @onclick='() => SetMrCategory(key)' @onmousedown:stopPropagation>
+                                <i class="@cat.Icon"></i> @cat.Label
+                            </button>
+                        }
+                    </div>
+
+                    <div class="panel-search-wrap">
+                        <i class="fa-solid fa-magnifying-glass"></i>
+                        <input class="panel-search-input" placeholder="Search Modrinth for mods, modpacks, shaders..."
+                               value="@mrSearchQuery"
+                               @oninput="OnMrSearchInput"
+                               @onkeydown="OnMrSearchKeyDown"
+                               @onkeydown:stopPropagation />
+                    </div>
+
                     @if (mrSearching)
                     {
                         <div style="display:flex; align-items:center; justify-content:center; padding:30px;">

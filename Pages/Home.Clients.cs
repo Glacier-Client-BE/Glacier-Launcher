@@ -745,11 +745,18 @@ public partial class Home
 
     // ── Modrinth ─────────────────────────────────────────────
 
+    private async Task SwitchToModrinth()
+    {
+        javaModsTab = "modrinth";
+        StateHasChanged();
+        if (!mrHasSearched) await MrSearchAsync();
+    }
+
     private async Task SetMrCategory(string cat)
     {
         mrCategory = cat;
         StateHasChanged();
-        if (mrHasSearched) await MrSearchAsync();
+        await MrSearchAsync();
     }
 
     private async Task OnMrSearchKeyDown(KeyboardEventArgs e)
