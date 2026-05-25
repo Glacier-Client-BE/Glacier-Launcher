@@ -1,4 +1,3 @@
-@* Reusable settings row with label, hint and trailing control slot. *@
 <div class="setting-row @(Clickable ? "clickable" : "") @(HiddenClass) @(Class)"
      @onclick="HandleClick">
     <div class="setting-meta">
@@ -24,6 +23,35 @@
     [Parameter] public EventCallback OnClick { get; set; }
     [Parameter] public RenderFragment? HintContent { get; set; }
     [Parameter] public RenderFragment? Trailing { get; set; }
+
+    private string? _lastLabel;
+    private string? _lastHint;
+    private string? _lastClass;
+    private string? _lastHiddenClass;
+    private bool? _lastClickable;
+    private RenderFragment? _lastHintContent;
+    private RenderFragment? _lastTrailing;
+
+    protected override bool ShouldRender()
+    {
+        var should = _lastLabel != Label
+                  || _lastHint != Hint
+                  || _lastClass != Class
+                  || _lastHiddenClass != HiddenClass
+                  || _lastClickable != Clickable
+                  || !ReferenceEquals(_lastHintContent, HintContent)
+                  || !ReferenceEquals(_lastTrailing, Trailing);
+
+        _lastLabel = Label;
+        _lastHint = Hint;
+        _lastClass = Class;
+        _lastHiddenClass = HiddenClass;
+        _lastClickable = Clickable;
+        _lastHintContent = HintContent;
+        _lastTrailing = Trailing;
+
+        return should;
+    }
 
     private async Task HandleClick()
     {

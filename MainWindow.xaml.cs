@@ -57,10 +57,13 @@ public partial class MainWindow : Window
         sc.AddSingleton<StoreInstallService>();
         sc.AddSingleton<LiveAuthService>();
         sc.AddSingleton<XboxProfileService>();
+        sc.AddSingleton<JavaInstanceService>();
         sc.AddSingleton<JavaVersionService>();
         sc.AddSingleton<JavaGameLauncher>();
         sc.AddSingleton<JavaInstallService>();
+        sc.AddSingleton<JavaModLoaderService>();
         sc.AddSingleton<LunarBadlionService>();
+        sc.AddSingleton<ModrinthService>();
 
 #if DEBUG
         sc.AddBlazorWebViewDeveloperTools();

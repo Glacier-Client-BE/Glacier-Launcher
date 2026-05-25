@@ -114,10 +114,10 @@ document.addEventListener('drop', e => {
     e.preventDefault();
     document.body.classList.remove('drop-active');
     const files = Array.from(e.dataTransfer.files || [])
-        .filter(f => f.name.toLowerCase().endsWith('.dll'));
+        .filter(f => ['.dll', '.zip', '.jar'].some(ext => f.name.toLowerCase().endsWith(ext)));
     if (!files.length) return;
     if (files[0].path && window._glacierDotNet)
-        window._glacierDotNet.invokeMethodAsync('OnDllDropped', files[0].path);
+        window._glacierDotNet.invokeMethodAsync('OnFileDropped', files[0].path);
 });
 
 // ── Keyboard shortcuts ────────────────────────────────────────
@@ -188,7 +188,7 @@ window.setCustomBackground = (filePath) => {
     } else {
         // Document-relative form: matches the inline style set in Razor and
         // resolves the same way under both `dotnet run` and the published exe.
-        bg.style.backgroundImage = "url('../images/bg.png')";
+        bg.style.backgroundImage = "url('../images/bg.jpg')";
     }
 };
 

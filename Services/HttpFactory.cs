@@ -3,10 +3,6 @@ using System.Net.Http;
 
 namespace GlacierLauncher.Services;
 
-/// <summary>
-/// Shared HttpClient instance for all services. A single client (re)used across the
-/// process avoids socket exhaustion and keeps connection pooling effective.
-/// </summary>
 public static class HttpFactory
 {
     private static readonly Lazy<HttpClient> _shared = new(() =>
@@ -15,7 +11,7 @@ public static class HttpFactory
         {
             PooledConnectionLifetime    = TimeSpan.FromMinutes(2),
             PooledConnectionIdleTimeout = TimeSpan.FromSeconds(60),
-            MaxConnectionsPerServer     = 8,
+            MaxConnectionsPerServer     = 24,
             AutomaticDecompression      = System.Net.DecompressionMethods.GZip
                                         | System.Net.DecompressionMethods.Deflate
                                         | System.Net.DecompressionMethods.Brotli
@@ -28,10 +24,6 @@ public static class HttpFactory
     public static HttpClient Shared => _shared.Value;
 }
 
-/// <summary>
-/// Reports progress at most every <paramref name="minIntervalMs"/> milliseconds.
-/// Reduces UI re-renders during fast network downloads.
-/// </summary>
 public sealed class ThrottledProgress : IProgress<double>
 {
     private readonly IProgress<double>? _inner;
@@ -49,7 +41,6 @@ public sealed class ThrottledProgress : IProgress<double>
     {
         if (_inner == null) return;
         var now = DateTime.UtcNow.Ticks;
-        // Always forward 0 and 100 immediately; throttle in-between.
         if (value <= 0 || value >= 100 || (now - _lastTicks) >= _minIntervalTicks
             || Math.Abs(value - _lastValue) >= 1.0)
         {

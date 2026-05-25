@@ -1,7 +1,8 @@
-@* Reusable icon button. *@
-<button class="@(Ghost ? "icon-btn icon-btn-ghost" : "icon-btn") @(Class)"
+<button type="button"
+        class="@(Ghost ? "icon-btn icon-btn-ghost" : "icon-btn") @(Class)"
         data-tooltip="@Title"
         aria-label="@Title"
+        aria-busy="@(Loading ? "true" : "false")"
         disabled="@Disabled"
         @onclick="OnClick"
         @onclick:stopPropagation
@@ -20,4 +21,33 @@
     [Parameter] public bool   Loading    { get; set; } = false;
     [Parameter] public EventCallback OnClick { get; set; }
     [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    private string? _lastIcon;
+    private string? _lastTitle;
+    private string? _lastClass;
+    private bool? _lastGhost;
+    private bool? _lastDisabled;
+    private bool? _lastLoading;
+    private RenderFragment? _lastChildContent;
+
+    protected override bool ShouldRender()
+    {
+        var should = _lastIcon != Icon
+                  || _lastTitle != Title
+                  || _lastClass != Class
+                  || _lastGhost != Ghost
+                  || _lastDisabled != Disabled
+                  || _lastLoading != Loading
+                  || !ReferenceEquals(_lastChildContent, ChildContent);
+
+        _lastIcon = Icon;
+        _lastTitle = Title;
+        _lastClass = Class;
+        _lastGhost = Ghost;
+        _lastDisabled = Disabled;
+        _lastLoading = Loading;
+        _lastChildContent = ChildContent;
+
+        return should;
+    }
 }

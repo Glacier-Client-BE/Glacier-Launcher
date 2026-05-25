@@ -1,5 +1,4 @@
-@* Reusable loading spinner. *@
-<span class="spinner @(Class)" style="@SizeStyle"></span>
+<span class="spinner @(Class)" style="@SizeStyle" role="status" aria-live="polite"></span>
 
 @code {
     [Parameter] public int? Size { get; set; }

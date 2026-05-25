@@ -1,4 +1,4 @@
-@page "/"
+﻿@page "/"
 @using GlacierLauncher.Services
 @using GlacierLauncher.Models
 @inject GameLauncher Launcher
@@ -14,12 +14,15 @@
 @inject JavaVersionService JavaVersions
 @inject JavaGameLauncher JavaLauncher
 @inject JavaInstallService JavaInstaller
+@inject JavaInstanceService JavaInstances
+@inject JavaModLoaderService JavaLoaders
 @inject LunarBadlionService LunarBadlion
+@inject ModrinthService Modrinth
 @inject IJSRuntime JS
 @implements IDisposable
 
 <div class="window">
-    <div class="window-bg" style="background-image: url('images/bg.png');"></div>
+    <div class="window-bg" style="background-image: url('images/bg.jpg');"></div>
     <div class="drag-zone" @onmousedown="OnDragStart"></div>
 
     <!-- Drop overlay -->
@@ -29,7 +32,7 @@
         <small>Saved to clients folder and selected automatically</small>
     </div>
 
-    <!-- ── GLOBAL SEARCH OVERLAY ── -->
+    <!-- â”€â”€ GLOBAL SEARCH OVERLAY â”€â”€ -->
     @if (searchOpen)
     {
         <div class="search-overlay" @onclick="CloseSearch">
@@ -37,7 +40,7 @@
                 <div class="search-modal-input-row">
                     <i class="fa-solid fa-magnifying-glass"></i>
                     <input class="search-modal-input"
-                           placeholder="Search clients, versions, settings…"
+                           placeholder="Search clients, versions, settings..."
                            value="@searchQuery"
                            @oninput="OnSearchInput"
                            @onkeydown:stopPropagation />
@@ -68,7 +71,7 @@
                                     {
                                         <div class="kbs"><kbd>@r.Shortcut</kbd></div>
                                     }
-                                    <span class="search-result-enter">↵</span>
+                                    <span class="search-result-enter">â†µ</span>
                                 </div>
                             }
                         }
@@ -79,12 +82,11 @@
                     }
                     else
                     {
-                        var grouped = searchResults.GroupBy(r => r.Category);
                         int flatIdx = 0;
-                        @foreach (var grp in grouped)
+                        @foreach (var grp in _searchGroups)
                         {
-                            <div class="search-category">@grp.Key</div>
-                            @foreach (var r in grp)
+                            <div class="search-category">@grp.Category</div>
+                            @foreach (var r in grp.Results)
                             {
                                 var fi = flatIdx++;
                                 <div class="search-result-item @(searchSelIdx == fi ? "sel" : "")"
@@ -98,7 +100,7 @@
                                         <span class="search-result-label">@r.Label</span>
                                         @if (!string.IsNullOrEmpty(r.Sub)) { <span class="search-result-sub">@r.Sub</span> }
                                     </div>
-                                    <span class="search-result-enter">↵</span>
+                                    <span class="search-result-enter">â†µ</span>
                                 </div>
                             }
                         }
@@ -108,7 +110,7 @@
         </div>
     }
 
-    <!-- ── LAUNCHER UPDATE MODAL ── -->
+    <!-- â”€â”€ LAUNCHER UPDATE MODAL â”€â”€ -->
     @if (launcherUpdateModalOpen && launcherUpdateInfo != null)
     {
         <div class="modal-overlay" @onclick="CloseUpdateModal">
@@ -151,7 +153,7 @@
                             </div>
                             <span class="update-progress-pct">@((int)launcherUpdateProgress)%</span>
                         </div>
-                        <p class="modal-desc" style="margin-top:6px;">Downloading update… launcher will restart automatically.</p>
+                        <p class="modal-desc" style="margin-top:6px;">Downloading update... launcher will restart automatically.</p>
                     }
                     else
                     {
@@ -168,7 +170,7 @@
         </div>
     }
 
-    <!-- ── RESET CONFIRM MODAL ── -->
+    <!-- â”€â”€ RESET CONFIRM MODAL â”€â”€ -->
     @if (resetConfirmOpen)
     {
         <div class="modal-overlay" @onclick="CancelResetSettings">
@@ -198,7 +200,7 @@
         </div>
     }
 
-    <!-- ── DISCORD MODAL ── -->
+    <!-- â”€â”€ DISCORD MODAL â”€â”€ -->
     @if (discordModalOpen)
     {
         <div class="modal-overlay" @onclick="CloseDiscordModal">
@@ -240,7 +242,7 @@
             </div>
         </div>
     }
-<!-- ── XBOX PROFILE MODAL ── -->
+<!-- â”€â”€ XBOX PROFILE MODAL â”€â”€ -->
 
     @if (xboxModalOpen)
     {
@@ -290,12 +292,32 @@
                             <div class="xbox-stat-card">
                                 <i class="fa-solid fa-id-badge" style="color:#107c10;"></i>
                                 <div class="xbox-stat-detail">
-                                    <span class="xbox-stat-value xbox-xuid-val">@(string.IsNullOrEmpty(Xbox.CurrentProfile?.Xuid) ? "—" : Xbox.CurrentProfile.Xuid)</span>
+                                    <span class="xbox-stat-value xbox-xuid-val">@(string.IsNullOrEmpty(Xbox.CurrentProfile?.Xuid) ? "â€”" : Xbox.CurrentProfile.Xuid)</span>
                                     <span class="xbox-stat-label">XUID</span>
                                 </div>
                             </div>
                         </div>
+                        @if (SettingsService.Settings.JavaAccounts.Count > 0)
+                        {
+                            <span class="panel-section-label">Minecraft accounts</span>
+                            @foreach (var account in SettingsService.Settings.JavaAccounts)
+                            {
+                                <div class="version-row @(SettingsService.Settings.ActiveJavaAccountId == account.Id ? "mcv-active-row" : "")">
+                                    <div class="version-meta">
+                                        <span class="version-name">@account.MinecraftUsername</span>
+                                        <span class="version-sub">@account.Gamertag</span>
+                                    </div>
+                                    <button class="vcs-btn vcs-btn-ghost" @onclick='() => SwitchJavaAccount(account)' @onmousedown:stopPropagation>
+                                        <i class="fa-solid fa-right-left"></i>
+                                    </button>
+                                    <button class="vcs-btn vcs-btn-ghost" @onclick='() => RemoveJavaAccount(account)' @onmousedown:stopPropagation>
+                                        <i class="fa-solid fa-trash"></i>
+                                    </button>
+                                </div>
+                            }
+                        }
                         <div class="modal-btn-row">
+                            <button class="modal-btn modal-btn-confirm" @onclick="XboxAddAccount" disabled="@xboxSigningIn">Add Account</button>
                             <button class="modal-btn modal-btn-disconnect" @onclick="XboxSignOut">Sign Out</button>
                             <button class="modal-btn modal-btn-cancel" @onclick="CloseXboxModal">Close</button>
                         </div>
@@ -310,7 +332,7 @@
                         <button class="xbox-signin-btn @(xboxSigningIn ? "disabled" : "")" @onclick="XboxSignIn" disabled="@xboxSigningIn">
                             @if (xboxSigningIn)
                             {
-                                <span class="spinner"></span><span>Signing in…</span>
+                                <span class="spinner"></span><span>Signing in...</span>
                             }
                             else
                             {
@@ -324,7 +346,7 @@
         </div>
     }
 
-    <!-- ── TOP BAR ── -->
+    <!-- â”€â”€ TOP BAR â”€â”€ -->
     <div class="top-bar">
         <div class="branding">
             <img class="logo-icon" src="images/icon.png" alt="" />
@@ -334,7 +356,7 @@
             </div>
             @if (launcherUpdateAvailable)
             {
-                <button class="update-pill" @onclick="OpenUpdateModal" @onmousedown:stopPropagation data-tooltip="Launcher update available — click to update">
+                <button class="update-pill" @onclick="OpenUpdateModal" @onmousedown:stopPropagation data-tooltip="Launcher update available â€” click to update">
                     <i class="fa-solid fa-arrow-up"></i>
                     <span>Update</span>
                 </button>
@@ -412,7 +434,7 @@
         </div>
     </div>
 
-    <!-- ── MAIN CONTENT ── -->
+    <!-- â”€â”€ MAIN CONTENT â”€â”€ -->
     <div class="main-content @(currentView != "home" ? "panel-open" : "")">
         <div class="btn-row">
             <button class="action-btn @(hoveredBtn == "launch" || isLaunching ? "btn-wide btn-blue" : "btn-sq") @(isLaunching ? "launching" : "")"
@@ -420,7 +442,7 @@
                     @onclick="HandleLaunch" @onmousedown:stopPropagation disabled="@isLaunching">
                 @if (hoveredBtn == "launch" || isLaunching)
                 {
-                    @if (isLaunching) { <span class="spinner"></span><span>Launching…</span> }
+                    @if (isLaunching) { <span class="spinner"></span><span>Launching...</span> }
                     else              { <span>Launch</span> }
                 }
                 else { <i class="fa-solid fa-play"></i> }
@@ -517,6 +539,17 @@
         {
             <p class="status-msg @(isError ? "error" : "") @(statusVisible ? "visible" : "")">@statusMessage</p>
 
+            @if (isDownloading)
+            {
+                <div class="launch-dl-bar">
+                    <span class="launch-dl-stage">@downloadStage</span>
+                    <div class="progress-bar-wrap launch-dl-progress">
+                        <div class="progress-bar-fill" style="width:@($"{downloadPct:F0}%")"></div>
+                    </div>
+                    <span class="dl-pct">@($"{(int)downloadPct}%")</span>
+                </div>
+            }
+
             var editionRecents = RecentsForCurrentEdition();
             @if (SettingsService.Settings.ShowRecentlyLaunched && editionRecents.Count > 0)
             {
@@ -536,7 +569,7 @@
         }
     </div>
 
-    <!-- ── FOOTER ── -->
+    <!-- â”€â”€ FOOTER â”€â”€ -->
     <div class="footer">
         @{
             var footerProfile = EffectiveProfile();
@@ -596,14 +629,14 @@
                         </div>
                         <div class="xbox-hover-stat">
                             <i class="fa-solid fa-id-badge" style="color:#107c10;"></i>
-                            <span class="xbox-hover-stat-val xbox-hover-xuid">@(string.IsNullOrEmpty(Xbox.CurrentProfile?.Xuid) ? "—" : Xbox.CurrentProfile.Xuid)</span>
+                            <span class="xbox-hover-stat-val xbox-hover-xuid">@(string.IsNullOrEmpty(Xbox.CurrentProfile?.Xuid) ? "â€”" : Xbox.CurrentProfile.Xuid)</span>
                             <span class="xbox-hover-stat-lbl">XUID</span>
                         </div>
                     </div>
                     <div class="xbox-hover-footer">
                         <i class="fa-solid fa-gamepad" style="color:#107c10;"></i>
                         <span>Xbox Live</span>
-                        <span class="xbox-hover-dot">•</span>
+                        <span class="xbox-hover-dot">â€¢</span>
                         <span>Click to manage</span>
                     </div>
                 </div>
@@ -627,7 +660,7 @@
                     <div class="xbox-hover-footer">
                         <i class="fa-brands fa-discord" style="color:#5865f2;"></i>
                         <span>Discord</span>
-                        <span class="xbox-hover-dot">•</span>
+                        <span class="xbox-hover-dot">â€¢</span>
                         <span>Click to manage</span>
                     </div>
                 </div>
@@ -702,7 +735,7 @@
         </div>
     </div>
 
-    <!-- ── SETTINGS PANEL ── -->
+    <!-- â”€â”€ SETTINGS PANEL â”€â”€ -->
     @if (currentView == "settings")
     {
         <div class="panel-overlay">
@@ -754,7 +787,7 @@
 
             <div class="panel-search-wrap">
                 <i class="fa-solid fa-magnifying-glass"></i>
-                <input class="panel-search-input" placeholder="Filter settings…"
+                <input class="panel-search-input" placeholder="Filter settingsc"
                        @bind="settingsFilter" @bind:event="oninput"
                        @onkeydown:stopPropagation />
                 @if (!string.IsNullOrEmpty(settingsFilter))
@@ -821,7 +854,7 @@
                             How long to wait after game launches before injecting
                             @if (SettingsService.Settings.SelectedClient == "Vanilla")
                             {
-                                <span style="color:var(--text-dim); opacity:0.7;"> · ignored in Vanilla</span>
+                                <span style="color:var(--text-dim); opacity:0.7;"> Â· ignored in Vanilla</span>
                             }
                         </span>
                     </div>
@@ -880,6 +913,21 @@
                                @oninput="OnJavaRamChanged" />
                         <span style="font-size:11px; color:var(--text-dim); width:50px; text-align:right;">
                             @(SettingsService.Settings.JavaMaxRamMb) MB
+                        </span>
+                    </div>
+                </div>
+
+                <div class="setting-row @(SH("Minimum RAM","ram memory java heap xms"))">
+                    <div class="setting-meta">
+                        <span class="setting-label">Minimum RAM</span>
+                        <span class="setting-hint">Initial heap size for the Minecraft JVM (-Xms)</span>
+                    </div>
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        <input type="range" min="256" max="@SettingsService.Settings.JavaMaxRamMb" step="256"
+                               value="@SettingsService.Settings.JavaMinRamMb"
+                               @oninput="OnJavaMinRamChanged" />
+                        <span style="font-size:11px; color:var(--text-dim); width:50px; text-align:right;">
+                            @(SettingsService.Settings.JavaMinRamMb) MB
                         </span>
                     </div>
                 </div>
@@ -953,6 +1001,53 @@
                            @onkeydown:stopPropagation />
                 </div>
 
+                <div class="setting-row clickable @(SH("Backup saves before launch","world backup saves zip"))"
+                     @onclick='() => ToggleProp(() => SettingsService.Settings.JavaBackupSavesBeforeLaunch = !SettingsService.Settings.JavaBackupSavesBeforeLaunch)'>
+                    <div class="setting-meta">
+                        <span class="setting-label">Backup saves before launch</span>
+                        <span class="setting-hint">Creates a zip of the active instance saves folder</span>
+                    </div>
+                    <div class="toggle @(SettingsService.Settings.JavaBackupSavesBeforeLaunch ? "on" : "")"
+                         @onclick:stopPropagation
+                         @onclick='() => ToggleProp(() => SettingsService.Settings.JavaBackupSavesBeforeLaunch = !SettingsService.Settings.JavaBackupSavesBeforeLaunch)'></div>
+                </div>
+
+                <div class="setting-row clickable @(SH("Fullscreen","window fullscreen resolution"))"
+                     @onclick='() => ToggleProp(() => SettingsService.Settings.JavaFullscreen = !SettingsService.Settings.JavaFullscreen)'>
+                    <div class="setting-meta">
+                        <span class="setting-label">Fullscreen</span>
+                        <span class="setting-hint">Adds --fullscreen to Java launches</span>
+                    </div>
+                    <div class="toggle @(SettingsService.Settings.JavaFullscreen ? "on" : "")"
+                         @onclick:stopPropagation
+                         @onclick='() => ToggleProp(() => SettingsService.Settings.JavaFullscreen = !SettingsService.Settings.JavaFullscreen)'></div>
+                </div>
+
+                <div class="setting-row clickable @(SH("Custom resolution","window fullscreen resolution width height"))"
+                     @onclick='() => ToggleProp(() => SettingsService.Settings.JavaUseCustomResolution = !SettingsService.Settings.JavaUseCustomResolution)'>
+                    <div class="setting-meta">
+                        <span class="setting-label">Custom resolution</span>
+                        <span class="setting-hint">Starts windowed Minecraft at the selected size</span>
+                    </div>
+                    <div style="display:flex; align-items:center; gap:6px;" @onclick:stopPropagation>
+                        <input class="setting-input" style="width:70px;" type="number" value="@SettingsService.Settings.JavaWindowWidth" @onchange="OnJavaWindowWidthChanged" @onkeydown:stopPropagation />
+                        <input class="setting-input" style="width:70px;" type="number" value="@SettingsService.Settings.JavaWindowHeight" @onchange="OnJavaWindowHeightChanged" @onkeydown:stopPropagation />
+                        <div class="toggle @(SettingsService.Settings.JavaUseCustomResolution ? "on" : "")"
+                             @onclick='() => ToggleProp(() => SettingsService.Settings.JavaUseCustomResolution = !SettingsService.Settings.JavaUseCustomResolution)'></div>
+                    </div>
+                </div>
+
+                <div class="setting-row @(SH("Server auto-connect","server port multiplayer quick play"))">
+                    <div class="setting-meta">
+                        <span class="setting-label">Server auto-connect</span>
+                        <span class="setting-hint">Optional --server and --port launch injection</span>
+                    </div>
+                    <div style="display:flex; align-items:center; gap:6px;">
+                        <input class="setting-input" style="width:150px;" type="text" placeholder="server address" value="@SettingsService.Settings.JavaServerAddress" @onchange="OnJavaServerAddressChanged" @onkeydown:stopPropagation />
+                        <input class="setting-input" style="width:70px;" type="number" value="@SettingsService.Settings.JavaServerPort" @onchange="OnJavaServerPortChanged" @onkeydown:stopPropagation />
+                    </div>
+                </div>
+
                 <div class="setting-row @(SH("Open Minecraft folder","minecraft folder dot directory open"))">
                     <div class="setting-meta">
                         <span class="setting-label">Open .minecraft folder</span>
@@ -1003,7 +1098,7 @@
                 <div class="setting-row @(SH("Theme preset","theme dark midnight slate ocean forest sunset light"))">
                     <div class="setting-meta">
                         <span class="setting-label">Theme preset</span>
-                        <span class="setting-hint">Background tone — affects panels and overlays</span>
+                        <span class="setting-hint">Background tone â€” affects panels and overlays</span>
                     </div>
                     <select class="setting-select" value="@SettingsService.Settings.ThemePreset"
                             @onchange="OnThemeChanged" @onclick:stopPropagation>
@@ -1022,7 +1117,7 @@
                      @onclick='() => ToggleProp(() => { SettingsService.Settings.CompactMode = !SettingsService.Settings.CompactMode; _ = JS.InvokeVoidAsync("setCompactMode", SettingsService.Settings.CompactMode); })'>
                     <div class="setting-meta">
                         <span class="setting-label">Compact mode</span>
-                        <span class="setting-hint">Tighter spacing — fits more on screen</span>
+                        <span class="setting-hint">Tighter spacing â€” fits more on screen</span>
                     </div>
                     <Toggle On="SettingsService.Settings.CompactMode"
                             OnClick='() => ToggleProp(() => { SettingsService.Settings.CompactMode = !SettingsService.Settings.CompactMode; _ = JS.InvokeVoidAsync("setCompactMode", SettingsService.Settings.CompactMode); })' />
@@ -1070,7 +1165,7 @@
                         <span class="setting-hint">
                             @if (!string.IsNullOrEmpty(SettingsService.Settings.CustomBackgroundPath))
                             {
-                                @("Custom — " + System.IO.Path.GetFileName(SettingsService.Settings.CustomBackgroundPath))
+                                @("Custom â€” " + System.IO.Path.GetFileName(SettingsService.Settings.CustomBackgroundPath))
                             }
                             else
                             {
@@ -1242,7 +1337,7 @@
                 <div class="setting-row @(SH("Check for updates now","update manual check"))">
                     <div class="setting-meta">
                         <span class="setting-label">Check for updates now</span>
-                        <span class="setting-hint">@(checkingUpdatesManual ? "Checking…" : lastUpdateCheckLabel)</span>
+                        <span class="setting-hint">@(checkingUpdatesManual ? "Checking..." : lastUpdateCheckLabel)</span>
                     </div>
                     <button class="btn-sm" @onclick="ManualUpdateCheck" @onmousedown:stopPropagation
                             disabled="@checkingUpdatesManual">
@@ -1272,7 +1367,7 @@
                 <div class="setting-row @(SH("Open Minecraft folder","minecraft com mojang folder"))">
                     <div class="setting-meta">
                         <span class="setting-label">Minecraft data folder</span>
-                        <span class="setting-hint">com.mojang — resource packs, worlds, behaviour packs</span>
+                        <span class="setting-hint">com.mojang â€” resource packs, worlds, behaviour packs</span>
                     </div>
                     <button class="btn-sm" @onclick="OpenMinecraftFolder" @onmousedown:stopPropagation>
                         <i class="fa-solid fa-cubes"></i> Open
@@ -1300,14 +1395,14 @@
                             }
                             else
                             {
-                                @("Required for Addons tab — get one free from CurseForge")
+                                @("Required for Addons tab â€” get one free from CurseForge")
                             }
                         </span>
                     </div>
                     <div style="display:flex; align-items:center; gap:6px;">
                         <input class="setting-input" style="width:160px; font-size:10px;" type="password"
                                value="@SettingsService.Settings.CurseForgeApiKey"
-                               placeholder="Paste API key…"
+                               placeholder="Paste API key..."
                                @onchange="OnCfApiKeyChanged"
                                @onclick:stopPropagation
                                @onkeydown:stopPropagation />
@@ -1347,7 +1442,7 @@
                 <div class="setting-row @(SH("Reset settings","reset default factory settings"))">
                     <div class="setting-meta">
                         <span class="setting-label">Reset to defaults</span>
-                        <span class="setting-hint">Clears all preferences — does not delete clients</span>
+                        <span class="setting-hint">Clears all preferences â€” does not delete clients</span>
                     </div>
                     <button class="btn-sm" style="color:var(--red);" @onclick="ConfirmResetSettings" @onmousedown:stopPropagation>
                         <i class="fa-solid fa-arrow-rotate-left"></i> Reset
@@ -1364,7 +1459,7 @@
                 <div class="setting-row @(SH("Keyboard shortcuts","shortcuts keyboard help"))">
                     <div class="setting-meta">
                         <span class="setting-label">Keyboard shortcuts</span>
-                        <span class="setting-hint">Ctrl+K search · Ctrl+L launch · Ctrl+1/2/3/4/5 panels · Ctrl+, settings · Ctrl+Tab cycle · F11 fullscreen · Esc close</span>
+                        <span class="setting-hint">Ctrl+K search Â· Ctrl+L launch Â· Ctrl+1/2/3/4/5 panels Â· Ctrl+, settings Â· Ctrl+Tab cycle Â· F11 fullscreen Â· Esc close</span>
                     </div>
                     <div class="kbs"><kbd>?</kbd></div>
                 </div>
@@ -1399,7 +1494,7 @@
         </div>
     }
 
-    <!-- ── CLIENTS PANEL ── -->
+    <!-- â”€â”€ CLIENTS PANEL â”€â”€ -->
     @if (currentView == "clients")
     {
         <div class="panel-overlay">
@@ -1537,10 +1632,10 @@
                         </div>
                     </div>
                     @if (!string.IsNullOrEmpty(odersoError)) { <span class="error-text" style="padding:0 2px;">@odersoError</span> }
-                    <p class="client-card-desc">OderSo Client — curated Minecraft Bedrock experience by MasonOderSo.</p>
+                    <p class="client-card-desc">OderSo Client â€” curated Minecraft Bedrock experience by MasonOderSo.</p>
                 </div>
 
-                <!-- Vanilla — no client -->
+                <!-- Vanilla â€” no client -->
                 <div class="client-card @(SettingsService.Settings.SelectedClient == "Vanilla" ? "client-active" : "")">
                     <div class="client-card-header">
                         <div class="client-card-icon" style="background:rgba(67,181,129,0.15); color:var(--green);">
@@ -1559,7 +1654,7 @@
                             }
                         </div>
                     </div>
-                    <p class="client-card-desc">Pure stock Minecraft Bedrock — useful for diagnostics, multiplayer realms, or just playing un-modified.</p>
+                    <p class="client-card-desc">Pure stock Minecraft Bedrock â€” useful for diagnostics, multiplayer realms, or just playing un-modified.</p>
                 </div>
 
                 <!-- Custom DLL -->
@@ -1596,7 +1691,7 @@
                     <i class="fa-solid fa-file-arrow-down"></i>
                     <span>Drag &amp; drop a DLL onto the window</span>
                     <button class="btn-sm" @onclick="PickDllFile" @onmousedown:stopPropagation style="margin-left:auto;">
-                        <i class="fa-solid fa-folder-open"></i> Browse…
+                        <i class="fa-solid fa-folder-open"></i> Browse...
                     </button>
                 </div>
 
@@ -1612,7 +1707,7 @@
         </div>
     }
 
-    <!-- ── VERSIONS PANEL ── -->
+    <!-- â”€â”€ VERSIONS PANEL â”€â”€ -->
     @if (currentView == "versions")
     {
         <div class="panel-overlay">
@@ -1658,14 +1753,14 @@
 
             <div class="panel-search-wrap">
                 <i class="fa-solid fa-magnifying-glass"></i>
-                <input class="panel-search-input" placeholder="@(versionsClient == "Latite" ? "Filter Latite versions…" : "Filter OderSo versions…")"
+                <input class="panel-search-input" placeholder="@(versionsClient == "Latite" ? "Filter Latite versions..." : "Filter OderSo versions...")"
                        @bind="versionsFilter" @bind:event="oninput"
                        @onkeydown:stopPropagation />
             </div>
 
             <div class="panel-body">
 
-                <!-- ── Latite list ── -->
+                <!-- â”€â”€ Latite list â”€â”€ -->
                 @if (versionsClient == "Latite")
                 {
                     @if (!string.IsNullOrEmpty(latiteFetchError) && versions.Count > 0)
@@ -1674,7 +1769,7 @@
                     }
                     @if (isLoadingVersions)
                     {
-                        <div class="versions-loading"><span class="spinner"></span><span>Fetching versions…</span></div>
+                        <div class="versions-loading"><span class="spinner"></span><span>Fetching versions...</span></div>
                     }
                     else if (versions.Count == 0 && !string.IsNullOrEmpty(latiteFetchError))
                     {
@@ -1731,7 +1826,7 @@
                     }
                 }
 
-                <!-- ── OderSo list ── -->
+                <!-- â”€â”€ OderSo list â”€â”€ -->
                 @if (versionsClient == "OderSo")
                 {
                     @if (!string.IsNullOrEmpty(oderSoFetchError) && oderSoVersions.Count > 0)
@@ -1740,7 +1835,7 @@
                     }
                     @if (isLoadingOderSoVersions)
                     {
-                        <div class="versions-loading"><span class="spinner"></span><span>Fetching OderSo versions…</span></div>
+                        <div class="versions-loading"><span class="spinner"></span><span>Fetching OderSo versions...</span></div>
                     }
                     else if (!string.IsNullOrEmpty(oderSoFetchError) && oderSoVersions.Count == 0)
                     {
@@ -1777,7 +1872,7 @@
                                         @if (state.IsActive) { <span class="tag-active">Active</span> }
                                     </div>
                                     @if (!string.IsNullOrEmpty(state.Error)) { <span class="error-text">@state.Error</span> }
-                                    else if (state.IsDownloaded && !state.IsDownloading) { <span class="version-sub">Ready · @state.SizeLabel</span> }
+                                    else if (state.IsDownloaded && !state.IsDownloading) { <span class="version-sub">Ready Â· @state.SizeLabel</span> }
                                     else if (!state.IsDownloaded) { <span class="version-sub">@state.SizeLabel</span> }
                                 </div>
                                 @OderSoVersionActions(state)
@@ -1790,7 +1885,7 @@
         </div>
     }
 
-    <!-- ── ADDONS PANEL (CurseForge MCBE) ── -->
+    <!-- â”€â”€ ADDONS PANEL (CurseForge MCBE) â”€â”€ -->
     @if (currentView == "addons")
     {
         <div class="panel-overlay">
@@ -1807,6 +1902,274 @@
                 </div>
             </div>
 
+            @if (IsJava)
+            {
+                <div class="versions-client-switcher">
+                    <button class="vcs-btn @(javaModsTab == "loaders" ? "active" : "")"
+                            @onclick='() => javaModsTab = "loaders"' @onmousedown:stopPropagation>
+                        <i class="fa-solid fa-screwdriver-wrench"></i> Loaders
+                    </button>
+                    <button class="vcs-btn @(javaModsTab == "mods" ? "active" : "")"
+                            @onclick='() => javaModsTab = "mods"' @onmousedown:stopPropagation>
+                        <i class="fa-solid fa-puzzle-piece"></i> Mods (@javaMods.Count)
+                    </button>
+                    <button class="vcs-btn @(javaModsTab == "assets" ? "active" : "")"
+                            @onclick='() => javaModsTab = "assets"' @onmousedown:stopPropagation>
+                        <i class="fa-solid fa-image"></i> Assets
+                    </button>
+                    <button class="vcs-btn @(javaModsTab == "tools" ? "active" : "")"
+                            @onclick='() => javaModsTab = "tools"' @onmousedown:stopPropagation>
+                        <i class="fa-solid fa-toolbox"></i> Tools
+                    </button>
+                    <button class="vcs-btn @(javaModsTab == "curseforge" ? "active" : "")"
+                            @onclick='() => javaModsTab = "curseforge"' @onmousedown:stopPropagation>
+                        <i class="fa-solid fa-fire"></i> CurseForge
+                    </button>
+                    <button class="vcs-btn @(javaModsTab == "modrinth" ? "active" : "")"
+                            @onclick='() => javaModsTab = "modrinth"' @onmousedown:stopPropagation>
+                        <i class="fa-solid fa-leaf"></i> Modrinth
+                    </button>
+                </div>
+
+                <div class="panel-body" style="padding-top:6px;">
+                    @if (javaModsTab == "loaders")
+                    {
+                        @if (string.IsNullOrWhiteSpace(SettingsService.Settings.JavaActiveVersion))
+                        {
+                            <div class="empty-state" style="padding:20px;">
+                                <i class="fa-solid fa-triangle-exclamation"></i>
+                                <span>No version selected</span>
+                                <small>Pick a Minecraft version from the Versions panel first, then come back to install a mod loader.</small>
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="version-row" style="border-left-width:2px; border-left-color:var(--accent); margin-bottom:4px;">
+                                <div class="version-meta">
+                                    <span class="version-name" style="font-size:12px; color:var(--text-dim);">Installing for</span>
+                                    <span class="version-sub" style="font-size:13px; font-weight:600; color:var(--text);">@SettingsService.Settings.JavaActiveVersion</span>
+                                </div>
+                            </div>
+
+                            <ClientCard Name="Fabric"
+                                        IconClass="fa-solid fa-feather"
+                                        IconStyle="background:rgba(219,185,137,0.15); color:#dbb989; padding:8px;"
+                                        Active="@(SettingsService.Settings.JavaActiveVersion?.Contains("fabric") == true)">
+                                <SubContent>
+                                    @if (SettingsService.Settings.JavaActiveVersion?.Contains("fabric") == true)
+                                    {
+                                        <span class="tag-uptodate"><i class="fa-solid fa-circle-check"></i> Active</span>
+                                    }
+                                    else
+                                    {
+                                        <span style="opacity:0.5;">Lightweight mod loader</span>
+                                    }
+                                </SubContent>
+                                <Actions>
+                                    <IconBtn Icon="fa-solid fa-download" Title="Install Fabric" Disabled="javaUtilityBusy" OnClick="InstallFabricForActive" />
+                                </Actions>
+                                <DescriptionContent>
+                                    Fast, lightweight mod loader. One click installs the latest stable Fabric loader for your active version.
+                                </DescriptionContent>
+                            </ClientCard>
+
+                            <ClientCard Name="Quilt"
+                                        IconClass="fa-solid fa-layer-group"
+                                        IconStyle="background:rgba(147,130,210,0.15); color:#9382d2; padding:8px;"
+                                        Active="@(SettingsService.Settings.JavaActiveVersion?.Contains("quilt") == true)">
+                                <SubContent>
+                                    @if (SettingsService.Settings.JavaActiveVersion?.Contains("quilt") == true)
+                                    {
+                                        <span class="tag-uptodate"><i class="fa-solid fa-circle-check"></i> Active</span>
+                                    }
+                                    else
+                                    {
+                                        <span style="opacity:0.5;">Fabric-compatible fork</span>
+                                    }
+                                </SubContent>
+                                <Actions>
+                                    <IconBtn Icon="fa-solid fa-download" Title="Install Quilt" Disabled="javaUtilityBusy" OnClick="InstallQuiltForActive" />
+                                </Actions>
+                                <DescriptionContent>
+                                    Community-driven fork of Fabric with enhanced APIs. Compatible with most Fabric mods out of the box.
+                                </DescriptionContent>
+                            </ClientCard>
+
+                            <ClientCard Name="Forge"
+                                        IconClass="fa-solid fa-hammer"
+                                        IconStyle="background:rgba(66,133,244,0.15); color:#4285f4; padding:8px;"
+                                        Active="false">
+                                <SubContent>
+                                    <span style="opacity:0.5;">The classic mod loader</span>
+                                </SubContent>
+                                <Actions>
+                                    <IconBtn Icon="fa-solid fa-download" Title="Download Forge installer" Disabled="javaUtilityBusy" OnClick="DownloadForgeInstaller" />
+                                </Actions>
+                                <DescriptionContent>
+                                    Auto-detects the recommended Forge version for your active Minecraft version and downloads the installer.
+                                </DescriptionContent>
+                            </ClientCard>
+
+                            <ClientCard Name="NeoForge"
+                                        IconClass="fa-solid fa-fire-flame-curved"
+                                        IconStyle="background:rgba(255,120,50,0.15); color:#ff7832; padding:8px;"
+                                        Active="false">
+                                <SubContent>
+                                    <span style="opacity:0.5;">Modern Forge fork (1.20.2+)</span>
+                                </SubContent>
+                                <Actions>
+                                    <IconBtn Icon="fa-solid fa-download" Title="Download NeoForge installer" Disabled="javaUtilityBusy" OnClick="DownloadNeoForgeInstaller" />
+                                </Actions>
+                                <DescriptionContent>
+                                    Auto-detects the latest NeoForge version for your active Minecraft version and downloads the installer.
+                                </DescriptionContent>
+                            </ClientCard>
+                        }
+                    }
+                    else if (javaModsTab == "mods")
+                    {
+                        @if (javaMods.Count == 0)
+                        {
+                            <div class="empty-state" style="padding:14px;">
+                                <i class="fa-solid fa-puzzle-piece"></i>
+                                <span>No local mods</span>
+                                <small>Drop jars into the active instance mods folder, or browse CurseForge below.</small>
+                                <button class="btn-sm" style="margin-top:6px;" @onclick='() => OpenJavaFolder("mods")' @onmousedown:stopPropagation>
+                                    <i class="fa-solid fa-folder-open"></i> Open mods folder
+                                </button>
+                            </div>
+                        }
+                        else
+                        {
+                            @foreach (var mod in javaMods)
+                            {
+                                <div class="version-row">
+                                    <div class="version-meta">
+                                        <span class="version-name" style="@(mod.IsDisabled ? "opacity:.55;" : "")">@mod.Name</span>
+                                        <span class="version-sub">@(mod.IsDisabled ? "Disabled" : "Enabled") @(string.IsNullOrWhiteSpace(mod.DependencyHint) ? "" : "· " + mod.DependencyHint)</span>
+                                    </div>
+                                    <button class="vcs-btn vcs-btn-ghost" @onclick='() => ToggleJavaMod(mod)' @onmousedown:stopPropagation>
+                                        <i class="fa-solid @(mod.IsDisabled ? "fa-toggle-off" : "fa-toggle-on")"></i>
+                                    </button>
+                                    <button class="vcs-btn vcs-btn-ghost" @onclick='() => DeleteJavaFile(mod)' @onmousedown:stopPropagation>
+                                        <i class="fa-solid fa-trash"></i>
+                                    </button>
+                                </div>
+                            }
+                            <div style="text-align:center; padding:4px;">
+                                <button class="btn-sm" @onclick='() => OpenJavaFolder("mods")' @onmousedown:stopPropagation>
+                                    <i class="fa-solid fa-folder-open"></i> Open mods folder
+                                </button>
+                            </div>
+                        }
+                    }
+                    else if (javaModsTab == "assets")
+                    {
+                        <div class="client-card">
+                            <div class="client-card-header">
+                                <div class="client-card-icon" style="background:rgba(67,181,129,0.15); color:var(--green); padding:8px;"><i class="fa-solid fa-image"></i></div>
+                                <div class="client-card-meta">
+                                    <span class="client-card-name">Resource Packs</span>
+                                    <span class="client-card-sub" style="opacity:0.5;">@javaResourcePacks.Count pack(s)</span>
+                                </div>
+                                <div class="client-card-actions">
+                                    <button class="icon-btn" data-tooltip="Open folder" @onclick='() => OpenJavaFolder("resourcepacks")' @onmousedown:stopPropagation><i class="fa-solid fa-folder-open"></i></button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="client-card">
+                            <div class="client-card-header">
+                                <div class="client-card-icon" style="background:rgba(255,200,50,0.15); color:#ffc832; padding:8px;"><i class="fa-solid fa-wand-magic-sparkles"></i></div>
+                                <div class="client-card-meta">
+                                    <span class="client-card-name">Shader Packs</span>
+                                    <span class="client-card-sub" style="opacity:0.5;">@javaShaderPacks.Count pack(s)</span>
+                                </div>
+                                <div class="client-card-actions">
+                                    <button class="icon-btn" data-tooltip="Open folder" @onclick='() => OpenJavaFolder("shaderpacks")' @onmousedown:stopPropagation><i class="fa-solid fa-folder-open"></i></button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="client-card">
+                            <div class="client-card-header">
+                                <div class="client-card-icon" style="background:rgba(114,137,218,0.15); color:var(--accent); padding:8px;"><i class="fa-solid fa-map"></i></div>
+                                <div class="client-card-meta">
+                                    <span class="client-card-name">Saves / Worlds</span>
+                                    <span class="client-card-sub" style="opacity:0.5;">Open your worlds folder</span>
+                                </div>
+                                <div class="client-card-actions">
+                                    <button class="icon-btn" data-tooltip="Open folder" @onclick='() => OpenJavaFolder("saves")' @onmousedown:stopPropagation><i class="fa-solid fa-folder-open"></i></button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="client-card">
+                            <div class="client-card-header">
+                                <div class="client-card-icon" style="background:rgba(240,71,71,0.15); color:var(--red); padding:8px;"><i class="fa-solid fa-camera"></i></div>
+                                <div class="client-card-meta">
+                                    <span class="client-card-name">Screenshots</span>
+                                    <span class="client-card-sub" style="opacity:0.5;">@javaScreenshots.Count screenshot(s)</span>
+                                </div>
+                                <div class="client-card-actions">
+                                    <button class="icon-btn" data-tooltip="Open folder" @onclick='() => OpenJavaFolder("screenshots")' @onmousedown:stopPropagation><i class="fa-solid fa-folder-open"></i></button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="client-card">
+                            <div class="client-card-header">
+                                <div class="client-card-icon" style="background:rgba(250,166,26,0.15); color:var(--orange); padding:8px;"><i class="fa-solid fa-drafting-compass"></i></div>
+                                <div class="client-card-meta">
+                                    <span class="client-card-name">Schematics</span>
+                                    <span class="client-card-sub" style="opacity:0.5;">@javaSchematics.Count file(s)</span>
+                                </div>
+                                <div class="client-card-actions">
+                                    <button class="icon-btn" data-tooltip="Open folder" @onclick='() => OpenJavaFolder("schematics")' @onmousedown:stopPropagation><i class="fa-solid fa-folder-open"></i></button>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                    else if (javaModsTab == "tools")
+                    {
+                        <div class="client-card">
+                            <div class="client-card-header">
+                                <div class="client-card-icon" style="background:rgba(114,137,218,0.15); color:var(--accent); padding:8px;"><i class="fa-solid fa-box-archive"></i></div>
+                                <div class="client-card-meta">
+                                    <span class="client-card-name">Backup Saves</span>
+                                    <span class="client-card-sub" style="opacity:0.5;">Zip your worlds before a risky update</span>
+                                </div>
+                                <div class="client-card-actions">
+                                    <IconBtn Icon="fa-solid fa-download" Title="Create backup" Disabled="javaUtilityBusy" OnClick="BackupJavaSaves" />
+                                </div>
+                            </div>
+                        </div>
+                        <div class="client-card">
+                            <div class="client-card-header">
+                                <div class="client-card-icon" style="background:rgba(67,181,129,0.15); color:var(--green); padding:8px;"><i class="fa-solid fa-file-zipper"></i></div>
+                                <div class="client-card-meta">
+                                    <span class="client-card-name">Export Modpack</span>
+                                    <span class="client-card-sub" style="opacity:0.5;">Bundle mods + config into a shareable zip</span>
+                                </div>
+                                <div class="client-card-actions">
+                                    <IconBtn Icon="fa-solid fa-file-export" Title="Export" Disabled="javaUtilityBusy" OnClick="ExportJavaModpack" />
+                                </div>
+                            </div>
+                        </div>
+                        <div class="client-card">
+                            <div class="client-card-header">
+                                <div class="client-card-icon" style="background:rgba(250,166,26,0.15); color:var(--orange); padding:8px;"><i class="fa-solid fa-clone"></i></div>
+                                <div class="client-card-meta">
+                                    <span class="client-card-name">Duplicate Instance</span>
+                                    <span class="client-card-sub" style="opacity:0.5;">Clone your active instance with all mods & config</span>
+                                </div>
+                                <div class="client-card-actions">
+                                    <IconBtn Icon="fa-solid fa-copy" Title="Duplicate" Disabled="javaUtilityBusy" OnClick="DuplicateJavaInstance" />
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+
+            @if (!IsJava || javaModsTab == "curseforge")
+            {
             @if (!CurseForge.IsAvailable)
             {
                 <div class="panel-body">
@@ -1835,7 +2198,7 @@
 
                 <div class="panel-search-wrap">
                     <i class="fa-solid fa-magnifying-glass"></i>
-                    <input class="panel-search-input" placeholder="@(IsJava ? "Search CurseForge for Java mods, modpacks, shaders…" : "Search CurseForge addons…")"
+                    <input class="panel-search-input" placeholder="@(IsJava ? "Search CurseForge for Java mods, modpacks, shaders..." : "Search CurseForge addons...")"
                            value="@cfSearchQuery"
                            @oninput="OnCfSearchInput"
                            @onkeydown="OnCfSearchKeyDown"
@@ -1847,7 +2210,7 @@
                     {
                         <div style="display:flex; align-items:center; justify-content:center; padding:30px;">
                             <span class="spinner" style="width:18px;height:18px;border-width:2px;"></span>
-                            <span style="margin-left:10px; font-size:12px; color:var(--text-dim);">Searching CurseForge…</span>
+                            <span style="margin-left:10px; font-size:12px; color:var(--text-dim);">Searching CurseForge...</span>
                         </div>
                     }
                     else if (!string.IsNullOrEmpty(cfError))
@@ -1934,6 +2297,122 @@
                     }
                 </div>
             }
+            }
+
+            @if (IsJava && javaModsTab == "modrinth")
+            {
+                <div class="versions-client-switcher">
+                    @foreach (var cat in Modrinth.AvailableCategories)
+                    {
+                        var key = cat.Key;
+                        <button class="vcs-btn @(mrCategory == key ? "active" : "")"
+                                @onclick='() => SetMrCategory(key)' @onmousedown:stopPropagation>
+                            <i class="@cat.Icon"></i> @cat.Label
+                        </button>
+                    }
+                </div>
+
+                <div class="panel-search-wrap">
+                    <i class="fa-solid fa-magnifying-glass"></i>
+                    <input class="panel-search-input" placeholder="Search Modrinth for mods, modpacks, shaders..."
+                           value="@mrSearchQuery"
+                           @oninput="OnMrSearchInput"
+                           @onkeydown="OnMrSearchKeyDown"
+                           @onkeydown:stopPropagation />
+                </div>
+
+                <div class="panel-body">
+                    @if (mrSearching)
+                    {
+                        <div style="display:flex; align-items:center; justify-content:center; padding:30px;">
+                            <span class="spinner" style="width:18px;height:18px;border-width:2px;"></span>
+                            <span style="margin-left:10px; font-size:12px; color:var(--text-dim);">Searching Modrinth...</span>
+                        </div>
+                    }
+                    else if (!string.IsNullOrEmpty(mrError))
+                    {
+                        <div style="padding:20px; text-align:center;">
+                            <span class="error-text">@mrError</span>
+                            <br/>
+                            <button class="btn-sm" style="margin-top:10px;" @onclick="MrSearchAsync" @onmousedown:stopPropagation>
+                                <i class="fa-solid fa-rotate"></i> Retry
+                            </button>
+                        </div>
+                    }
+                    else if (mrResults.Count == 0 && mrHasSearched)
+                    {
+                        <div class="empty-state">
+                            <i class="fa-solid fa-box-open"></i>
+                            <span>No results found</span>
+                            <small>Try a different search term or category.</small>
+                        </div>
+                    }
+                    else if (mrResults.Count == 0)
+                    {
+                        <div class="empty-state">
+                            <i class="fa-solid fa-leaf"></i>
+                            <span>Browse Modrinth</span>
+                            <small>Search for mods, modpacks, resource packs, or shaders above.</small>
+                        </div>
+                    }
+                    else
+                    {
+                        @foreach (var project in mrResults)
+                        {
+                            var p = project;
+                            <div class="client-card" style="margin-bottom:6px;">
+                                <div class="client-card-header">
+                                    <div class="client-card-icon" style="padding:3px; border-radius:6px; overflow:hidden;">
+                                        @if (!string.IsNullOrEmpty(p.IconUrl))
+                                        {
+                                            <img src="@p.IconUrl" style="width:100%;height:100%;object-fit:cover;border-radius:4px;" alt="" />
+                                        }
+                                        else
+                                        {
+                                            <i class="fa-solid fa-leaf" style="font-size:18px; color:#1bd96a;"></i>
+                                        }
+                                    </div>
+                                    <div class="client-card-meta" style="min-width:0;">
+                                        <span class="client-card-name" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">@p.Title</span>
+                                        <span class="client-card-sub" style="display:flex; gap:8px; align-items:center;">
+                                            <span style="opacity:0.6;">@p.Author</span>
+                                            <span style="opacity:0.4;">@FormatDownloads(p.Downloads)</span>
+                                            @if (!string.IsNullOrEmpty(p.CategoryName))
+                                            {
+                                                <span class="tag-uptodate" style="font-size:9px; padding:1px 5px;">@p.CategoryName</span>
+                                            }
+                                        </span>
+                                    </div>
+                                    <div class="client-card-actions">
+                                        @if (mrDownloadingId == p.Id)
+                                        {
+                                            <InlineProgress Progress="mrDownloadProgress" />
+                                        }
+                                        else
+                                        {
+                                            <button class="icon-btn" data-tooltip="Download &amp; Install"
+                                                    @onclick="() => HandleMrDownload(p)" @onmousedown:stopPropagation>
+                                                <i class="fa-solid fa-download"></i>
+                                            </button>
+                                        }
+                                    </div>
+                                </div>
+                                <p class="client-card-desc" style="display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">@p.Description</p>
+                            </div>
+                        }
+
+                        @if (mrResults.Count < mrTotalCount)
+                        {
+                            <div style="text-align:center; padding:8px;">
+                                <button class="btn-sm" @onclick="MrLoadMore" @onmousedown:stopPropagation
+                                        disabled="@mrSearching">
+                                    <i class="fa-solid fa-angles-down"></i> Load more (@mrResults.Count / @mrTotalCount)
+                                </button>
+                            </div>
+                        }
+                    }
+                </div>
+            }
 
             <div class="panel-tabs">
                 <button class="panel-tab" @onclick="OpenSettings" @onmousedown:stopPropagation><i class="fa-solid fa-gear"></i>Settings</button>
@@ -1955,7 +2434,7 @@
         </div>
     }
 
-    <!-- ── SERVERS PANEL ── -->
+    <!-- â”€â”€ SERVERS PANEL â”€â”€ -->
     @if (currentView == "servers")
     {
         <div class="panel-overlay">
@@ -2071,7 +2550,7 @@
         </div>
     }
 
-    <!-- ── ADD/EDIT SERVER MODAL ── -->
+    <!-- â”€â”€ ADD/EDIT SERVER MODAL â”€â”€ -->
     @if (serverModalOpen)
     {
         <div class="modal-overlay" @onclick="CloseServerModal">
@@ -2117,7 +2596,7 @@
         </div>
     }
 
-    <!-- ── MC VERSIONS PANEL (Vanilla Version Switcher) ── -->
+    <!-- â”€â”€ MC VERSIONS PANEL (Vanilla Version Switcher) â”€â”€ -->
     @if (currentView == "mcversions")
     {
         <div class="panel-overlay">
@@ -2144,7 +2623,7 @@
                 <span>Switch between Minecraft Bedrock versions. Sideload requires Developer Mode; the Microsoft Store option below does not.</span>
             </div>
 
-            <!-- ── Microsoft Store install (BedrockUpdater method) ── -->
+            <!-- â”€â”€ Microsoft Store install (BedrockUpdater method) â”€â”€ -->
             <div class="mcv-store-row">
                 <div class="mcv-store-meta">
                     @if (storeInstallBusy)
@@ -2175,7 +2654,7 @@
 
             <div class="panel-search-wrap">
                 <i class="fa-solid fa-magnifying-glass"></i>
-                <input class="panel-search-input" placeholder="Filter Minecraft versions…"
+                <input class="panel-search-input" placeholder="Filter Minecraft versions..."
                        @bind="mcVersionsFilter" @bind:event="oninput"
                        @onkeydown:stopPropagation />
             </div>
@@ -2183,7 +2662,7 @@
             <div class="panel-body">
                 @if (isLoadingMcVersions)
                 {
-                    <div class="versions-loading"><span class="spinner"></span><span>Fetching Minecraft versions…</span></div>
+                    <div class="versions-loading"><span class="spinner"></span><span>Fetching Minecraft versions...</span></div>
                 }
                 else if (mcVersionsList.Count == 0 && !string.IsNullOrEmpty(mcVersionsError))
                 {
@@ -2228,7 +2707,7 @@
                                         <span class="tag-active">Active</span>
                                     </div>
                                     @if (!string.IsNullOrEmpty(v.ErrorMessage)) { <span class="error-text">@v.ErrorMessage</span> }
-                                    else if (v.IsDownloaded) { <span class="version-sub">Ready · @v.SizeLabel</span> }
+                                    else if (v.IsDownloaded) { <span class="version-sub">Ready Â· @v.SizeLabel</span> }
                                 </div>
                                 @McVersionActions(v)
                             </div>
@@ -2242,7 +2721,7 @@
                             <div class="version-meta">
                                 <span class="version-name">Minecraft @v.Version</span>
                                 @if (!string.IsNullOrEmpty(v.ErrorMessage)) { <span class="error-text">@v.ErrorMessage</span> }
-                                else if (v.IsDownloaded && !v.IsDownloading) { <span class="version-sub">Ready · @v.SizeLabel</span> }
+                                else if (v.IsDownloaded && !v.IsDownloading) { <span class="version-sub">Ready Â· @v.SizeLabel</span> }
                                 else if (!v.IsDownloaded && !v.IsDownloading) { <span class="version-sub">@v.SizeLabel</span> }
                             </div>
                             @McVersionActions(v)
@@ -2261,7 +2740,7 @@
             </div>
         </div>
     }
-    <!-- ── JAVA LAUNCHERS PANEL ── -->
+    <!-- â”€â”€ JAVA LAUNCHERS PANEL â”€â”€ -->
     @if (currentView == "javaclients")
     {
         <div class="panel-overlay">
@@ -2283,7 +2762,7 @@
 
             <div class="mcv-info-bar">
                 <i class="fa-solid fa-circle-info"></i>
-                <span>Vanilla launches through Glacier directly. Lunar and Badlion launch via their own installed apps — we don't proxy through them.</span>
+                <span>Vanilla launches through Glacier directly. Lunar and Badlion launch via their own installed apps â€” we don't proxy through them.</span>
             </div>
 
             <div class="panel-body">
@@ -2318,15 +2797,15 @@
                         <span class="credits-card-sub">
                             @if (lbInstalled && canDirect)
                             {
-                                <text>Direct launch ready · @(LunarBadlion.LunarInstalledVersions.Length) version(s) installed offline</text>
+                                <text>Direct launch ready Â· @(LunarBadlion.LunarInstalledVersions.Length) version(s) installed offline</text>
                             }
                             else if (lbInstalled)
                             {
-                                <text>Detected · @(LunarBadlion.LunarExePath ?? LunarBadlion.BadlionExePath) — first launch may show the Lunar splash</text>
+                                <text>Detected Â· @(LunarBadlion.LunarExePath ?? LunarBadlion.BadlionExePath) â€” first launch may show the Lunar splash</text>
                             }
                             else
                             {
-                                <text>Not installed — download from lunarclient.com (Lunar's purchase of Badlion lets one app cover both)</text>
+                                <text>Not installed â€” download from lunarclient.com (Lunar's purchase of Badlion lets one app cover both)</text>
                             }
                         </span>
                     </div>
@@ -2369,7 +2848,7 @@
         </div>
     }
 
-    <!-- ── JAVA VERSIONS PANEL ── -->
+    <!-- â”€â”€ JAVA VERSIONS PANEL â”€â”€ -->
     @if (currentView == "javaversions")
     {
         <div class="panel-overlay">
@@ -2410,7 +2889,7 @@
 
             <div class="panel-search-wrap">
                 <i class="fa-solid fa-magnifying-glass"></i>
-                <input class="panel-search-input" placeholder="Filter Java versions (e.g. 1.21, 1.8.9)…"
+                <input class="panel-search-input" placeholder="Filter Java versions (e.g. 1.21, 1.8.9)..."
                        @bind="javaVersionsFilter" @bind:event="oninput"
                        @onkeydown:stopPropagation />
             </div>
@@ -2418,7 +2897,7 @@
             <div class="panel-body">
                 @if (isLoadingJavaVersions)
                 {
-                    <div class="versions-loading"><span class="spinner"></span><span>Fetching Java versions…</span></div>
+                    <div class="versions-loading"><span class="spinner"></span><span>Fetching Java versions...</span></div>
                 }
                 else if (javaVersionsList.Count == 0 && !string.IsNullOrEmpty(javaVersionsError))
                 {
@@ -2455,11 +2934,11 @@
                                     </div>
                                     @if (!string.IsNullOrEmpty(v.ErrorMessage)) { <span class="error-text">@v.ErrorMessage</span> }
                                     else if (v.HasJar) { <span class="version-sub">Ready to launch</span> }
-                                    else { <span class="version-sub" style="color:var(--orange);">Profile present but jar missing — open in official launcher once</span> }
+                                    else { <span class="version-sub" style="color:var(--orange);">Profile present but jar missing â€” open in official launcher once</span> }
                                 </div>
                                 <button class="vcs-btn" @onclick='() => HandleJavaLaunch(v)'
                                         disabled="@(v.IsLaunching || !v.HasJar)" @onmousedown:stopPropagation>
-                                    @if (v.IsLaunching) { <span class="spinner"></span><span>Launching…</span> }
+                                    @if (v.IsLaunching) { <span class="spinner"></span><span>Launching...</span> }
                                     else { <i class="fa-solid fa-play"></i><span>&nbsp;Launch</span> }
                                 </button>
                                 <button class="vcs-btn vcs-btn-ghost" @onclick='() => SetActiveJavaVersion(v)'
@@ -2488,7 +2967,7 @@
                                     }
                                     else
                                     {
-                                        <span class="version-sub" style="opacity:0.6;">@v.TypeLabel @(string.IsNullOrEmpty(v.ReleaseTime) ? "" : "· " + v.ReleaseTime[..Math.Min(10, v.ReleaseTime.Length)])</span>
+                                        <span class="version-sub" style="opacity:0.6;">@v.TypeLabel @(string.IsNullOrEmpty(v.ReleaseTime) ? "" : "Â· " + v.ReleaseTime[..Math.Min(10, v.ReleaseTime.Length)])</span>
                                     }
                                 </div>
                                 @if (v.IsInstalling)
@@ -2525,7 +3004,7 @@
         </div>
     }
 
-    <!-- ── CREDITS PANEL ── -->
+    <!-- â”€â”€ CREDITS PANEL â”€â”€ -->
     @if (currentView == "credits")
     {
         <div class="panel-overlay">
@@ -2549,7 +3028,7 @@
                 <div class="credits-card-icon" style="padding:6px;"><img src="https://media.discordapp.net/attachments/1252981510223429693/1491099168612028497/1000167923-removebg-preview.png?ex=69d675d1&is=69d52451&hm=f8489d83a088d107f933b54625e9ebd93dd1d726788804f0dbc498720a3b689f&=&width=320&height=320" style="width:100%;height:100%;object-fit:contain;"/></div>
                     <div class="credits-card-meta">
                         <span class="credits-card-name">Glacier Launcher</span>
-                        <span class="credits-card-sub">Built by Pepe · Glacier Productions</span>
+                        <span class="credits-card-sub">Built by Pepe Â· Glacier Productions</span>
                     </div>
                     <div class="credits-card-actions">
                         <button class="credits-link-btn" data-tooltip="GitHub"
@@ -2651,2968 +3130,3 @@
     }
 
 </div>
-
-@code {
-    // ── State ─────────────────────────────────────────────────
-    private string currentView   = "home";
-    private string hoveredBtn    = "";
-    private bool   isLaunching   = false;
-    private bool   isError       = false;
-    private string statusMessage = "";
-    private bool   statusVisible = false;
-    private System.Threading.CancellationTokenSource? _statusCts;
-
-    // ── Versions ──────────────────────────────────────────────
-    private bool   isLoadingVersions = false;
-    private List<MinecraftVersion> versions = new();
-    private double downloadProgress = 0;
-    private string versionsFilter = "";
-    private string versionsClient = "Latite";
-    private IEnumerable<MinecraftVersion> FilteredVersions
-    {
-        get
-        {
-            IEnumerable<MinecraftVersion> q = versions;
-            if (!string.IsNullOrWhiteSpace(versionsFilter))
-            {
-                q = q.Where(v => v.DisplayName.Contains(versionsFilter, StringComparison.OrdinalIgnoreCase)
-                              || v.Tag.Contains(versionsFilter, StringComparison.OrdinalIgnoreCase));
-            }
-            if (SettingsService.Settings.ShowOnlyDownloaded)
-                q = q.Where(v => v.IsDownloaded);
-            return SortedVersions(q);
-        }
-    }
-
-    // ── OderSo multi-version state ────────────────────────────
-    private class OderSoDllState
-    {
-        public OderSoService.DllEntry Entry { get; }
-        public bool   IsDownloaded  { get; set; }
-        public bool   IsDownloading { get; set; }
-        public double Progress      { get; set; }
-        public string Error         { get; set; } = "";
-        public bool   IsActive      { get; set; }
-
-        public string DisplayName =>
-            System.IO.Path.GetFileNameWithoutExtension(Entry.Name);
-
-        public string SizeLabel =>
-            Entry.Size > 0
-                ? (Entry.Size >= 1_048_576
-                    ? $"{Entry.Size / 1_048_576.0:F1} MB"
-                    : $"{Entry.Size / 1024.0:F0} KB")
-                : "";
-
-        public OderSoDllState(OderSoService.DllEntry entry) => Entry = entry;
-    }
-    private List<OderSoDllState>  oderSoVersions          = new();
-    private bool                  isLoadingOderSoVersions = false;
-
-    // ── MC Versions (Vanilla Version Switcher) ──────────────────
-    private bool   isLoadingMcVersions = false;
-    private List<VanillaVersion> mcVersionsList = new();
-    private string mcVersionsFilter = "";
-    private string? mcVersionsError = null;
-
-    // ── Microsoft Store install (BedrockUpdater pattern) ────────
-    private bool   storeInstallBusy   = false;
-    private double storeInstallPct    = 0;
-    private string storeInstallStage  = "";
-    private string storeInstallDetail = "";
-
-    private IEnumerable<VanillaVersion> FilteredMcVersions
-    {
-        get
-        {
-            IEnumerable<VanillaVersion> q = mcVersionsList;
-            if (!string.IsNullOrWhiteSpace(mcVersionsFilter))
-                q = q.Where(v => v.Version.Contains(mcVersionsFilter, StringComparison.OrdinalIgnoreCase));
-            return q;
-        }
-    }
-
-    // ── Java Edition ────────────────────────────────────────────
-    private bool   isLoadingJavaVersions = false;
-    private List<JavaVersion> javaVersionsList = new();
-    private string javaVersionsFilter = "";
-    private string? javaVersionsError = null;
-
-    private bool IsBedrock => !IsJava;
-    private bool IsJava    => string.Equals(SettingsService.Settings.Edition, "java", StringComparison.OrdinalIgnoreCase);
-
-    private IEnumerable<JavaVersion> FilteredJavaVersions
-    {
-        get
-        {
-            IEnumerable<JavaVersion> q = javaVersionsList;
-            if (!SettingsService.Settings.JavaShowSnapshots)
-                q = q.Where(v => v.Type != "snapshot");
-            if (!SettingsService.Settings.JavaShowHistorical)
-                q = q.Where(v => v.Type != "old_beta" && v.Type != "old_alpha");
-            if (!string.IsNullOrWhiteSpace(javaVersionsFilter))
-                q = q.Where(v => v.Id.Contains(javaVersionsFilter, StringComparison.OrdinalIgnoreCase));
-            return q;
-        }
-    }
-
-    // ── CurseForge Addons ───────────────────────────────────────
-    private string cfSearchQuery      = "";
-    private string cfCategory         = "all";
-    private bool   cfSearching        = false;
-    private bool   cfHasSearched      = false;
-    private string cfError            = "";
-    private int    cfPage             = 0;
-    private int    cfTotalCount       = 0;
-    private int    cfDownloadingId    = 0;
-    private double cfDownloadProgress = 0;
-    private List<CurseForgeService.CfAddon> cfResults = new();
-
-    // ── Flarial ───────────────────────────────────────────────
-    private bool   flarialDownloaded  = false;
-    private bool   flarialUpToDate    = false;
-    private bool   flarialDownloading = false;
-    private double flarialProgress    = 0;
-    private string flarialError       = "";
-
-    // ── OderSo ────────────────────────────────────────────────
-    private bool   odersoDownloaded  = false;
-    private bool   odersoUpToDate    = false;
-    private bool   odersoDownloading = false;
-    private double odersoProgress    = 0;
-    private string odersoError       = "";
-
-    // ── Custom DLL ────────────────────────────────────────────
-    private string customDllPath { get => SettingsService.Settings.CustomDllPath; set { SettingsService.Settings.CustomDllPath = value; SettingsService.Save(); } }
-    private bool   copiedDllPath = false;
-
-    // ── Display ───────────────────────────────────────────────
-    private string displayName   = System.Environment.UserName;
-    private string displayHandle = "@" + System.Environment.UserName.ToLower();
-
-    // ── Search ────────────────────────────────────────────────
-    private bool   searchOpen   = false;
-    private string searchQuery  = "";
-    private int    searchSelIdx = 0;
-    private List<SearchResult> searchResults = new();
-
-    // ── Settings filter ───────────────────────────────────────
-    private string settingsFilter = "";
-    private string settingsCategory = "all";
-
-    // ── Discord modal ─────────────────────────────────────────
-    private bool   discordModalOpen     = false;
-    private string discordUsernameInput = "";
-
-    // ── Xbox modal ────────────────────────────────────────────
-    private bool xboxModalOpen  = false;
-    private bool xboxSigningIn  = false;
-
-    // ── Badges ────────────────────────────────────────────────
-    private bool clientsHasBadge  = false;
-    private bool versionsHasBadge = false;
-
-    // ── Launcher update ───────────────────────────────────────
-    private bool                launcherUpdateAvailable   = false;
-    private bool                launcherUpdateModalOpen   = false;
-    private bool                launcherUpdating          = false;
-    private double              launcherUpdateProgress    = 0;
-    private LauncherUpdateInfo? launcherUpdateInfo        = null;
-
-    // ── Startup check tracking ────────────────────────────────
-    private bool   checkingUpdatesManual = false;
-    private string lastUpdateCheckLabel  = "Never checked";
-
-    // ── Toasts ────────────────────────────────────────────────
-    private record ToastItem(string Message, string Kind, string Icon);
-    private List<ToastItem> _toasts = new();
-
-    // ── Minecraft running indicator ──────────────────────────
-    private bool mcRunning = false;
-    private System.Threading.CancellationTokenSource? _mcPollCts;
-
-    // ── Fullscreen state (synced from WPF host) ──────────────
-    private bool _isFullscreen = false;
-
-    // ── JS ref ────────────────────────────────────────────────
-    private DotNetObjectReference<Home>? _selfRef;
-
-    // ── Static data ───────────────────────────────────────────
-    private static readonly string[] _accentSwatches =
-        { "#7289da", "#5865f2", "#3ba55d", "#faa61a", "#f04747", "#eb459e", "#00d8ff", "#ff7043",
-          "#a855f7", "#22d3ee", "#84cc16", "#f59e0b" };
-
-    private record NewsItem(string Icon, string Title, string Subtitle, string Url);
-    private static readonly NewsItem[] _newsItems =
-    {
-        new("fa-brands fa-discord",     "Join Our Discord",       "discord.glacierclient.xyz",  "https://discord.glacierclient.xyz"),
-        new("fa-solid fa-globe",        "Visit Our Website",      "glacierclient.xyz",          "https://glacierclient.xyz"),
-        new("fa-solid fa-layer-group",  "Glacier Texture Pack",   "Download for free",          "https://glacierclient.xyz/#downloads"),
-        new("fa-solid fa-star",         "Star Us on GitHub",      "github.com/Glacier-Client-BE","https://github.com/Glacier-Client-BE/Glacier-Launcher"),
-        new("fa-solid fa-newspaper",    "Latest Release",         "Check the Versions tab",    ""),
-        new("fa-solid fa-shield-halved","About Glacier",          "Made with ❤ by Glacier",   ""),
-    };
-
-    private record SearchResult(string Icon, string Label, string Category, string Sub, string Shortcut, Action OnSelect)
-    {
-        public SearchResult(string Icon, string Label, string Category, string Sub, Action OnSelect)
-            : this(Icon, Label, Category, Sub, "", OnSelect) {}
-    }
-
-    private List<SearchResult> _defaultSearchResults = new();
-
-    // ── Lifecycle ─────────────────────────────────────────────
-    protected override void OnInitialized()
-    {
-        if (!string.IsNullOrEmpty(SettingsService.Settings.Username))
-            displayName = SettingsService.Settings.Username;
-        if (!string.IsNullOrEmpty(SettingsService.Settings.UserHandle))
-            displayHandle = SettingsService.Settings.UserHandle;
-        BuildDefaultSearchResults();
-    }
-
-    protected override async Task OnAfterRenderAsync(bool firstRender)
-    {
-        if (!firstRender) return;
-        _selfRef = DotNetObjectReference.Create(this);
-        await JS.InvokeVoidAsync("glacierRegisterDropHandler", _selfRef);
-        await JS.InvokeVoidAsync("applyStoredSettings",
-            SettingsService.Settings.AccentColor,
-            SettingsService.Settings.ThemePreset,
-            SettingsService.Settings.BlurIntensity,
-            SettingsService.Settings.CustomBackgroundPath,
-            SettingsService.Settings.CompactMode,
-            SettingsService.Settings.AnimationsEnabled);
-        clientsHasBadge = !Flarial.IsDownloaded || !OderSo.IsDownloaded;
-
-        if (!string.IsNullOrEmpty(SettingsService.Settings.LastUpdateCheck))
-            lastUpdateCheckLabel = "Last checked " + FormatRelativeTime(SettingsService.Settings.LastUpdateCheck);
-
-        StateHasChanged();
-
-        _ = RunStartupChecksAsync();
-        _ = StartMcPollAsync();
-    }
-
-    private async Task StartMcPollAsync()
-    {
-        _mcPollCts?.Cancel();
-        _mcPollCts = new System.Threading.CancellationTokenSource();
-        var token = _mcPollCts.Token;
-        try
-        {
-            while (!token.IsCancellationRequested)
-            {
-                bool running = false;
-                try
-                {
-                    running = IsBedrock
-                        ? GameLauncher.IsMinecraftRunning()
-                        : JavaGameLauncher.IsRunning();
-                }
-                catch { }
-                if (running != mcRunning)
-                {
-                    mcRunning = running;
-                    await InvokeAsync(StateHasChanged);
-                }
-                // 4 s when we're idle, 2 s once we've seen MC running. Process
-                // enumeration on Windows isn't free — keeping the idle interval long
-                // is meaningful on low-end hardware where the launcher otherwise
-                // does several process scans per minute for a UI indicator only.
-                await Task.Delay(running ? 2500 : 4000, token);
-            }
-        }
-        catch (TaskCanceledException) { }
-    }
-
-    private void BuildDefaultSearchResults()
-    {
-        _defaultSearchResults = new List<SearchResult>
-        {
-            // Quick actions
-            new("fa-solid fa-play",               "Launch Game",           "Quick Actions", "with " + SettingsService.Settings.SelectedClient, "Ctrl+L", () => { CloseSearch(); _ = HandleLaunch(); }),
-            new("fa-solid fa-gear",               "Open Settings",         "Quick Actions", "Injection, Appearance, Account",                  "Ctrl+1", () => { CloseSearch(); OpenSettings(); }),
-            new("fa-solid fa-puzzle-piece",       "Manage Clients",        "Quick Actions", "Flarial, Latite, OderSo, Custom DLL",             "Ctrl+2", () => { CloseSearch(); _ = OpenClients(); }),
-            new("fa-solid fa-cube",               "Browse Addons",         "Quick Actions", "CurseForge MCBE resource packs, worlds",         "Ctrl+4", () => { CloseSearch(); OpenAddons(); }),
-            new("fa-solid fa-server",             "Servers",               "Quick Actions", "Quick-launch into saved Bedrock servers",        "Ctrl+5", () => { CloseSearch(); OpenServers(); }),
-            new("fa-solid fa-clock-rotate-left",  "Browse Versions",       "Quick Actions", "Download & manage Latite versions",               "",       () => { CloseSearch(); _ = OpenVersions(); }),
-            new("fa-solid fa-box-archive",         "MC Versions",           "Quick Actions", "Switch Minecraft Bedrock versions",               "",       () => { CloseSearch(); _ = OpenMcVersions(); }),
-            new("fa-brands fa-discord",           "Discord Account",       "Account",       "Connect or manage Discord",                       "",       () => { CloseSearch(); OpenDiscordModal(); }),
-            new("fa-solid fa-gamepad",            "Xbox Profile",          "Account",       "Sign in with Xbox Live",                          "",       () => { CloseSearch(); OpenXboxModal(); }),
-            // Clients
-            new("images/clients/flarial.svg",     "Select Flarial",        "Clients",       "Switch active client to Flarial",                 "",       () => { CloseSearch(); SelectClient("Flarial Client"); }),
-            new("images/clients/latite.png",      "Select Latite",         "Clients",       "Switch active client to Latite",                  "",       () => { CloseSearch(); SelectClient("Latite Client"); }),
-            new("images/clients/oderso.png",      "Select OderSo",         "Clients",       "Switch active client to OderSo",                  "",       () => { CloseSearch(); SelectClient("OderSo Client"); }),
-            new("fa-solid fa-cube",               "Select Vanilla",        "Clients",       "Launch Minecraft with no client",                 "",       () => { CloseSearch(); SelectClient("Vanilla"); }),
-            new("fa-solid fa-folder-open",        "Open Launcher Folder",  "Quick Actions", "Settings, downloads and clients folder",          "",       () => { CloseSearch(); OpenLauncherFolder(); }),
-            new("fa-solid fa-cubes",              "Open Minecraft Folder", "Quick Actions", "com.mojang data folder",                          "",       () => { CloseSearch(); OpenMinecraftFolder(); }),
-            new("fa-solid fa-file-export",        "Export Settings",       "Settings",      "Save settings as a JSON backup",                  "",       () => { CloseSearch(); _ = ExportSettings(); }),
-            new("fa-solid fa-file-import",        "Import Settings",       "Settings",      "Restore from JSON backup",                        "",       () => { CloseSearch(); _ = ImportSettings(); }),
-            // Settings — Injection
-            new("fa-solid fa-syringe",            "Auto-inject",           "Settings",      "Inject automatically when game is detected",      "",       () => { CloseSearch(); OpenSettings(); settingsFilter = "auto-inject"; StateHasChanged(); }),
-            new("fa-solid fa-clock",              "Injection Delay",       "Settings",      "Time to wait before injecting",                   "",       () => { CloseSearch(); OpenSettings(); settingsFilter = "injection delay"; StateHasChanged(); }),
-            new("fa-solid fa-door-closed",        "Close After Launch",    "Settings",      "Minimize launcher after injection",               "",       () => { CloseSearch(); OpenSettings(); settingsFilter = "close after"; StateHasChanged(); }),
-            // Settings — Appearance
-            new("fa-solid fa-palette",            "Accent Colour",         "Settings",      "Change button and highlight colour",              "",       () => { CloseSearch(); OpenSettings(); settingsFilter = "accent"; StateHasChanged(); }),
-            new("fa-solid fa-moon",               "Theme Preset",          "Settings",      "Dark, Darker, Midnight, Slate",                   "",       () => { CloseSearch(); OpenSettings(); settingsFilter = "theme"; StateHasChanged(); }),
-            new("fa-solid fa-droplet",            "Background Blur",       "Settings",      "Backdrop blur intensity for panels",              "",       () => { CloseSearch(); OpenSettings(); settingsFilter = "blur"; StateHasChanged(); }),
-            new("fa-solid fa-image",              "Background Wallpaper",  "Settings",      "Change custom background image",                  "",       () => { CloseSearch(); OpenSettings(); settingsFilter = "wallpaper"; StateHasChanged(); }),
-            new("fa-solid fa-expand",             "Remember Window Size",  "Settings",      "Restore last used size on launch",                "",       () => { CloseSearch(); OpenSettings(); settingsFilter = "window size"; StateHasChanged(); }),
-            // Settings — Behaviour
-            new("fa-solid fa-clock-rotate-left",  "Show Recently Launched","Settings",      "Quick-access chips on home screen",               "",       () => { CloseSearch(); OpenSettings(); settingsFilter = "recently"; StateHasChanged(); }),
-            new("fa-solid fa-window-minimize",    "Minimize to Tray",      "Settings",      "Send to system tray instead of taskbar",          "",       () => { CloseSearch(); OpenSettings(); settingsFilter = "tray"; StateHasChanged(); }),
-            new("fa-solid fa-trash",              "Clear Recent History",  "Settings",      "Clear recently launched list",                    "",       () => { CloseSearch(); OpenSettings(); settingsFilter = "clear"; StateHasChanged(); }),
-            // Settings — Other
-            new("fa-solid fa-rotate",             "Check for Updates",     "Settings",      "Check for launcher and client updates",           "",       () => { CloseSearch(); OpenSettings(); settingsFilter = "update"; StateHasChanged(); }),
-            new("fa-solid fa-gamepad",            "Discord Rich Presence", "Settings",      "Show game status on Discord profile",             "",       () => { CloseSearch(); OpenSettings(); settingsFilter = "rich presence"; StateHasChanged(); }),
-            new("fa-solid fa-expand",             "Toggle Fullscreen",     "Quick Actions", "F11 to toggle fullscreen mode",                   "F11",    () => { CloseSearch(); _ = ToggleFullscreen(); }),
-            new("fa-solid fa-heart",              "Credits",               "About",         "View launcher credits",                           "",       () => { CloseSearch(); OpenCredits(); }),
-        };
-    }
-
-    // ── JS invokables ─────────────────────────────────────────
-    [JSInvokable]
-    public void OnDllDropped(string path)
-    {
-        customDllPath = path;
-        SelectClient("Custom DLL");
-        currentView = "clients";
-        InvokeAsync(StateHasChanged);
-    }
-
-    [JSInvokable]
-    public void OnFullscreenChanged(bool isFullscreen)
-    {
-        _isFullscreen = isFullscreen;
-        InvokeAsync(StateHasChanged);
-    }
-
-    [JSInvokable]
-    public void KbShortcut(string key)
-    {
-        InvokeAsync(async () =>
-        {
-            switch (key)
-            {
-                case "search":  if (!searchOpen) await OpenSearch(); else CloseSearch(); break;
-                case "launch":  if (currentView == "home" && !isLaunching) await HandleLaunch(); break;
-                case "settings": if (!searchOpen && currentView != "settings") OpenSettings(); break;
-                case "clients":  if (!searchOpen && currentView != "clients")  await OpenClients(); break;
-                case "addons":   if (!searchOpen && currentView != "addons")   OpenAddons(); break;
-                case "servers":  if (!searchOpen && currentView != "servers")  OpenServers(); break;
-                case "versions": if (!searchOpen && currentView != "versions") await OpenVersions(); break;
-                case "mcversions": if (!searchOpen && currentView != "mcversions") await OpenMcVersions(); break;
-                case "fullscreen": await ToggleFullscreen(); break;
-                case "cycle":    if (!searchOpen) CycleClient(); break;
-                case "refresh":
-                    if (currentView == "versions") await RefreshVersionsAsync();
-                    else if (currentView == "clients") await OpenClients();
-                    else if (currentView == "addons" && CurseForge.IsAvailable) await CfSearchAsync();
-                    break;
-                case "escape":
-                    if      (resetConfirmOpen) CancelResetSettings();
-                    else if (serverModalOpen)  CloseServerModal();
-                    else if (searchOpen)       CloseSearch();
-                    else if (launcherUpdateModalOpen) CloseUpdateModal();
-                    else if (xboxModalOpen)    CloseXboxModal();
-                    else if (discordModalOpen) CloseDiscordModal();
-                    else if (currentView == "versions") await BackFromVersions();
-                    else if (currentView != "home") GoHome();
-                    break;
-                case "down":  if (searchOpen) searchSelIdx = Math.Min(searchSelIdx + 1, GetCurrentSearchList().Count - 1); break;
-                case "up":    if (searchOpen) searchSelIdx = Math.Max(searchSelIdx - 1, 0); break;
-                case "enter":
-                    if (searchOpen)
-                    {
-                        var list = GetCurrentSearchList();
-                        if (searchSelIdx >= 0 && searchSelIdx < list.Count) list[searchSelIdx].OnSelect();
-                    }
-                    break;
-            }
-            StateHasChanged();
-        });
-    }
-
-    private List<SearchResult> GetCurrentSearchList() =>
-        searchResults.Count > 0 ? searchResults : _defaultSearchResults;
-
-    public void Dispose()
-    {
-        _selfRef?.Dispose();
-        _statusCts?.Cancel();
-        _statusCts?.Dispose();
-        _mcPollCts?.Cancel();
-        _mcPollCts?.Dispose();
-        _cfDebounceCts?.Cancel();
-        _cfDebounceCts?.Dispose();
-        _launchCts?.Cancel();
-        _launchCts?.Dispose();
-    }
-
-    // ── Window ────────────────────────────────────────────────
-    private async Task OnDragStart()    => await JS.InvokeVoidAsync("startDrag");
-    private async Task CloseWindow()    => await JS.InvokeVoidAsync("closeWindow");
-    private async Task MaximizeWindow() => await JS.InvokeVoidAsync("maximizeWindow");
-    private async Task ToggleFullscreen() => await JS.InvokeVoidAsync("toggleFullscreen");
-    private async Task MinimizeWindow()
-    {
-        if (SettingsService.Settings.MinimizeToTray)
-            await JS.InvokeVoidAsync("minimizeToTray");
-        else
-            await JS.InvokeVoidAsync("minimizeWindow");
-    }
-
-    // ── Navigation ────────────────────────────────────────────
-    private void GoHome()              { currentView = "home"; hoveredBtn = ""; Discord.SetIdlePresence(); }
-    private void SetHover(string btn) => hoveredBtn = btn;
-    private void ClearHover()         => hoveredBtn = "";
-
-    // ── Search ────────────────────────────────────────────────
-    private async Task OpenSearch()
-    {
-        searchOpen = true; searchQuery = ""; searchResults.Clear(); searchSelIdx = 0;
-        StateHasChanged();
-        await JS.InvokeVoidAsync("focusSearchInput");
-    }
-
-    private void CloseSearch()
-    {
-        searchOpen = false; searchQuery = ""; searchResults.Clear(); searchSelIdx = 0;
-    }
-
-    private void OnSearchInput(ChangeEventArgs e)
-    {
-        searchQuery = e.Value?.ToString() ?? "";
-        searchSelIdx = 0;
-        if (string.IsNullOrWhiteSpace(searchQuery)) { searchResults.Clear(); return; }
-
-        var q = searchQuery.ToLower();
-        searchResults = BuildDynamicSearchPool()
-            .Where(r => r.Label.ToLower().Contains(q) || r.Sub.ToLower().Contains(q) || r.Category.ToLower().Contains(q))
-            .Take(10).ToList();
-    }
-
-    /// <summary>
-    /// Builds the full set of searchable actions on every keystroke. Static
-    /// entries live in <c>_defaultSearchResults</c>; this method layers in
-    /// everything that depends on current launcher state (installed versions,
-    /// saved servers, recent items, third-party launchers, mc-versions). Cheap
-    /// to recompute — all sources are already in memory.
-    /// </summary>
-    private IEnumerable<SearchResult> BuildDynamicSearchPool()
-    {
-        foreach (var s in _defaultSearchResults) yield return s;
-
-        // Recents (edition-aware)
-        foreach (var r in RecentsForCurrentEdition())
-        {
-            var raw = r;
-            yield return new SearchResult("fa-solid fa-clock-rotate-left", RecentDisplayLabel(raw),
-                "Recent", "Quick-launch",
-                () => { CloseSearch(); _ = QuickLaunchRecent(raw); });
-        }
-
-        if (IsBedrock)
-        {
-            // Bedrock client versions list
-            foreach (var v in versions)
-            {
-                var local = v;
-                yield return new SearchResult("fa-solid fa-download", local.DisplayName, "Versions",
-                    local.IsDownloaded ? "Downloaded" : "Not downloaded",
-                    () => { CloseSearch(); _ = (local.IsDownloaded ? HandleVersionLaunch(local) : HandleVersionDownload(local)); });
-            }
-            // Bedrock MC versions (sideload list)
-            foreach (var mc in mcVersionsList)
-            {
-                var local = mc;
-                yield return new SearchResult("fa-solid fa-box-archive", $"Minecraft {local.Version}",
-                    "MC Versions", local.IsDownloaded ? "Downloaded" : "Not downloaded",
-                    () => { CloseSearch(); _ = OpenMcVersions(); });
-            }
-            // Saved servers
-            foreach (var srv in SettingsService.Settings.SavedServers)
-            {
-                var local = srv;
-                yield return new SearchResult("fa-solid fa-server", local.Name, "Servers",
-                    $"{local.Address}:{local.Port}",
-                    () => { CloseSearch(); _ = LaunchServer(local); });
-            }
-        }
-        else
-        {
-            // Java versions — list installed first, then everything from the manifest
-            foreach (var v in javaVersionsList)
-            {
-                var local = v;
-                yield return new SearchResult("fa-brands fa-java", $"Minecraft {local.Id}",
-                    local.IsInstalled ? "Java · Installed" : $"Java · {local.TypeLabel}",
-                    local.IsInstalled ? "Launch" : "Install",
-                    () => { CloseSearch(); _ = (local.IsInstalled ? HandleJavaLaunch(local) : HandleJavaInstall(local)); });
-            }
-            // Lunar offline versions (skip-splash launches)
-            foreach (var lv in LunarBadlion.LunarInstalledVersions)
-            {
-                var local = lv;
-                yield return new SearchResult("fa-solid fa-moon", $"Lunar {local}", "Launchers",
-                    "Direct game launch",
-                    () => { CloseSearch(); lunarSelectedVersion = local; LaunchLunarDirect(); });
-            }
-            // Always include the third-party launcher cards as searchable entries
-            yield return new SearchResult("fa-solid fa-moon", "Lunar Client", "Launchers",
-                LunarBadlion.LunarInstalled ? "Detected" : "Not installed",
-                () => { CloseSearch(); LaunchLunar(); });
-            if (LunarBadlion.BadlionInstalled)
-            {
-                yield return new SearchResult("fa-solid fa-shield", "Badlion Client", "Launchers",
-                    "Detected",
-                    () => { CloseSearch(); LaunchBadlion(); });
-            }
-        }
-    }
-
-    // ── Status ────────────────────────────────────────────────
-    private async Task ShowStatus(string message, bool error = false, int clearAfterMs = 4000)
-    {
-        _statusCts?.Cancel();
-        _statusCts = new System.Threading.CancellationTokenSource();
-        var token = _statusCts.Token;
-        isError = error; statusMessage = message; statusVisible = true;
-        StateHasChanged();
-        try { await Task.Delay(clearAfterMs, token); statusVisible = false; StateHasChanged(); }
-        catch (TaskCanceledException) { }
-    }
-
-    // ── Toast ─────────────────────────────────────────────────
-    private async Task ShowToast(string message, string kind = "info")
-    {
-        var icon = kind switch { "success" => "fa-solid fa-circle-check", "error" => "fa-solid fa-circle-xmark", _ => "fa-solid fa-circle-info" };
-        var t = new ToastItem(message, kind, icon);
-        _toasts.Add(t);
-        StateHasChanged();
-        await Task.Delay(2800);
-        _toasts.Remove(t);
-        StateHasChanged();
-    }
-
-    // ── Launch ────────────────────────────────────────────────
-    // Tracks an in-flight launch so the "Force close" button can abort it. The
-    // launch task itself still finishes on its own thread — we just stop waiting
-    // on it and reset UI state, then kill any MC process the launch spawned.
-    private System.Threading.CancellationTokenSource? _launchCts;
-    private bool _launchForceCancelled = false;
-
-    private async Task HandleLaunch()
-    {
-        if (IsJava)
-        {
-            await HandleJavaLaunchFromHome();
-            return;
-        }
-
-        var sel        = SettingsService.Settings.SelectedClient;
-        bool isFlarial = sel == "Flarial Client";
-        bool isOderSo  = sel == "OderSo Client";
-        bool isCustom  = sel == "Custom DLL";
-        bool isVanilla = sel == "Vanilla";
-        isLaunching = true;
-        _launchForceCancelled = false;
-        _launchCts?.Cancel();
-        _launchCts = new System.Threading.CancellationTokenSource();
-        var token = _launchCts.Token;
-        await ShowStatus(isVanilla ? "Starting Minecraft (vanilla)…" : "Starting Minecraft…", clearAfterMs: 30_000);
-        try
-        {
-            Task launchTask = isVanilla ? Launcher.LaunchVanillaAsync()
-                            : (isCustom && !string.IsNullOrEmpty(customDllPath)) ? Launcher.LaunchWithDllAsync(customDllPath)
-                            : isOderSo ? Launcher.LaunchWithDllAsync(OderSo.FilePath)
-                            : Launcher.LaunchAsync(useFlarial: isFlarial);
-
-            // Race the actual launch against cancellation so the user can hit the
-            // force-close button without waiting for the 30-second timeouts inside
-            // GameLauncher to expire.
-            var done = await Task.WhenAny(launchTask, Task.Delay(System.Threading.Timeout.Infinite, token));
-            if (done != launchTask)
-                throw new OperationCanceledException();
-
-            await launchTask; // surface any exceptions
-
-            isLaunching = false;
-            var label = isVanilla ? "Vanilla"
-                      : isCustom  ? System.IO.Path.GetFileNameWithoutExtension(customDllPath)
-                      : isFlarial ? "Flarial"
-                      : isOderSo  ? "OderSo"
-                      : SettingsService.Settings.LastUsedVersion;
-            Discord.SetInGamePresence(label ?? "", sel);
-            AddToRecentlyLaunched(label ?? "");
-
-            if (SettingsService.Settings.CloseAfterLaunch) { await CloseWindow(); return; }
-
-            var doneMsg = isVanilla ? "Minecraft launched. Have fun!" : "Injected! Have fun.";
-            await ShowStatus(doneMsg, clearAfterMs: 3000);
-            _ = ShowToast(isVanilla ? "Minecraft launched!" : "Injection successful!", "success");
-        }
-        catch (OperationCanceledException)
-        {
-            isLaunching = false;
-            await ShowStatus("Launch cancelled.", error: false, clearAfterMs: 3000);
-        }
-        catch (Exception ex)
-        {
-            isLaunching = false;
-            // If the user force-cancelled, an exception from the abandoned task isn't useful
-            if (!_launchForceCancelled)
-            {
-                await ShowStatus(ex.Message, error: true, clearAfterMs: 8000);
-                _ = ShowToast(ex.Message, "error");
-            }
-        }
-    }
-
-    private async Task HandleJavaLaunchFromHome()
-    {
-        // Pick the user's pinned default; if none, fall back to last-used; if still
-        // nothing, open the Java versions panel so they can choose explicitly.
-        var s   = SettingsService.Settings;
-        var ver = !string.IsNullOrEmpty(s.JavaActiveVersion) ? s.JavaActiveVersion
-                : !string.IsNullOrEmpty(s.JavaLastUsedVersion) ? s.JavaLastUsedVersion
-                : "";
-
-        if (string.IsNullOrEmpty(ver))
-        {
-            await ShowStatus("Pick a Java version first.", clearAfterMs: 3000);
-            await OpenJavaVersions();
-            return;
-        }
-
-        isLaunching = true;
-        await ShowStatus($"Starting Minecraft Java {ver}…", clearAfterMs: 30_000);
-        try
-        {
-            await JavaLauncher.LaunchAsync(ver);
-            AddToRecentlyLaunched("Java " + ver);
-            Discord.SetJavaInGamePresence(ver);
-            await ShowStatus("Minecraft launching!", clearAfterMs: 3000);
-            _ = ShowToast($"Minecraft Java {ver} launching!", "success");
-            if (SettingsService.Settings.CloseAfterLaunch) { await CloseWindow(); }
-        }
-        catch (Exception ex)
-        {
-            await ShowStatus(ex.Message, error: true, clearAfterMs: 8000);
-            _ = ShowToast(ex.Message, "error");
-        }
-        finally
-        {
-            isLaunching = false;
-            StateHasChanged();
-        }
-    }
-
-    private void ForceCloseLaunch()
-    {
-        _launchForceCancelled = true;
-        _launchCts?.Cancel();
-        isLaunching = false;
-        // Best-effort kill of any Minecraft process the launch may have started — without
-        // this, a half-launched MC keeps running while the launcher pretends nothing happened.
-        try
-        {
-            foreach (var name in new[] { "Minecraft.Windows", "Minecraft", "MinecraftUWP" })
-            {
-                foreach (var p in System.Diagnostics.Process.GetProcessesByName(name))
-                {
-                    try { p.Kill(entireProcessTree: true); } catch { }
-                }
-            }
-        }
-        catch { }
-        _ = ShowToast("Launch cancelled", "info");
-        StateHasChanged();
-    }
-
-    /// <summary>Recents stored by Java launches are prefixed "Java ". Bedrock has no prefix.</summary>
-    private List<string> RecentsForCurrentEdition()
-    {
-        var all = SettingsService.Settings.RecentlyLaunched;
-        if (IsJava)
-            return all.Where(r => r.StartsWith("Java ", StringComparison.Ordinal)).ToList();
-        return all.Where(r => !r.StartsWith("Java ", StringComparison.Ordinal)).ToList();
-    }
-
-    /// <summary>Strips the "Java " prefix from the chip label so the user sees "1.21.4", not "Java 1.21.4".</summary>
-    private string RecentDisplayLabel(string raw) =>
-        raw.StartsWith("Java ", StringComparison.Ordinal) ? raw[5..] : raw;
-
-    private async Task QuickLaunchRecent(string label)
-    {
-        // Java recents are stored prefixed with "Java " to keep them separate
-        // from the bedrock list. Strip the prefix and route through the Java
-        // launcher.
-        if (label.StartsWith("Java ", StringComparison.Ordinal))
-        {
-            var ver = label[5..];
-            var jv = javaVersionsList.FirstOrDefault(x => x.Id == ver);
-            if (jv != null)
-            {
-                await HandleJavaLaunch(jv);
-                return;
-            }
-            // Fall through and try a direct launch by id — works even if the
-            // Java versions panel hasn't been opened yet (so the list is empty).
-            try
-            {
-                isLaunching = true; StateHasChanged();
-                await JavaLauncher.LaunchAsync(ver);
-                AddToRecentlyLaunched("Java " + ver);
-                _ = ShowToast($"Minecraft Java {ver} launching!", "success");
-            }
-            catch (Exception ex)
-            {
-                await ShowStatus(ex.Message, error: true, clearAfterMs: 8000);
-            }
-            finally
-            {
-                isLaunching = false; StateHasChanged();
-            }
-            return;
-        }
-
-        // Check if it's a known client (Flarial, OderSo, Vanilla, Custom DLL)
-        if (label == "Flarial")
-        {
-            SettingsService.Settings.SelectedClient = "Flarial Client";
-            SettingsService.Save();
-            await HandleLaunch();
-            return;
-        }
-        if (label == "OderSo")
-        {
-            SettingsService.Settings.SelectedClient = "OderSo Client";
-            SettingsService.Save();
-            await HandleLaunch();
-            return;
-        }
-        if (label == "Vanilla")
-        {
-            SettingsService.Settings.SelectedClient = "Vanilla";
-            SettingsService.Save();
-            await HandleLaunch();
-            return;
-        }
-
-        // Check downloaded Latite versions
-        var v = versions.FirstOrDefault(x => x.Tag == label || x.DisplayName == label);
-        if (v != null && v.IsDownloaded) { await HandleVersionLaunch(v); return; }
-
-        // Check if it might be a custom DLL filename
-        if (!string.IsNullOrEmpty(customDllPath) &&
-            System.IO.Path.GetFileNameWithoutExtension(customDllPath) == label)
-        {
-            SettingsService.Settings.SelectedClient = "Custom DLL";
-            SettingsService.Save();
-            await HandleLaunch();
-            return;
-        }
-
-        await ShowStatus($"'{label}' not found in downloaded versions.", error: true);
-    }
-
-    private void AddToRecentlyLaunched(string label)
-    {
-        if (string.IsNullOrEmpty(label)) return;
-        var rec = SettingsService.Settings.RecentlyLaunched;
-        rec.Remove(label);
-        rec.Insert(0, label);
-        while (rec.Count > 5) rec.RemoveAt(rec.Count - 1);
-        SettingsService.Save();
-    }
-
-    private void ClearRecentHistory()
-    {
-        SettingsService.Settings.RecentlyLaunched.Clear();
-        SettingsService.Save();
-        StateHasChanged();
-    }
-
-    // ── Clients ───────────────────────────────────────────────
-    private void OpenSettings() { currentView = "settings"; settingsFilter = ""; settingsCategory = "all"; }
-
-    private void SetSettingsCategory(string cat)
-    {
-        settingsCategory = cat;
-        StateHasChanged();
-    }
-
-    private bool CategoryMatches(string section)
-    {
-        // Edition gate: the bedrock-only injection block is hidden entirely in
-        // Java mode (and vice-versa for the Java settings block) so the user
-        // doesn't see settings that can't apply to their current edition.
-        if (IsJava    && section == "injection") return false;
-        if (IsBedrock && section == "java")      return false;
-
-        // When the user is actively searching, ignore category tabs so the
-        // filter is global. Otherwise gate by the selected tab.
-        if (!string.IsNullOrWhiteSpace(settingsFilter)) return true;
-        return settingsCategory == "all" || settingsCategory == section;
-    }
-
-    private void OnClientChanged(ChangeEventArgs e) => SelectClient(e.Value?.ToString() ?? "Latite Client");
-
-    private void SelectClient(string name)
-    {
-        SettingsService.Settings.SelectedClient = name;
-        SettingsService.Save();
-        BuildDefaultSearchResults();
-        StateHasChanged();
-    }
-
-    private void CycleClient()
-    {
-        var clients = new List<string> { "Latite Client", "Flarial Client", "OderSo Client", "Vanilla" };
-        if (!string.IsNullOrEmpty(customDllPath)) clients.Add("Custom DLL");
-        var idx = clients.IndexOf(SettingsService.Settings.SelectedClient);
-        if (idx < 0) idx = -1;
-        SelectClient(clients[(idx + 1) % clients.Count]);
-        _ = ShowToast("Active client: " + SettingsService.Settings.SelectedClient, "info");
-    }
-
-    private void ClearCustomDll()
-    {
-        customDllPath = "";
-        if (SettingsService.Settings.SelectedClient == "Custom DLL") SelectClient("Latite Client");
-        StateHasChanged();
-    }
-
-    private async Task CopyDllPath()
-    {
-        await JS.InvokeVoidAsync("copyToClipboard", customDllPath);
-        copiedDllPath = true; StateHasChanged();
-        await Task.Delay(1500);
-        copiedDllPath = false; StateHasChanged();
-    }
-
-    // ── Settings ──────────────────────────────────────────────
-    private void ToggleProp(Action toggle, bool discordToggle = false)
-    {
-        toggle();
-        if (discordToggle) Discord.Toggle();
-        SettingsService.Save();
-        StateHasChanged();
-    }
-
-    // Per-row visibility class. Returns "" (visible) or "hidden-by-search"
-    // (filtered out). Filter is matched against the row's own label + keyword
-    // string — the surrounding `@if (CategoryMatches(...))` block handles tab
-    // gating, and CategoryMatches itself bypasses the gate while a search is
-    // active so search is global across all categories.
-    private string SH(string label, string keywords)
-    {
-        var q = (settingsFilter ?? "").Trim().ToLower();
-        if (q.Length == 0) return "";
-        return (label.ToLower().Contains(q) || keywords.ToLower().Contains(q)) ? "" : "hidden-by-search";
-    }
-
-    // Whether a section header should render. Hidden when the filter has zero
-    // matching items within the section.
-    private bool SectionMatch(params (string l, string k)[] items)
-    {
-        var q = (settingsFilter ?? "").Trim().ToLower();
-        if (q.Length == 0) return true;
-        return items.Any(i => i.l.ToLower().Contains(q) || i.k.ToLower().Contains(q));
-    }
-
-    // Catalog of all setting rows in the panel — single source of truth for the
-    // search "no results" check. Keep in sync with the markup; misses just make
-    // the no-results state slightly inaccurate (real rows still render).
-    private static readonly (string Cat, string Label, string Keywords)[] _settingDefs =
-    {
-        ("injection",  "Active client",                  "active client injection vanilla"),
-        ("injection",  "Injection delay",                "injection delay wait"),
-        ("injection",  "Auto-inject",                    "auto inject automatic"),
-        ("injection",  "Close after launch",             "close minimize launch"),
-
-        ("java",       "Maximum RAM",                    "ram memory java heap"),
-        ("java",       "Minecraft folder",               "minecraft folder dot directory"),
-        ("java",       "Java runtime",                   "java runtime jre jdk javaw"),
-        ("java",       "Show snapshots",                 "snapshots experimental"),
-        ("java",       "Show beta and alpha",            "beta alpha historical old"),
-        ("java",       "Close after launch",             "close minimize launch java"),
-        ("java",       "Custom JVM args",                "jvm args java options garbage collector gc"),
-        ("java",       "Open Minecraft folder",          "minecraft folder dot directory open"),
-        ("java",       "Latest crash report",            "crash report log latest open view java"),
-
-        ("appearance", "Accent colour",                  "accent color theme"),
-        ("appearance", "Theme preset",                   "theme dark midnight slate ocean forest sunset light"),
-        ("appearance", "Compact mode",                   "compact dense small"),
-        ("appearance", "Animations",                     "animations smooth motion"),
-        ("appearance", "Background blur",                "blur background"),
-        ("appearance", "Remember window size",           "window size remember"),
-        ("appearance", "Custom background wallpaper",    "background wallpaper image custom"),
-
-        ("account",    "Display name",                   "username name display account"),
-        ("account",    "Profile display",                "profile display footer xbox discord switch which"),
-        ("account",    "Discord Rich Presence",          "discord rpc social"),
-        ("account",    "Discord account",                "discord login account"),
-        ("account",    "Xbox profile",                   "xbox gamertag account microsoft"),
-
-        ("system",     "Show recently launched",         "recent history"),
-        ("system",     "Show launch console",            "console log launch window java bedrock output stdout"),
-        ("system",     "Minimize to tray",               "tray minimize system"),
-        ("system",     "Clear recent history",           "clear history recent"),
-        ("system",     "Check for updates on startup",   "update auto check startup"),
-        ("system",     "Check for updates now",          "update manual check"),
-        ("system",     "Open launcher folder",           "launcher folder downloads location"),
-        ("system",     "Open Minecraft folder",          "minecraft com mojang folder"),
-        ("system",     "CurseForge API key",             "curseforge api key addons"),
-        ("system",     "Export settings",                "export backup settings save"),
-        ("system",     "Import settings",                "import restore settings load"),
-        ("system",     "Reset settings",                 "reset default factory settings"),
-        ("system",     "Keyboard shortcuts",             "shortcuts keyboard help"),
-        ("system",     "Credits",                        "credits about launcher"),
-    };
-
-    private int VisibleSettingsCount()
-    {
-        var q = (settingsFilter ?? "").Trim().ToLower();
-        var hasFilter = q.Length > 0;
-        return _settingDefs.Count(s =>
-        {
-            // Apply the same edition gating CategoryMatches() does so the
-            // empty-state count agrees with what's actually rendered.
-            if (IsJava    && s.Cat == "injection") return false;
-            if (IsBedrock && s.Cat == "java")      return false;
-            if (!hasFilter && settingsCategory != "all" && settingsCategory != s.Cat) return false;
-            if (hasFilter && !s.Label.ToLower().Contains(q) && !s.Keywords.ToLower().Contains(q)) return false;
-            return true;
-        });
-    }
-
-    private void ClearSettingsFilter()
-    {
-        settingsFilter = "";
-        StateHasChanged();
-    }
-
-    private void OnDelayChanged(ChangeEventArgs e)
-    {
-        if (int.TryParse(e.Value?.ToString(), out int v))
-        { SettingsService.Settings.InjectionDelayMs = v; SettingsService.Save(); StateHasChanged(); }
-    }
-
-    private void OnUsernameChanged(ChangeEventArgs e)
-    {
-        var val = e.Value?.ToString() ?? "";
-        SettingsService.Settings.Username = val;
-        displayName = string.IsNullOrEmpty(val) ? System.Environment.UserName : val;
-        SettingsService.Save();
-        StateHasChanged();
-    }
-
-    private void OnProfileDisplayChanged(ChangeEventArgs e)
-    {
-        var val = e.Value?.ToString() ?? "auto";
-        if (val != "auto" && val != "xbox" && val != "discord") val = "auto";
-        SettingsService.Settings.ProfileDisplayMode = val;
-        SettingsService.Save();
-        StateHasChanged();
-    }
-
-    private async void SetAccent(string color)
-    {
-        SettingsService.Settings.AccentColor = color;
-        SettingsService.Save();
-        await JS.InvokeVoidAsync("setAccentColor", color);
-        StateHasChanged();
-    }
-
-    private async void OnThemeChanged(ChangeEventArgs e)
-    {
-        var val = e.Value?.ToString() ?? "dark";
-        SettingsService.Settings.ThemePreset = val;
-        SettingsService.Save();
-        await JS.InvokeVoidAsync("setTheme", val);
-        StateHasChanged();
-    }
-
-    private async void OnBlurChanged(ChangeEventArgs e)
-    {
-        if (int.TryParse(e.Value?.ToString(), out int v))
-        {
-            SettingsService.Settings.BlurIntensity = v;
-            SettingsService.Save();
-            await JS.InvokeVoidAsync("setBlurIntensity", v);
-            StateHasChanged();
-        }
-    }
-
-    private void OnCfApiKeyChanged(ChangeEventArgs e)
-    {
-        SettingsService.Settings.CurseForgeApiKey = e.Value?.ToString() ?? "";
-        SettingsService.Save();
-        StateHasChanged();
-    }
-
-    // ── Wallpaper ─────────────────────────────────────────────
-    private async Task PickWallpaper()
-    {
-        var path = await Task.Run(() =>
-        {
-            string? result = null;
-            var thread = new System.Threading.Thread(() =>
-            {
-                var dlg = new Microsoft.Win32.OpenFileDialog
-                {
-                    Title  = "Choose a wallpaper",
-                    Filter = "Image files|*.png;*.jpg;*.jpeg;*.bmp;*.gif;*.webp|All files|*.*"
-                };
-                if (dlg.ShowDialog() == true)
-                    result = dlg.FileName;
-            });
-            thread.SetApartmentState(System.Threading.ApartmentState.STA);
-            thread.Start();
-            thread.Join();
-            return result;
-        });
-
-        if (!string.IsNullOrEmpty(path))
-            await OnWallpaperPicked(path);
-    }
-
-    [JSInvokable]
-    public async Task OnWallpaperPicked(string path)
-    {
-        if (string.IsNullOrEmpty(path)) return;
-        try
-        {
-            var fileInfo = new System.IO.FileInfo(path);
-            if (!fileInfo.Exists) { _ = ShowToast("File not found.", "error"); return; }
-            if (fileInfo.Length > 20 * 1024 * 1024)
-            {
-                _ = ShowToast("Image too large (max 20 MB). Try a smaller file.", "error");
-                return;
-            }
-
-            var appFolder = System.IO.Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-                "Glacier Launcher");
-            System.IO.Directory.CreateDirectory(appFolder);
-            var destName = "custom-bg" + System.IO.Path.GetExtension(path);
-            var destPath = System.IO.Path.Combine(appFolder, destName);
-
-            // Copy on a background thread to avoid blocking the UI
-            await Task.Run(() => System.IO.File.Copy(path, destPath, true));
-
-            SettingsService.Settings.CustomBackgroundPath = destPath;
-            SettingsService.Save();
-            await JS.InvokeVoidAsync("setCustomBackground", destPath);
-            await InvokeAsync(StateHasChanged);
-        }
-        catch (Exception ex)
-        {
-            _ = ShowToast("Failed to set wallpaper: " + ex.Message, "error");
-        }
-    }
-
-    private async Task ResetWallpaper()
-    {
-        SettingsService.Settings.CustomBackgroundPath = "";
-        SettingsService.Save();
-        await JS.InvokeVoidAsync("setCustomBackground", "");
-        StateHasChanged();
-    }
-
-    private void OpenUrl(string url)
-    {
-        if (!string.IsNullOrEmpty(url))
-            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
-            { FileName = url, UseShellExecute = true });
-    }
-
-    private async Task PickDllFile() => await JS.InvokeVoidAsync("pickDllFile", _selfRef);
-
-    // ── Flarial ───────────────────────────────────────────────
-    private async Task OpenClients()
-    {
-        currentView = "clients";
-        flarialDownloaded = Flarial.IsDownloaded;
-        flarialUpToDate   = flarialDownloaded && await Flarial.IsUpToDateAsync();
-        odersoDownloaded  = OderSo.IsDownloaded;
-        odersoUpToDate    = odersoDownloaded  && await OderSo.IsUpToDateAsync();
-        clientsHasBadge   = false;
-        StateHasChanged();
-    }
-
-    private async Task HandleFlarialDownload()
-    {
-        flarialDownloading = true; flarialProgress = 0; flarialError = "";
-        StateHasChanged();
-        try
-        {
-            var prog = new ThrottledProgress(new Progress<double>(pct =>
-            { flarialProgress = pct; InvokeAsync(StateHasChanged); }));
-            await Flarial.DownloadAsync(prog);
-            flarialDownloaded = true;
-            flarialUpToDate   = await Flarial.IsUpToDateAsync();
-            _ = ShowToast("Flarial downloaded!", "success");
-        }
-        catch (Exception ex) { flarialError = ex.Message; }
-        finally { flarialDownloading = false; flarialProgress = 0; }
-        StateHasChanged();
-    }
-
-    private void HandleFlarialDelete()
-    {
-        Flarial.Delete();
-        flarialDownloaded = false; flarialUpToDate = false;
-        StateHasChanged();
-    }
-
-    // ── OderSo ────────────────────────────────────────────────
-    private async Task HandleOderSoDownload()
-    {
-        odersoDownloading = true; odersoProgress = 0; odersoError = "";
-        StateHasChanged();
-        try
-        {
-            var prog = new ThrottledProgress(new Progress<double>(pct =>
-            { odersoProgress = pct; InvokeAsync(StateHasChanged); }));
-            await OderSo.DownloadAsync(prog);
-            odersoDownloaded = true;
-            odersoUpToDate   = await OderSo.IsUpToDateAsync();
-            _ = ShowToast("OderSo downloaded!", "success");
-        }
-        catch (Exception ex) { odersoError = ex.Message; }
-        finally { odersoDownloading = false; odersoProgress = 0; }
-        StateHasChanged();
-    }
-
-    private void HandleOderSoDelete()
-    {
-        OderSo.Delete();
-        odersoDownloaded = false; odersoUpToDate = false;
-        if (SettingsService.Settings.SelectedClient == "OderSo Client") SelectClient("Latite Client");
-        StateHasChanged();
-    }
-
-    // ── Versions ─────────────────────────────────────────────
-    private string versionsBackTarget = "home";
-
-    private async Task OpenVersions()
-    {
-        if (currentView != "versions") versionsBackTarget = currentView;
-        currentView = "versions"; versionsFilter = "";
-        versionsHasBadge = false;
-        if (versionsClient == "Latite" && versions.Count == 0) await LoadVersionsAsync();
-        else if (versionsClient == "OderSo" && oderSoVersions.Count == 0) await LoadOderSoVersionsAsync();
-    }
-
-    private async Task BackFromVersions()
-    {
-        switch (versionsBackTarget)
-        {
-            case "clients": await OpenClients(); break;
-            case "settings": OpenSettings(); break;
-            case "addons":   OpenAddons(); break;
-            case "servers":  OpenServers(); break;
-            case "credits":  OpenCredits(); break;
-            default:         GoHome(); break;
-        }
-    }
-
-    private void OpenCredits() => currentView = "credits";
-
-    // ── Servers ───────────────────────────────────────────────
-    private bool   serverModalOpen   = false;
-    private SavedServer? editingServer = null;
-    private string serverInputName    = "";
-    private string serverInputAddress = "";
-    private int    serverInputPort    = 19132;
-    private string serverInputError   = "";
-
-    // A curated list of well-known Bedrock servers. Each carries a custom icon/color
-    // so the panel reads as a quick-pick gallery rather than a blank list.
-    private static readonly SavedServer[] _serverSuggestions =
-    {
-        new() { Name = "NetherGames",   Address = "play.nethergames.org",    Port = 19132, Icon = "fa-solid fa-fire",       IconColor = "#ff6b35" },
-        new() { Name = "Hive",          Address = "geo.hivebedrock.network", Port = 19132, Icon = "fa-solid fa-hexagon-nodes", IconColor = "#f5a623" },
-        new() { Name = "CubeCraft",     Address = "play.cubecraft.net",      Port = 19132, Icon = "fa-solid fa-cube",       IconColor = "#4a90e2" },
-        new() { Name = "Mineplex",      Address = "mco.mineplex.com",        Port = 19132, Icon = "fa-solid fa-tower-cell", IconColor = "#e94e4e" },
-        new() { Name = "Lifeboat",      Address = "play.lbsg.net",           Port = 19132, Icon = "fa-solid fa-life-ring",  IconColor = "#00bcd4" },
-        new() { Name = "Galaxite",      Address = "play.galaxite.net",       Port = 19132, Icon = "fa-solid fa-star",       IconColor = "#9b51e0" },
-    };
-
-    private void OpenServers() { currentView = "servers"; }
-
-    // ── MC Versions (Vanilla Switcher) ────────────────────────
-    private async Task OpenMcVersions()
-    {
-        currentView = "mcversions";
-        mcVersionsFilter = "";
-        if (mcVersionsList.Count == 0) await LoadMcVersionsAsync();
-    }
-
-    private async Task RefreshMcVersionsAsync() => await LoadMcVersionsAsync();
-
-    private async Task LoadMcVersionsAsync()
-    {
-        isLoadingMcVersions = true; mcVersionsError = null; StateHasChanged();
-        mcVersionsList = await VanillaVersions.GetVersionsAsync();
-        mcVersionsError = VanillaVersions.LastError;
-        isLoadingMcVersions = false; StateHasChanged();
-    }
-
-    private async Task HandleMcVersionDownload(VanillaVersion v)
-    {
-        v.IsDownloading = true; v.ErrorMessage = null; v.Progress = 0; StateHasChanged();
-        try
-        {
-            var prog = new ThrottledProgress(new Progress<double>(pct =>
-            { v.Progress = pct; InvokeAsync(StateHasChanged); }));
-            await VanillaVersions.DownloadVersionAsync(v, prog);
-            _ = ShowToast($"Minecraft {v.Version} downloaded!", "success");
-        }
-        catch (Exception ex) { v.ErrorMessage = ex.Message; }
-        finally { v.IsDownloading = false; v.Progress = 0; }
-        StateHasChanged();
-    }
-
-    private async Task HandleMcVersionSwitch(VanillaVersion v)
-    {
-        v.IsSwitching = true; v.ErrorMessage = null; StateHasChanged();
-        try
-        {
-            var result = await VanillaVersions.SwitchVersionAsync(v);
-            if (!string.IsNullOrEmpty(result))
-            {
-                v.ErrorMessage = result;
-                _ = ShowToast(result, "error");
-            }
-            else
-            {
-                foreach (var mv in mcVersionsList) mv.IsActive = (mv.Version == v.Version);
-                _ = ShowToast($"Switched to Minecraft {v.Version}!", "success");
-            }
-        }
-        catch (Exception ex) { v.ErrorMessage = ex.Message; _ = ShowToast(ex.Message, "error"); }
-        finally { v.IsSwitching = false; }
-        StateHasChanged();
-    }
-
-    private void HandleMcVersionDelete(VanillaVersion v)
-    {
-        VanillaVersions.DeleteVersion(v);
-        if (v.IsActive)
-            foreach (var mv in mcVersionsList) mv.IsActive = false;
-        StateHasChanged();
-    }
-
-    // ── Edition switcher ───────────────────────────────────────
-    private void SetEdition(string ed)
-    {
-        if (string.Equals(SettingsService.Settings.Edition, ed, StringComparison.OrdinalIgnoreCase))
-            return;
-
-        SettingsService.Settings.Edition = ed;
-        SettingsService.Save();
-
-        // The CurseForge category list is per-edition; the previously-selected
-        // bedrock-only key like "skins" doesn't exist for Java and would render
-        // as nothing-active until the user clicks again.
-        cfCategory = "all";
-        cfResults.Clear();
-        cfHasSearched = false;
-        // Settings categories are also per-edition ("injection" vs. "java"). If
-        // the user was on a tab that no longer exists in the new edition we
-        // bounce them back to All instead of leaving a stale selection.
-        settingsCategory = "all";
-
-        // Bounce the user back home so they aren't stranded on a panel that's
-        // edition-specific (e.g. the Clients panel doesn't exist for Java).
-        currentView = "home";
-        hoveredBtn  = "";
-        StateHasChanged();
-    }
-
-    // ── Java versions ──────────────────────────────────────────
-    private async Task OpenJavaVersions()
-    {
-        currentView = "javaversions";
-        javaVersionsFilter = "";
-        if (javaVersionsList.Count == 0) await LoadJavaVersionsAsync();
-    }
-
-    private async Task RefreshJavaVersionsAsync() => await LoadJavaVersionsAsync();
-
-    private async Task LoadJavaVersionsAsync()
-    {
-        isLoadingJavaVersions = true; javaVersionsError = null; StateHasChanged();
-        try
-        {
-            var fromManifest = await JavaVersions.GetVersionsAsync();
-            var known        = fromManifest.Select(v => v.Id).ToList();
-            var custom       = JavaVersions.ScanCustomInstalledVersions(known);
-            // Custom profiles (Fabric/Forge/old) sit at the top of the list — users care about those first.
-            javaVersionsList = custom.Concat(fromManifest).ToList();
-            javaVersionsError = JavaVersions.LastError;
-        }
-        catch (Exception ex)
-        {
-            javaVersionsError = ex.Message;
-        }
-        finally
-        {
-            isLoadingJavaVersions = false;
-            StateHasChanged();
-        }
-    }
-
-    private void ToggleJavaSnapshots()
-    {
-        SettingsService.Settings.JavaShowSnapshots = !SettingsService.Settings.JavaShowSnapshots;
-        SettingsService.Save();
-        StateHasChanged();
-    }
-
-    private void ToggleJavaHistorical()
-    {
-        SettingsService.Settings.JavaShowHistorical = !SettingsService.Settings.JavaShowHistorical;
-        SettingsService.Save();
-        StateHasChanged();
-    }
-
-    private void SetActiveJavaVersion(JavaVersion v)
-    {
-        foreach (var jv in javaVersionsList) jv.IsActive = false;
-        v.IsActive = true;
-        SettingsService.Settings.JavaActiveVersion = v.Id;
-        SettingsService.Save();
-        _ = ShowToast($"Default Java version: {v.Id}", "success");
-        StateHasChanged();
-    }
-
-    private void OnJavaRamChanged(ChangeEventArgs e)
-    {
-        if (int.TryParse(e.Value?.ToString(), out var v))
-        {
-            SettingsService.Settings.JavaMaxRamMb = Math.Clamp(v, 512, 16384);
-            SettingsService.Save();
-        }
-    }
-
-    private void OpenJavaClients()
-    {
-        LunarBadlion.Detect();
-        if (string.IsNullOrEmpty(lunarSelectedVersion))
-            lunarSelectedVersion = LunarBadlion.LunarInstalledVersions.FirstOrDefault() ?? "";
-        currentView = "javaclients";
-        StateHasChanged();
-    }
-
-    private void RefreshJavaClients()
-    {
-        LunarBadlion.Detect();
-        if (!LunarBadlion.LunarInstalledVersions.Contains(lunarSelectedVersion))
-            lunarSelectedVersion = LunarBadlion.LunarInstalledVersions.FirstOrDefault() ?? "";
-        StateHasChanged();
-    }
-
-    private string lunarSelectedVersion = "";
-
-    private void LaunchLunar()
-    {
-        try
-        {
-            LunarBadlion.LaunchLunar();
-            Discord.SetJavaInGamePresence(lunarSelectedVersion, "Lunar");
-            AddToRecentlyLaunched("Java Lunar");
-            _ = ShowToast("Lunar Client launching…", "success");
-        }
-        catch (Exception ex) { _ = ShowToast(ex.Message, "error"); }
-    }
-
-    private void LaunchLunarDirect()
-    {
-        // Picks the first installed version if the user hasn't touched the dropdown.
-        var ver = !string.IsNullOrEmpty(lunarSelectedVersion)
-            ? lunarSelectedVersion
-            : LunarBadlion.LunarInstalledVersions.FirstOrDefault() ?? "";
-        try
-        {
-            LunarBadlion.LaunchLunar(ver);
-            Discord.SetJavaInGamePresence(ver, "Lunar");
-            AddToRecentlyLaunched("Java Lunar " + ver);
-            _ = ShowToast(
-                string.IsNullOrEmpty(ver)
-                    ? "Lunar Client launching…"
-                    : $"Lunar {ver} launching (skip-splash)…",
-                "success");
-        }
-        catch (Exception ex) { _ = ShowToast(ex.Message, "error"); }
-    }
-
-    private void LaunchBadlion()
-    {
-        try
-        {
-            LunarBadlion.LaunchBadlion();
-            Discord.SetJavaInGamePresence("", "Badlion");
-            AddToRecentlyLaunched("Java Badlion");
-            _ = ShowToast("Badlion Client launching…", "success");
-        }
-        catch (Exception ex) { _ = ShowToast(ex.Message, "error"); }
-    }
-
-    private void OnJavaMinecraftDirChanged(ChangeEventArgs e)
-    {
-        var v = (e.Value?.ToString() ?? "").Trim().Trim('"');
-        SettingsService.Settings.JavaMinecraftDir = v;
-        SettingsService.Save();
-        javaVersionsList.Clear(); // installed-detection re-runs on next OpenJavaVersions
-        StateHasChanged();
-    }
-
-    private void OnJavaRuntimeChanged(ChangeEventArgs e)
-    {
-        var v = (e.Value?.ToString() ?? "").Trim().Trim('"');
-        SettingsService.Settings.JavaRuntimePath = v;
-        SettingsService.Save();
-        StateHasChanged();
-    }
-
-    private void OnJavaJvmArgsChanged(ChangeEventArgs e)
-    {
-        SettingsService.Settings.JavaCustomJvmArgs = (e.Value?.ToString() ?? "").Trim();
-        SettingsService.Save();
-        StateHasChanged();
-    }
-
-    private void OpenJavaMinecraftFolder()
-    {
-        try
-        {
-            var dir = JavaVersions.MinecraftDir;
-            System.IO.Directory.CreateDirectory(dir);
-            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
-            {
-                FileName = dir,
-                UseShellExecute = true
-            });
-        }
-        catch (Exception ex) { _ = ShowToast(ex.Message, "error"); }
-    }
-
-    /// <summary>
-    /// Returns the most-recently-modified crash report file in the user's
-    /// .minecraft/crash-reports/ directory, or null if there are none.
-    /// </summary>
-    private string? LatestJavaCrashFile()
-    {
-        try
-        {
-            var dir = System.IO.Path.Combine(JavaVersions.MinecraftDir, "crash-reports");
-            if (!System.IO.Directory.Exists(dir)) return null;
-            return System.IO.Directory.EnumerateFiles(dir, "crash-*.txt")
-                .OrderByDescending(System.IO.File.GetLastWriteTimeUtc)
-                .FirstOrDefault();
-        }
-        catch { return null; }
-    }
-
-    private string LatestJavaCrashLabel()
-    {
-        var p = LatestJavaCrashFile();
-        if (p == null) return "No crash reports yet";
-        try
-        {
-            var when = System.IO.File.GetLastWriteTime(p);
-            return $"{System.IO.Path.GetFileName(p)} · {FormatRelativeTime(when.ToUniversalTime().ToString("o"))}";
-        }
-        catch { return System.IO.Path.GetFileName(p) ?? ""; }
-    }
-
-    private void OpenLatestJavaCrash()
-    {
-        var p = LatestJavaCrashFile();
-        if (p == null) { _ = ShowToast("No crash reports found.", "info"); return; }
-        try
-        {
-            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
-            {
-                FileName = p,
-                UseShellExecute = true
-            });
-        }
-        catch (Exception ex) { _ = ShowToast(ex.Message, "error"); }
-    }
-
-    private async Task HandleJavaInstall(JavaVersion v)
-    {
-        if (v.IsInstalling) return;
-        v.IsInstalling = true; v.InstallPercent = 0; v.InstallStage = "Starting…"; v.ErrorMessage = null;
-        StateHasChanged();
-        try
-        {
-            // Throttle progress updates so we don't trigger a Blazor re-render
-            // for every one of ~3500 files in an install.
-            var lastTick = 0L;
-            await JavaInstaller.InstallAsync(v, p =>
-            {
-                v.InstallPercent = p.Percent;
-                v.InstallStage   = p.Stage;
-                var now = Environment.TickCount64;
-                if (now - lastTick >= 80 || p.Percent >= 100)
-                {
-                    lastTick = now;
-                    InvokeAsync(StateHasChanged);
-                }
-            });
-            v.IsInstalled = true;
-            v.HasJar      = true;
-            _ = ShowToast($"Minecraft Java {v.Id} installed!", "success");
-        }
-        catch (Exception ex)
-        {
-            v.ErrorMessage = ex.Message;
-            _ = ShowToast(ex.Message, "error");
-        }
-        finally
-        {
-            v.IsInstalling = false;
-            // Reload the list so the freshly-installed version moves into the
-            // Installed section without the user having to hit Refresh.
-            _ = LoadJavaVersionsAsync();
-            StateHasChanged();
-        }
-    }
-
-    private async Task HandleJavaLaunch(JavaVersion v)
-    {
-        if (v.IsLaunching) return;
-        v.IsLaunching = true; v.ErrorMessage = null; StateHasChanged();
-        try
-        {
-            await JavaLauncher.LaunchAsync(v.Id);
-            _ = ShowToast($"Minecraft Java {v.Id} launching…", "success");
-            AddToRecentlyLaunched("Java " + v.Id);
-            Discord.SetJavaInGamePresence(v.Id);
-            if (SettingsService.Settings.CloseAfterLaunch) await CloseWindow();
-        }
-        catch (Exception ex)
-        {
-            v.ErrorMessage = ex.Message;
-            _ = ShowToast(ex.Message, "error");
-        }
-        finally
-        {
-            v.IsLaunching = false;
-            StateHasChanged();
-        }
-    }
-
-    // ── Microsoft Store install (BedrockUpdater method) ────────
-    // Installs the current Release or Preview through AppInstallManager. Works
-    // without Developer Mode and replaces any sideloaded Minecraft package.
-    private async Task InstallFromStoreAsync(bool preview)
-    {
-        if (storeInstallBusy) return;
-        storeInstallBusy   = true;
-        storeInstallPct    = 0;
-        storeInstallStage  = preview ? "Installing Minecraft Preview…" : "Installing Minecraft…";
-        storeInstallDetail = "Talking to the Microsoft Store…";
-        StateHasChanged();
-
-        var product = preview
-            ? StoreInstallService.Product.MinecraftPreview
-            : StoreInstallService.Product.MinecraftRelease;
-
-        var progress = new Progress<StoreInstallService.InstallProgress>(p =>
-        {
-            storeInstallPct    = p.Percent;
-            storeInstallStage  = $"{p.Stage} {p.ProductName}";
-            storeInstallDetail = p.BytesTotal > 0
-                ? $"{FormatSize(p.BytesDownloaded)} of {FormatSize(p.BytesTotal)}"
-                : "Preparing…";
-            InvokeAsync(StateHasChanged);
-        });
-
-        try
-        {
-            var finalState = await StoreInstall.InstallAsync(product, progress);
-
-            if (finalState == Windows.ApplicationModel.Store.Preview.InstallControl.AppInstallState.Completed)
-            {
-                _ = ShowToast($"{product.DisplayName} installed from the Store.", "success");
-                // The Store install reasserts the official package — drop the
-                // sideload pointer so the UI no longer claims a custom version
-                // is active.
-                if (!string.IsNullOrEmpty(SettingsService.Settings.ActiveVanillaVersion))
-                {
-                    SettingsService.Settings.ActiveVanillaVersion = "";
-                    SettingsService.Save();
-                    foreach (var mv in mcVersionsList) mv.IsActive = false;
-                }
-            }
-            else
-            {
-                _ = ShowToast($"Install ended: {finalState}", "info");
-            }
-        }
-        catch (Exception ex)
-        {
-            _ = ShowToast($"Store install failed: {ex.Message}. You can still sideload a build below.", "error");
-        }
-        finally
-        {
-            storeInstallBusy   = false;
-            storeInstallPct    = 0;
-            storeInstallStage  = "";
-            storeInstallDetail = "";
-            StateHasChanged();
-        }
-    }
-
-    private void CancelStoreInstall()
-    {
-        StoreInstall.Cancel();
-    }
-
-    private static string FormatSize(long bytes)
-    {
-        if (bytes <= 0) return "0 B";
-        string[] units = { "B", "KB", "MB", "GB" };
-        double value = bytes;
-        int unit = 0;
-        while (value >= 1024 && unit < units.Length - 1) { value /= 1024; unit++; }
-        return $"{value:0.##} {units[unit]}";
-    }
-
-    private RenderFragment McVersionActions(VanillaVersion v) => b =>
-    {
-        if (v.IsDownloading)
-        {
-            b.OpenElement(0, "div");
-            b.AddAttribute(1, "class", "dl-progress-row");
-            if (v.Progress > 0)
-            {
-                b.OpenElement(2, "div");
-                b.AddAttribute(3, "class", "progress-bar-wrap");
-                b.OpenElement(4, "div");
-                b.AddAttribute(5, "class", "progress-bar-fill");
-                b.AddAttribute(6, "style", $"width:{v.Progress:F0}%");
-                b.CloseElement();
-                b.CloseElement();
-                b.OpenElement(7, "span");
-                b.AddAttribute(8, "class", "dl-pct");
-                b.AddContent(9, $"{(int)v.Progress}%");
-                b.CloseElement();
-            }
-            b.OpenElement(10, "button");
-            b.AddAttribute(11, "class", "icon-btn");
-            b.AddAttribute(12, "disabled", true);
-            b.OpenElement(13, "span");
-            b.AddAttribute(14, "class", "spinner");
-            b.CloseElement();
-            b.CloseElement();
-            b.CloseElement();
-        }
-        else if (v.IsSwitching)
-        {
-            b.OpenElement(0, "div");
-            b.AddAttribute(1, "class", "version-actions");
-            b.OpenElement(2, "button");
-            b.AddAttribute(3, "class", "icon-btn");
-            b.AddAttribute(4, "disabled", true);
-            b.OpenElement(5, "span");
-            b.AddAttribute(6, "class", "spinner");
-            b.CloseElement();
-            b.CloseElement();
-            b.CloseElement();
-        }
-        else
-        {
-            b.OpenElement(20, "div");
-            b.AddAttribute(21, "class", "version-actions");
-
-            if (v.IsDownloaded)
-            {
-                // Delete
-                b.OpenElement(30, "button");
-                b.AddAttribute(31, "class", "icon-btn icon-btn-ghost");
-                b.AddAttribute(32, "title", "Delete");
-                b.AddAttribute(33, "onclick", Microsoft.AspNetCore.Components.EventCallback.Factory.Create(this, () => HandleMcVersionDelete(v)));
-                b.OpenElement(34, "i");
-                b.AddAttribute(35, "class", "fa-solid fa-trash");
-                b.CloseElement();
-                b.CloseElement();
-
-                if (!v.IsActive)
-                {
-                    // Switch
-                    b.OpenElement(40, "button");
-                    b.AddAttribute(41, "class", "icon-btn mcv-switch-btn");
-                    b.AddAttribute(42, "title", "Switch to this version");
-                    b.AddAttribute(43, "onclick", Microsoft.AspNetCore.Components.EventCallback.Factory.Create(this, async () => await HandleMcVersionSwitch(v)));
-                    b.OpenElement(44, "i");
-                    b.AddAttribute(45, "class", "fa-solid fa-right-left");
-                    b.CloseElement();
-                    b.CloseElement();
-                }
-            }
-            else
-            {
-                // Download
-                b.OpenElement(50, "button");
-                b.AddAttribute(51, "class", "icon-btn");
-                b.AddAttribute(52, "title", "Download");
-                b.AddAttribute(53, "onclick", Microsoft.AspNetCore.Components.EventCallback.Factory.Create(this, async () => await HandleMcVersionDownload(v)));
-                b.OpenElement(54, "i");
-                b.AddAttribute(55, "class", "fa-solid fa-download");
-                b.CloseElement();
-                b.CloseElement();
-            }
-
-            b.CloseElement();
-        }
-    };
-
-    private void OpenAddServerModal()
-    {
-        editingServer       = null;
-        serverInputName     = "";
-        serverInputAddress  = "";
-        serverInputPort     = 19132;
-        serverInputError    = "";
-        serverModalOpen     = true;
-        StateHasChanged();
-    }
-
-    private void OpenEditServerModal(SavedServer s)
-    {
-        editingServer       = s;
-        serverInputName     = s.Name;
-        serverInputAddress  = s.Address;
-        serverInputPort     = s.Port;
-        serverInputError    = "";
-        serverModalOpen     = true;
-        StateHasChanged();
-    }
-
-    private void CloseServerModal()
-    {
-        serverModalOpen = false;
-        editingServer   = null;
-        StateHasChanged();
-    }
-
-    private void SaveServerModal()
-    {
-        if (string.IsNullOrWhiteSpace(serverInputAddress))
-        {
-            serverInputError = "Address is required.";
-            return;
-        }
-        if (serverInputPort <= 0 || serverInputPort > 65535)
-        {
-            serverInputError = "Port must be between 1 and 65535.";
-            return;
-        }
-
-        var name = string.IsNullOrWhiteSpace(serverInputName) ? serverInputAddress : serverInputName.Trim();
-
-        if (editingServer == null)
-        {
-            SettingsService.Settings.SavedServers.Add(new SavedServer
-            {
-                Name    = name,
-                Address = serverInputAddress.Trim(),
-                Port    = serverInputPort
-            });
-        }
-        else
-        {
-            editingServer.Name    = name;
-            editingServer.Address = serverInputAddress.Trim();
-            editingServer.Port    = serverInputPort;
-        }
-        SettingsService.Save();
-        CloseServerModal();
-        _ = ShowToast(editingServer == null ? "Server saved" : "Server updated", "success");
-    }
-
-    private void DeleteServer(SavedServer s)
-    {
-        SettingsService.Settings.SavedServers.Remove(s);
-        SettingsService.Save();
-        StateHasChanged();
-    }
-
-    private void SaveSuggestedServer(SavedServer s)
-    {
-        // Don't double-add — match by host:port since a user could rename a saved entry
-        if (SettingsService.Settings.SavedServers.Any(x =>
-                string.Equals(x.Address, s.Address, StringComparison.OrdinalIgnoreCase) && x.Port == s.Port))
-        {
-            _ = ShowToast(s.Name + " is already saved", "info");
-            return;
-        }
-        SettingsService.Settings.SavedServers.Add(new SavedServer
-        {
-            Name      = s.Name,
-            Address   = s.Address,
-            Port      = s.Port,
-            Icon      = s.Icon,
-            IconColor = s.IconColor
-        });
-        SettingsService.Save();
-        _ = ShowToast(s.Name + " saved", "success");
-        StateHasChanged();
-    }
-
-    private bool IsSuggestionUnsaved(SavedServer s) =>
-        !SettingsService.Settings.SavedServers.Any(x =>
-            string.Equals(x.Address, s.Address, StringComparison.OrdinalIgnoreCase) && x.Port == s.Port);
-
-    private static string GetServerIconClass(SavedServer s) =>
-        string.IsNullOrWhiteSpace(s.Icon) ? "fa-solid fa-server" : s.Icon;
-
-    private string GetServerIconStyle(SavedServer s)
-    {
-        var color = string.IsNullOrWhiteSpace(s.IconColor) ? SettingsService.Settings.AccentColor : s.IconColor;
-        return $"background:{color};";
-    }
-
-    private async Task CopyServerAddress(SavedServer s)
-    {
-        await JS.InvokeVoidAsync("copyToClipboard", $"{s.Address}:{s.Port}");
-        _ = ShowToast($"Copied {s.Address}:{s.Port}", "info");
-    }
-
-    private async Task LaunchServer(SavedServer s)
-    {
-        if (isLaunching) return;
-
-        var sel        = SettingsService.Settings.SelectedClient;
-        bool isFlarial = sel == "Flarial Client";
-        bool isOderSo  = sel == "OderSo Client";
-        bool isCustom  = sel == "Custom DLL";
-        bool isVanilla = sel == "Vanilla";
-
-        string? dllPath = null;
-        try
-        {
-            if (isCustom && !string.IsNullOrEmpty(customDllPath)) dllPath = customDllPath;
-            else if (isOderSo)                                    dllPath = OderSo.FilePath;
-            else if (isFlarial)                                   dllPath = FlarialService.FilePath;
-            else if (!isVanilla)
-            {
-                var tag = SettingsService.Settings.LastUsedVersion;
-                if (!string.IsNullOrEmpty(tag))
-                {
-                    var p = GameLauncher.GetDllPath(tag);
-                    dllPath = System.IO.File.Exists(p) ? p : null;
-                }
-            }
-        }
-        catch { dllPath = null; }
-
-        // For non-vanilla clients, the DLL must already exist or we'd fail mid-launch
-        if (!isVanilla && !string.IsNullOrEmpty(dllPath) && !System.IO.File.Exists(dllPath))
-            dllPath = null;
-
-        isLaunching = true;
-        _launchForceCancelled = false;
-        _launchCts?.Cancel();
-        _launchCts = new System.Threading.CancellationTokenSource();
-        var token = _launchCts.Token;
-        await ShowStatus($"Launching → {s.Name}…", clearAfterMs: 30_000);
-        try
-        {
-            var launchTask = Launcher.LaunchServerAsync(dllPath, s.Name, s.Address, s.Port);
-            var done = await Task.WhenAny(launchTask, Task.Delay(System.Threading.Timeout.Infinite, token));
-            if (done != launchTask) throw new OperationCanceledException();
-            await launchTask;
-
-            isLaunching = false;
-            Discord.SetInGamePresence(s.Name, sel);
-            AddToRecentlyLaunched(s.Name);
-
-            if (SettingsService.Settings.CloseAfterLaunch) { await CloseWindow(); return; }
-
-            await ShowStatus($"Connected to {s.Name}!", clearAfterMs: 3000);
-            _ = ShowToast($"Joining {s.Name}", "success");
-        }
-        catch (OperationCanceledException)
-        {
-            isLaunching = false;
-            await ShowStatus("Launch cancelled.", clearAfterMs: 3000);
-        }
-        catch (Exception ex)
-        {
-            isLaunching = false;
-            if (!_launchForceCancelled)
-            {
-                await ShowStatus(ex.Message, error: true, clearAfterMs: 8000);
-                _ = ShowToast(ex.Message, "error");
-            }
-        }
-    }
-
-    private async Task RefreshVersionsAsync()
-    {
-        if (versionsClient == "Latite") await LoadVersionsAsync();
-        else await LoadOderSoVersionsAsync();
-    }
-
-    private async Task SwitchVersionsClient(string client)
-    {
-        versionsClient = client;
-        versionsFilter = "";
-        if (client == "Latite" && versions.Count == 0)        await LoadVersionsAsync();
-        else if (client == "OderSo" && oderSoVersions.Count == 0) await LoadOderSoVersionsAsync();
-        else StateHasChanged();
-    }
-
-    private string? oderSoFetchError = null;
-
-    private async Task LoadOderSoVersionsAsync()
-    {
-        isLoadingOderSoVersions = true; oderSoFetchError = null; StateHasChanged();
-        var dlls   = await OderSo.ListDllsAsync();
-        var active = OderSo.GetActiveEntry();
-        oderSoVersions = dlls.Select(e => new OderSoDllState(e)
-        {
-            IsDownloaded = OderSo.IsEntryDownloaded(e),
-            IsActive     = active?.Name == e.Name
-        }).ToList();
-        oderSoFetchError = OderSo.LastError;
-        isLoadingOderSoVersions = false; StateHasChanged();
-    }
-
-    private async Task HandleOderSoEntryDownload(OderSoDllState state)
-    {
-        state.IsDownloading = true; state.Progress = 0; state.Error = "";
-        StateHasChanged();
-        try
-        {
-            var prog = new ThrottledProgress(new Progress<double>(pct =>
-            { state.Progress = pct; InvokeAsync(StateHasChanged); }));
-            await OderSo.DownloadEntryAsync(state.Entry, prog);
-            state.IsDownloaded = true;
-            _ = ShowToast(state.DisplayName + " downloaded!", "success");
-        }
-        catch (Exception ex) { state.Error = ex.Message; }
-        finally { state.IsDownloading = false; state.Progress = 0; }
-        StateHasChanged();
-    }
-
-    private void HandleOderSoEntryDelete(OderSoDllState state)
-    {
-        OderSo.DeleteEntry(state.Entry);
-        state.IsDownloaded = false;
-        state.IsActive = false;
-        if (SettingsService.Settings.SelectedClient == "OderSo Client" && !OderSo.IsDownloaded)
-            SelectClient("Latite Client");
-        StateHasChanged();
-    }
-
-    private async Task HandleOderSoEntryLaunch(OderSoDllState state)
-    {
-        OderSo.SetActiveEntry(state.Entry);
-        foreach (var s in oderSoVersions) s.IsActive = (s.Entry.Name == state.Entry.Name);
-        SelectClient("OderSo Client");
-        GoHome();
-        isLaunching = true;
-        await ShowStatus($"Launching OderSo {state.Entry.Name}…", clearAfterMs: 30_000);
-        try
-        {
-            var dllPath = OderSo.GetEntryFilePath(state.Entry);
-            await Launcher.LaunchWithDllAsync(dllPath);
-            isLaunching = false;
-            Discord.SetInGamePresence(state.Entry.Name, "OderSo Client");
-            AddToRecentlyLaunched("OderSo");
-
-            if (SettingsService.Settings.CloseAfterLaunch) { await CloseWindow(); return; }
-
-            await ShowStatus("Injected! Have fun.", clearAfterMs: 3000);
-            _ = ShowToast("Injection successful!", "success");
-        }
-        catch (Exception ex)
-        {
-            isLaunching = false;
-            await ShowStatus(ex.Message, error: true, clearAfterMs: 8000);
-            _ = ShowToast(ex.Message, "error");
-        }
-    }
-
-    // ── OderSo version action render fragment ─────────────────
-    private RenderFragment OderSoVersionActions(OderSoDllState state) => b =>
-    {
-        if (state.IsDownloading)
-        {
-            b.OpenElement(0, "div");
-            b.AddAttribute(1, "class", "dl-progress-row");
-            if (state.Progress > 0)
-            {
-                b.OpenElement(2, "div");
-                b.AddAttribute(3, "class", "progress-bar-wrap");
-                b.OpenElement(4, "div");
-                b.AddAttribute(5, "class", "progress-bar-fill");
-                b.AddAttribute(6, "style", $"width:{state.Progress:F0}%");
-                b.CloseElement();
-                b.CloseElement();
-                b.OpenElement(7, "span");
-                b.AddAttribute(8, "class", "dl-pct");
-                b.AddContent(9, $"{(int)state.Progress}%");
-                b.CloseElement();
-            }
-            b.OpenElement(10, "button");
-            b.AddAttribute(11, "class", "icon-btn");
-            b.AddAttribute(12, "disabled", true);
-            b.OpenElement(13, "span");
-            b.AddAttribute(14, "class", "spinner");
-            b.CloseElement();
-            b.CloseElement();
-            b.CloseElement();
-        }
-        else
-        {
-            b.OpenElement(20, "div");
-            b.AddAttribute(21, "class", "version-actions");
-
-            if (state.IsDownloaded)
-            {
-                // Delete
-                b.OpenElement(30, "button");
-                b.AddAttribute(31, "class", "icon-btn icon-btn-ghost");
-                b.AddAttribute(32, "title", "Delete");
-                b.AddAttribute(33, "onclick", Microsoft.AspNetCore.Components.EventCallback.Factory.Create(this, () => HandleOderSoEntryDelete(state)));
-                b.OpenElement(34, "i");
-                b.AddAttribute(35, "class", "fa-solid fa-trash");
-                b.CloseElement();
-                b.CloseElement();
-                // Launch (sets active + launches)
-                b.OpenElement(40, "button");
-                b.AddAttribute(41, "class", "icon-btn");
-                b.AddAttribute(42, "title", "Set active &amp; Launch");
-                b.AddAttribute(43, "onclick", Microsoft.AspNetCore.Components.EventCallback.Factory.Create(this, async () => await HandleOderSoEntryLaunch(state)));
-                b.OpenElement(44, "i");
-                b.AddAttribute(45, "class", "fa-solid fa-play");
-                b.CloseElement();
-                b.CloseElement();
-            }
-            else
-            {
-                // Download
-                b.OpenElement(50, "button");
-                b.AddAttribute(51, "class", "icon-btn");
-                b.AddAttribute(52, "title", "Download");
-                b.AddAttribute(53, "onclick", Microsoft.AspNetCore.Components.EventCallback.Factory.Create(this, async () => await HandleOderSoEntryDownload(state)));
-                b.OpenElement(54, "i");
-                b.AddAttribute(55, "class", "fa-solid fa-download");
-                b.CloseElement();
-                b.CloseElement();
-            }
-
-            b.CloseElement(); // version-actions
-        }
-    };
-
-    private string? latiteFetchError = null;
-
-    private async Task LoadVersionsAsync()
-    {
-        isLoadingVersions = true; latiteFetchError = null; StateHasChanged();
-        versions = await Launcher.GetVersionsAsync();
-        latiteFetchError = Launcher.LastVersionsError;
-        isLoadingVersions = false; StateHasChanged();
-    }
-
-    private bool IsPinned(string tag) => SettingsService.Settings.PinnedVersions.Contains(tag);
-
-    private void TogglePin(MinecraftVersion v)
-    {
-        var pins = SettingsService.Settings.PinnedVersions;
-        if (pins.Contains(v.Tag)) pins.Remove(v.Tag);
-        else pins.Insert(0, v.Tag);
-        SettingsService.Save();
-        StateHasChanged();
-    }
-
-    private async Task CopyVersionTag(MinecraftVersion v)
-    {
-        await JS.InvokeVoidAsync("copyToClipboard", v.Tag);
-        _ = ShowToast("Copied \"" + v.Tag + "\"", "info");
-    }
-
-    // ── Inline version action buttons ─────────────────────────
-    // Using a Razor helper method returning RenderFragment avoids __builder
-    // lambda ambiguity that crashes Blazor WebView at runtime.
-    private RenderFragment VersionActions(MinecraftVersion v) => b =>
-    {
-        if (v.IsDownloading)
-        {
-            b.OpenElement(0, "div");
-            b.AddAttribute(1, "class", "dl-progress-row");
-            if (downloadProgress > 0)
-            {
-                b.OpenElement(2, "div");
-                b.AddAttribute(3, "class", "progress-bar-wrap");
-                b.OpenElement(4, "div");
-                b.AddAttribute(5, "class", "progress-bar-fill");
-                b.AddAttribute(6, "style", $"width:{downloadProgress:F0}%");
-                b.CloseElement();
-                b.CloseElement();
-                b.OpenElement(7, "span");
-                b.AddAttribute(8, "class", "dl-pct");
-                b.AddContent(9, $"{(int)downloadProgress}%");
-                b.CloseElement();
-            }
-            b.OpenElement(10, "button");
-            b.AddAttribute(11, "class", "icon-btn");
-            b.AddAttribute(12, "disabled", true);
-            b.OpenElement(13, "span");
-            b.AddAttribute(14, "class", "spinner");
-            b.CloseElement();
-            b.CloseElement();
-            b.CloseElement();
-        }
-        else
-        {
-            b.OpenElement(20, "div");
-            b.AddAttribute(21, "class", "version-actions");
-
-            // Pin button
-            b.OpenElement(22, "button");
-            b.AddAttribute(23, "class", IsPinned(v.Tag) ? "pin-btn pinned" : "pin-btn");
-            b.AddAttribute(24, "title", IsPinned(v.Tag) ? "Unpin" : "Pin");
-            b.AddAttribute(25, "onclick", Microsoft.AspNetCore.Components.EventCallback.Factory.Create(this, () => TogglePin(v)));
-            b.OpenElement(26, "i");
-            b.AddAttribute(27, "class", "fa-solid fa-thumbtack");
-            b.AddAttribute(28, "style", IsPinned(v.Tag) ? "" : "opacity:0.4;");
-            b.CloseElement();
-            b.CloseElement();
-
-            // Copy button
-            b.OpenElement(30, "button");
-            b.AddAttribute(31, "class", "copy-btn");
-            b.AddAttribute(32, "title", "Copy tag");
-            b.AddAttribute(33, "onclick", Microsoft.AspNetCore.Components.EventCallback.Factory.Create(this, async () => await CopyVersionTag(v)));
-            b.OpenElement(34, "i");
-            b.AddAttribute(35, "class", "fa-solid fa-copy");
-            b.CloseElement();
-            b.CloseElement();
-
-            if (v.IsDownloaded)
-            {
-                // Delete
-                b.OpenElement(40, "button");
-                b.AddAttribute(41, "class", "icon-btn icon-btn-ghost");
-                b.AddAttribute(42, "title", "Delete");
-                b.AddAttribute(43, "onclick", Microsoft.AspNetCore.Components.EventCallback.Factory.Create(this, () => HandleVersionDelete(v)));
-                b.OpenElement(44, "i");
-                b.AddAttribute(45, "class", "fa-solid fa-trash");
-                b.CloseElement();
-                b.CloseElement();
-                // Launch
-                b.OpenElement(50, "button");
-                b.AddAttribute(51, "class", "icon-btn");
-                b.AddAttribute(52, "title", "Launch");
-                b.AddAttribute(53, "onclick", Microsoft.AspNetCore.Components.EventCallback.Factory.Create(this, async () => await HandleVersionLaunch(v)));
-                b.OpenElement(54, "i");
-                b.AddAttribute(55, "class", "fa-solid fa-play");
-                b.CloseElement();
-                b.CloseElement();
-            }
-            else
-            {
-                // Download
-                b.OpenElement(60, "button");
-                b.AddAttribute(61, "class", "icon-btn");
-                b.AddAttribute(62, "title", "Download");
-                b.AddAttribute(63, "onclick", Microsoft.AspNetCore.Components.EventCallback.Factory.Create(this, async () => await HandleVersionDownload(v)));
-                b.OpenElement(64, "i");
-                b.AddAttribute(65, "class", "fa-solid fa-download");
-                b.CloseElement();
-                b.CloseElement();
-            }
-
-            b.CloseElement(); // version-actions
-        }
-    };
-
-    private async Task HandleVersionDownload(MinecraftVersion v)
-    {
-        v.IsDownloading = true; v.ErrorMessage = null; downloadProgress = 0; StateHasChanged();
-        try
-        {
-            var prog = new ThrottledProgress(new Progress<double>(pct =>
-            { downloadProgress = pct; InvokeAsync(StateHasChanged); }));
-            await Launcher.DownloadVersionAsync(v, prog);
-            _ = ShowToast(v.DisplayName + " downloaded!", "success");
-        }
-        catch (Exception ex) { v.ErrorMessage = ex.Message; }
-        finally { v.IsDownloading = false; downloadProgress = 0; }
-        StateHasChanged();
-    }
-
-    private void HandleVersionDelete(MinecraftVersion v) { Launcher.DeleteVersion(v); StateHasChanged(); }
-
-    private async Task HandleVersionLaunch(MinecraftVersion v)
-    {
-        GoHome(); isLaunching = true;
-        await ShowStatus($"Launching {v.DisplayName}…", clearAfterMs: 30_000);
-        try
-        {
-            var dllPath = GameLauncher.GetDllPath(v.Tag);
-            await Launcher.LaunchWithDllAsync(dllPath);
-            isLaunching = false;
-            SettingsService.Settings.LastUsedVersion = v.Tag;
-            SettingsService.Save();
-            Discord.SetInGamePresence(v.Tag, SettingsService.Settings.SelectedClient);
-            AddToRecentlyLaunched(v.DisplayName);
-
-            if (SettingsService.Settings.CloseAfterLaunch) { await CloseWindow(); return; }
-
-            await ShowStatus("Injected! Have fun.", clearAfterMs: 3000);
-            _ = ShowToast("Injection successful!", "success");
-        }
-        catch (Exception ex)
-        {
-            isLaunching = false;
-            await ShowStatus(ex.Message, error: true, clearAfterMs: 8000);
-            _ = ShowToast(ex.Message, "error");
-        }
-    }
-
-    // ── CurseForge Addons ─────────────────────────────────────
-    private void OpenAddons()
-    {
-        currentView = "addons";
-        if (!cfHasSearched && CurseForge.IsAvailable)
-            _ = CfSearchAsync();
-    }
-    private void OpenSettingsCurseForge() { OpenSettings(); settingsFilter = "curseforge"; StateHasChanged(); }
-
-    private async Task OnCfSearchKeyDown(KeyboardEventArgs e)
-    {
-        if (e.Key == "Enter")
-        {
-            _cfDebounceCts?.Cancel();
-            await CfSearchAsync();
-        }
-    }
-
-    private void OnCfSearchInput(ChangeEventArgs e)
-    {
-        cfSearchQuery = e.Value?.ToString() ?? "";
-        _ = DebouncedCfSearch();
-    }
-
-    private async Task SetCfCategory(string cat)
-    {
-        cfCategory = cat;
-        StateHasChanged();
-        if (cfHasSearched) await CfSearchAsync();
-    }
-
-    private async Task CfSearchAsync()
-    {
-        cfSearching = true; cfError = ""; cfPage = 0; cfResults.Clear();
-        StateHasChanged();
-        try
-        {
-            var result = await CurseForge.SearchAsync(cfSearchQuery, cfCategory, 20, 0);
-            cfResults    = result.Addons;
-            cfTotalCount = result.TotalCount;
-            cfHasSearched = true;
-        }
-        catch (Exception ex) { cfError = ex.Message; }
-        finally { cfSearching = false; }
-        StateHasChanged();
-    }
-
-    private async Task CfLoadMore()
-    {
-        cfPage++; cfSearching = true;
-        StateHasChanged();
-        try
-        {
-            var result = await CurseForge.SearchAsync(cfSearchQuery, cfCategory, 20, cfPage);
-            cfResults.AddRange(result.Addons);
-            cfTotalCount = result.TotalCount;
-        }
-        catch (Exception ex) { cfError = ex.Message; }
-        finally { cfSearching = false; }
-        StateHasChanged();
-    }
-
-    private async Task HandleCfDownload(CurseForgeService.CfAddon addon)
-    {
-        cfDownloadingId = addon.Id; cfDownloadProgress = 0;
-        StateHasChanged();
-        try
-        {
-            var files = await CurseForge.GetFilesAsync(addon.Id);
-            var file = files.FirstOrDefault();
-            if (file == null) { _ = ShowToast("No downloadable file found.", "error"); return; }
-
-            var prog = new ThrottledProgress(new Progress<double>(pct =>
-            { cfDownloadProgress = pct; InvokeAsync(StateHasChanged); }));
-            await CurseForge.DownloadAndInstallAsync(file, addon.ClassId, prog);
-            _ = ShowToast(addon.Name + " installed!", "success");
-        }
-        catch (Exception ex) { _ = ShowToast("Download failed: " + ex.Message, "error"); }
-        finally { cfDownloadingId = 0; cfDownloadProgress = 0; }
-        StateHasChanged();
-    }
-
-    private static string FormatDownloads(long count) => count switch
-    {
-        >= 1_000_000 => $"{count / 1_000_000.0:F1}M downloads",
-        >= 1_000     => $"{count / 1_000.0:F1}K downloads",
-        _            => $"{count} downloads"
-    };
-
-    // ── Update checks ─────────────────────────────────────────
-    private async Task RunStartupChecksAsync()
-    {
-        try
-        {
-            var skipped = SettingsService.Settings.SkippedLauncherVersion;
-
-            var launcherTask = AutoUpdate.CheckLauncherUpdateAsync();
-            var flarialTask  = AutoUpdate.IsFlarialUpdateAvailableAsync();
-            var odersoTask   = AutoUpdate.IsOderSoUpdateAvailableAsync();
-
-            await Task.WhenAll(launcherTask, flarialTask, odersoTask);
-
-            var info          = launcherTask.Result;
-            var flarialUpdate = flarialTask.Result;
-            var odersoUpdate  = odersoTask.Result;
-
-            SettingsService.Settings.LastUpdateCheck = DateTime.UtcNow.ToString("o");
-            SettingsService.Save();
-
-            await InvokeAsync(() =>
-            {
-                lastUpdateCheckLabel = "Just now";
-
-                if (info != null && info.Tag != skipped)
-                {
-                    launcherUpdateInfo      = info;
-                    launcherUpdateAvailable = true;
-                }
-
-                if (flarialUpdate || odersoUpdate)
-                    clientsHasBadge = true;
-
-                StateHasChanged();
-            });
-        }
-        catch { }
-    }
-
-    private async Task ManualUpdateCheck()
-    {
-        checkingUpdatesManual = true;
-        StateHasChanged();
-
-        var skipped      = SettingsService.Settings.SkippedLauncherVersion;
-        var launcherTask = AutoUpdate.CheckLauncherUpdateAsync();
-        var flarialTask  = AutoUpdate.IsFlarialUpdateAvailableAsync();
-        var odersoTask   = AutoUpdate.IsOderSoUpdateAvailableAsync();
-        await Task.WhenAll(launcherTask, flarialTask, odersoTask);
-
-        var info          = launcherTask.Result;
-        var flarialUpdate = flarialTask.Result;
-        var odersoUpdate  = odersoTask.Result;
-
-        SettingsService.Settings.LastUpdateCheck = DateTime.UtcNow.ToString("o");
-        SettingsService.Save();
-
-        checkingUpdatesManual = false;
-        lastUpdateCheckLabel  = "Just now";
-
-        if (info != null && info.Tag != skipped)
-        {
-            launcherUpdateInfo      = info;
-            launcherUpdateAvailable = true;
-            OpenUpdateModal();
-        }
-
-        if (flarialUpdate || odersoUpdate)
-            clientsHasBadge = true;
-
-        var checkStatus = AutoUpdate.LastCheckStatus;
-        if (!string.IsNullOrEmpty(checkStatus))
-            _ = ShowToast(checkStatus, "info");
-        else if (info == null && !flarialUpdate && !odersoUpdate)
-            _ = ShowToast("Everything is up to date!", "success");
-        else if (info == null && (flarialUpdate || odersoUpdate))
-            _ = ShowToast("Client update available in Clients panel.", "info");
-
-        StateHasChanged();
-    }
-
-    private void OpenUpdateModal()  { launcherUpdateModalOpen = true;  StateHasChanged(); }
-    private void CloseUpdateModal() { launcherUpdateModalOpen = false; StateHasChanged(); }
-
-    private void SkipLauncherUpdate()
-    {
-        if (launcherUpdateInfo == null) return;
-        SettingsService.Settings.SkippedLauncherVersion = launcherUpdateInfo.Tag;
-        SettingsService.Save();
-        launcherUpdateAvailable = false;
-        launcherUpdateModalOpen = false;
-        _ = ShowToast("This version will be skipped.", "info");
-        StateHasChanged();
-    }
-
-    private async Task ApplyLauncherUpdate()
-    {
-        if (launcherUpdateInfo == null) return;
-        launcherUpdating       = true;
-        launcherUpdateProgress = 0;
-        StateHasChanged();
-        try
-        {
-            var prog = new ThrottledProgress(new Progress<double>(pct =>
-            { launcherUpdateProgress = pct; InvokeAsync(StateHasChanged); }));
-            await AutoUpdate.ApplyUpdateAsync(launcherUpdateInfo, prog);
-        }
-        catch (Exception ex)
-        {
-            launcherUpdating = false;
-            _ = ShowToast("Update failed: " + ex.Message, "error");
-            StateHasChanged();
-        }
-    }
-
-    private static string FormatRelativeTime(string isoTimestamp)
-    {
-        try
-        {
-            var dt   = DateTime.Parse(isoTimestamp, null, System.Globalization.DateTimeStyles.RoundtripKind);
-            var diff = DateTime.UtcNow - dt;
-            if (diff.TotalMinutes < 2)  return "just now";
-            if (diff.TotalHours   < 1)  return $"{(int)diff.TotalMinutes}m ago";
-            if (diff.TotalDays    < 1)  return $"{(int)diff.TotalHours}h ago";
-            if (diff.TotalDays    < 7)  return $"{(int)diff.TotalDays}d ago";
-            return dt.ToString("MMM d");
-        }
-        catch { return ""; }
-    }
-
-    // ── Discord ───────────────────────────────────────────────
-    private void OpenDiscordModal()
-    {
-        discordUsernameInput = SettingsService.Settings.DiscordUsername;
-        discordModalOpen = true;
-        StateHasChanged();
-    }
-
-    private void CloseDiscordModal() { discordModalOpen = false; StateHasChanged(); }
-
-private async Task OpenDiscordOAuth()
-{
-    try
-    {
-        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
-        {
-            FileName = "https://discord.com/oauth2/authorize?client_id=1482726422094024779&response_type=code&redirect_uri=http%3A%2F%2Flocalhost%3A5000%2Fcallback&scope=identify",
-            UseShellExecute = true
-        });
-
-        using var listener = new System.Net.HttpListener();
-        listener.Prefixes.Add("http://localhost:5000/callback/");
-        listener.Start();
-
-        var context = await listener.GetContextAsync();
-        var code = context.Request.QueryString["code"];
-
-        var responseBytes = System.Text.Encoding.UTF8.GetBytes("Success");
-        context.Response.OutputStream.Write(responseBytes, 0, responseBytes.Length);
-        context.Response.Close();
-        listener.Stop();
-
-        if (!string.IsNullOrEmpty(code))
-        {
-            using var http = new System.Net.Http.HttpClient();
-            var tokenContent = new System.Net.Http.FormUrlEncodedContent(new[]
-            {
-                new System.Collections.Generic.KeyValuePair<string, string>("client_id", "1482726422094024779"),
-                new System.Collections.Generic.KeyValuePair<string, string>("client_secret", "zwvBIpvo18qHSLUzlvG1AKfJKAkMLujc"),
-                new System.Collections.Generic.KeyValuePair<string, string>("grant_type", "authorization_code"),
-                new System.Collections.Generic.KeyValuePair<string, string>("code", code),
-                new System.Collections.Generic.KeyValuePair<string, string>("redirect_uri", "http://localhost:5000/callback")
-            });
-
-            var tokenResponse = await http.PostAsync("https://discord.com/api/oauth2/token", tokenContent);
-            var tokenJson = await tokenResponse.Content.ReadAsStringAsync();
-            var tokenDoc = System.Text.Json.JsonDocument.Parse(tokenJson);
-            var accessToken = tokenDoc.RootElement.GetProperty("access_token").GetString() ?? "";
-
-            http.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", accessToken);
-            var userResponse = await http.GetAsync("https://discord.com/api/users/@me");
-            var userJson = await userResponse.Content.ReadAsStringAsync();
-            var userDoc = System.Text.Json.JsonDocument.Parse(userJson);
-
-            var userId     = userDoc.RootElement.GetProperty("id").GetString()       ?? "";
-            var username   = userDoc.RootElement.GetProperty("username").GetString() ?? "";
-            var avatarHash = userDoc.RootElement.GetProperty("avatar").GetString()   ?? "";
-
-            var avatarUrl = !string.IsNullOrEmpty(avatarHash)
-                ? $"https://cdn.discordapp.com/avatars/{userId}/{avatarHash}.png"
-                : "";
-
-            SettingsService.Settings.DiscordLoggedIn = true;
-            SettingsService.Settings.DiscordUsername = username;
-            SettingsService.Settings.DiscordAvatar   = avatarUrl;
-            SettingsService.Settings.DiscordToken    = accessToken;
-            displayName   = username;
-            displayHandle = "@" + username.ToLower().Replace(" ", "");
-            SettingsService.Settings.Username   = displayName;
-            SettingsService.Settings.UserHandle = displayHandle;
-            SettingsService.Save();
-            BuildDefaultSearchResults();
-            discordModalOpen = false;
-            _ = ShowToast("Signed in as " + displayName, "success");
-            StateHasChanged();
-        }
-    }
-    catch
-    {
-    }
-}
-
-    private void SaveDiscordManual()
-    {
-        if (string.IsNullOrWhiteSpace(discordUsernameInput)) return;
-        var name = discordUsernameInput.Trim();
-        SettingsService.Settings.DiscordLoggedIn = true;
-        SettingsService.Settings.DiscordUsername = name;
-        displayName   = name;
-        displayHandle = "@" + name.ToLower().Replace(" ", "");
-        SettingsService.Settings.Username   = displayName;
-        SettingsService.Settings.UserHandle = displayHandle;
-        SettingsService.Save();
-        BuildDefaultSearchResults();
-        discordModalOpen = false;
-        _ = ShowToast("Signed in as " + displayName, "success");
-        StateHasChanged();
-    }
-
-    private void DisconnectDiscord()
-    {
-        SettingsService.Settings.DiscordLoggedIn = false;
-        SettingsService.Settings.DiscordUsername = "";
-        SettingsService.Settings.DiscordAvatar   = "";
-        SettingsService.Settings.DiscordToken    = "";
-        SettingsService.Save();
-        discordModalOpen = false;
-        _ = ShowToast("Discord disconnected", "info");
-        StateHasChanged();
-    }
-
-    // ── Helpers ───────────────────────────────────────────────
-    private static string GetClientIcon(string client) => client switch
-    {
-        "Custom DLL"     => "fa-solid fa-file-code",
-        "Vanilla"        => "fa-solid fa-cube",
-        _                => "",
-    };
-
-    private static string GetClientImagePath(string client) => client switch
-    {
-        "Flarial Client" => "images/clients/flarial.svg",
-        "OderSo Client"  => "images/clients/oderso.png",
-        _                => "images/clients/latite.png",
-    };
-
-    private static bool IsImageClient(string client) =>
-        client is "Latite Client" or "Flarial Client" or "OderSo Client";
-
-    private static string FormatChangelog(string md)
-    {
-        var html = System.Net.WebUtility.HtmlEncode(md);
-        // bold: **text**
-        html = System.Text.RegularExpressions.Regex.Replace(html, @"\*\*(.+?)\*\*", "<strong>$1</strong>");
-        // links: [text](url)
-        html = System.Text.RegularExpressions.Regex.Replace(html, @"\[([^\]]+)\]\((https?://[^\)]+)\)", "<a href=\"$2\" target=\"_blank\" rel=\"noopener\" style=\"color:var(--accent);text-decoration:underline;cursor:pointer;\">$1</a>");
-        // newlines
-        html = html.Replace("\r\n", "<br/>").Replace("\n", "<br/>");
-        return html;
-    }
-
-    private string GetFooterVersionLabel()
-    {
-        var client = SettingsService.Settings.SelectedClient;
-        return client switch
-        {
-            "Flarial Client" => "Flarial Client",
-            "OderSo Client"  => "OderSo Client",
-            "Vanilla"        => "Vanilla",
-            "Custom DLL"     => !string.IsNullOrEmpty(customDllPath)
-                                ? System.IO.Path.GetFileNameWithoutExtension(customDllPath)
-                                : "Custom DLL",
-            _ => !string.IsNullOrEmpty(SettingsService.Settings.LastUsedVersion)
-                 ? SettingsService.Settings.LastUsedVersion
-                 : "Latite Client",
-        };
-    }
-
-    private string GetAvatarSrc()
-    {
-        var which = EffectiveProfile();
-        if (which == "xbox" && !string.IsNullOrEmpty(Xbox.CurrentProfile?.GamerPictureUrl))
-            return Xbox.CurrentProfile.GamerPictureUrl;
-        if (which == "discord" && !string.IsNullOrEmpty(SettingsService.Settings.DiscordAvatar))
-            return SettingsService.Settings.DiscordAvatar;
-        return "images/icon.png";
-    }
-
-    // Which profile owns the footer avatar/name right now. "auto" prefers Xbox,
-    // then Discord, then falls back to the local username. Explicit modes return
-    // "none" when their underlying account isn't connected — UI then shows the
-    // local user as a graceful fallback.
-    private string EffectiveProfile()
-    {
-        var mode = SettingsService.Settings.ProfileDisplayMode;
-        switch (mode)
-        {
-            case "xbox":    return Xbox.IsSignedIn ? "xbox" : "none";
-            case "discord": return SettingsService.Settings.DiscordLoggedIn ? "discord" : "none";
-            default:
-                if (Xbox.IsSignedIn) return "xbox";
-                if (SettingsService.Settings.DiscordLoggedIn) return "discord";
-                return "none";
-        }
-    }
-
-    private void CycleProfileDisplay()
-    {
-        var next = SettingsService.Settings.ProfileDisplayMode switch
-        {
-            "auto"    => "xbox",
-            "xbox"    => "discord",
-            "discord" => "auto",
-            _          => "auto"
-        };
-        SettingsService.Settings.ProfileDisplayMode = next;
-        SettingsService.Save();
-        _ = ShowToast(next switch
-        {
-            "xbox"    => "Footer profile: Xbox",
-            "discord" => "Footer profile: Discord",
-            _          => "Footer profile: Auto"
-        }, "info");
-        StateHasChanged();
-    }
-
-    private string ProfileSwitchTooltip() => SettingsService.Settings.ProfileDisplayMode switch
-    {
-        "xbox"    => "Showing Xbox — click to switch to Discord",
-        "discord" => "Showing Discord — click to switch to Auto",
-        _          => "Auto (prefers Xbox) — click to switch to Xbox"
-    };
-
-    private void OpenActiveProfileModal()
-    {
-        // Click the avatar → manage whichever account is currently shown. Falls
-        // back to opening the Xbox modal so the user has a way to sign in even
-        // when nothing is connected yet.
-        switch (EffectiveProfile())
-        {
-            case "discord": OpenDiscordModal(); break;
-            case "xbox":
-            default:        OpenXboxModal();    break;
-        }
-    }
-
-    // ── Xbox Profile ─────────────────────────────────────────
-    private void OpenXboxModal() { xboxModalOpen = true; StateHasChanged(); }
-    private void CloseXboxModal() { xboxModalOpen = false; StateHasChanged(); }
-
-    private async Task XboxSignIn()
-    {
-        xboxSigningIn = true; StateHasChanged();
-        try
-        {
-            var success = await Xbox.SignInAsync();
-            if (success)
-            {
-                _ = ShowToast($"Signed in as {Xbox.CurrentProfile?.Gamertag}", "success");
-                xboxModalOpen = false;
-            }
-            else
-            {
-                _ = ShowToast(Xbox.LastError ?? "Sign-in failed.", "error");
-            }
-        }
-        catch (Exception ex)
-        {
-            _ = ShowToast(ex.Message, "error");
-        }
-        finally
-        {
-            xboxSigningIn = false;
-            StateHasChanged();
-        }
-    }
-
-    private void XboxSignOut()
-    {
-        Xbox.SignOut();
-        xboxModalOpen = false;
-        _ = ShowToast("Xbox account disconnected.", "info");
-        StateHasChanged();
-    }
-
-    // ── Folder shortcuts ─────────────────────────────────────
-    private void OpenLauncherFolder()
-    {
-        try
-        {
-            var dir = System.IO.Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-                "Glacier Launcher");
-            System.IO.Directory.CreateDirectory(dir);
-            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
-            { FileName = dir, UseShellExecute = true });
-        }
-        catch (Exception ex) { _ = ShowToast("Couldn't open folder: " + ex.Message, "error"); }
-    }
-
-    private void OpenMinecraftFolder()
-    {
-        try
-        {
-            var dir = System.IO.Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "Packages", "Microsoft.MinecraftUWP_8wekyb3d8bbwe", "LocalState",
-                "games", "com.mojang");
-
-            if (!System.IO.Directory.Exists(dir))
-            {
-                _ = ShowToast("Minecraft data folder not found. Is Minecraft installed?", "error");
-                return;
-            }
-
-            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
-            { FileName = dir, UseShellExecute = true });
-        }
-        catch (Exception ex) { _ = ShowToast("Couldn't open folder: " + ex.Message, "error"); }
-    }
-
-    // ── Settings export/import/reset ─────────────────────────
-    private async Task ExportSettings()
-    {
-        try
-        {
-            var path = await Task.Run(() =>
-            {
-                string? result = null;
-                var thread = new System.Threading.Thread(() =>
-                {
-                    var dlg = new Microsoft.Win32.SaveFileDialog
-                    {
-                        Title    = "Export Glacier Launcher settings",
-                        Filter   = "JSON|*.json",
-                        FileName = $"glacier-settings-{DateTime.Now:yyyyMMdd-HHmm}.json"
-                    };
-                    if (dlg.ShowDialog() == true) result = dlg.FileName;
-                });
-                thread.SetApartmentState(System.Threading.ApartmentState.STA);
-                thread.Start();
-                thread.Join();
-                return result;
-            });
-            if (string.IsNullOrEmpty(path)) return;
-
-            var json = System.Text.Json.JsonSerializer.Serialize(SettingsService.Settings,
-                new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
-            await System.IO.File.WriteAllTextAsync(path, json);
-            _ = ShowToast("Settings exported.", "success");
-        }
-        catch (Exception ex) { _ = ShowToast("Export failed: " + ex.Message, "error"); }
-    }
-
-    private async Task ImportSettings()
-    {
-        try
-        {
-            var path = await Task.Run(() =>
-            {
-                string? result = null;
-                var thread = new System.Threading.Thread(() =>
-                {
-                    var dlg = new Microsoft.Win32.OpenFileDialog
-                    {
-                        Title  = "Import Glacier Launcher settings",
-                        Filter = "JSON|*.json"
-                    };
-                    if (dlg.ShowDialog() == true) result = dlg.FileName;
-                });
-                thread.SetApartmentState(System.Threading.ApartmentState.STA);
-                thread.Start();
-                thread.Join();
-                return result;
-            });
-            if (string.IsNullOrEmpty(path)) return;
-
-            var json = await System.IO.File.ReadAllTextAsync(path);
-            var imported = System.Text.Json.JsonSerializer.Deserialize<LauncherSettings>(json);
-            if (imported == null) { _ = ShowToast("Invalid settings file.", "error"); return; }
-
-            // Replace and persist
-            SettingsService.Settings.SelectedClient        = imported.SelectedClient;
-            SettingsService.Settings.DiscordRichPresence   = imported.DiscordRichPresence;
-            SettingsService.Settings.LastUsedVersion       = imported.LastUsedVersion;
-            SettingsService.Settings.Username              = imported.Username;
-            SettingsService.Settings.UserHandle            = imported.UserHandle;
-            SettingsService.Settings.CloseAfterLaunch      = imported.CloseAfterLaunch;
-            SettingsService.Settings.AutoInject            = imported.AutoInject;
-            SettingsService.Settings.InjectionDelayMs      = imported.InjectionDelayMs;
-            SettingsService.Settings.AccentColor           = imported.AccentColor;
-            SettingsService.Settings.ThemePreset           = imported.ThemePreset;
-            SettingsService.Settings.BlurIntensity         = imported.BlurIntensity;
-            SettingsService.Settings.BackgroundOpacity     = imported.BackgroundOpacity;
-            SettingsService.Settings.CustomBackgroundPath  = imported.CustomBackgroundPath;
-            SettingsService.Settings.CompactMode           = imported.CompactMode;
-            SettingsService.Settings.AnimationsEnabled     = imported.AnimationsEnabled;
-            SettingsService.Settings.RememberWindowSize    = imported.RememberWindowSize;
-            SettingsService.Settings.MinimizeToTray        = imported.MinimizeToTray;
-            SettingsService.Settings.ShowRecentlyLaunched  = imported.ShowRecentlyLaunched;
-            SettingsService.Settings.RecentlyLaunched      = imported.RecentlyLaunched ?? new();
-            SettingsService.Settings.PinnedVersions        = imported.PinnedVersions   ?? new();
-            SettingsService.Settings.SavedServers          = imported.SavedServers     ?? new();
-            SettingsService.Settings.VersionSortMode       = imported.VersionSortMode;
-            SettingsService.Settings.ShowOnlyDownloaded    = imported.ShowOnlyDownloaded;
-            SettingsService.Settings.ActiveVanillaVersion  = imported.ActiveVanillaVersion;
-            SettingsService.Settings.CheckUpdatesOnStartup = imported.CheckUpdatesOnStartup;
-            SettingsService.Save();
-
-            await JS.InvokeVoidAsync("applyStoredSettings",
-                SettingsService.Settings.AccentColor,
-                SettingsService.Settings.ThemePreset,
-                SettingsService.Settings.BlurIntensity,
-                SettingsService.Settings.CustomBackgroundPath);
-            await JS.InvokeVoidAsync("setCompactMode", SettingsService.Settings.CompactMode);
-            await JS.InvokeVoidAsync("setAnimationsEnabled", SettingsService.Settings.AnimationsEnabled);
-
-            _ = ShowToast("Settings imported.", "success");
-            StateHasChanged();
-        }
-        catch (Exception ex) { _ = ShowToast("Import failed: " + ex.Message, "error"); }
-    }
-
-    private bool resetConfirmOpen = false;
-    private void ConfirmResetSettings() { resetConfirmOpen = true; StateHasChanged(); }
-    private void CancelResetSettings()  { resetConfirmOpen = false; StateHasChanged(); }
-    private async Task DoResetSettings()
-    {
-        var fresh = new LauncherSettings();
-        // Preserve Discord login & username so users don't have to re-link
-        fresh.DiscordLoggedIn = SettingsService.Settings.DiscordLoggedIn;
-        fresh.DiscordUsername = SettingsService.Settings.DiscordUsername;
-        fresh.DiscordAvatar   = SettingsService.Settings.DiscordAvatar;
-        fresh.DiscordToken    = SettingsService.Settings.DiscordToken;
-        fresh.DiscordUserId   = SettingsService.Settings.DiscordUserId;
-        fresh.XboxGamertag        = SettingsService.Settings.XboxGamertag;
-        fresh.XboxXuid            = SettingsService.Settings.XboxXuid;
-        fresh.XboxGamerPictureUrl = SettingsService.Settings.XboxGamerPictureUrl;
-        fresh.XboxGamerscore      = SettingsService.Settings.XboxGamerscore;
-        fresh.XboxAccountTier     = SettingsService.Settings.XboxAccountTier;
-        fresh.XboxBio             = SettingsService.Settings.XboxBio;
-
-        // Replace everything via the same path as Import
-        var json = System.Text.Json.JsonSerializer.Serialize(fresh);
-        var copy = System.Text.Json.JsonSerializer.Deserialize<LauncherSettings>(json)!;
-        var dst  = SettingsService.Settings;
-
-        // Apply field-by-field via reflection: simple but effective
-        foreach (var p in typeof(LauncherSettings).GetProperties())
-            if (p.CanWrite) p.SetValue(dst, p.GetValue(copy));
-
-        SettingsService.Save();
-        await JS.InvokeVoidAsync("applyStoredSettings",
-            dst.AccentColor, dst.ThemePreset, dst.BlurIntensity, dst.CustomBackgroundPath);
-        await JS.InvokeVoidAsync("setCompactMode", dst.CompactMode);
-        await JS.InvokeVoidAsync("setAnimationsEnabled", dst.AnimationsEnabled);
-
-        resetConfirmOpen = false;
-        _ = ShowToast("Settings reset.", "success");
-        StateHasChanged();
-    }
-
-    // ── CurseForge search debouncing ─────────────────────────
-    private System.Threading.CancellationTokenSource? _cfDebounceCts;
-
-    private async Task DebouncedCfSearch()
-    {
-        _cfDebounceCts?.Cancel();
-        _cfDebounceCts = new System.Threading.CancellationTokenSource();
-        var token = _cfDebounceCts.Token;
-        try
-        {
-            await Task.Delay(350, token);
-            if (!token.IsCancellationRequested) await CfSearchAsync();
-        }
-        catch (TaskCanceledException) { }
-    }
-
-    // ── Versions sort ──────────────────────────────────────────
-    private record SortOption(string Key, string Label, string Icon);
-    private static readonly SortOption[] _sortOptions =
-    {
-        new("newest",     "Newest first",     "fa-arrow-down-9-1"),
-        new("oldest",     "Oldest first",     "fa-arrow-up-9-1"),
-        new("name",       "Name A–Z",         "fa-arrow-down-a-z"),
-        new("downloaded", "Downloaded first", "fa-circle-down"),
-    };
-
-    private string CurrentSortLabel =>
-        _sortOptions.FirstOrDefault(o => o.Key == SettingsService.Settings.VersionSortMode)?.Label
-            ?? "Newest first";
-
-    private string CurrentSortIcon =>
-        _sortOptions.FirstOrDefault(o => o.Key == SettingsService.Settings.VersionSortMode)?.Icon
-            ?? "fa-arrow-down-wide-short";
-
-    private IEnumerable<MinecraftVersion> SortedVersions(IEnumerable<MinecraftVersion> src)
-    {
-        var mode = SettingsService.Settings.VersionSortMode;
-        return mode switch
-        {
-            "oldest"     => src.Reverse(),
-            "name"       => src.OrderBy(v => v.DisplayName, StringComparer.OrdinalIgnoreCase),
-            "downloaded" => src.OrderByDescending(v => v.IsDownloaded).ThenBy(v => 0),
-            _            => src // newest (already sorted by API)
-        };
-    }
-
-    private void SetVersionSort(string mode)
-    {
-        SettingsService.Settings.VersionSortMode = mode;
-        SettingsService.Save();
-        StateHasChanged();
-    }
-
-    private void CycleVersionSort()
-    {
-        var current = SettingsService.Settings.VersionSortMode ?? "newest";
-        var idx = Array.FindIndex(_sortOptions, o => o.Key == current);
-        if (idx < 0) idx = -1;
-        var next = _sortOptions[(idx + 1) % _sortOptions.Length];
-        SetVersionSort(next.Key);
-    }
-
-    private void ToggleShowOnlyDownloaded()
-    {
-        SettingsService.Settings.ShowOnlyDownloaded = !SettingsService.Settings.ShowOnlyDownloaded;
-        SettingsService.Save();
-        StateHasChanged();
-    }
-}

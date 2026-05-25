@@ -326,6 +326,56 @@ public partial class GameConsoleWindow : Window
         }
     }
 
+    private async void ShareBtn_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            ShareBtn.IsEnabled = false;
+            ShareBtn.Content   = "Uploading…";
+
+            var range = new TextRange(_doc.ContentStart, _doc.ContentEnd);
+            var text  = range.Text;
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                FooterLabel.Text = "Nothing to upload — log is empty.";
+                return;
+            }
+
+            using var http    = new System.Net.Http.HttpClient();
+            http.Timeout      = TimeSpan.FromSeconds(15);
+            var content       = new System.Net.Http.FormUrlEncodedContent(new[]
+            {
+                new System.Collections.Generic.KeyValuePair<string, string>("content", text),
+            });
+
+            var resp = await http.PostAsync("https://api.mclo.gs/1/log", content);
+            var body = await resp.Content.ReadAsStringAsync();
+
+            if (resp.IsSuccessStatusCode)
+            {
+                // Response: {"success":true,"id":"abc123","url":"https://mclo.gs/abc123", ...}
+                var doc  = System.Text.Json.JsonDocument.Parse(body);
+                var url  = doc.RootElement.GetProperty("url").GetString() ?? "";
+                Clipboard.SetText(url);
+                AppendLine($"Log uploaded → {url}  (copied to clipboard)", LineKind.Info);
+                FooterLabel.Text = "mclo.gs link copied!";
+            }
+            else
+            {
+                AppendLine($"mclo.gs upload failed (HTTP {(int)resp.StatusCode}): {body}", LineKind.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            AppendLine("mclo.gs upload failed: " + ex.Message, LineKind.Error);
+        }
+        finally
+        {
+            ShareBtn.IsEnabled = true;
+            ShareBtn.Content   = "mclo.gs";
+        }
+    }
+
     private void StopBtn_Click(object sender, RoutedEventArgs e)
     {
         var p = AttachedProcess;

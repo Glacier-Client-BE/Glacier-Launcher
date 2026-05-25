@@ -12,20 +12,13 @@
     <ApplicationIcon>icon.ico</ApplicationIcon>
     <Version Condition="'$(Version)' == ''">0.0.0-dev</Version>
     <CurseForgeApiKey Condition="'$(CurseForgeApiKey)' == ''"></CurseForgeApiKey>
-
-    <!-- ── Publish optimisation ──────────────────────────────── -->
-    <!-- Compress the single-file bundle to shrink the final .exe -->
     <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
-    <!-- Disable ReadyToRun pre-compilation — saves ~30-40% per assembly at the
-         cost of slightly longer cold-start (JIT on first launch). -->
     <PublishReadyToRun>false</PublishReadyToRun>
-    <!-- Strip API XML doc files (Microsoft.Web.WebView2.*.xml etc.) from publish output. -->
     <CopyDocumentationFilesFromPackages>false</CopyDocumentationFilesFromPackages>
-    <!-- Don't emit a separate .pdb next to the exe in Release; embed it instead so the
-         single .exe is the entire deliverable. -->
     <DebugType Condition="'$(Configuration)' == 'Release'">embedded</DebugType>
-    <!-- Drop all non-en localisation satellite assemblies (~50 sub-folders × ~30 KB each). -->
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <IncludeAllContentForSelfExtract>true</IncludeAllContentForSelfExtract>
   </PropertyGroup>
 
   <ItemGroup>
@@ -36,13 +29,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
     <PackageReference Include="DiscordRichPresence" Version="1.2.1.24" />
-    <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
     <PackageReference Include="Microsoft.AspNetCore.Components.WebView.Wpf" Version="10.0.*-*" />
-    <!-- Microsoft.Identity.Client removed: Xbox sign-in now goes through the
-         Live OAuth desktop flow (client 00000000402b5328 / MBI_SSL) handled by
-         LiveAuthService + LiveAuthWindow. -->
   </ItemGroup>
 
   <ItemGroup>
@@ -76,4 +64,3 @@
   </Target>
 
 </Project>
-

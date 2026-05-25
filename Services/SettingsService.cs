@@ -7,19 +7,20 @@ namespace GlacierLauncher.Services;
 
 public class SettingsService
 {
+    private static readonly JsonSerializerOptions SerializerOptions = new() { WriteIndented = true };
+
     private readonly string _settingsPath;
+    private readonly object _sync = new();
+    private string _lastSerialized = "";
 
     public LauncherSettings Settings { get; private set; } = new();
 
     public SettingsService()
     {
-        string userFolder = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-        string appFolder = Path.Combine(userFolder, "Glacier Launcher");
+        var userFolder = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        var appFolder = Path.Combine(userFolder, "Glacier Launcher");
         
-        if (!Directory.Exists(appFolder))
-        {
-            Directory.CreateDirectory(appFolder);
-        }
+        Directory.CreateDirectory(appFolder);
 
         _settingsPath = Path.Combine(appFolder, "glacier-settings.json");
         Load();
@@ -33,11 +34,13 @@ public class SettingsService
             {
                 var json = File.ReadAllText(_settingsPath);
                 Settings = JsonSerializer.Deserialize<LauncherSettings>(json) ?? new();
+                _lastSerialized = JsonSerializer.Serialize(Settings, SerializerOptions);
             }
         }
         catch
         {
             Settings = new();
+            _lastSerialized = "";
         }
     }
 
@@ -45,8 +48,15 @@ public class SettingsService
     {
         try
         {
-            var json = JsonSerializer.Serialize(Settings, new JsonSerializerOptions { WriteIndented = true });
-            File.WriteAllText(_settingsPath, json);
+            var json = JsonSerializer.Serialize(Settings, SerializerOptions);
+            lock (_sync)
+            {
+                if (string.Equals(json, _lastSerialized, StringComparison.Ordinal))
+                    return;
+
+                File.WriteAllText(_settingsPath, json);
+                _lastSerialized = json;
+            }
         }
         catch { }
     }

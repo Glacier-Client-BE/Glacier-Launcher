@@ -12,23 +12,9 @@ using GlacierLauncher.Models;
 
 namespace GlacierLauncher.Services;
 
-/// <summary>
-/// Downloads everything a vanilla Java version needs to launch:
-///   • the version JSON itself
-///   • the client jar
-///   • libraries (per OS rules), including native classifiers
-///   • the asset index + every asset object
-///   • extracted natives in versions/&lt;id&gt;/natives
-///
-/// Output layout matches what the official Minecraft launcher writes, so the
-/// resulting tree is interchangeable: either launcher can use it.
-/// </summary>
 public sealed class JavaInstallService
 {
     private const string AssetsBaseUrl = "https://resources.download.minecraft.net";
-
-    // Six parallel downloads is friendly to home connections, and a meaningful
-    // step up from sequential (a typical install fetches ~3500 small files).
     private const int ParallelDownloads = 6;
 
     private readonly JavaVersionService _versions;
@@ -40,7 +26,6 @@ public sealed class JavaInstallService
         _http     = HttpFactory.Shared;
     }
 
-    /// <summary>Mirrors install progress to the UI. Stage text plus 0-100 percent.</summary>
     public sealed class Progress
     {
         public string Stage { get; internal set; } = "";
@@ -69,16 +54,14 @@ public sealed class JavaInstallService
         var versionDir = Path.Combine(mcDir, "versions", version.Id);
         Directory.CreateDirectory(versionDir);
 
-        // ── 1. Version JSON ─────────────────────────────────────
         Tick("Downloading version metadata…", 1);
         var versionJsonPath = Path.Combine(versionDir, version.Id + ".json");
-        var versionJsonText = await GetStringAsync(version.Url, cancel);
-        await File.WriteAllTextAsync(versionJsonPath, versionJsonText, cancel);
+        var versionJsonText = await GetStringAsync(version.Url, cancel).ConfigureAwait(false);
+        await File.WriteAllTextAsync(versionJsonPath, versionJsonText, cancel).ConfigureAwait(false);
 
         using var versionDoc = JsonDocument.Parse(versionJsonText);
         var root = versionDoc.RootElement;
 
-        // ── 2. Client jar ───────────────────────────────────────
         Tick("Downloading client jar…", 4);
         if (root.TryGetProperty("downloads", out var downloads)
             && downloads.TryGetProperty("client", out var clientDl))
@@ -86,16 +69,14 @@ public sealed class JavaInstallService
             var url    = clientDl.GetProperty("url").GetString()!;
             var sha1   = clientDl.TryGetProperty("sha1", out var s) ? s.GetString() : null;
             var jarPath = Path.Combine(versionDir, version.Id + ".jar");
-            await DownloadFileAsync(url, jarPath, sha1, cancel);
+            await DownloadFileAsync(url, jarPath, sha1, cancel).ConfigureAwait(false);
         }
 
-        // ── 3. Libraries (+ natives) ────────────────────────────
         Tick("Downloading libraries…", 8);
         var (libFiles, nativeJars) = CollectLibraries(root, mcDir);
         await DownloadManyAsync(libFiles, cancel,
-            (done, total) => Tick($"Libraries ({done}/{total})", 8 + done * 22.0 / Math.Max(1, total), done, total));
+            (done, total) => Tick($"Libraries ({done}/{total})", 8 + done * 22.0 / Math.Max(1, total), done, total)).ConfigureAwait(false);
 
-        // Extract natives now so launches don't pay the unzip cost.
         Tick("Extracting natives…", 32);
         var nativesDir = Path.Combine(versionDir, "natives");
         Directory.CreateDirectory(nativesDir);
@@ -107,26 +88,21 @@ public sealed class JavaInstallService
                 using var zip = ZipFile.OpenRead(nj);
                 foreach (var entry in zip.Entries)
                 {
-                    // Skip META-INF and the obvious cruft.
                     if (entry.FullName.StartsWith("META-INF/", StringComparison.OrdinalIgnoreCase)) continue;
                     if (string.IsNullOrEmpty(entry.Name)) continue;
                     var dest = Path.Combine(nativesDir, entry.Name);
                     entry.ExtractToFile(dest, overwrite: true);
                 }
             }
-            catch { /* one bad native shouldn't abort the whole install */ }
+            catch { }
         }
 
-        // ── 4. Asset index + objects ────────────────────────────
         Tick("Downloading asset index…", 34);
-        var (assetFiles, isLegacy, isVirtual, assetIndexName) = await ResolveAssetsAsync(root, mcDir, cancel);
+        var (assetFiles, isLegacy, isVirtual, assetIndexName) = await ResolveAssetsAsync(root, mcDir, cancel).ConfigureAwait(false);
         Tick($"Downloading assets…", 36, 0, assetFiles.Count);
         await DownloadManyAsync(assetFiles, cancel,
-            (done, total) => Tick($"Assets ({done}/{total})", 36 + done * 60.0 / Math.Max(1, total), done, total));
+            (done, total) => Tick($"Assets ({done}/{total})", 36 + done * 60.0 / Math.Max(1, total), done, total)).ConfigureAwait(false);
 
-        // Pre-1.7 versions read assets from a flat folder. The official launcher
-        // mirrors objects/<hash> into resources/<virtual-path>; the simplest
-        // compatibility shim is to also copy each object into the legacy slot.
         if (isLegacy || isVirtual)
         {
             Tick("Linking legacy/virtual assets…", 96);
@@ -150,8 +126,6 @@ public sealed class JavaInstallService
         Tick("Done", 100);
     }
 
-    // ── Library / native collection ─────────────────────────────
-
     private (List<DownloadJob> libs, List<string> natives) CollectLibraries(JsonElement root, string mcDir)
     {
         var jobs    = new List<DownloadJob>();
@@ -165,7 +139,6 @@ public sealed class JavaInstallService
 
             if (lib.TryGetProperty("downloads", out var dl))
             {
-                // Main artifact
                 if (dl.TryGetProperty("artifact", out var art)
                     && art.TryGetProperty("url", out var u)
                     && art.TryGetProperty("path", out var p))
@@ -177,7 +150,6 @@ public sealed class JavaInstallService
                         jobs.Add(new DownloadJob(url, path, sha1));
                 }
 
-                // Windows native classifier
                 if (dl.TryGetProperty("classifiers", out var classifiers)
                     && classifiers.ValueKind == JsonValueKind.Object
                     && lib.TryGetProperty("natives", out var nativesElem)
@@ -230,8 +202,6 @@ public sealed class JavaInstallService
         return true;
     }
 
-    // ── Asset resolution ────────────────────────────────────────
-
     private async Task<(List<AssetJob> jobs, bool isLegacy, bool isVirtual, string indexName)>
         ResolveAssetsAsync(JsonElement versionRoot, string mcDir, CancellationToken cancel)
     {
@@ -243,9 +213,9 @@ public sealed class JavaInstallService
         var sha1      = idx.TryGetProperty("sha1", out var s) ? s.GetString() : null;
         var indexPath = Path.Combine(mcDir, "assets", "indexes", indexId + ".json");
 
-        await DownloadFileAsync(url, indexPath, sha1, cancel);
+        await DownloadFileAsync(url, indexPath, sha1, cancel).ConfigureAwait(false);
 
-        var indexText = await File.ReadAllTextAsync(indexPath, cancel);
+        var indexText = await File.ReadAllTextAsync(indexPath, cancel).ConfigureAwait(false);
         using var indexDoc = JsonDocument.Parse(indexText);
         var indexRoot = indexDoc.RootElement;
 
@@ -270,8 +240,6 @@ public sealed class JavaInstallService
         return (jobs, isLegacy, isVirtual, indexId);
     }
 
-    // ── Parallel download driver ────────────────────────────────
-
     private record DownloadJob(string Url, string Destination, string? Sha1);
 
     private sealed record AssetJob(string Url, string Destination, string? Sha1, string? VirtualPath)
@@ -284,80 +252,97 @@ public sealed class JavaInstallService
         if (jobs.Count == 0) return;
 
         int done = 0;
-        using var gate = new SemaphoreSlim(ParallelDownloads, ParallelDownloads);
-        var tasks = new List<Task>(jobs.Count);
-
-        foreach (var j in jobs)
+        var options = new ParallelOptions
         {
-            await gate.WaitAsync(cancel);
-            cancel.ThrowIfCancellationRequested();
+            MaxDegreeOfParallelism = ParallelDownloads,
+            CancellationToken = cancel
+        };
 
-            tasks.Add(Task.Run(async () =>
+        await Parallel.ForEachAsync(jobs, options, async (j, ct) =>
+        {
+            try
             {
-                try
-                {
-                    await DownloadFileAsync(j.Url, j.Destination, j.Sha1, cancel);
-                }
-                catch
-                {
-                    // Skip the one file — most installs survive a few 404s on
-                    // ancient libraries that were never published.
-                }
-                finally
-                {
-                    var n = Interlocked.Increment(ref done);
-                    report?.Invoke(n, jobs.Count);
-                    gate.Release();
-                }
-            }, cancel));
-        }
-
-        await Task.WhenAll(tasks);
+                await DownloadFileAsync(j.Url, j.Destination, j.Sha1, ct).ConfigureAwait(false);
+            }
+            catch
+            {
+            }
+            finally
+            {
+                var n = Interlocked.Increment(ref done);
+                report?.Invoke(n, jobs.Count);
+            }
+        }).ConfigureAwait(false);
     }
 
     private async Task DownloadFileAsync(string url, string dest, string? sha1, CancellationToken cancel)
     {
-        // Skip work when the file is already on disk and matches the expected hash.
         if (File.Exists(dest))
         {
             if (string.IsNullOrEmpty(sha1)) return;
-            if (await VerifySha1Async(dest, sha1!, cancel)) return;
-            // Otherwise re-download.
+            if (await VerifySha1Async(dest, sha1!, cancel).ConfigureAwait(false)) return;
         }
 
         Directory.CreateDirectory(Path.GetDirectoryName(dest)!);
 
         var tmp = dest + ".part";
-        using (var resp = await _http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, cancel))
+        using (var resp = await _http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, cancel).ConfigureAwait(false))
         {
             resp.EnsureSuccessStatusCode();
-            await using var src  = await resp.Content.ReadAsStreamAsync(cancel);
+            await using var src  = await resp.Content.ReadAsStreamAsync(cancel).ConfigureAwait(false);
             await using var fs   = File.Create(tmp);
-            await src.CopyToAsync(fs, cancel);
+            await src.CopyToAsync(fs, cancel).ConfigureAwait(false);
         }
 
-        // Move atomically into place so partial downloads never leave a half-file.
         if (File.Exists(dest)) File.Delete(dest);
         File.Move(tmp, dest);
     }
 
     private async Task<string> GetStringAsync(string url, CancellationToken cancel)
     {
-        using var resp = await _http.GetAsync(url, cancel);
+        using var resp = await _http.GetAsync(url, cancel).ConfigureAwait(false);
         resp.EnsureSuccessStatusCode();
-        return await resp.Content.ReadAsStringAsync(cancel);
+        return await resp.Content.ReadAsStringAsync(cancel).ConfigureAwait(false);
     }
 
     private static async Task<bool> VerifySha1Async(string path, string expected, CancellationToken cancel)
     {
         try
         {
-            await using var fs = File.OpenRead(path);
-            using var sha = SHA1.Create();
-            var hash = await sha.ComputeHashAsync(fs, cancel);
-            var hex = Convert.ToHexStringLower(hash);
-            return string.Equals(hex, expected, StringComparison.OrdinalIgnoreCase);
+            await using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, useAsync: true);
+            byte[] hash = await SHA1.HashDataAsync(fs, cancel).ConfigureAwait(false);
+            Span<byte> expectedBytes = stackalloc byte[20];
+            if (TryParseHexToBytes(expected, expectedBytes))
+            {
+                return expectedBytes.SequenceEqual(hash);
+            }
+            return false;
         }
         catch { return false; }
+    }
+
+    private static bool TryParseHexToBytes(string hex, Span<byte> bytes)
+    {
+        if (hex.Length != 40 || bytes.Length < 20) return false;
+        for (int i = 0; i < 20; i++)
+        {
+            int high = HexVal(hex[i * 2]);
+            int low = HexVal(hex[i * 2 + 1]);
+            if (high < 0 || low < 0) return false;
+            bytes[i] = (byte)((high << 4) | low);
+        }
+        return true;
+    }
+
+    private static int HexVal(char hex)
+    {
+        int val = hex;
+        return val switch
+        {
+            >= '0' and <= '9' => val - '0',
+            >= 'A' and <= 'F' => val - 'A' + 10,
+            >= 'a' and <= 'f' => val - 'a' + 10,
+            _ => -1
+        };
     }
 }

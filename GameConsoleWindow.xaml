@@ -130,6 +130,9 @@
                             Style="{StaticResource PillButton}"  Click="CopyBtn_Click"/>
                     <Button Content="Save"  Margin="0,0,6,0"
                             Style="{StaticResource PillButton}"  Click="SaveBtn_Click"/>
+                    <Button x:Name="ShareBtn" Content="mclo.gs" Margin="0,0,6,0"
+                            Style="{StaticResource PillButton}"  Click="ShareBtn_Click"
+                            ToolTip="Upload log to mclo.gs and copy the link"/>
                     <Button x:Name="StopBtn" Content="Stop"
                             Style="{StaticResource DangerButton}" Click="StopBtn_Click"/>
                 </StackPanel>

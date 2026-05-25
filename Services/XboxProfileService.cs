@@ -1,6 +1,7 @@
 using System;
 using System.Net.Http;
 using System.Net.Http.Headers;
+using System.Linq;
 using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
@@ -8,16 +9,6 @@ using GlacierLauncher.Models;
 
 namespace GlacierLauncher.Services;
 
-/// <summary>
-/// Drives the Xbox Live sign-in flow:
-///   1. Acquires a Live OAuth access token via <see cref="LiveAuthService"/>.
-///   2. Trades it for an XBL user token (xbl.signin).
-///   3. Trades that for an XSTS token bound to xboxlive.com (xsts.authorize).
-///   4. Calls profile.xboxlive.com with <c>XBL3.0 x=&lt;uhs&gt;;&lt;xstsToken&gt;</c>.
-///
-/// Uses the legacy MBI_SSL ticket form ("t=&lt;token&gt;"), matching the
-/// public-client flow the community Minecraft auth libraries use.
-/// </summary>
 public class XboxProfileService
 {
     private const string XblAuthEndpoint  = "https://user.auth.xboxlive.com/user/authenticate";
@@ -38,8 +29,6 @@ public class XboxProfileService
         _liveAuth = liveAuth;
         _http     = HttpFactory.Shared;
 
-        // Hydrate the cached profile so the UI shows the user as signed in on
-        // launch, before any network roundtrip.
         var s = _settings.Settings;
         if (!string.IsNullOrEmpty(s.XboxGamertag))
         {
@@ -55,14 +44,14 @@ public class XboxProfileService
         }
     }
 
-    public async Task<bool> SignInAsync()
+    public async Task<bool> SignInAsync(bool promptAccountPicker = false)
     {
         LastError = null;
         try
         {
-            // 1. Live OAuth: try silent refresh first, then prompt.
-            var liveToken = await _liveAuth.RefreshAsync()
-                         ?? await _liveAuth.SignInInteractiveAsync();
+            var liveToken = promptAccountPicker
+                ? await _liveAuth.SignInInteractiveAsync(true).ConfigureAwait(false)
+                : await _liveAuth.RefreshAsync().ConfigureAwait(false) ?? await _liveAuth.SignInInteractiveAsync().ConfigureAwait(false);
 
             if (liveToken is null)
             {
@@ -70,12 +59,13 @@ public class XboxProfileService
                 return false;
             }
 
-            // 2 + 3. XBL + XSTS exchange.
-            var (xblToken, _)               = await ExchangeForXblTokenAsync(liveToken.AccessToken);
-            var (xstsToken, userHash)       = await ExchangeForXstsTokenAsync(xblToken);
+            var (xblToken, _) = await ExchangeForXblTokenAsync(liveToken.AccessToken).ConfigureAwait(false);
 
-            // 4. Fetch the public Xbox profile.
-            var profile = await FetchProfileAsync(xstsToken, userHash);
+            var (xstsToken, userHash) = await ExchangeForXstsTokenAsync(xblToken).ConfigureAwait(false);
+
+            var (mcXstsToken, mcUserHash) = await ExchangeForXstsTokenAsync(xblToken, "rp://api.minecraftservices.com/").ConfigureAwait(false);
+
+            var profile = await FetchProfileAsync(xstsToken, userHash).ConfigureAwait(false);
             if (profile is null)
             {
                 LastError = "Could not load Xbox profile.";
@@ -84,6 +74,27 @@ public class XboxProfileService
 
             CurrentProfile = profile;
             PersistProfile(profile);
+
+            var mcToken = await AuthenticateWithMinecraftAsync(mcXstsToken, mcUserHash).ConfigureAwait(false);
+            if (mcToken is null)
+            {
+                LastError = "Xbox sign-in succeeded but Minecraft authentication failed.";
+                return true;
+            }
+
+            var mcProfile = await FetchMinecraftProfileAsync(mcToken).ConfigureAwait(false);
+            if (mcProfile is not null)
+            {
+                var s = _settings.Settings;
+                s.JavaUsername          = mcProfile.Value.Name;
+                s.JavaUuid             = mcProfile.Value.Uuid;
+                s.JavaAccessToken      = mcToken;
+                s.JavaAccessTokenExpiry = DateTime.UtcNow.AddHours(23).ToString("o");
+                s.JavaSkinUrl          = mcProfile.Value.SkinUrl;
+                PersistAccount(profile, mcProfile.Value, mcToken, liveToken.RefreshToken);
+                _settings.Save();
+            }
+
             return true;
         }
         catch (XboxAuthException ex)
@@ -106,21 +117,64 @@ public class XboxProfileService
         var s = _settings.Settings;
         s.XboxGamertag = s.XboxXuid = s.XboxGamerPictureUrl = "";
         s.XboxGamerscore = s.XboxAccountTier = s.XboxBio = "";
+        s.JavaUsername = s.JavaUuid = s.JavaAccessToken = s.JavaAccessTokenExpiry = "";
         _settings.Save();
     }
 
     public async Task RefreshProfileAsync()
     {
         if (!IsSignedIn) return;
-        await SignInAsync();
+        await SignInAsync().ConfigureAwait(false);
     }
 
-    // ── XBL / XSTS ────────────────────────────────────────────────
+    public async Task ValidateSessionAsync()
+    {
+        var s = _settings.Settings;
+        if (string.IsNullOrWhiteSpace(s.JavaAccessToken) || string.IsNullOrWhiteSpace(s.JavaAccessTokenExpiry))
+            return;
+        if (!DateTime.TryParse(s.JavaAccessTokenExpiry, null, System.Globalization.DateTimeStyles.RoundtripKind, out var expiry))
+            return;
+        if (DateTime.UtcNow < expiry.AddMinutes(-10))
+            return;
+        await SignInAsync().ConfigureAwait(false);
+    }
+
+    public bool SwitchAccount(string id)
+    {
+        var s = _settings.Settings;
+        var account = s.JavaAccounts.FirstOrDefault(a => string.Equals(a.Id, id, StringComparison.OrdinalIgnoreCase));
+        if (account == null)
+            return false;
+        s.ActiveJavaAccountId = account.Id;
+        s.XboxLiveRefreshToken = account.RefreshToken;
+        s.XboxGamertag = account.Gamertag;
+        s.XboxXuid = account.Xuid;
+        s.XboxGamerPictureUrl = account.GamerPictureUrl;
+        s.JavaUsername = account.MinecraftUsername;
+        s.JavaUuid = account.MinecraftUuid;
+        s.JavaAccessToken = account.MinecraftAccessToken;
+        s.JavaAccessTokenExpiry = account.MinecraftAccessTokenExpiry;
+        s.JavaSkinUrl = account.MinecraftSkinUrl;
+        account.LastUsedAt = DateTime.UtcNow.ToString("o");
+        CurrentProfile = new XboxProfile { Gamertag = account.Gamertag, Xuid = account.Xuid, GamerPictureUrl = account.GamerPictureUrl };
+        _settings.Save();
+        return true;
+    }
+
+    public void RemoveAccount(string id)
+    {
+        var s = _settings.Settings;
+        var account = s.JavaAccounts.FirstOrDefault(a => string.Equals(a.Id, id, StringComparison.OrdinalIgnoreCase));
+        if (account == null)
+            return;
+        s.JavaAccounts.Remove(account);
+        if (s.ActiveJavaAccountId == id)
+            SignOut();
+        _settings.Save();
+    }
 
     private async Task<(string token, string userHash)> ExchangeForXblTokenAsync(string liveAccessToken)
     {
-        // MBI_SSL ticket form: "t=<token>". Used by community Minecraft launchers
-        // for years (vs. the v2.0 endpoint which would require "d=<token>").
         var payload = JsonSerializer.Serialize(new
         {
             RelyingParty = "http://auth.xboxlive.com",
@@ -133,14 +187,15 @@ public class XboxProfileService
             }
         });
 
-        return await PostXboxAuthAsync(XblAuthEndpoint, payload, contractVersion: "1");
+        return await PostXboxAuthAsync(XblAuthEndpoint, payload, contractVersion: "1").ConfigureAwait(false);
     }
 
-    private async Task<(string token, string userHash)> ExchangeForXstsTokenAsync(string xblToken)
+    private Task<(string token, string userHash)> ExchangeForXstsTokenAsync(string xblToken,
+        string relyingParty = "http://xboxlive.com")
     {
         var payload = JsonSerializer.Serialize(new
         {
-            RelyingParty = "http://xboxlive.com",
+            RelyingParty = relyingParty,
             TokenType    = "JWT",
             Properties   = new
             {
@@ -151,11 +206,10 @@ public class XboxProfileService
 
         try
         {
-            return await PostXboxAuthAsync(XstsAuthEndpoint, payload, contractVersion: "1");
+            return PostXboxAuthAsync(XstsAuthEndpoint, payload, contractVersion: "1");
         }
         catch (XboxAuthException ex) when (!string.IsNullOrEmpty(ex.XErr))
         {
-            // Translate the common XErr codes to actionable messages.
             throw new XboxAuthException(MapXErr(ex.XErr), ex.XErr);
         }
     }
@@ -169,15 +223,15 @@ public class XboxProfileService
         using var req = new HttpRequestMessage(HttpMethod.Post, endpoint) { Content = content };
         req.Headers.Add("x-xbl-contract-version", contractVersion);
 
-        using var resp = await _http.SendAsync(req);
-        var json = await resp.Content.ReadAsStringAsync();
+        using var resp = await _http.SendAsync(req).ConfigureAwait(false);
 
         if (!resp.IsSuccessStatusCode)
         {
             string? xErr = null;
             try
             {
-                using var errDoc = JsonDocument.Parse(json);
+                await using var errStream = await resp.Content.ReadAsStreamAsync().ConfigureAwait(false);
+                using var errDoc = await JsonDocument.ParseAsync(errStream).ConfigureAwait(false);
                 if (errDoc.RootElement.TryGetProperty("XErr", out var x))
                     xErr = x.ValueKind == JsonValueKind.Number ? x.GetInt64().ToString() : x.GetString();
             }
@@ -188,7 +242,8 @@ public class XboxProfileService
                 xErr);
         }
 
-        using var doc = JsonDocument.Parse(json);
+        await using var stream = await resp.Content.ReadAsStreamAsync().ConfigureAwait(false);
+        using var doc = await JsonDocument.ParseAsync(stream).ConfigureAwait(false);
         var token = doc.RootElement.GetProperty("Token").GetString() ?? "";
         var uhs   = doc.RootElement
                        .GetProperty("DisplayClaims")
@@ -205,10 +260,11 @@ public class XboxProfileService
         req.Headers.Authorization = new AuthenticationHeaderValue("XBL3.0", $"x={userHash};{xstsToken}");
         req.Headers.Add("x-xbl-contract-version", "3");
 
-        using var resp = await _http.SendAsync(req);
+        using var resp = await _http.SendAsync(req).ConfigureAwait(false);
         resp.EnsureSuccessStatusCode();
 
-        using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync());
+        await using var stream = await resp.Content.ReadAsStreamAsync().ConfigureAwait(false);
+        using var doc = await JsonDocument.ParseAsync(stream).ConfigureAwait(false);
 
         var profile = new XboxProfile();
         var user = doc.RootElement.GetProperty("profileUsers")[0];
@@ -244,6 +300,86 @@ public class XboxProfileService
         s.XboxAccountTier     = profile.AccountTier;
         s.XboxBio             = profile.Bio;
         _settings.Save();
+    }
+
+    private const string McAuthEndpoint    = "https://api.minecraftservices.com/authentication/login_with_xbox";
+    private const string McProfileEndpoint = "https://api.minecraftservices.com/minecraft/profile";
+
+    private async Task<string?> AuthenticateWithMinecraftAsync(string xstsToken, string userHash)
+    {
+        var payload = JsonSerializer.Serialize(new
+        {
+            identityToken = $"XBL3.0 x={userHash};{xstsToken}"
+        });
+
+        using var content = new StringContent(payload, Encoding.UTF8, "application/json");
+        using var resp = await _http.PostAsync(McAuthEndpoint, content).ConfigureAwait(false);
+        if (!resp.IsSuccessStatusCode) return null;
+
+        await using var stream = await resp.Content.ReadAsStreamAsync().ConfigureAwait(false);
+        using var doc = await JsonDocument.ParseAsync(stream).ConfigureAwait(false);
+        return doc.RootElement.TryGetProperty("access_token", out var t) ? t.GetString() : null;
+    }
+
+    private readonly record struct MinecraftProfile(string Uuid, string Name, string SkinUrl);
+
+    private async Task<MinecraftProfile?> FetchMinecraftProfileAsync(string mcAccessToken)
+    {
+        using var req = new HttpRequestMessage(HttpMethod.Get, McProfileEndpoint);
+        req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", mcAccessToken);
+
+        using var resp = await _http.SendAsync(req).ConfigureAwait(false);
+        if (!resp.IsSuccessStatusCode) return null;
+
+        await using var stream = await resp.Content.ReadAsStreamAsync().ConfigureAwait(false);
+        using var doc = await JsonDocument.ParseAsync(stream).ConfigureAwait(false);
+        var root = doc.RootElement;
+
+        var id   = root.TryGetProperty("id",   out var i) ? i.GetString() : null;
+        var name = root.TryGetProperty("name", out var n) ? n.GetString() : null;
+        var skin = "";
+        if (root.TryGetProperty("skins", out var skins) && skins.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var item in skins.EnumerateArray())
+            {
+                if (item.TryGetProperty("url", out var u))
+                {
+                    skin = u.GetString() ?? "";
+                    break;
+                }
+            }
+        }
+
+        if (string.IsNullOrEmpty(id) || string.IsNullOrEmpty(name)) return null;
+
+        if (id.Length == 32 && !id.Contains('-'))
+            id = $"{id[..8]}-{id[8..12]}-{id[12..16]}-{id[16..20]}-{id[20..]}";
+
+        return new MinecraftProfile(id, name, skin);
+    }
+
+    private void PersistAccount(XboxProfile profile, MinecraftProfile mcProfile, string accessToken, string? refreshToken)
+    {
+        var s = _settings.Settings;
+        var id = string.IsNullOrWhiteSpace(mcProfile.Uuid) ? profile.Xuid : mcProfile.Uuid;
+        var account = s.JavaAccounts.FirstOrDefault(a => string.Equals(a.Id, id, StringComparison.OrdinalIgnoreCase));
+        if (account == null)
+        {
+            account = new JavaAccount { Id = id };
+            s.JavaAccounts.Add(account);
+        }
+        account.Gamertag = profile.Gamertag;
+        account.Xuid = profile.Xuid;
+        account.GamerPictureUrl = profile.GamerPictureUrl;
+        account.MinecraftUsername = mcProfile.Name;
+        account.MinecraftUuid = mcProfile.Uuid;
+        account.MinecraftAccessToken = accessToken;
+        account.MinecraftAccessTokenExpiry = DateTime.UtcNow.AddHours(23).ToString("o");
+        account.MinecraftSkinUrl = mcProfile.SkinUrl;
+        if (!string.IsNullOrWhiteSpace(refreshToken))
+            account.RefreshToken = refreshToken;
+        account.LastUsedAt = DateTime.UtcNow.ToString("o");
+        s.ActiveJavaAccountId = account.Id;
     }
 
     private static string MapXErr(string xErr) => xErr switch

@@ -1,8 +1,7 @@
-@* Reusable modal shell with backdrop, header and body slot. *@
 @if (Open)
 {
     <div class="modal-overlay" @onclick="OnBackdropClick">
-        <div class="modal-box @(Class)" @onclick:stopPropagation>
+        <div class="modal-box @(Class)" role="dialog" aria-modal="true" aria-label="@Title" @onclick:stopPropagation>
             <div class="modal-header">
                 <span class="modal-title">
                     @if (!string.IsNullOrEmpty(Icon))
@@ -11,7 +10,7 @@
                     }
                     @Title
                 </span>
-                <button class="modal-close-btn" @onclick="HandleClose">
+                <button type="button" class="modal-close-btn" aria-label="Close" @onclick="HandleClose">
                     <i class="fa-solid fa-xmark"></i>
                 </button>
             </div>

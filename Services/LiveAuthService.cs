@@ -35,10 +35,10 @@ public sealed class LiveAuthService
     /// Show the WebView2 popup, exchange the resulting code for tokens.
     /// Returns null if the user cancels.
     /// </summary>
-    public async Task<LiveToken?> SignInInteractiveAsync()
+    public async Task<LiveToken?> SignInInteractiveAsync(bool promptSelectAccount = false)
     {
         var owner = Application.Current?.MainWindow;
-        var window = new LiveAuthWindow { Owner = owner, PromptSelectAccount = false };
+        var window = new LiveAuthWindow { Owner = owner, PromptSelectAccount = promptSelectAccount };
         window.Show();
 
         var code = await window.GetAuthorizationCodeAsync();

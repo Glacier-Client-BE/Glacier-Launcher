@@ -8,40 +8,34 @@ using System.Text.Json;
 using System.Threading.Tasks;
 using GlacierLauncher.Models;
 using Microsoft.Win32;
+using System.Security.Cryptography;
 
 namespace GlacierLauncher.Services;
 
-/// <summary>
-/// Launches Java Edition Minecraft against an existing <c>%APPDATA%\.minecraft</c>
-/// install. Reads the version JSON the official launcher emits and constructs the
-/// command line the way the vanilla launcher would.
-///
-/// This is the MVP path — it does not download missing libraries / assets / a Java
-/// runtime. If a version isn't already installed, <see cref="LaunchAsync"/> throws
-/// with a clear message and the user is steered toward installing it with the
-/// official launcher first. Full asset/library download support lands in a later
-/// pass.
-/// </summary>
 public sealed class JavaGameLauncher
 {
-    private readonly SettingsService     _settings;
-    private readonly JavaVersionService  _versions;
-    private readonly GameConsoleService  _console;
+    private readonly SettingsService              _settings;
+    private readonly JavaVersionService           _versions;
+    private readonly GameConsoleService            _console;
+    private readonly JavaRuntimeDownloadService    _javaDownload;
+    private readonly JavaInstallService            _installer;
+    private readonly XboxProfileService            _xbox;
+    private readonly JavaInstanceService            _instances;
 
-    public JavaGameLauncher(SettingsService settings, JavaVersionService versions, GameConsoleService console)
+    public JavaGameLauncher(SettingsService settings, JavaVersionService versions, GameConsoleService console, JavaInstallService installer, XboxProfileService xbox, JavaInstanceService instances)
     {
-        _settings = settings;
-        _versions = versions;
-        _console  = console;
+        _settings      = settings;
+        _versions      = versions;
+        _console       = console;
+        _javaDownload  = new JavaRuntimeDownloadService();
+        _xbox          = xbox;
+        _installer     = installer;
+        _instances     = instances;
     }
 
-    // Processes Glacier itself has launched. Scanning the whole system for
-    // javaw.exe false-positives on anything Java-based the user is running
-    // (IDEs, build tools, other launchers), so we only count our own children.
     private static readonly List<Process> _tracked = new();
     private static readonly object        _trackedLock = new();
 
-    /// <summary>True if any Minecraft instance Glacier launched is still running.</summary>
     public static bool IsRunning()
     {
         lock (_trackedLock)
@@ -60,32 +54,22 @@ public sealed class JavaGameLauncher
         lock (_trackedLock) _tracked.Add(p);
     }
 
-    public async Task LaunchAsync(string versionId)
+    public delegate void LaunchProgress(string stage, double percent);
+
+    public async Task LaunchAsync(string versionId, LaunchProgress? onProgress = null)
     {
         if (string.IsNullOrWhiteSpace(versionId))
             throw new InvalidOperationException("No Java version selected.");
 
-        var console = _console.Open($"Minecraft Java · {versionId}");
-        try
-        {
-            await LaunchAsyncCore(versionId, console);
-        }
-        catch (Exception ex)
-        {
-            console?.Error(ex.Message);
-            console?.MarkFailed(ex.Message.Length > 60 ? ex.Message[..60] + "…" : ex.Message);
-            throw;
-        }
+        await LaunchAsyncCore(versionId, onProgress).ConfigureAwait(false);
     }
 
-    private async Task LaunchAsyncCore(string versionId, GameConsoleHandle? console)
+    private async Task LaunchAsyncCore(string versionId, LaunchProgress? onProgress)
     {
         var mcDir      = _versions.MinecraftDir;
         var versionDir = Path.Combine(mcDir, "versions", versionId);
         var jsonPath   = Path.Combine(versionDir, versionId + ".json");
         var jarPath    = Path.Combine(versionDir, versionId + ".jar");
-
-        console?.Info($".minecraft = {mcDir}");
 
         if (!File.Exists(jsonPath))
         {
@@ -93,41 +77,94 @@ public sealed class JavaGameLauncher
                 $"Version {versionId} isn't installed in {mcDir}\\versions. " +
                 "Click Install on the row in Versions to download it.");
         }
-        if (!File.Exists(jarPath))
-        {
-            // Some versions inherit and don't have their own jar — fall through and let inheritsFrom handle it.
-            // If even the parent jar is missing we'll throw when building the classpath.
-            console?.Info("Primary jar missing — falling back to inheritsFrom chain.");
-        }
 
+        var instanceLock = AcquireInstanceLock(versionId);
         var profile = ReadVersionProfile(versionId, mcDir);
-        console?.Info($"Main class: {profile.MainClass}");
-        console?.Info($"Asset index: {profile.AssetsIndex}  ·  Java major: {(string.IsNullOrEmpty(profile.MinJavaMajor) ? "(legacy)" : profile.MinJavaMajor)}");
+
+        if (_settings.Settings.JavaBackupSavesBeforeLaunch)
+            await _instances.BackupSavesAsync().ConfigureAwait(false);
 
         var javaw = ResolveJavaRuntime(profile);
+        int requiredMajor = int.TryParse(profile.MinJavaMajor, out var rm) ? rm : 8;
+
+        int actualJavaMajor = !string.IsNullOrEmpty(javaw) ? DetectJavaMajor(javaw) : 0;
+        bool needsJavaDownload = string.IsNullOrEmpty(javaw)
+                           || (actualJavaMajor > 0 && actualJavaMajor < requiredMajor);
+
+        if (needsJavaDownload && requiredMajor >= 8)
+        {
+            onProgress?.Invoke($"Downloading Java {requiredMajor}…", 0);
+            try
+            {
+                javaw = await _javaDownload.DownloadAsync(
+                    requiredMajor,
+                    onProgress: (stage, pct) => onProgress?.Invoke(stage, pct)).ConfigureAwait(false);
+                actualJavaMajor = DetectJavaMajor(javaw);
+            }
+            catch (Exception)
+            {
+                if (string.IsNullOrEmpty(javaw))
+                    throw new InvalidOperationException(
+                        $"Could not find or download Java {requiredMajor}. " +
+                        "Install it manually and set Settings → Java Runtime, or check your internet connection.");
+            }
+        }
+
         if (string.IsNullOrEmpty(javaw))
             throw new InvalidOperationException(
                 "Could not find javaw.exe. Set Settings → Java Runtime, or install Minecraft (which bundles JREs under .minecraft/runtime).");
-        console?.Info($"Java runtime: {javaw}");
 
         var classpath = BuildClasspath(profile, mcDir);
         if (classpath.Count == 0)
             throw new InvalidOperationException(
                 "Couldn't resolve any libraries on disk. Run this version once in the official launcher so libraries download, then retry.");
+
+        var missing = classpath.Where(p => !File.Exists(p)).ToList();
+        if (missing.Count > 0)
+        {
+            onProgress?.Invoke($"Downloading {missing.Count} missing libraries…", 0);
+            try
+            {
+                var allVersions = await _versions.GetVersionsAsync().ConfigureAwait(false);
+                var jv = allVersions.FirstOrDefault(v => v.Id == versionId);
+                if (jv != null && !string.IsNullOrEmpty(jv.Url))
+                {
+                    await _installer.InstallAsync(jv,
+                        report: p => onProgress?.Invoke(p.Stage, p.Percent)).ConfigureAwait(false);
+                }
+                else
+                {
+                    throw new InvalidOperationException(
+                        $"Version {versionId} not found in manifest — can't auto-download missing libraries. " +
+                        "Try installing this version from the Versions tab first.");
+                }
+            }
+            catch (InvalidOperationException) { throw; }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException(
+                    $"Auto-install failed: {ex.Message}. Try installing this version from the Versions tab first.");
+            }
+        }
+
+        onProgress?.Invoke("Launching…", 100);
+
+        var console = _console.Open($"Minecraft Java · {versionId}");
+        console?.Info($".minecraft = {mcDir}");
+        console?.Info($"Main class: {profile.MainClass}");
+        console?.Info($"Asset index: {profile.AssetsIndex}  ·  Java major: {(string.IsNullOrEmpty(profile.MinJavaMajor) ? "(legacy)" : profile.MinJavaMajor)}");
+        console?.Info($"Java runtime: {javaw}  (detected major: {actualJavaMajor})");
         console?.Info($"Classpath entries: {classpath.Count}");
 
-        var auth = ResolveAuthValues();
+        var auth = await ResolveAuthValuesAsync().ConfigureAwait(false);
         console?.Info($"Auth: {auth.Name} ({auth.UserType}) · {auth.Uuid}");
 
         var sb = new StringBuilder();
-        AppendJvmArgs(sb, profile, mcDir, versionId);
+        AppendJvmArgs(sb, profile, mcDir, versionId, actualJavaMajor);
         sb.Append(" -cp ").Append(Quote(string.Join(';', classpath)));
         sb.Append(' ').Append(profile.MainClass);
         AppendGameArgs(sb, profile, mcDir, versionId, auth);
 
-        // The full arg vector is the single most useful thing to capture for
-        // post-mortem debugging — any feature-flag / classpath bug shows up
-        // here without the user having to reproduce the crash.
         console?.Info("Game args (sanitised):");
         console?.Info(SanitiseForLog(sb.ToString(), auth));
 
@@ -138,30 +175,49 @@ public sealed class JavaGameLauncher
             WorkingDirectory = mcDir,
             UseShellExecute        = false,
             CreateNoWindow         = true,
-            // Capture stdout/stderr only when we have a console window to write
-            // them to — otherwise the streams fill up the kernel pipe and the
-            // game stalls waiting for someone to read.
             RedirectStandardOutput = console != null,
             RedirectStandardError  = console != null,
         };
 
         Process? proc = null;
-        await Task.Run(() => proc = Process.Start(psi));
+        await Task.Run(() => proc = Process.Start(psi)).ConfigureAwait(false);
 
         if (proc != null)
         {
             TrackProcess(proc);
+            proc.EnableRaisingEvents = true;
+            proc.Exited += (_, _) =>
+            {
+                try { instanceLock.Dispose(); } catch { }
+            };
             console?.Info($"Started PID {proc.Id}");
             console?.SetPid(proc.Id);
             console?.MarkRunning();
             console?.Attach(proc);
         }
+        else
+        {
+            instanceLock.Dispose();
+        }
 
         _settings.Settings.JavaLastUsedVersion = versionId;
+        _instances.SetActiveVersion(versionId);
         _settings.Save();
     }
 
-    // ── Version JSON parsing (handles inheritsFrom) ─────────────────────
+    private FileStream AcquireInstanceLock(string versionId)
+    {
+        var lockPath = _instances.CreateInstanceLockPath(versionId);
+        Directory.CreateDirectory(Path.GetDirectoryName(lockPath)!);
+        try
+        {
+            return new FileStream(lockPath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+        }
+        catch (IOException)
+        {
+            throw new InvalidOperationException("This Java instance is already launching or running.");
+        }
+    }
 
     private sealed record VersionProfile(
         string Id,
@@ -226,48 +282,38 @@ public sealed class JavaGameLauncher
                             && art.TryGetProperty("path", out var path))
                         {
                             var p = Path.Combine(mcDir, "libraries", path.GetString()!.Replace('/', Path.DirectorySeparatorChar));
-                            if (File.Exists(p)) libraries.Add(new LibraryEntry(p, false));
+                            libraries.Add(new LibraryEntry(p, false));
                         }
 
-                        // Native classifiers (lwjgl-*-natives-windows etc.). We don't
-                        // extract them into a temp folder here — modern (1.19+) lwjgl
-                        // packages natives inline, and older versions can be launched
-                        // through the official launcher once which will leave the
-                        // natives directory populated.
                         if (dl.TryGetProperty("classifiers", out var classifiers)
                             && classifiers.ValueKind == JsonValueKind.Object
                             && lib.TryGetProperty("natives", out var natives)
                             && natives.TryGetProperty("windows", out var winKey))
                         {
                             var key = winKey.GetString() ?? "";
-                            // The "${arch}" placeholder is a 32/64 marker — we only target x64.
                             key = key.Replace("${arch}", "64");
                             if (classifiers.TryGetProperty(key, out var native)
                                 && native.TryGetProperty("path", out var npath))
                             {
                                 var p = Path.Combine(mcDir, "libraries", npath.GetString()!.Replace('/', Path.DirectorySeparatorChar));
-                                if (File.Exists(p)) libraries.Add(new LibraryEntry(p, true));
+                                libraries.Add(new LibraryEntry(p, true));
                             }
                         }
                     }
                     else if (lib.TryGetProperty("name", out var name))
                     {
-                        // Forge/Fabric libraries without an explicit `downloads` block.
-                        // Maven coordinate `group:artifact:version` → group/artifact/version/artifact-version.jar
                         var coord = name.GetString() ?? "";
                         var p = MavenCoordToPath(mcDir, coord);
-                        if (p != null && File.Exists(p)) libraries.Add(new LibraryEntry(p, false));
+                        if (p != null) libraries.Add(new LibraryEntry(p, false));
                     }
                 }
             }
 
-            // Modern arguments block { game: [...], jvm: [...] }
             if (root.TryGetProperty("arguments", out var args))
             {
                 if (args.TryGetProperty("jvm",  out var j)) CollectArgs(j, jvmArgs);
                 if (args.TryGetProperty("game", out var g)) CollectArgs(g, gameArgs);
             }
-            // Legacy minecraftArguments (pre-1.13 string form)
             else if (root.TryGetProperty("minecraftArguments", out var legacy))
             {
                 gameArgs.AddRange((legacy.GetString() ?? "").Split(' ', StringSplitOptions.RemoveEmptyEntries));
@@ -280,8 +326,6 @@ public sealed class JavaGameLauncher
             }
         }
 
-        // Always include the version's primary jar at the END of the classpath. The
-        // game expects the launcher-chosen jar (or its inherited parent) last.
         var jarId = jarVerId ?? id;
         var primary = Path.Combine(mcDir, "versions", jarId, jarId + ".jar");
         if (File.Exists(primary)) libraries.Add(new LibraryEntry(primary, false));
@@ -323,17 +367,10 @@ public sealed class JavaGameLauncher
         if (!el.TryGetProperty("rules", out var rules) || rules.ValueKind != JsonValueKind.Array)
             return true;
 
-        // Default action when no rule matches is "disallow" per Mojang's spec.
         bool allowed = false;
         foreach (var rule in rules.EnumerateArray())
         {
             var action = rule.TryGetProperty("action", out var a) ? a.GetString() : "allow";
-            // A rule only matches when ALL of its filters match. We support
-            // the `os` filter; any `features` filter (quick-play, demo mode,
-            // custom resolution) is treated as not-matching because we don't
-            // enable any features. Without this check Minecraft 1.20+ crashes
-            // at startup with "Only one quick play option can be specified"
-            // because all four quick-play arg blocks fall through.
             if (!OsMatches(rule)) continue;
             if (!FeaturesMatch(rule)) continue;
             allowed = action == "allow";
@@ -350,21 +387,14 @@ public sealed class JavaGameLauncher
             if (!string.Equals(name, "windows", StringComparison.OrdinalIgnoreCase))
                 return false;
         }
-        // We could check `arch` and `version` regex too — for x64 Windows the
-        // common cases (osx/linux excludes) are covered above.
         return true;
     }
 
     private static bool FeaturesMatch(JsonElement rule)
     {
-        // No `features` block → no feature requirement → trivially matches.
         if (!rule.TryGetProperty("features", out var features)) return true;
         if (features.ValueKind != JsonValueKind.Object) return true;
 
-        // Glacier doesn't expose demo mode, quick-play, or custom-resolution
-        // launches, so any rule requiring one of those features cannot match.
-        // (If we later add quick-play we'd populate a whitelist of enabled
-        // feature names and check against it here.)
         foreach (var _ in features.EnumerateObject())
             return false;
         return true;
@@ -372,7 +402,6 @@ public sealed class JavaGameLauncher
 
     private static string? MavenCoordToPath(string mcDir, string coord)
     {
-        // group:artifact:version[:classifier][@ext]
         var ext   = "jar";
         var atIdx = coord.IndexOf('@');
         if (atIdx >= 0) { ext = coord[(atIdx + 1)..]; coord = coord[..atIdx]; }
@@ -393,24 +422,20 @@ public sealed class JavaGameLauncher
 
     private List<string> BuildClasspath(VersionProfile profile, string mcDir)
     {
-        // Deduplicate while preserving order (the version's own jar is intentionally last).
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var cp   = new List<string>(profile.Libraries.Count);
         foreach (var lib in profile.Libraries)
         {
-            if (lib.IsNative) continue; // natives go on java.library.path, not classpath
+            if (lib.IsNative) continue;
             if (seen.Add(lib.Path)) cp.Add(lib.Path);
         }
         return cp;
     }
 
-    // ── Args ─────────────────────────────────────────────────────────
-
-    private void AppendJvmArgs(StringBuilder sb, VersionProfile profile, string mcDir, string versionId)
+    private void AppendJvmArgs(StringBuilder sb, VersionProfile profile, string mcDir, string versionId, int actualJavaMajor)
     {
-        // Build the substitution table used by both jvm and game arg templates.
         var nativesDir = Path.Combine(mcDir, "versions", versionId, "natives");
-        Directory.CreateDirectory(nativesDir); // make sure the path exists even if empty
+        Directory.CreateDirectory(nativesDir);
 
         var subs = new Dictionary<string, string>
         {
@@ -420,36 +445,26 @@ public sealed class JavaGameLauncher
             ["classpath"]         = "<set-by-cp-flag>",
         };
 
-        // Strip JVM args that the chosen Java is too old to understand. Mojang ships
-        // some of these unconditionally in arguments.jvm even when javaVersion still
-        // declares an older major (e.g. 1.21.6+ includes --sun-misc-unsafe-memory-access=allow
-        // alongside javaVersion.majorVersion=21, but the flag was only added in Java 23
-        // so a Java 21 runtime hard-crashes with "Unrecognized option").
-        int javaMajor = int.TryParse(profile.MinJavaMajor, out var m) ? m : 8;
-
         if (profile.JvmArgs.Count > 0)
         {
             foreach (var raw in profile.JvmArgs)
             {
                 var v = Substitute(raw, subs);
-                // We supply -cp ourselves outside this list, so skip Mojang's classpath placeholder.
                 if (v.Contains("${classpath}", StringComparison.Ordinal)) continue;
-                if (!IsJvmArgCompatible(v, javaMajor)) continue;
+                if (!IsJvmArgCompatible(v, actualJavaMajor)) continue;
                 sb.Append(' ').Append(Quote(v));
             }
         }
         else
         {
-            // Legacy versions don't ship JVM args — supply the bare minimum.
             sb.Append(" -Djava.library.path=").Append(Quote(nativesDir));
         }
 
-        // Heap size: respect the user's setting but cap at 16 GB to avoid typos.
         var ram = Math.Clamp(_settings.Settings.JavaMaxRamMb, 512, 16384);
+        var minRam = Math.Clamp(_settings.Settings.JavaMinRamMb, 256, ram);
         sb.Append(" -Xmx").Append(ram).Append('M');
-        sb.Append(" -Xms").Append(Math.Min(512, ram)).Append('M');
+        sb.Append(" -Xms").Append(minRam).Append('M');
 
-        // User-supplied JVM args last so they can override our defaults.
         var custom = _settings.Settings.JavaCustomJvmArgs;
         if (!string.IsNullOrWhiteSpace(custom))
             sb.Append(' ').Append(custom);
@@ -471,23 +486,34 @@ public sealed class JavaGameLauncher
             ["auth_xuid"]           = _settings.Settings.XboxXuid,
             ["user_type"]           = auth.UserType,
             ["version_type"]        = profile.JarVersionId == versionId ? "release" : "release",
-            ["user_properties"]     = "{}", // legacy field; modern versions ignore it
-            ["auth_session"]        = "token:" + auth.AccessToken + ":" + auth.Uuid, // legacy
-            ["game_assets"]         = profile.AssetsDir,                              // legacy
+            ["user_properties"]     = "{}",
+            ["auth_session"]        = "token:" + auth.AccessToken + ":" + auth.Uuid,
+            ["game_assets"]         = profile.AssetsDir,
         };
 
         foreach (var raw in profile.GameArgs)
         {
             var v = Substitute(raw, subs);
-            // Skip args that resolved to empty — a feature-gated arg that slipped
-            // past RulesAllow would otherwise become `""` on the command line,
-            // which some Minecraft versions choke on.
             if (string.IsNullOrEmpty(v)) continue;
-            // Drop unsubstituted placeholders like ${quickPlayPath} — these mean
-            // the version JSON wanted a value Glacier doesn't supply.
             if (v.StartsWith("${", StringComparison.Ordinal) && v.EndsWith("}", StringComparison.Ordinal))
                 continue;
             sb.Append(' ').Append(Quote(v));
+        }
+
+        if (_settings.Settings.JavaFullscreen)
+        {
+            sb.Append(" --fullscreen");
+        }
+        else if (_settings.Settings.JavaUseCustomResolution)
+        {
+            sb.Append(" --width ").Append(Math.Clamp(_settings.Settings.JavaWindowWidth, 320, 7680));
+            sb.Append(" --height ").Append(Math.Clamp(_settings.Settings.JavaWindowHeight, 240, 4320));
+        }
+
+        if (!string.IsNullOrWhiteSpace(_settings.Settings.JavaServerAddress))
+        {
+            sb.Append(" --server ").Append(Quote(_settings.Settings.JavaServerAddress.Trim()));
+            sb.Append(" --port ").Append(Math.Clamp(_settings.Settings.JavaServerPort, 1, 65535));
         }
     }
 
@@ -523,18 +549,66 @@ public sealed class JavaGameLauncher
 
     private static bool IsJvmArgCompatible(string arg, int javaMajor)
     {
-        // --sun-misc-unsafe-memory-access was introduced in JEP 498 (Java 23).
-        // Older JVMs reject it as "Unrecognized option" and refuse to start.
+        if (javaMajor <= 0) return true;
+
         if (javaMajor < 23 && arg.StartsWith("--sun-misc-unsafe-memory-access", StringComparison.Ordinal))
             return false;
         return true;
     }
 
-    /// <summary>
-    /// Returns the command line with the auth access token masked, so users
-    /// can paste console output into bug reports without leaking their MSA
-    /// session.
-    /// </summary>
+    private static int DetectJavaMajor(string javawPath)
+    {
+        try
+        {
+            var dir = Path.GetDirectoryName(javawPath);
+            for (int depth = 0; depth < 6 && dir != null; depth++)
+            {
+                dir = Path.GetDirectoryName(dir);
+                if (dir == null) break;
+                var release = Path.Combine(dir, "release");
+                if (File.Exists(release))
+                {
+                    foreach (var line in File.ReadLines(release))
+                    {
+                        if (!line.StartsWith("JAVA_VERSION", StringComparison.OrdinalIgnoreCase))
+                            continue;
+                        var eq = line.IndexOf('=');
+                        if (eq < 0) continue;
+                        var ver = line[(eq + 1)..].Trim().Trim('"');
+                        if (ver.StartsWith("1.", StringComparison.Ordinal) && ver.Length >= 3)
+                        {
+                            if (int.TryParse(ver.Split('.')[1], out var legacy)) return legacy;
+                        }
+                        else
+                        {
+                            if (int.TryParse(ver.Split('.')[0], out var modern)) return modern;
+                        }
+                    }
+                }
+            }
+        }
+        catch { }
+
+        var m2 = System.Text.RegularExpressions.Regex.Match(
+            javawPath,
+            @"(?:jdk|jre|java|openjdk)-?(\d+)",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        if (m2.Success && int.TryParse(m2.Groups[1].Value, out var heuristic))
+        {
+            if (heuristic == 1)
+            {
+                var m3 = System.Text.RegularExpressions.Regex.Match(
+                    javawPath, @"(?:jdk|jre|java)-?1\.(\d+)",
+                    System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                if (m3.Success && int.TryParse(m3.Groups[1].Value, out var legacy))
+                    return legacy;
+            }
+            return heuristic;
+        }
+
+        return 0;
+    }
+
     private static string SanitiseForLog(string args, AuthValues auth)
     {
         if (string.IsNullOrEmpty(auth.AccessToken) || auth.AccessToken == "0")
@@ -542,27 +616,50 @@ public sealed class JavaGameLauncher
         return args.Replace(auth.AccessToken, "<access-token>");
     }
 
-    // ── Auth ─────────────────────────────────────────────────────────
-
     private sealed record AuthValues(string Name, string Uuid, string AccessToken, string UserType);
 
-    private AuthValues ResolveAuthValues()
+    private async Task<AuthValues> ResolveAuthValuesAsync()
     {
         var s = _settings.Settings;
 
-        // Prefer the Minecraft Services profile we obtained ourselves.
         if (!string.IsNullOrEmpty(s.JavaAccessToken)
             && !string.IsNullOrEmpty(s.JavaUuid)
             && !string.IsNullOrEmpty(s.JavaUsername))
         {
-            return new AuthValues(s.JavaUsername, s.JavaUuid, s.JavaAccessToken, "msa");
+            bool expired = false;
+            if (DateTime.TryParse(s.JavaAccessTokenExpiry, null,
+                    System.Globalization.DateTimeStyles.RoundtripKind, out var expiry))
+            {
+                expired = DateTime.UtcNow >= expiry;
+            }
+
+            if (!expired)
+                return new AuthValues(s.JavaUsername, s.JavaUuid, s.JavaAccessToken, "msa");
+
+            try
+            {
+                await _xbox.RefreshProfileAsync().ConfigureAwait(false);
+                if (!string.IsNullOrEmpty(s.JavaAccessToken))
+                    return new AuthValues(s.JavaUsername, s.JavaUuid, s.JavaAccessToken, "msa");
+            }
+            catch { }
         }
 
-        // Offline mode — use the launcher's username if set, else a sensible default.
-        // We deliberately DO NOT read the official launcher's launcher_accounts.json
-        // here: reaching into another launcher's credential store is a malware tell
-        // and gets Glacier flagged by AV. Users without a Glacier MSA sign-in get
-        // offline-mode worlds tied to their chosen name.
+        if (!string.IsNullOrEmpty(s.XboxLiveRefreshToken) && _xbox.IsSignedIn)
+        {
+            try
+            {
+                await _xbox.RefreshProfileAsync().ConfigureAwait(false);
+                if (!string.IsNullOrEmpty(s.JavaAccessToken)
+                    && !string.IsNullOrEmpty(s.JavaUuid)
+                    && !string.IsNullOrEmpty(s.JavaUsername))
+                {
+                    return new AuthValues(s.JavaUsername, s.JavaUuid, s.JavaAccessToken, "msa");
+                }
+            }
+            catch { }
+        }
+
         var name = !string.IsNullOrWhiteSpace(s.Username) ? s.Username : "Player";
         var uuid = OfflineUuid(name);
         return new AuthValues(name, uuid, "0", "legacy");
@@ -570,49 +667,50 @@ public sealed class JavaGameLauncher
 
     private static string OfflineUuid(string name)
     {
-        // Mojang's "OfflinePlayer:<name>" UUIDv3 (md5) — matches what vanilla
-        // assigns offline accounts, so worlds/inventories stay associated.
-        using var md5 = System.Security.Cryptography.MD5.Create();
-        var hash = md5.ComputeHash(Encoding.UTF8.GetBytes("OfflinePlayer:" + name));
-        // Set version (3) and variant bits to make it a valid UUIDv3.
+        int nameByteCount = Encoding.UTF8.GetByteCount(name);
+        int totalByteCount = 14 + nameByteCount;
+        Span<byte> utf8Bytes = totalByteCount <= 512 ? stackalloc byte[totalByteCount] : new byte[totalByteCount];
+        
+        "OfflinePlayer:"u8.CopyTo(utf8Bytes);
+        
+        Encoding.UTF8.GetBytes(name, utf8Bytes[14..]);
+
+        Span<byte> hash = stackalloc byte[16];
+        MD5.HashData(utf8Bytes, hash);
+
         hash[6] = (byte)((hash[6] & 0x0f) | 0x30);
         hash[8] = (byte)((hash[8] & 0x3f) | 0x80);
         return new Guid(hash).ToString("N");
     }
 
-    // ── Java runtime resolution ──────────────────────────────────────
-
     private string? ResolveJavaRuntime(VersionProfile profile)
     {
-        // 1. Explicit override.
         var explicitPath = _settings.Settings.JavaRuntimePath;
         if (!string.IsNullOrEmpty(explicitPath) && File.Exists(explicitPath))
             return explicitPath;
 
-        // 2. Minecraft's bundled JREs under .minecraft\runtime (the official launcher
-        //    installs these per major version; reuse them so we match the version's
-        //    declared javaVersion.majorVersion).
+        if (int.TryParse(profile.MinJavaMajor, out var reqMajor) && reqMajor > 0)
+        {
+            var glacierJavaw = JavaRuntimeDownloadService.GetCachedJavaw(reqMajor);
+            if (glacierJavaw != null) return glacierJavaw;
+        }
+
         var runtimeRoot = Path.Combine(_versions.MinecraftDir, "runtime");
         if (Directory.Exists(runtimeRoot))
         {
             foreach (var component in Directory.EnumerateDirectories(runtimeRoot))
             {
-                // The official layout is runtime\<component>\<os>\<arch>\<...>\bin\javaw.exe
                 if (!string.IsNullOrEmpty(profile.MinJavaMajor)
                     && !ComponentMatchesMajor(component, profile.MinJavaMajor))
                     continue;
                 foreach (var javaw in EnumerateJavawUnder(component))
                     return javaw;
             }
-            // No major-version match — return whatever we found first so the user
-            // at least gets a launch attempt (and a clear error in the console)
-            // rather than a silent "Java not found".
             foreach (var component in Directory.EnumerateDirectories(runtimeRoot))
                 foreach (var javaw in EnumerateJavawUnder(component))
                     return javaw;
         }
 
-        // 3. JAVA_HOME / PATH.
         var javaHome = Environment.GetEnvironmentVariable("JAVA_HOME");
         if (!string.IsNullOrEmpty(javaHome))
         {
@@ -630,7 +728,6 @@ public sealed class JavaGameLauncher
             catch { }
         }
 
-        // 4. Registry — Adoptium/Temurin/Microsoft Build of OpenJDK keys.
         try
         {
             foreach (var rootKey in new[] { Registry.LocalMachine, Registry.CurrentUser })
@@ -677,14 +774,6 @@ public sealed class JavaGameLauncher
     private static bool ComponentMatchesMajor(string componentDir, string major)
     {
         var name = Path.GetFileName(componentDir);
-        // Official launcher names them with Greek codenames, not version numbers:
-        //   jre-legacy → Java 8
-        //   java-runtime-alpha → Java 16
-        //   java-runtime-beta / java-runtime-gamma → Java 17
-        //   java-runtime-delta → Java 21
-        //   java-runtime-epsilon → Java 25 (anticipated, not yet shipped)
-        // Matching by raw major-number substring was wrong — "21" doesn't appear
-        // anywhere in delta's path, and "16" would false-match "java-runtime-…".
         return major switch
         {
             "8"  => name.Contains("legacy"),

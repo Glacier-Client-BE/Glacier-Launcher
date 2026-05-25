@@ -1,22 +1,26 @@
-@* Reusable panel tab strip — pass the active tab id to highlight. *@
 <div class="panel-tabs">
-    <button class="panel-tab @(Active == "settings" ? "active" : "")"
+    <button type="button" class="panel-tab @(Active == "settings" ? "active" : "")"
+            aria-pressed="@(Active == "settings" ? "true" : "false")"
             @onclick="@(() => Switch("settings"))" @onmousedown:stopPropagation>
         <i class="fa-solid fa-gear"></i>Settings
     </button>
-    <button class="panel-tab @(Active == "clients" ? "active" : "")"
+    <button type="button" class="panel-tab @(Active == "clients" ? "active" : "")"
+            aria-pressed="@(Active == "clients" ? "true" : "false")"
             @onclick="@(() => Switch("clients"))" @onmousedown:stopPropagation>
         <i class="fa-solid fa-puzzle-piece"></i>Clients
     </button>
-    <button class="panel-tab @(Active == "addons" ? "active" : "")"
+    <button type="button" class="panel-tab @(Active == "addons" ? "active" : "")"
+            aria-pressed="@(Active == "addons" ? "true" : "false")"
             @onclick="@(() => Switch("addons"))" @onmousedown:stopPropagation>
         <i class="fa-solid fa-cube"></i>Addons
     </button>
-    <button class="panel-tab @(Active == "versions" ? "active" : "")"
+    <button type="button" class="panel-tab @(Active == "versions" ? "active" : "")"
+            aria-pressed="@(Active == "versions" ? "true" : "false")"
             @onclick="@(() => Switch("versions"))" @onmousedown:stopPropagation>
         <i class="fa-solid fa-clock-rotate-left"></i>Versions
     </button>
-    <button class="panel-tab @(Active == "credits" ? "active" : "")"
+    <button type="button" class="panel-tab @(Active == "credits" ? "active" : "")"
+            aria-pressed="@(Active == "credits" ? "true" : "false")"
             @onclick="@(() => Switch("credits"))" @onmousedown:stopPropagation>
         <i class="fa-solid fa-heart"></i>Credits
     </button>
@@ -25,6 +29,15 @@
 @code {
     [Parameter] public string Active { get; set; } = "";
     [Parameter] public EventCallback<string> OnSwitch { get; set; }
+
+    private string? _lastActive;
+
+    protected override bool ShouldRender()
+    {
+        var should = _lastActive != Active;
+        _lastActive = Active;
+        return should;
+    }
 
     private async Task Switch(string id)
     {

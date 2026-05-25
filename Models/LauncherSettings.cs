@@ -48,13 +48,22 @@ public class LauncherSettings
     // ── Java Edition ─────────────────────────────────────────────
     public string JavaActiveVersion     { get; set; } = "";
     public string JavaLastUsedVersion   { get; set; } = "";
+    public string JavaActiveInstanceId  { get; set; } = "";
     // Override path to .minecraft (empty = %APPDATA%\.minecraft)
     public string JavaMinecraftDir      { get; set; } = "";
     // Override path to javaw.exe (empty = auto-detect)
     public string JavaRuntimePath       { get; set; } = "";
+    public int    JavaMinRamMb          { get; set; } = 512;
     public int    JavaMaxRamMb          { get; set; } = 2048;
     // Extra JVM args appended to every Java launch (e.g. -XX:+UseG1GC, -Dfile.encoding=UTF-8)
     public string JavaCustomJvmArgs     { get; set; } = "";
+    public bool   JavaBackupSavesBeforeLaunch { get; set; } = false;
+    public bool   JavaFullscreen        { get; set; } = false;
+    public int    JavaWindowWidth       { get; set; } = 854;
+    public int    JavaWindowHeight      { get; set; } = 480;
+    public bool   JavaUseCustomResolution { get; set; } = false;
+    public string JavaServerAddress     { get; set; } = "";
+    public int    JavaServerPort        { get; set; } = 25565;
     // Pop the game console window on launch. Java captures real stdout/stderr;
     // Bedrock captures launcher lifecycle events (we can't read UWP stdout).
     public bool   ShowLaunchConsole     { get; set; } = true;
@@ -67,6 +76,8 @@ public class LauncherSettings
     public string JavaAccessToken       { get; set; } = "";
     public string JavaAccessTokenExpiry { get; set; } = "";
     public string JavaSkinUrl           { get; set; } = "";
+    public string ActiveJavaAccountId   { get; set; } = "";
+    public List<JavaAccount> JavaAccounts { get; set; } = new();
 
     // ── Custom DLL ──────────────────────────────────────────────
     public string CustomDllPath         { get; set; } = "";

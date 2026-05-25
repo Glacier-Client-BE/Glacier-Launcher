@@ -9,41 +9,34 @@ using GlacierLauncher.Models;
 
 namespace GlacierLauncher.Services;
 
-/// <summary>
-/// Java Edition version manifest service. Pulls the Mojang piston-meta
-/// version_manifest_v2.json (the same list the official launcher uses) and
-/// cross-references it with the installed versions in
-/// <c>%APPDATA%\.minecraft\versions\</c>.
-/// </summary>
 public sealed class JavaVersionService
 {
     private const string ManifestUrl =
         "https://piston-meta.mojang.com/mc/game/version_manifest_v2.json";
 
     private readonly SettingsService _settings;
+    private readonly JavaInstanceService _instances;
     private readonly HttpClient      _http;
 
     public string? LastError      { get; private set; }
     public string? LatestRelease  { get; private set; }
     public string? LatestSnapshot { get; private set; }
 
-    public JavaVersionService(SettingsService settings)
+    public JavaVersionService(SettingsService settings, JavaInstanceService instances)
     {
         _settings = settings;
+        _instances = instances;
         _http     = HttpFactory.Shared;
         Directory.CreateDirectory(Path.GetDirectoryName(CacheFile)!);
     }
 
-    /// <summary>The user's .minecraft directory (override or %APPDATA%\.minecraft).</summary>
     public string MinecraftDir
     {
         get
         {
             var s = _settings.Settings.JavaMinecraftDir;
             if (!string.IsNullOrEmpty(s)) return s;
-            return Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-                ".minecraft");
+            return _instances.ActiveMinecraftDir;
         }
     }
 
@@ -60,7 +53,7 @@ public sealed class JavaVersionService
 
         try
         {
-            versions = await FetchManifestAsync();
+            versions = await FetchManifestAsync().ConfigureAwait(false);
             SaveCache(versions);
         }
         catch (Exception ex)
@@ -71,8 +64,6 @@ public sealed class JavaVersionService
                 LastError += " (showing cached data)";
         }
 
-        // Cross-reference with what's actually on disk so the UI can show
-        // installed vs. needs-download without us re-walking the folder on every render.
         var active = _settings.Settings.JavaActiveVersion;
         foreach (var v in versions)
         {
@@ -85,11 +76,6 @@ public sealed class JavaVersionService
         return versions;
     }
 
-    /// <summary>
-    /// Returns versions found under .minecraft\versions that aren't in the
-    /// upstream manifest — typically modloader profiles (Fabric, Forge,
-    /// OptiFine) and ancient versions Mojang has dropped.
-    /// </summary>
     public List<JavaVersion> ScanCustomInstalledVersions(IReadOnlyCollection<string> knownIds)
     {
         var results = new List<JavaVersion>();
@@ -121,11 +107,11 @@ public sealed class JavaVersionService
 
     private async Task<List<JavaVersion>> FetchManifestAsync()
     {
-        using var resp = await _http.GetAsync(ManifestUrl);
+        using var resp = await _http.GetAsync(ManifestUrl, HttpCompletionOption.ResponseHeadersRead).ConfigureAwait(false);
         resp.EnsureSuccessStatusCode();
-        var json = await resp.Content.ReadAsStringAsync();
+        await using var stream = await resp.Content.ReadAsStreamAsync().ConfigureAwait(false);
 
-        using var doc = JsonDocument.Parse(json);
+        using var doc = await JsonDocument.ParseAsync(stream).ConfigureAwait(false);
         var root = doc.RootElement;
 
         if (root.TryGetProperty("latest", out var latest))
@@ -166,7 +152,7 @@ public sealed class JavaVersionService
             File.WriteAllText(CacheFile,
                 JsonSerializer.Serialize(data, new JsonSerializerOptions { WriteIndented = false }));
         }
-        catch { /* cache is best-effort */ }
+        catch { }
     }
 
     private List<JavaVersion> LoadCache()
@@ -174,8 +160,8 @@ public sealed class JavaVersionService
         try
         {
             if (!File.Exists(CacheFile)) return new();
-            var json = File.ReadAllText(CacheFile);
-            using var doc = JsonDocument.Parse(json);
+            using var fs = File.OpenRead(CacheFile);
+            using var doc = JsonDocument.Parse(fs);
             var list = new List<JavaVersion>();
             foreach (var el in doc.RootElement.EnumerateArray())
             {

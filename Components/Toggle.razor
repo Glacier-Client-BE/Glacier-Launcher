@@ -1,17 +1,32 @@
-@* Reusable on/off toggle switch. *@
 <div class="toggle @(On ? "on" : "")"
      role="switch" aria-checked="@(On ? "true" : "false")"
+     tabindex="0"
      @onclick="HandleClick"
-     @onclick:stopPropagation></div>
+     @onclick:stopPropagation
+     @onkeydown="HandleKeyDown"></div>
 
 @code {
     [Parameter] public bool On { get; set; }
     [Parameter] public EventCallback<bool> OnChanged { get; set; }
     [Parameter] public EventCallback OnClick { get; set; }
 
+    private bool? _lastOn;
+
+    protected override bool ShouldRender()
+    {
+        var should = _lastOn == null || On != _lastOn.Value;
+        _lastOn = On;
+        return should;
+    }
+
     private async Task HandleClick()
     {
         if (OnChanged.HasDelegate) await OnChanged.InvokeAsync(!On);
         if (OnClick.HasDelegate)   await OnClick.InvokeAsync();
+    }
+
+    private async Task HandleKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key is " " or "Enter") await HandleClick();
     }
 }
