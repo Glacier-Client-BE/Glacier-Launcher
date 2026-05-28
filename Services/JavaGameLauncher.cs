@@ -56,15 +56,15 @@ public sealed class JavaGameLauncher
 
     public delegate void LaunchProgress(string stage, double percent);
 
-    public async Task LaunchAsync(string versionId, LaunchProgress? onProgress = null)
+    public async Task LaunchAsync(string versionId, LaunchProgress? onProgress = null, IReadOnlyList<string>? extraJvmArgs = null)
     {
         if (string.IsNullOrWhiteSpace(versionId))
             throw new InvalidOperationException("No Java version selected.");
 
-        await LaunchAsyncCore(versionId, onProgress).ConfigureAwait(false);
+        await LaunchAsyncCore(versionId, onProgress, extraJvmArgs).ConfigureAwait(false);
     }
 
-    private async Task LaunchAsyncCore(string versionId, LaunchProgress? onProgress)
+    private async Task LaunchAsyncCore(string versionId, LaunchProgress? onProgress, IReadOnlyList<string>? extraJvmArgs = null)
     {
         var mcDir      = _versions.MinecraftDir;
         var versionDir = Path.Combine(mcDir, "versions", versionId);
@@ -160,7 +160,7 @@ public sealed class JavaGameLauncher
         console?.Info($"Auth: {auth.Name} ({auth.UserType}) · {auth.Uuid}");
 
         var sb = new StringBuilder();
-        AppendJvmArgs(sb, profile, mcDir, versionId, actualJavaMajor);
+        AppendJvmArgs(sb, profile, mcDir, versionId, actualJavaMajor, extraJvmArgs);
         sb.Append(" -cp ").Append(Quote(string.Join(';', classpath)));
         sb.Append(' ').Append(profile.MainClass);
         AppendGameArgs(sb, profile, mcDir, versionId, auth);
@@ -432,7 +432,7 @@ public sealed class JavaGameLauncher
         return cp;
     }
 
-    private void AppendJvmArgs(StringBuilder sb, VersionProfile profile, string mcDir, string versionId, int actualJavaMajor)
+    private void AppendJvmArgs(StringBuilder sb, VersionProfile profile, string mcDir, string versionId, int actualJavaMajor, IReadOnlyList<string>? extraJvmArgs = null)
     {
         var nativesDir = Path.Combine(mcDir, "versions", versionId, "natives");
         Directory.CreateDirectory(nativesDir);
@@ -468,6 +468,10 @@ public sealed class JavaGameLauncher
         var custom = _settings.Settings.JavaCustomJvmArgs;
         if (!string.IsNullOrWhiteSpace(custom))
             sb.Append(' ').Append(custom);
+
+        if (extraJvmArgs != null)
+            foreach (var arg in extraJvmArgs)
+                sb.Append(' ').Append(Quote(arg));
     }
 
     private void AppendGameArgs(
