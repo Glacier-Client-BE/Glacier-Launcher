@@ -26,6 +26,7 @@ public class VanillaVersionService
 
     private readonly SettingsService _settingsService;
     private readonly HttpClient      _httpClient;
+    private readonly DownloadService _download = new();
 
     public static string VersionsDirectory =>
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
@@ -171,7 +172,8 @@ public class VanillaVersionService
 
     // ── Download / Switch / Delete ─────────────────────────────────
 
-    public async Task DownloadVersionAsync(VanillaVersion version, IProgress<double>? progress = null)
+    public async Task DownloadVersionAsync(
+        VanillaVersion version, IProgress<double>? progress = null, CancellationToken cancel = default)
     {
         var downloadUrl = await GetDownloadUrlAsync(version.UpdateId);
         if (string.IsNullOrEmpty(downloadUrl))
@@ -180,31 +182,8 @@ public class VanillaVersionService
         var tempFile   = Path.Combine(VersionsDirectory, version.Version + ".appx.tmp");
         var versionDir = Path.Combine(VersionsDirectory, version.Version);
 
-        try
-        {
-            using var response = await _httpClient.GetAsync(downloadUrl, HttpCompletionOption.ResponseHeadersRead);
-            response.EnsureSuccessStatusCode();
-
-            var total = response.Content.Headers.ContentLength ?? version.SizeBytes;
-            long downloaded = 0;
-            var buf = new byte[65536];
-
-            await using var stream = await response.Content.ReadAsStreamAsync();
-            await using var fs = File.Create(tempFile);
-
-            int read;
-            while ((read = await stream.ReadAsync(buf)) > 0)
-            {
-                await fs.WriteAsync(buf.AsMemory(0, read));
-                downloaded += read;
-                if (total > 0) progress?.Report((double)downloaded / total * 100);
-            }
-        }
-        catch
-        {
-            try { File.Delete(tempFile); } catch { }
-            throw;
-        }
+        await _download.DownloadAsync(
+            downloadUrl, tempFile, knownTotalBytes: version.SizeBytes, progress: progress, cancel: cancel);
 
         Directory.CreateDirectory(versionDir);
 
@@ -235,7 +214,7 @@ public class VanillaVersionService
         }
 
         version.IsDownloaded = true;
-        progress?.Report(100);
+        progress?.Report(1.0);
     }
 
     public async Task<string> SwitchVersionAsync(VanillaVersion version)

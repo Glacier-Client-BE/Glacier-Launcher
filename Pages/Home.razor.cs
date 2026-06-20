@@ -26,7 +26,6 @@ public partial class Home : IDisposable
 
     private bool   isLoadingVersions = false;
     private List<MinecraftVersion> versions = new();
-    private double downloadProgress = 0;
     private string versionsFilter = "";
     private string versionsClient = "Latite";
     private IEnumerable<MinecraftVersion> FilteredVersions
@@ -53,6 +52,7 @@ public partial class Home : IDisposable
         public double Progress      { get; set; }
         public string Error         { get; set; } = "";
         public bool   IsActive      { get; set; }
+        public CancellationTokenSource? DownloadCts { get; set; }
 
         public string DisplayName =>
             System.IO.Path.GetFileNameWithoutExtension(Entry.Name);
@@ -142,17 +142,8 @@ public partial class Home : IDisposable
     private double mrDownloadProgress = 0;
     private List<ModrinthService.MrProject> mrResults = new();
 
-    private bool   flarialDownloaded  = false;
-    private bool   flarialUpToDate    = false;
-    private bool   flarialDownloading = false;
-    private double flarialProgress    = 0;
-    private string flarialError       = "";
-
-    private bool   odersoDownloaded  = false;
-    private bool   odersoUpToDate    = false;
-    private bool   odersoDownloading = false;
-    private double odersoProgress    = 0;
-    private string odersoError       = "";
+    private readonly ClientDownloadState _flarial = new();
+    private readonly ClientDownloadState _oderso  = new();
 
     private string customDllPath { get => SettingsService.Settings.CustomDllPath; set { SettingsService.Settings.CustomDllPath = value; SettingsService.Save(); } }
     private bool   copiedDllPath = false;
@@ -190,6 +181,7 @@ public partial class Home : IDisposable
     private List<ToastItem> _toasts = new();
 
     private bool mcRunning = false;
+    private DateTime? _sessionStart;
     private CancellationTokenSource? _mcPollCts;
 
     private bool _isFullscreen = false;
@@ -274,6 +266,7 @@ public partial class Home : IDisposable
                 if (running != mcRunning)
                 {
                     mcRunning = running;
+                    AccumulatePlaytime(running);
                     await InvokeAsync(StateHasChanged);
                 }
                 await Task.Delay(running ? 2500 : 4000, token);
@@ -356,6 +349,9 @@ public partial class Home : IDisposable
                 case "mcversions": if (!searchOpen && currentView != "mcversions") await OpenMcVersions(); break;
                 case "fullscreen": await ToggleFullscreen(); break;
                 case "cycle":    if (!searchOpen) CycleClient(); break;
+                case "cycletheme":  await CycleTheme();      break;
+                case "cycleaccent": await CycleAccent();     break;
+                case "diagnostics": await CopyDiagnostics(); break;
                 case "refresh":
                     if (currentView == "versions") await RefreshVersionsAsync();
                     else if (currentView == "clients") await OpenClients();
@@ -401,6 +397,8 @@ public partial class Home : IDisposable
         _mrDebounceCts?.Dispose();
         _launchCts?.Cancel();
         _launchCts?.Dispose();
+        _serverPingCts?.Cancel();
+        _serverPingCts?.Dispose();
     }
 
     private async Task OnDragStart()    => await JS.InvokeVoidAsync("startDrag");
@@ -590,7 +588,7 @@ public partial class Home : IDisposable
     private string GetAvatarSrc()
     {
         if (IsJava && !string.IsNullOrEmpty(SettingsService.Settings.JavaUuid))
-            return "https://crafatar.com/avatars/" + SettingsService.Settings.JavaUuid.Replace("-", "") + "?overlay";
+            return "https://mc-heads.net/avatar/" + SettingsService.Settings.JavaUuid.Replace("-", "");
         var which = EffectiveProfile();
         if (which == "xbox" && !string.IsNullOrEmpty(Xbox.CurrentProfile?.GamerPictureUrl))
             return Xbox.CurrentProfile.GamerPictureUrl;
@@ -665,5 +663,58 @@ public partial class Home : IDisposable
         currentView = "home";
         hoveredBtn  = "";
         StateHasChanged();
+    }
+
+    private string FormatMarkdown(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return "";
+        try
+        {
+            // Escape HTML first
+            text = System.Net.WebUtility.HtmlEncode(text);
+
+            // Bold: **text**
+            text = System.Text.RegularExpressions.Regex.Replace(text, @"\*\*(.*?)\*\*", "<strong>$1</strong>");
+            
+            // Links: [text](url)
+            text = System.Text.RegularExpressions.Regex.Replace(text, @"\[(.*?)\]\((.*?)\)", "<a href=\"$2\" target=\"_blank\">$1</a>");
+
+            // Lists: - item
+            text = System.Text.RegularExpressions.Regex.Replace(text, @"^\s*-\s+(.*)$", "<li>$1</li>", System.Text.RegularExpressions.RegexOptions.Multiline);
+            text = System.Text.RegularExpressions.Regex.Replace(text, @"(<li>.*</li>)", "<ul>$1</ul>", System.Text.RegularExpressions.RegexOptions.Singleline);
+
+            // Line breaks
+            text = text.Replace("\n", "<br/>");
+
+            return text;
+        }
+        catch { return text; }
+    }
+
+    private void ToggleDiscordRpc()
+    {
+        SettingsService.Settings.DiscordRichPresence = !SettingsService.Settings.DiscordRichPresence;
+        SettingsService.Save();
+        _ = ShowToast(SettingsService.Settings.DiscordRichPresence ? "Discord RPC enabled" : "Discord RPC disabled", "success");
+        StateHasChanged();
+    }
+
+    private string Highlight(string text, string query)
+    {
+        if (string.IsNullOrWhiteSpace(query)) return text;
+        try
+        {
+            var parts = System.Text.RegularExpressions.Regex.Split(text, $"({System.Text.RegularExpressions.Regex.Escape(query)})", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            var sb = new System.Text.StringBuilder();
+            foreach (var p in parts)
+            {
+                if (p.Equals(query, StringComparison.OrdinalIgnoreCase))
+                    sb.Append("<span class=\"search-highlight\">").Append(p).Append("</span>");
+                else
+                    sb.Append(p);
+            }
+            return sb.ToString();
+        }
+        catch { return text; }
     }
 }

@@ -1,5 +1,6 @@
+using System.IO;
+using System.Net.Http;
 using System.Net.Http.Json;
-using System.Security.Cryptography;
 using GlacierLauncher.Models;
 
 namespace GlacierLauncher.Services;
@@ -13,16 +14,18 @@ public sealed class GlacierClientService
 {
     private const string ManifestUrl = "https://cdn.glacierclient.xyz/versions.json";
 
-    private readonly HttpClient      _http;
+    private readonly HttpClient       _http;
     private readonly JavaGameLauncher _javaLauncher;
-    private GlacierManifest?         _cachedManifest;
+    private readonly DownloadService  _download;
+    private GlacierManifest?          _cachedManifest;
 
     public string? LastError { get; private set; }
 
-    public GlacierClientService(JavaGameLauncher javaLauncher)
+    public GlacierClientService(JavaGameLauncher javaLauncher, DownloadService download)
     {
         _javaLauncher = javaLauncher;
-        _http         = HttpFactory.Create("GlacierLauncher/1.0");
+        _download     = download;
+        _http         = HttpFactory.Shared;
     }
 
     // ── Manifest ─────────────────────────────────────────────────────────────
@@ -45,51 +48,9 @@ public sealed class GlacierClientService
 
     // ── Install ───────────────────────────────────────────────────────────────
 
-    public async Task InstallAsync(GlacierClientVersion version, IProgress<double>? progress = null)
-    {
-        Directory.CreateDirectory(version.InstallDir);
-        var tmp = version.JarPath + ".tmp";
-        try
-        {
-            using var response = await _http.GetAsync(version.Url, HttpCompletionOption.ResponseHeadersRead);
-            response.EnsureSuccessStatusCode();
-
-            var total = response.Content.Headers.ContentLength ?? -1L;
-            using var sha  = SHA256.Create();
-            await using var net  = await response.Content.ReadAsStreamAsync();
-            await using var file = new FileStream(tmp, FileMode.Create, FileAccess.Write, FileShare.None, 81920, true);
-
-            var buf = new byte[81920];
-            long downloaded = 0;
-            int  read;
-            while ((read = await net.ReadAsync(buf)) > 0)
-            {
-                await file.WriteAsync(buf.AsMemory(0, read));
-                sha.TransformBlock(buf, 0, read, null, 0);
-                downloaded += read;
-                if (total > 0) progress?.Report((double)downloaded / total);
-            }
-
-            sha.TransformFinalBlock([], 0, 0);
-            var actual = Convert.ToHexStringLower(sha.Hash!);
-
-            if (!string.IsNullOrEmpty(version.Sha256)
-                && !version.Sha256.StartsWith("0000")
-                && !actual.Equals(version.Sha256, StringComparison.OrdinalIgnoreCase))
-            {
-                File.Delete(tmp);
-                throw new InvalidDataException(
-                    $"SHA256 mismatch for {version.Id}: expected {version.Sha256}, got {actual}");
-            }
-
-            File.Move(tmp, version.JarPath, overwrite: true);
-        }
-        catch
-        {
-            if (File.Exists(tmp)) File.Delete(tmp);
-            throw;
-        }
-    }
+    public async Task InstallAsync(
+        GlacierClientVersion version, IProgress<double>? progress = null, CancellationToken cancel = default) =>
+        await _download.DownloadAsync(version.Url, version.JarPath, version.Sha256, progress, cancel: cancel);
 
     // ── Uninstall ─────────────────────────────────────────────────────────────
 

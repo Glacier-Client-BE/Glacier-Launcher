@@ -23,7 +23,8 @@ public class FlarialService
     public static string FilePath =>
         Path.Combine(FlarialDirectory, FileName);
 
-    private readonly HttpClient _http;
+    private readonly HttpClient      _http;
+    private readonly DownloadService _download = new();
 
     public FlarialService()
     {
@@ -45,34 +46,10 @@ public class FlarialService
         catch { return false; }
     }
 
-    public async Task DownloadAsync(IProgress<double>? progress = null)
+    public async Task DownloadAsync(IProgress<double>? progress = null, CancellationToken cancel = default)
     {
-        // Skip if already up-to-date
         if (await IsUpToDateAsync()) return;
-
-        // Remove stale copy
-        if (File.Exists(FilePath))
-        {
-            try { File.Delete(FilePath); } catch { }
-        }
-
-        using var response = await _http.GetAsync(DownloadUri, HttpCompletionOption.ResponseHeadersRead);
-        response.EnsureSuccessStatusCode();
-
-        var  total      = response.Content.Headers.ContentLength ?? -1;
-        var  buffer     = new byte[8192];
-        long downloaded = 0;
-
-        await using var stream     = await response.Content.ReadAsStreamAsync();
-        await using var fileStream = File.Create(FilePath);
-
-        int read;
-        while ((read = await stream.ReadAsync(buffer)) > 0)
-        {
-            await fileStream.WriteAsync(buffer.AsMemory(0, read));
-            downloaded += read;
-            if (total > 0) progress?.Report((double)downloaded / total * 100);
-        }
+        await _download.DownloadAsync(DownloadUri, FilePath, progress: progress, cancel: cancel);
     }
 
     public void Delete()

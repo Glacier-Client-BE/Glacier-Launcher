@@ -16,7 +16,8 @@ namespace GlacierLauncher.Services;
 /// </summary>
 public sealed class JavaRuntimeDownloadService
 {
-    private readonly HttpClient _http = HttpFactory.Shared;
+    private readonly HttpClient      _http     = HttpFactory.Shared;
+    private readonly DownloadService _download = new();
 
     /// <summary>Root directory for all Glacier-managed JDKs.</summary>
     public static string RuntimesRoot { get; } = Path.Combine(
@@ -114,30 +115,18 @@ public sealed class JavaRuntimeDownloadService
         var zipPath = Path.Combine(destDir, $"java-{major}.zip");
         onProgress?.Invoke($"Downloading Java {major}…", 5);
 
-        using (var resp = await _http.GetAsync(downloadUrl, HttpCompletionOption.ResponseHeadersRead, cancel))
+        var progress = new DelegateProgress<double>(f =>
         {
-            resp.EnsureSuccessStatusCode();
-            var contentLength = resp.Content.Headers.ContentLength ?? totalSize;
+            var pct = Math.Min(5 + f * 80.0, 85);
+            if (totalSize > 0)
+                onProgress?.Invoke(
+                    $"Downloading Java {major}… ({(long)(f * totalSize) / (1024 * 1024)} / {totalSize / (1024 * 1024)} MB)",
+                    pct);
+            else
+                onProgress?.Invoke($"Downloading Java {major}…", pct);
+        });
 
-            await using var src  = await resp.Content.ReadAsStreamAsync(cancel);
-            await using var dest = File.Create(zipPath);
-
-            var buffer = new byte[81920];
-            long totalRead = 0;
-            int bytesRead;
-            while ((bytesRead = await src.ReadAsync(buffer, cancel)) > 0)
-            {
-                await dest.WriteAsync(buffer.AsMemory(0, bytesRead), cancel);
-                totalRead += bytesRead;
-                if (contentLength > 0)
-                {
-                    var pct = 5 + totalRead * 80.0 / contentLength;
-                    onProgress?.Invoke(
-                        $"Downloading Java {major}… ({totalRead / (1024 * 1024)} / {contentLength / (1024 * 1024)} MB)",
-                        Math.Min(pct, 85));
-                }
-            }
-        }
+        await _download.DownloadAsync(downloadUrl, zipPath, progress: progress, knownTotalBytes: totalSize, cancel: cancel);
 
         // Extract.
         onProgress?.Invoke($"Extracting Java {major}…", 88);

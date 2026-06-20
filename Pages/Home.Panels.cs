@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using GlacierLauncher.Components;
 using GlacierLauncher.Models;
 using GlacierLauncher.Services;
 using Microsoft.AspNetCore.Components;
@@ -30,7 +31,71 @@ public partial class Home
         new() { Name = "Galaxite",      Address = "play.galaxite.net",       Port = 19132, Icon = "fa-solid fa-star",       IconColor = "#9b51e0" },
     };
 
-    private void OpenServers() { currentView = "servers"; }
+    // Live status keyed by "address:port". A present-but-null value means a ping
+    // is in flight; an absent key means we haven't started one yet.
+    private readonly Dictionary<string, ServerStatus?> _serverStatus = new();
+    private System.Threading.CancellationTokenSource? _serverPingCts;
+
+    private void OpenServers()
+    {
+        currentView = "servers";
+        _ = PingAllServersAsync();
+    }
+
+    private static string ServerKey(SavedServer s) => $"{s.Address}:{s.Port}";
+
+    // Inline live-status badge for a server row: "Pinging…" → players/latency, or "Offline".
+    private RenderFragment RenderServerStatus(SavedServer s) => builder =>
+    {
+        if (!_serverStatus.TryGetValue(ServerKey(s), out var st)) return;   // not started yet
+
+        if (st == null)
+        {
+            builder.OpenElement(0, "span");
+            builder.AddAttribute(1, "class", "server-ping checking");
+            builder.AddContent(2, "Pinging…");
+            builder.CloseElement();
+            return;
+        }
+
+        builder.OpenElement(10, "span");
+        builder.AddAttribute(11, "class", st.Online ? "server-ping online" : "server-ping offline");
+        builder.OpenElement(12, "span");
+        builder.AddAttribute(13, "class", "ping-dot");
+        builder.CloseElement();
+        builder.AddContent(14, st.Online
+            ? $"{st.PlayersOnline:N0}/{st.PlayersMax:N0} · {st.LatencyMs} ms"
+            : "Offline");
+        builder.CloseElement();
+    };
+
+    /// <summary>Pings every saved + suggested server in parallel, refreshing the UI as each returns.</summary>
+    private async Task PingAllServersAsync()
+    {
+        _serverPingCts?.Cancel();
+        _serverPingCts = new System.Threading.CancellationTokenSource();
+        var token = _serverPingCts.Token;
+
+        var targets = SettingsService.Settings.SavedServers
+            .Concat(_serverSuggestions)
+            .GroupBy(ServerKey)
+            .Select(g => g.First())
+            .ToList();
+
+        foreach (var s in targets) _serverStatus[ServerKey(s)] = null;   // mark "pinging" (UI thread)
+        StateHasChanged();
+
+        await Task.WhenAll(targets.Select(async s =>
+        {
+            var status = await ServerPingService.PingAsync(s.Address, s.Port);
+            if (token.IsCancellationRequested) return;
+            await InvokeAsync(() =>                                       // marshal dict write to UI thread
+            {
+                _serverStatus[ServerKey(s)] = status;
+                StateHasChanged();
+            });
+        }));
+    }
 
     private void OpenAddServerModal()
     {
@@ -162,16 +227,19 @@ public partial class Home
 
     private async Task HandleMcVersionDownload(VanillaVersion v)
     {
+        if (v.IsDownloading) return;
+        v.DownloadCts = new CancellationTokenSource();
         v.IsDownloading = true; v.ErrorMessage = null; v.Progress = 0; StateHasChanged();
         try
         {
             var prog = new ThrottledProgress(new Progress<double>(pct =>
-            { v.Progress = pct; InvokeAsync(StateHasChanged); }));
-            await VanillaVersions.DownloadVersionAsync(v, prog);
+            { v.Progress = pct; InvokeAsync(StateHasChanged); }), completeValue: 1.0, minDelta: 0.01);
+            await VanillaVersions.DownloadVersionAsync(v, prog, v.DownloadCts.Token);
             _ = ShowToast($"Minecraft {v.Version} downloaded!", "success");
         }
+        catch (OperationCanceledException) { _ = ShowToast($"Minecraft {v.Version} download cancelled.", "info"); }
         catch (Exception ex) { v.ErrorMessage = ex.Message; }
-        finally { v.IsDownloading = false; v.Progress = 0; }
+        finally { v.IsDownloading = false; v.Progress = 0; var cts = v.DownloadCts; v.DownloadCts = null; cts?.Dispose(); }
         StateHasChanged();
     }
 
@@ -209,30 +277,10 @@ public partial class Home
     {
         if (v.IsDownloading)
         {
-            b.OpenElement(0, "div");
-            b.AddAttribute(1, "class", "dl-progress-row");
-            if (v.Progress > 0)
-            {
-                b.OpenElement(2, "div");
-                b.AddAttribute(3, "class", "progress-bar-wrap");
-                b.OpenElement(4, "div");
-                b.AddAttribute(5, "class", "progress-bar-fill");
-                b.AddAttribute(6, "style", $"width:{v.Progress:F0}%");
-                b.CloseElement();
-                b.CloseElement();
-                b.OpenElement(7, "span");
-                b.AddAttribute(8, "class", "dl-pct");
-                b.AddContent(9, $"{(int)v.Progress}%");
-                b.CloseElement();
-            }
-            b.OpenElement(10, "button");
-            b.AddAttribute(11, "class", "icon-btn");
-            b.AddAttribute(12, "disabled", true);
-            b.OpenElement(13, "span");
-            b.AddAttribute(14, "class", "spinner");
-            b.CloseElement();
-            b.CloseElement();
-            b.CloseElement();
+            b.OpenComponent<InlineProgress>(0);
+            b.AddAttribute(1, "Progress", v.Progress);
+            b.AddAttribute(2, "OnCancel", EventCallback.Factory.Create(this, () => v.DownloadCts?.Cancel()));
+            b.CloseComponent();
         }
         else if (v.IsSwitching)
         {
@@ -467,6 +515,7 @@ public partial class Home
             lunarSelectedVersion = LunarBadlion.LunarInstalledVersions.FirstOrDefault() ?? "";
         currentView = "javaclients";
         StateHasChanged();
+        _ = EnsureGlacierManifestAsync();
     }
 
     private void RefreshJavaClients()
@@ -475,6 +524,7 @@ public partial class Home
         if (!LunarBadlion.LunarInstalledVersions.Contains(lunarSelectedVersion))
             lunarSelectedVersion = LunarBadlion.LunarInstalledVersions.FirstOrDefault() ?? "";
         StateHasChanged();
+        _ = EnsureGlacierManifestAsync(force: true);
     }
 
     private string lunarSelectedVersion = "";
@@ -765,8 +815,8 @@ public partial class Home
         StateHasChanged();
         try
         {
-            var prog = new ThrottledProgress(new Progress<double>(pct =>
-            { launcherUpdateProgress = pct; InvokeAsync(StateHasChanged); }));
+            var prog = new ThrottledProgress(new Progress<double>(f =>
+            { launcherUpdateProgress = f; InvokeAsync(StateHasChanged); }), completeValue: 1.0, minDelta: 0.01);
             await AutoUpdate.ApplyUpdateAsync(launcherUpdateInfo, prog);
         }
         catch (Exception ex)

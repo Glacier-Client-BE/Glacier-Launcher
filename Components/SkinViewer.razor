@@ -1,0 +1,134 @@
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+
+@* Player skin display. Defaults to a reliable static body render (mc-heads), with
+   an opt-in interactive 3D model (skinview3d) that renders the selected cape and a
+   chosen arm model (Steve/Alex). The 3D path falls back to the static view if WebGL
+   is unavailable. *@
+
+<div class="skin-viewer">
+    <div class="skin-stage">
+        @if (_mode == "3d")
+        {
+            <canvas id="@_canvasId" class="skin-canvas"></canvas>
+            @if (!_ready) { <div class="skin-loading"><span class="spinner"></span></div> }
+        }
+        else
+        {
+            <img class="skin-body" src="@BodyRenderUrl" alt="@DisplayName skin"
+                 onerror="this.onerror=null;this.src='@FallbackRenderUrl';" />
+        }
+    </div>
+
+    <div class="skin-pills" @onmousedown:stopPropagation>
+        <button class="skin-pill @(_mode == "2d" ? "active" : "")" @onclick='() => SetMode("2d")'>2D</button>
+        <button class="skin-pill @(_mode == "3d" ? "active" : "")" @onclick='() => SetMode("3d")'>3D</button>
+        <span class="skin-pill-sep"></span>
+        <button class="skin-pill @(_model == "default" ? "active" : "")" @onclick='() => SetModel("default")' data-tooltip="Classic model">Steve</button>
+        <button class="skin-pill @(_model == "slim" ? "active" : "")" @onclick='() => SetModel("slim")' data-tooltip="Slim model">Alex</button>
+        @if (!string.IsNullOrEmpty(CapeUrl) && _mode == "3d")
+        {
+            <button class="skin-pill" @onclick="CycleCape" data-tooltip="Cape / Elytra / Off">
+                <i class="fa-solid fa-feather"></i> @CapeLabel
+            </button>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter] public string Uuid     { get; set; } = "";
+    [Parameter] public string Username { get; set; } = "";
+    [Parameter] public string CapeUrl  { get; set; } = "";
+
+    private readonly string _canvasId = "skin-" + Guid.NewGuid().ToString("N")[..8];
+    private string _mode        = "2d";       // 2d (static image) | 3d (interactive)
+    private string _model       = "default";  // default = Steve | slim = Alex
+    private bool   _ready;
+    private bool   _need3dInit;
+    private string _capeMode    = "cape";     // cape | elytra | off
+    private string _appliedCape = "";
+
+    private string CleanUuid         => (Uuid ?? "").Replace("-", "").Trim();
+    private string DisplayName       => string.IsNullOrWhiteSpace(Username) ? "Player" : Username;
+    private string SkinTextureUrl    => $"https://mc-heads.net/skin/{CleanUuid}";
+    private string BodyRenderUrl     => $"https://mc-heads.net/body/{CleanUuid}/right";
+    private string FallbackRenderUrl => $"https://crafatar.com/renders/body/{CleanUuid}?overlay&scale=10";
+    private string CapeLabel         => _capeMode switch { "elytra" => "Elytra", "off" => "No cape", _ => "Cape" };
+
+    // A cape selected in the wardrobe arrives via CapeUrl. Show it on the model —
+    // which means switching to 3D, since the static render can't display capes.
+    protected override void OnParametersSet()
+    {
+        if (CapeUrl == _appliedCape) return;
+        _appliedCape = CapeUrl;
+        if (!string.IsNullOrEmpty(CapeUrl))
+        {
+            _mode = "3d"; _ready = false; _capeMode = "cape"; _need3dInit = true;
+        }
+        else if (_mode == "3d")
+        {
+            _need3dInit = true;   // re-init to drop the cape
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_need3dInit)
+        {
+            _need3dInit = false;
+            await Init3d();
+        }
+    }
+
+    private async Task SetMode(string mode)
+    {
+        if (_mode == mode) return;
+        _mode = mode; _ready = false;
+        if (mode == "3d") _need3dInit = true;
+        else { try { await JS.InvokeVoidAsync("glacierSkin.dispose", _canvasId); } catch { } }
+        StateHasChanged();
+    }
+
+    private async Task SetModel(string model)
+    {
+        if (_model == model) return;
+        _model = model;
+        if (_mode == "3d" && _ready)
+        {
+            try { await JS.InvokeAsync<bool>("glacierSkin.setModel", _canvasId, SkinTextureUrl, _model); } catch { }
+        }
+        else
+        {
+            _mode = "3d"; _ready = false; _need3dInit = true;   // jump to 3D so the change is visible
+        }
+        StateHasChanged();
+    }
+
+    private async Task Init3d()
+    {
+        bool ok;
+        var cape = _capeMode == "off" ? "" : CapeUrl;
+        try { ok = await JS.InvokeAsync<bool>("glacierSkin.render", _canvasId, SkinTextureUrl, cape, _model); }
+        catch { ok = false; }
+
+        if (ok && _capeMode == "elytra" && !string.IsNullOrEmpty(CapeUrl))
+        {
+            try { await JS.InvokeAsync<bool>("glacierSkin.setCape", _canvasId, CapeUrl, "elytra"); } catch { }
+        }
+        if (!ok) _mode = "2d";
+        _ready = true;
+        StateHasChanged();
+    }
+
+    private async Task CycleCape()
+    {
+        _capeMode = _capeMode switch { "cape" => "elytra", "elytra" => "off", _ => "cape" };
+        try { await JS.InvokeAsync<bool>("glacierSkin.setCape", _canvasId, CapeUrl, _capeMode); } catch { }
+        StateHasChanged();
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try { await JS.InvokeVoidAsync("glacierSkin.dispose", _canvasId); } catch { }
+    }
+}

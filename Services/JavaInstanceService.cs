@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
@@ -260,18 +261,28 @@ public sealed class JavaInstanceService
             if (!File.Exists(_indexPath))
                 return;
             var json = File.ReadAllText(_indexPath);
-            _instances = JsonSerializer.Deserialize<List<JavaInstance>>(json) ?? new();
+            try
+            {
+                _instances = JsonSerializer.Deserialize<List<JavaInstance>>(json) ?? new();
+            }
+            catch (JsonException)
+            {
+                // Malformed index — keep a copy aside and rebuild from the default.
+                JsonStore.QuarantineCorrupt(_indexPath);
+                _instances = new();
+            }
         }
         catch
         {
+            // Transient read error: fall back to an empty list without touching disk.
             _instances = new();
         }
     }
 
     private void Save()
     {
-        Directory.CreateDirectory(Path.GetDirectoryName(_indexPath)!);
-        File.WriteAllText(_indexPath, JsonSerializer.Serialize(_instances, new JsonSerializerOptions { WriteIndented = true }));
+        var json = JsonSerializer.Serialize(_instances, new JsonSerializerOptions { WriteIndented = true });
+        JsonStore.WriteAtomic(_indexPath, json);
     }
 
     private void EnsureDefaultInstance()
@@ -285,6 +296,20 @@ public sealed class JavaInstanceService
         }
     }
 
+    /// <summary>Sets a per-instance RAM override on the active instance (0 = use global).</summary>
+    public void SetActiveRam(int minMb, int maxMb)
+    {
+        lock (_sync)
+        {
+            EnsureDefaultInstance();
+            var instance = _instances.FirstOrDefault(x => string.Equals(x.Id, _settings.Settings.JavaActiveInstanceId, StringComparison.OrdinalIgnoreCase)) ?? _instances.First();
+            instance.MaxRamMb = maxMb < 0 ? 0 : maxMb;
+            instance.MinRamMb = minMb < 0 ? 0 : minMb;
+            instance.UpdatedAt = DateTime.UtcNow.ToString("o");
+            Save();
+        }
+    }
+
     private static JavaInstance Clone(JavaInstance instance) => new()
     {
         Id = instance.Id,
@@ -292,7 +317,9 @@ public sealed class JavaInstanceService
         VersionId = instance.VersionId,
         Directory = instance.Directory,
         CreatedAt = instance.CreatedAt,
-        UpdatedAt = instance.UpdatedAt
+        UpdatedAt = instance.UpdatedAt,
+        MaxRamMb = instance.MaxRamMb,
+        MinRamMb = instance.MinRamMb
     };
 
     private static void EnsureLayout(JavaInstance instance)
@@ -316,13 +343,32 @@ public sealed class JavaInstanceService
     {
         if (Directory.Exists(linkPath))
             return;
+
         try
         {
             Directory.CreateSymbolicLink(linkPath, targetPath);
         }
         catch
         {
-            Directory.CreateDirectory(linkPath);
+            // Fallback: Try creating a Junction on Windows if symbolic link fails
+            try
+            {
+                if (System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows))
+                {
+                    var psi = new ProcessStartInfo
+                    {
+                        FileName = "cmd.exe",
+                        Arguments = $"/c mklink /j \"{linkPath}\" \"{targetPath}\"",
+                        CreateNoWindow = true,
+                        UseShellExecute = false
+                    };
+                    Process.Start(psi)?.WaitForExit();
+                }
+            }
+            catch { }
+
+            if (!Directory.Exists(linkPath))
+                Directory.CreateDirectory(linkPath);
         }
     }
 

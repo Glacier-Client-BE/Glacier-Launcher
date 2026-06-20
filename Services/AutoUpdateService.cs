@@ -17,6 +17,8 @@ public record LauncherUpdateInfo(
     long   AssetSize
 );
 
+public record LauncherRelease(string Tag, string PublishedAt, string Changelog);
+
 public class AutoUpdateService
 {
     // ── Launcher identity ─────────────────────────────────────────
@@ -33,9 +35,10 @@ public class AutoUpdateService
         $"https://api.github.com/repos/{LauncherOrg}/{LauncherRepo}/releases?per_page=30";
 
     // ── Injected services ─────────────────────────────────────────
-    private readonly FlarialService _flarial;
-    private readonly OderSoService  _oderso;
-    private readonly HttpClient     _http;
+    private readonly FlarialService  _flarial;
+    private readonly OderSoService   _oderso;
+    private readonly HttpClient      _http;
+    private readonly DownloadService _download = new();
 
     public AutoUpdateService(FlarialService flarial, OderSoService oderso)
     {
@@ -137,24 +140,7 @@ public class AutoUpdateService
     {
         var tmpPath = Path.Combine(Path.GetTempPath(), $"GlacierLauncher_{info.Tag}.exe");
 
-        using var resp = await _http.GetAsync(info.DownloadUrl, HttpCompletionOption.ResponseHeadersRead);
-        resp.EnsureSuccessStatusCode();
-
-        var  total      = resp.Content.Headers.ContentLength ?? info.AssetSize;
-        using var src   = await resp.Content.ReadAsStreamAsync();
-        using var dest  = File.Create(tmpPath);
-
-        var  buf        = new byte[81920];
-        long downloaded = 0;
-        int  read;
-        while ((read = await src.ReadAsync(buf)) > 0)
-        {
-            await dest.WriteAsync(buf.AsMemory(0, read));
-            downloaded += read;
-            if (total > 0) progress?.Report(downloaded * 100.0 / total);
-        }
-
-        dest.Close();
+        await _download.DownloadAsync(info.DownloadUrl, tmpPath, progress: progress, knownTotalBytes: info.AssetSize);
 
         // Replace the original exe so shortcuts keep working.
         // A running exe can't overwrite itself, so we use a small batch script
@@ -192,6 +178,31 @@ public class AutoUpdateService
         }
 
         Application.Current.Dispatcher.Invoke(() => Application.Current.Shutdown());
+    }
+
+    /// <summary>Recent launcher releases (newest first) for the in-app changelog viewer.</summary>
+    public async Task<List<LauncherRelease>> GetRecentReleasesAsync(int max = 12)
+    {
+        var list = new List<LauncherRelease>();
+        try
+        {
+            var cached = await GitHubApiCache.GetJsonAsync(_http, ReleasesApiUrl);
+            using var doc = JsonDocument.Parse(cached.Body);
+            if (doc.RootElement.ValueKind != JsonValueKind.Array) return list;
+
+            foreach (var rel in doc.RootElement.EnumerateArray())
+            {
+                if (rel.TryGetProperty("draft", out var dr) && dr.GetBoolean()) continue;
+                var tag  = rel.TryGetProperty("tag_name", out var t)     ? t.GetString() ?? "" : "";
+                var date = rel.TryGetProperty("published_at", out var p) ? p.GetString() ?? "" : "";
+                var body = rel.TryGetProperty("body", out var b)         ? b.GetString() ?? "" : "";
+                if (string.IsNullOrEmpty(tag)) continue;
+                list.Add(new LauncherRelease(tag, date, body));
+                if (list.Count >= max) break;
+            }
+        }
+        catch { /* offline / rate-limited — return whatever we have */ }
+        return list;
     }
 
     // ── Client update checks (delegates) ─────────────────────────

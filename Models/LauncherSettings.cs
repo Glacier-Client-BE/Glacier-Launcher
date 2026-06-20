@@ -35,6 +35,12 @@ public class LauncherSettings
     public bool         ShowRecentlyLaunched { get; set; } = true;
     public List<string> RecentlyLaunched     { get; set; } = new();
 
+    // ── Playtime tracking ────────────────────────────────────────
+    // Accumulated game time across all sessions, measured by the launcher's
+    // running-state poll. LastPlayed is an ISO-8601 UTC timestamp.
+    public long   TotalPlaytimeSeconds { get; set; } = 0;
+    public string LastPlayed           { get; set; } = "";
+
     // ── Pinned Versions ──────────────────────────────────────────
     public List<string> PinnedVersions { get; set; } = new();
 
@@ -49,7 +55,11 @@ public class LauncherSettings
     public string JavaActiveVersion     { get; set; } = "";
     public string JavaLastUsedVersion   { get; set; } = "";
     public string JavaActiveInstanceId  { get; set; } = "";
-    // Override path to .minecraft (empty = %APPDATA%\.minecraft)
+    // When true (default), Java game files live in the standard %APPDATA%\.minecraft.
+    // When false, they live inside the Glacier Launcher instance folder. An explicit
+    // JavaMinecraftDir below overrides both.
+    public bool   JavaUseDotMinecraft   { get; set; } = true;
+    // Override path to .minecraft (empty = use the toggle above)
     public string JavaMinecraftDir      { get; set; } = "";
     // Override path to javaw.exe (empty = auto-detect)
     public string JavaRuntimePath       { get; set; } = "";

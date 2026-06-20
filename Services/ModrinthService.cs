@@ -15,6 +15,7 @@ public class ModrinthService
     private readonly HttpClient _http;
     private readonly SettingsService _settings;
     private readonly JavaVersionService? _javaVersions;
+    private readonly DownloadService _download = new();
 
     public ModrinthService(SettingsService settings, JavaVersionService javaVersions)
     {
@@ -136,25 +137,12 @@ public class ModrinthService
         var tmpPath = Path.Combine(Path.GetTempPath(), version.FileName);
         try
         {
-            using var req = new HttpRequestMessage(HttpMethod.Get, version.Url);
-            req.Headers.TryAddWithoutValidation("User-Agent", "GlacierLauncher/1.0 (glacier-launcher)");
-            using var resp = await _http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead);
-            resp.EnsureSuccessStatusCode();
-
-            var total = resp.Content.Headers.ContentLength ?? version.Size;
-            using var src = await resp.Content.ReadAsStreamAsync();
-            using var dest = File.Create(tmpPath);
-
-            var buf = new byte[81920];
-            long downloaded = 0;
-            int read;
-            while ((read = await src.ReadAsync(buf)) > 0)
-            {
-                await dest.WriteAsync(buf.AsMemory(0, read));
-                downloaded += read;
-                if (total > 0) progress?.Report(downloaded * 100.0 / total);
-            }
-            dest.Close();
+            await _download.DownloadAsync(
+                version.Url, tmpPath,
+                progress: progress,
+                knownTotalBytes: version.Size,
+                configureRequest: req => req.Headers.TryAddWithoutValidation(
+                    "User-Agent", "GlacierLauncher/1.0 (glacier-launcher)"));
 
             InstallFile(tmpPath, projectType);
         }

@@ -42,6 +42,8 @@ public partial class Home
             new("fa-solid fa-expand", "Toggle Fullscreen", "Quick Actions", "F11 fullscreen mode", "F11", () => { CloseSearch(); _ = ToggleFullscreen(); }),
             new("fa-solid fa-heart", "Credits", "About", "View launcher credits", "", () => { CloseSearch(); OpenCredits(); }),
         };
+
+        _defaultSearchResults.AddRange(ExtraQuickActions());
     }
 
     private IEnumerable<SearchResult> BuildDynamicSearchPool()

@@ -1,8 +1,11 @@
 using System;
 using System.IO;
+using System.Linq;
+using System.Net;
 using System.Net.Http;
 using System.Text.Json;
 using System.Threading.Tasks;
+using System.Xml.Linq;
 using GlacierLauncher.Models;
 
 namespace GlacierLauncher.Services;
@@ -11,6 +14,7 @@ public sealed class JavaModLoaderService
 {
     private readonly JavaVersionService _versions;
     private readonly HttpClient _http;
+    private readonly DownloadService _download = new();
 
     public JavaModLoaderService(JavaVersionService versions)
     {
@@ -23,7 +27,7 @@ public sealed class JavaModLoaderService
         var loader = string.IsNullOrWhiteSpace(loaderVersion) ? await LatestFabricLoaderAsync() : loaderVersion;
         var url = $"https://meta.fabricmc.net/v2/versions/loader/{Uri.EscapeDataString(minecraftVersion)}/{Uri.EscapeDataString(loader)}/profile/json";
         var id = $"fabric-loader-{loader}-{minecraftVersion}";
-        return await InstallProfileAsync(id, url);
+        return await InstallProfileAsync(id, url, "Fabric", minecraftVersion);
     }
 
     public async Task<JavaVersion> InstallQuiltAsync(string minecraftVersion, string loaderVersion = "")
@@ -31,23 +35,17 @@ public sealed class JavaModLoaderService
         var loader = string.IsNullOrWhiteSpace(loaderVersion) ? await LatestQuiltLoaderAsync() : loaderVersion;
         var url = $"https://meta.quiltmc.org/v3/versions/loader/{Uri.EscapeDataString(minecraftVersion)}/{Uri.EscapeDataString(loader)}/profile/json";
         var id = $"quilt-loader-{loader}-{minecraftVersion}";
-        return await InstallProfileAsync(id, url);
+        return await InstallProfileAsync(id, url, "Quilt", minecraftVersion);
     }
 
     public async Task<string> DownloadForgeInstallerAsync(string minecraftVersion, string forgeVersion = "")
     {
-        var ver = string.IsNullOrWhiteSpace(forgeVersion) ? await LatestForgeVersionAsync(minecraftVersion) : forgeVersion;
-        var id = $"{minecraftVersion}-{ver}";
-        var file = $"forge-{id}-installer.jar";
-        var url = $"https://maven.minecraftforge.net/net/minecraftforge/forge/{id}/{file}";
-        var destDir = Path.Combine(JavaInstanceService.RootDir, "loaders", "forge");
-        Directory.CreateDirectory(destDir);
-        var dest = Path.Combine(destDir, file);
-        using var resp = await _http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead);
-        resp.EnsureSuccessStatusCode();
-        await using var stream = await resp.Content.ReadAsStreamAsync();
-        await using var output = File.Create(dest);
-        await stream.CopyToAsync(output);
+        var build = string.IsNullOrWhiteSpace(forgeVersion) ? await LatestForgeVersionAsync(minecraftVersion) : forgeVersion;
+        var artifact = await ResolveForgeArtifactAsync(minecraftVersion, build);
+        var file = $"forge-{artifact}-installer.jar";
+        var url = $"https://maven.minecraftforge.net/net/minecraftforge/forge/{artifact}/{file}";
+        var dest = Path.Combine(JavaInstanceService.RootDir, "loaders", "forge", file);
+        await _download.DownloadAsync(url, dest);
         return dest;
     }
 
@@ -56,20 +54,16 @@ public sealed class JavaModLoaderService
         var ver = await LatestNeoForgeVersionAsync(minecraftVersion);
         var file = $"neoforge-{ver}-installer.jar";
         var url = $"https://maven.neoforged.net/releases/net/neoforged/neoforge/{ver}/{file}";
-        var destDir = Path.Combine(JavaInstanceService.RootDir, "loaders", "neoforge");
-        Directory.CreateDirectory(destDir);
-        var dest = Path.Combine(destDir, file);
-        using var resp = await _http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead);
-        resp.EnsureSuccessStatusCode();
-        await using var stream = await resp.Content.ReadAsStreamAsync();
-        await using var output = File.Create(dest);
-        await stream.CopyToAsync(output);
+        var dest = Path.Combine(JavaInstanceService.RootDir, "loaders", "neoforge", file);
+        await _download.DownloadAsync(url, dest);
         return dest;
     }
 
-    private async Task<JavaVersion> InstallProfileAsync(string id, string url)
+    private async Task<JavaVersion> InstallProfileAsync(string id, string url, string loaderName, string minecraftVersion)
     {
         using var resp = await _http.GetAsync(url);
+        if (resp.StatusCode is HttpStatusCode.NotFound or HttpStatusCode.BadRequest)
+            throw new InvalidOperationException($"{loaderName} does not support Minecraft {minecraftVersion}.");
         resp.EnsureSuccessStatusCode();
         var json = await resp.Content.ReadAsStringAsync();
         using var doc = JsonDocument.Parse(json);
@@ -102,10 +96,50 @@ public sealed class JavaModLoaderService
         using var resp = await _http.GetAsync("https://meta.quiltmc.org/v3/versions/loader");
         resp.EnsureSuccessStatusCode();
         using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync());
+        string? newest = null;
         foreach (var item in doc.RootElement.EnumerateArray())
-            if (item.TryGetProperty("separator", out _) == false)
-                return item.GetProperty("version").GetString() ?? "";
-        return "";
+        {
+            var version = item.GetProperty("version").GetString() ?? "";
+            newest ??= version;
+            if (!IsPreRelease(version))
+                return version;
+        }
+        return newest ?? "";
+    }
+
+    private static bool IsPreRelease(string version) =>
+        version.Contains("-beta", StringComparison.OrdinalIgnoreCase)
+        || version.Contains("-pre", StringComparison.OrdinalIgnoreCase)
+        || version.Contains("-rc", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Resolves the exact Forge Maven artifact coordinate for a Minecraft
+    /// version and build number. Legacy Minecraft versions (e.g. 1.7.10, 1.8.9)
+    /// publish their installer under a branch-suffixed coordinate such as
+    /// <c>1.8.9-11.15.1.2318-1.8.9</c>, which cannot be reconstructed from the
+    /// promotions feed alone; the authoritative value is read from
+    /// <c>maven-metadata.xml</c>. Falls back to <c>{mc}-{build}</c> when the
+    /// metadata is unavailable or lists no match.
+    /// </summary>
+    private async Task<string> ResolveForgeArtifactAsync(string minecraftVersion, string build)
+    {
+        var coordinate = $"{minecraftVersion}-{build}";
+        try
+        {
+            using var resp = await _http.GetAsync("https://maven.minecraftforge.net/net/minecraftforge/forge/maven-metadata.xml");
+            resp.EnsureSuccessStatusCode();
+            var xml = await resp.Content.ReadAsStringAsync();
+            var matches = XDocument.Parse(xml)
+                .Descendants("version")
+                .Select(v => v.Value)
+                .Where(v => v == coordinate || v.StartsWith(coordinate + "-", StringComparison.Ordinal))
+                .ToList();
+            return matches.FirstOrDefault(v => v == coordinate) ?? matches.FirstOrDefault() ?? coordinate;
+        }
+        catch
+        {
+            return coordinate;
+        }
     }
 
     private async Task<string> LatestForgeVersionAsync(string minecraftVersion)

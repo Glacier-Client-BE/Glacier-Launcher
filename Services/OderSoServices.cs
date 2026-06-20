@@ -50,7 +50,8 @@ public class OderSoService
         }
     }
 
-    private readonly HttpClient _http;
+    private readonly HttpClient      _http;
+    private readonly DownloadService _download = new();
 
     public OderSoService()
     {
@@ -124,34 +125,12 @@ public class OderSoService
 
     public void SetActiveEntry(DllEntry entry) => SaveStoredEntry(entry);
 
-    public async Task DownloadEntryAsync(DllEntry entry, IProgress<double>? progress = null)
+    public async Task DownloadEntryAsync(
+        DllEntry entry, IProgress<double>? progress = null, CancellationToken cancel = default)
     {
-        Directory.CreateDirectory(OderSoDirectory);
-
         var rawUrl  = RawBaseUrl + Uri.EscapeDataString(entry.Name);
         var dllPath = GetDllPath(entry.Name);
-        var tmpPath = dllPath + ".tmp";
-
-        using var resp = await _http.GetAsync(rawUrl, HttpCompletionOption.ResponseHeadersRead);
-        resp.EnsureSuccessStatusCode();
-
-        var total      = resp.Content.Headers.ContentLength ?? entry.Size;
-        using var src  = await resp.Content.ReadAsStreamAsync();
-        using var dest = File.Create(tmpPath);
-
-        var  buf        = new byte[81920];
-        long downloaded = 0;
-        int  read;
-        while ((read = await src.ReadAsync(buf)) > 0)
-        {
-            await dest.WriteAsync(buf.AsMemory(0, read));
-            downloaded += read;
-            if (total > 0) progress?.Report(downloaded * 100.0 / total);
-        }
-
-        dest.Close();
-        if (File.Exists(dllPath)) File.Delete(dllPath);
-        File.Move(tmpPath, dllPath);
+        await _download.DownloadAsync(rawUrl, dllPath, progress: progress, knownTotalBytes: entry.Size, cancel: cancel);
     }
 
     public void DeleteEntry(DllEntry entry)
@@ -179,12 +158,12 @@ public class OderSoService
         catch { return true; }
     }
 
-    public async Task DownloadAsync(IProgress<double>? progress = null)
+    public async Task DownloadAsync(IProgress<double>? progress = null, CancellationToken cancel = default)
     {
         var entry = await GetLatestDllAsync()
             ?? throw new Exception("No .dll files found in MasonOderSo/oderso-data.");
 
-        await DownloadEntryAsync(entry, progress);
+        await DownloadEntryAsync(entry, progress, cancel);
         SaveStoredEntry(entry);
     }
 

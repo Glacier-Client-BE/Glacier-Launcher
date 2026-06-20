@@ -13,6 +13,7 @@ public class VanillaVersion
     public double Progress     { get; set; }
     public string? ErrorMessage { get; set; }
     public long   SizeBytes    { get; set; }
+    public System.Threading.CancellationTokenSource? DownloadCts { get; set; }
 
     public string SizeLabel => SizeBytes switch
     {

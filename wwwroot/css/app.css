@@ -17,8 +17,16 @@
     --bg-item-hover: rgba(255, 255, 255, 0.075);
     --text: #ffffff;
     --text-dim: #99aab5;
-    --red: #f04747;
+    --red: #ff5c5c;
     --green: #43b581;
+...
+/* ── Search Highlighting ── */
+.search-highlight {
+    color: var(--accent);
+    font-weight: 600;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
     --orange: #faa61a;
     --r-sm: 8px;
     --r-md: 12px;
@@ -383,7 +391,10 @@ body {
     align-items: center;
     gap: 10px;
     pointer-events: none;
-    flex-shrink: 0;
+    /* Allow the title block to give way before the window controls get pushed
+       off-screen at narrow widths (e.g. the Bedrock tab's extra client chip). */
+    flex-shrink: 1;
+    min-width: 0;
 }
 
 .logo-icon {
@@ -398,18 +409,25 @@ body {
     display: flex;
     flex-direction: column;
     line-height: 1.25;
+    min-width: 0;
 }
 
 .branding-title {
     font-size: 13px;
     font-weight: 700;
     color: #fff;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .branding-sub {
     font-size: 10px;
     color: var(--text-dim);
     letter-spacing: 0.02em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 /* Push chip + search + controls to the right */
@@ -482,9 +500,19 @@ body {
     color: var(--text-dim);
     cursor: pointer;
     pointer-events: all;
-    flex-shrink: 0;
+    /* Truncate the client name rather than shove the window controls off-screen. */
+    flex-shrink: 1;
+    min-width: 0;
     transition: background var(--t), border-color var(--t), color var(--t), box-shadow var(--t);
     white-space: nowrap;
+}
+
+/* The client-name label is the only flexible part of the chip; the dot, icon
+   and arrow stay fixed and it ellipsizes when space is tight. */
+.topbar-client-chip > span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .topbar-client-chip:hover {
@@ -498,10 +526,15 @@ body {
     font-size: 11px;
 }
 
+.topbar-client-chip .chip-icon {
+    flex-shrink: 0;
+}
+
 .topbar-client-chip .chip-arrow {
     font-size: 8px;
     opacity: 0.45;
     margin-left: 1px;
+    flex-shrink: 0;
 }
 
 .chip-dot {
@@ -2254,6 +2287,35 @@ body {
     flex-shrink: 0;
 }
 
+/* Cancel affordance: a ghost busy indicator that reveals an × on hover/focus. */
+.icon-btn-cancel {
+    background: transparent;
+    color: var(--text-dim);
+    box-shadow: none;
+}
+
+.icon-btn-cancel .fa-xmark {
+    display: none;
+}
+
+.icon-btn-cancel:not(:disabled):hover,
+.icon-btn-cancel:focus-visible {
+    background: transparent;
+    box-shadow: none;
+    transform: none;
+    color: var(--red, #f04747);
+}
+
+.icon-btn-cancel:not(:disabled):hover .spinner,
+.icon-btn-cancel:focus-visible .spinner {
+    display: none;
+}
+
+.icon-btn-cancel:not(:disabled):hover .fa-xmark,
+.icon-btn-cancel:focus-visible .fa-xmark {
+    display: inline;
+}
+
 .versions-loading {
     display: flex;
     flex-direction: column;
@@ -2275,11 +2337,11 @@ body {
 .client-card {
     background: var(--bg-item);
     border-radius: var(--r-md);
-    padding: 14px 16px;
+    padding: 16px;
     border: 1px solid rgba(255, 255, 255, 0.05);
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 11px;
     transition: background var(--t), border-color var(--t);
 }
 
@@ -2288,8 +2350,8 @@ body {
 }
 
 .client-card.client-active {
-    border-color: rgba(114, 137, 218, 0.40);
-    background: rgba(114, 137, 218, 0.07);
+    border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+    background: color-mix(in srgb, var(--accent) 8%, transparent);
 }
 
 .client-card-header {
@@ -2307,6 +2369,10 @@ body {
     justify-content: center;
     flex-shrink: 0;
     font-size: 17px;
+}
+
+.client-card-icon-img {
+    padding: 5px;
 }
 
 .flarial-icon {
@@ -2357,8 +2423,24 @@ body {
     font-size: 11px;
     color: var(--text-dim);
     line-height: 1.55;
-    padding: 8px 2px 0;
+    padding: 11px 0 0;
     border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.client-card-note {
+    opacity: 0.55;
+}
+
+.client-card-path {
+    font-size: 10px;
+    max-width: 190px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.client-card .error-text {
+    padding: 0;
 }
 
 .tag-uptodate {
@@ -2419,7 +2501,7 @@ body.drop-active .drop-zone-overlay {
     align-items: center;
     justify-content: center;
     gap: 12px;
-    border: 1px dashed rgba(114, 137, 218, 0.30);
+    border: 1px dashed color-mix(in srgb, var(--accent) 30%, transparent);
     border-radius: var(--r-md);
     padding: 12px;
     background: transparent;
@@ -2987,6 +3069,20 @@ input[type=range]:active::-webkit-slider-thumb {
 
 .vcs-btn i {
     font-size: 11px;
+}
+
+.vcs-btn-ghost {
+    background: transparent;
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+.vcs-btn-ghost:hover {
+    background: var(--bg-item);
+}
+
+.vcs-btn-icon {
+    flex: 0 0 auto;
+    padding: 0 11px;
 }
 
 /* ── OderSo active row ─────────────────────────────────────── */
@@ -4112,6 +4208,9 @@ input[type=range]:disabled {
 
 .client-card-icon img {
     display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
     border-radius: inherit;
 }
 
@@ -4276,3 +4375,538 @@ input[type=range]:focus-visible:not(:disabled) {
 [data-theme="light"] .update-changelog::-webkit-scrollbar-thumb:hover {
     background: rgba(0, 0, 0, 0.24);
 }
+
+/* ── Skin viewer (Java profile) ─────────────────────────────── */
+.skin-viewer {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+    padding: 14px 0 6px;
+}
+
+.skin-stage {
+    position: relative;
+    width: 190px;
+    height: 280px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 16px;
+    background:
+        radial-gradient(120% 80% at 50% 0%, var(--accent-bg), transparent 70%),
+        rgba(0, 0, 0, 0.18);
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    overflow: hidden;
+}
+
+.skin-canvas {
+    width: 190px;
+    height: 280px;
+    cursor: grab;
+}
+.skin-canvas:active { cursor: grabbing; }
+.skin-hidden { display: none; }
+
+.skin-body,
+.skin-fallback {
+    max-height: 256px;
+    max-width: 150px;
+    object-fit: contain;
+    image-rendering: pixelated;
+    filter: drop-shadow(0 12px 26px rgba(0, 0, 0, 0.5));
+}
+
+/* 2D / 3D · Steve / Alex · cape toggle pills under the skin */
+.skin-view-toggle,
+.skin-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    justify-content: center;
+    align-items: center;
+    max-width: 190px;
+    pointer-events: all;
+}
+.skin-pill-sep {
+    width: 1px;
+    align-self: stretch;
+    margin: 2px 1px;
+    background: rgba(255, 255, 255, 0.14);
+}
+.skin-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-family: inherit;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-dim);
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    border-radius: 12px;
+    padding: 4px 11px;
+    cursor: pointer;
+    transition: background var(--t), color var(--t), border-color var(--t);
+}
+.skin-pill:hover { color: var(--text); background: rgba(255, 255, 255, 0.12); }
+.skin-pill.active {
+    color: #fff;
+    background: var(--accent);
+    border-color: transparent;
+    box-shadow: 0 0 10px var(--accent-glow);
+}
+
+/* ── Cape wardrobe ──────────────────────────────────────────── */
+.capes-card {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    border-radius: 14px;
+    padding: 12px 14px;
+    margin: 0 2px 12px;
+    flex-shrink: 0;
+}
+.capes-head {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 12px;
+    font-weight: 700;
+    color: #fff;
+    margin-bottom: 10px;
+}
+.capes-head i { color: var(--accent); }
+
+.capes-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+.cape-tile {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    width: 66px;
+    padding: 8px 6px;
+    background: rgba(0, 0, 0, 0.2);
+    border: 2px solid transparent;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: border-color var(--t), background var(--t), transform var(--t);
+}
+.cape-tile:hover { transform: translateY(-2px); background: rgba(255, 255, 255, 0.05); }
+.cape-tile.active {
+    border-color: var(--accent);
+    box-shadow: 0 0 12px var(--accent-glow);
+    background: var(--accent-bg);
+}
+
+/* Crop the cape's front face (10×16 at offset 1,1) from the 64×32 texture, ×5. */
+.cape-thumb {
+    width: 50px;
+    height: 80px;
+    background-repeat: no-repeat;
+    background-size: 320px 160px;
+    background-position: -5px -5px;
+    image-rendering: pixelated;
+    border-radius: 4px;
+    flex-shrink: 0;
+}
+.cape-none {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--text-dim);
+    font-size: 18px;
+}
+.cape-label {
+    font-size: 10px;
+    color: var(--text-dim);
+    max-width: 100%;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.cape-tile.active .cape-label { color: #fff; }
+
+/* ── Profile card (two-column) ──────────────────────────────── */
+.profile-card {
+    position: relative;
+    display: flex;
+    gap: 18px;
+    padding: 18px;
+    margin: 4px 2px 12px;
+    border-radius: 16px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    overflow: hidden;
+    flex-shrink: 0;   /* panel-body is a flex column — don't let the card collapse */
+}
+.profile-card-bg {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    background:
+        radial-gradient(90% 120% at 0% 0%, var(--accent-bg), transparent 55%),
+        linear-gradient(135deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.015));
+    pointer-events: none;
+}
+.profile-skin-col,
+.profile-info-col { position: relative; z-index: 1; }
+
+.profile-skin-col { flex-shrink: 0; }
+.profile-skin-col .skin-viewer { gap: 10px; padding: 0; }
+
+.profile-info-col {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.profile-name {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 22px;
+    font-weight: 800;
+    color: #fff;
+    line-height: 1.1;
+}
+.profile-online {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--green);
+    background: rgba(67, 181, 129, 0.16);
+    border: 1px solid rgba(67, 181, 129, 0.4);
+    border-radius: 10px;
+    padding: 2px 8px;
+}
+.profile-online-dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--green);
+    box-shadow: 0 0 6px var(--green);
+}
+.profile-tagline {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    color: var(--text-dim);
+    margin-top: -4px;
+}
+
+.pstat-list { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
+.pstat {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 6px 8px;
+    border-radius: 8px;
+    font-size: 12px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 0;
+    width: 100%;
+    text-align: left;
+    font-family: inherit;
+    color: var(--text);
+}
+.pstat > i { width: 14px; text-align: center; color: var(--accent); font-size: 12px; }
+.pstat-k { color: var(--text-dim); }
+.pstat-v { margin-left: auto; font-weight: 600; color: #fff; font-family: ui-monospace, "Cascadia Code", monospace; font-size: 11px; }
+.pstat-click { cursor: pointer; transition: background var(--t); }
+.pstat-click:hover { background: var(--accent-bg); }
+
+.profile-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 4px;
+}
+.profile-info-col .skin-slim-toggle { margin-top: 2px; }
+
+.skin-loading {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.skin-meta {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+}
+
+.skin-name {
+    font-size: 17px;
+    font-weight: 700;
+    color: #fff;
+}
+
+.skin-uuid {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    font-family: ui-monospace, "Cascadia Code", monospace;
+    color: var(--text-dim);
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 14px;
+    padding: 3px 10px;
+    cursor: pointer;
+    transition: background var(--t), color var(--t), border-color var(--t);
+}
+.skin-uuid:hover {
+    color: var(--text);
+    background: var(--accent-bg);
+    border-color: rgba(114, 137, 218, 0.4);
+}
+
+.skin-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    justify-content: center;
+}
+
+.skin-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    font-family: inherit;
+    color: #fff;
+    background: var(--accent);
+    border: 0;
+    border-radius: 14px;
+    padding: 7px 14px;
+    cursor: pointer;
+    transition: filter var(--t), background var(--t), box-shadow var(--t);
+}
+.skin-btn:hover { filter: brightness(1.1); box-shadow: 0 0 12px var(--accent-glow); }
+
+.skin-btn-ghost {
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--text-dim);
+    border: 1px solid rgba(255, 255, 255, 0.10);
+}
+.skin-btn-ghost:hover { color: var(--text); background: rgba(255, 255, 255, 0.12); box-shadow: none; }
+
+.skin-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    padding: 48px 24px;
+    text-align: center;
+    color: var(--text-dim);
+}
+.skin-empty i { font-size: 32px; opacity: 0.6; }
+
+/* ── Instance memory card (profile panel) ───────────────────── */
+.instance-card {
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    border-radius: 12px;
+    padding: 12px 14px;
+    margin: 4px 2px 12px;
+    flex-shrink: 0;
+}
+.instance-card-head {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 12px;
+    font-weight: 700;
+    color: #fff;
+    margin-bottom: 8px;
+}
+.instance-card-head i { color: var(--accent); }
+.instance-ram-row { display: flex; align-items: center; gap: 8px; }
+.instance-ram-row input {
+    width: 90px;
+    background: rgba(0, 0, 0, 0.25);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 8px;
+    color: #fff;
+    padding: 5px 8px;
+    font-family: inherit;
+    font-size: 12px;
+}
+.instance-ram-unit { font-size: 11px; color: var(--text-dim); }
+.instance-hint { display: block; margin-top: 6px; font-size: 10px; color: var(--text-dim); opacity: 0.8; }
+
+/* ── Change skin controls ───────────────────────────────────── */
+.skin-change {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+}
+.skin-slim-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    color: var(--text-dim);
+    cursor: pointer;
+}
+.skin-change-btns { display: flex; gap: 8px; }
+
+/* ── Mod conflict warnings ──────────────────────────────────── */
+.mod-warnings {
+    background: rgba(240, 71, 71, 0.10);
+    border: 1px solid rgba(240, 71, 71, 0.30);
+    border-radius: 10px;
+    padding: 10px 12px;
+    margin-bottom: 10px;
+}
+.mod-warnings-head {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 12px;
+    font-weight: 700;
+    color: #ff8a8a;
+    margin-bottom: 6px;
+}
+.mod-warning-item {
+    font-size: 11px;
+    color: var(--text);
+    opacity: 0.85;
+    padding: 2px 0 2px 20px;
+}
+
+/* ── News & changelog panel ─────────────────────────────────── */
+.news-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: background var(--t);
+}
+.news-row:hover { background: rgba(255, 255, 255, 0.05); }
+.news-icon {
+    width: 34px;
+    height: 34px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 9px;
+    background: var(--accent-bg);
+    color: var(--accent);
+    font-size: 15px;
+}
+.news-meta { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+.news-title { font-size: 13px; font-weight: 600; color: #fff; }
+.news-sub { font-size: 11px; color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.news-ext { color: var(--text-dim); font-size: 11px; opacity: 0.6; }
+
+.changelog-entry {
+    border-left: 2px solid var(--accent);
+    padding: 4px 0 10px 12px;
+    margin: 4px 2px 4px 6px;
+}
+.changelog-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 4px; }
+.changelog-tag { font-size: 13px; font-weight: 700; color: #fff; }
+.changelog-date { font-size: 10px; color: var(--text-dim); }
+.changelog-body {
+    font-size: 11.5px;
+    line-height: 1.5;
+    color: var(--text-dim);
+    word-break: break-word;
+}
+.changelog-body a { color: var(--accent); }
+
+/* ── Screenshot gallery (Java) ──────────────────────────────── */
+.screenshot-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 8px;
+    padding: 6px 2px;
+}
+
+.screenshot-tile {
+    position: relative;
+    aspect-ratio: 16 / 9;
+    padding: 0;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 10px;
+    overflow: hidden;
+    background: rgba(255, 255, 255, 0.03);
+    cursor: pointer;
+    transition: transform var(--t), border-color var(--t), box-shadow var(--t);
+}
+.screenshot-tile:hover {
+    transform: translateY(-2px);
+    border-color: rgba(114, 137, 218, 0.5);
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
+}
+.screenshot-tile img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+/* ── Server live status badge ───────────────────────────────── */
+.server-ping {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 10px;
+    font-weight: 600;
+    margin-top: 2px;
+    color: var(--text-dim);
+}
+.server-ping .ping-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: currentColor;
+    flex-shrink: 0;
+}
+.server-ping.online  { color: var(--green); }
+.server-ping.offline { color: #f04747; }
+.server-ping.checking {
+    color: var(--text-dim);
+    opacity: 0.7;
+}
+.server-ping.online .ping-dot { box-shadow: 0 0 6px currentColor; }
+
+/* ── Profile stats (under the skin viewer) ──────────────────── */
+.profile-stats {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin-top: 4px;
+}
+
+.profile-stat {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    min-width: 110px;
+    padding: 10px 16px;
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+}
+.profile-stat > i { font-size: 14px; color: var(--accent); margin-bottom: 2px; }
+.profile-stat-value { font-size: 15px; font-weight: 700; color: #fff; }
+.profile-stat-label { font-size: 10px; color: var(--text-dim); letter-spacing: 0.03em; }

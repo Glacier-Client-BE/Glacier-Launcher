@@ -36,6 +36,8 @@ public sealed class JavaVersionService
         {
             var s = _settings.Settings.JavaMinecraftDir;
             if (!string.IsNullOrEmpty(s)) return s;
+            if (_settings.Settings.JavaUseDotMinecraft)
+                return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), ".minecraft");
             return _instances.ActiveMinecraftDir;
         }
     }

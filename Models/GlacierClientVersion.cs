@@ -1,3 +1,5 @@
+using System.IO;
+
 namespace GlacierLauncher.Models;
 
 public sealed class GlacierClientVersion

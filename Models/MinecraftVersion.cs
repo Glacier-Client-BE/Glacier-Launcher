@@ -7,7 +7,9 @@ public class MinecraftVersion
     public bool    IsDownloaded  { get; set; } = false;
     public bool    IsDownloading { get; set; } = false;
     public bool    IsLaunching   { get; set; } = false;
+    public double  Progress      { get; set; }
     public string? ErrorMessage  { get; set; }
+    public System.Threading.CancellationTokenSource? DownloadCts { get; set; }
 
     // GitHub release metadata (LatiteClient/Latite). DownloadUrl is required for
     // download since the new repo's asset name (LatiteNightly.dll) and tag do not

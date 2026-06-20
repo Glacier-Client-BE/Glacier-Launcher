@@ -100,6 +100,25 @@ window.pickImageFile = async (dotNetRef) => {
     });
 };
 
+// ── File picker (Skin PNG) ────────────────────────────────────
+window.pickSkinFile = async (dotNetRef) => {
+    return new Promise(resolve => {
+        const input = document.createElement('input');
+        input.type   = 'file';
+        input.accept = 'image/png,.png';
+        input.style.display = 'none';
+        document.body.appendChild(input);
+        input.onchange = () => {
+            const file = input.files[0];
+            if (file) dotNetRef.invokeMethodAsync('OnSkinPicked', file.path || file.name);
+            document.body.removeChild(input);
+            resolve();
+        };
+        input.oncancel = () => { document.body.removeChild(input); resolve(); };
+        input.click();
+    });
+};
+
 // ── Drag-and-drop DLL ─────────────────────────────────────────
 document.addEventListener('dragover', e => {
     e.preventDefault();
@@ -134,6 +153,9 @@ document.addEventListener('keydown', e => {
     if (e.ctrlKey && (e.key === ',' || e.key === '?')) { e.preventDefault(); dn.invokeMethodAsync('KbShortcut', 'settings'); return; }
     if (e.ctrlKey && (e.key === 'Tab' || e.code === 'Tab')) { e.preventDefault(); dn.invokeMethodAsync('KbShortcut', 'cycle'); return; }
     if (e.ctrlKey && e.shiftKey && (e.key === 'r' || e.key === 'R')) { e.preventDefault(); dn.invokeMethodAsync('KbShortcut', 'refresh'); return; }
+    if (e.ctrlKey && e.shiftKey && (e.key === 't' || e.key === 'T')) { e.preventDefault(); dn.invokeMethodAsync('KbShortcut', 'cycletheme'); return; }
+    if (e.ctrlKey && e.shiftKey && (e.key === 'a' || e.key === 'A')) { e.preventDefault(); dn.invokeMethodAsync('KbShortcut', 'cycleaccent'); return; }
+    if (e.ctrlKey && e.shiftKey && (e.key === 'd' || e.key === 'D')) { e.preventDefault(); dn.invokeMethodAsync('KbShortcut', 'diagnostics'); return; }
     if (e.key === 'F11')       { e.preventDefault(); dn.invokeMethodAsync('KbShortcut', 'fullscreen'); return; }
     if (e.key === 'Escape')    { dn.invokeMethodAsync('KbShortcut', 'escape'); return; }
     if (e.key === 'ArrowDown') { dn.invokeMethodAsync('KbShortcut', 'down'); return; }
@@ -219,6 +241,92 @@ window.openDiscordOAuth = (clientId) => {
 window.focusSearchInput = () => {
     setTimeout(() => { const el = document.querySelector('.search-modal-input'); if (el) el.focus(); }, 50);
 };
+
+// ── 3D skin + cape viewer (skinview3d: vendored first, CDN fallback, then static) ──
+window.glacierSkin = (function () {
+    let libPromise = null;
+    const viewers = {};
+
+    function loadScript(src) {
+        return new Promise(resolve => {
+            const s = document.createElement('script');
+            s.src = src;
+            s.onload  = () => resolve(true);
+            s.onerror = () => resolve(false);
+            document.head.appendChild(s);
+        });
+    }
+
+    function ensureLib() {
+        if (window.skinview3d) return Promise.resolve(true);
+        if (libPromise) return libPromise;
+        libPromise = (async () => {
+            // Vendored copy works offline; the CDN is only a backstop.
+            if (await loadScript('js/lib/skinview3d.bundle.js') && window.skinview3d) return true;
+            if (await loadScript('https://cdn.jsdelivr.net/npm/skinview3d@3/bundles/skinview3d.bundle.js') && window.skinview3d) return true;
+            libPromise = null;
+            return false;
+        })();
+        return libPromise;
+    }
+
+    return {
+        // Returns true if the 3D viewer initialised; false → caller shows the static render.
+        // model: 'slim' (Alex) | anything else (Steve/classic).
+        render: async function (canvasId, skinUrl, capeUrl, model) {
+            try {
+                if (!await ensureLib()) return false;
+                const canvas = document.getElementById(canvasId);
+                if (!canvas) return false;
+                if (viewers[canvasId]) { try { viewers[canvasId].dispose(); } catch (e) {} delete viewers[canvasId]; }
+
+                const w = canvas.clientWidth  || 240;
+                const h = canvas.clientHeight || 340;
+                const viewer = new skinview3d.SkinViewer({ canvas, width: w, height: h });
+                try { await viewer.loadSkin(skinUrl, { model: model === 'slim' ? 'slim' : 'default' }); }
+                catch (e) { return false; }
+                viewer.autoRotate      = true;
+                viewer.autoRotateSpeed = 0.55;
+                viewer.zoom            = 0.85;
+                try { viewer.animation = new skinview3d.WalkingAnimation(); viewer.animation.speed = 0.6; } catch (e) {}
+                if (capeUrl) { try { await viewer.loadCape(capeUrl); } catch (e) { /* no cape texture */ } }
+                viewers[canvasId] = viewer;
+                return true;
+            } catch (e) {
+                return false;
+            }
+        },
+        // Swap the arm model (Steve/Alex) without rebuilding the viewer.
+        setModel: async function (canvasId, skinUrl, model) {
+            const v = viewers[canvasId];
+            if (!v) return false;
+            try { await v.loadSkin(skinUrl, { model: model === 'slim' ? 'slim' : 'default' }); return true; }
+            catch (e) { return false; }
+        },
+        // mode: 'cape' | 'elytra' | 'off'
+        setCape: async function (canvasId, capeUrl, mode) {
+            const v = viewers[canvasId];
+            if (!v) return false;
+            try {
+                if (mode === 'off' || !capeUrl) { v.resetCape(); return true; }
+                await v.loadCape(capeUrl, { backEquipment: mode === 'elytra' ? 'elytra' : 'cape' });
+                return true;
+            } catch (e) { return false; }
+        },
+        // Cheap presence check: an <img> load succeeds only if the cape texture exists.
+        probe: function (url) {
+            return new Promise(resolve => {
+                const img = new Image();
+                img.onload  = () => resolve(true);
+                img.onerror = () => resolve(false);
+                img.src = url;
+            });
+        },
+        dispose: function (canvasId) {
+            if (viewers[canvasId]) { try { viewers[canvasId].dispose(); } catch (e) {} delete viewers[canvasId]; }
+        }
+    };
+})();
 
 // ── Panel drag handle (resize / dismiss via the top bar) ─────
 // Uses event delegation so it works for any .panel-handle that ever

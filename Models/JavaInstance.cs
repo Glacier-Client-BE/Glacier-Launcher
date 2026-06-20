@@ -8,6 +8,10 @@ public class JavaInstance
     public string Directory { get; set; } = "";
     public string CreatedAt { get; set; } = "";
     public string UpdatedAt { get; set; } = "";
+
+    // Per-instance memory override in MB. 0 = fall back to the global setting.
+    public int MaxRamMb { get; set; } = 0;
+    public int MinRamMb { get; set; } = 0;
 }
 
 public class JavaInstanceFile

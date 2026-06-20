@@ -1,18 +1,27 @@
 <div class="dl-progress-row">
     @if (Progress > 0)
     {
-        <div class="progress-bar-wrap" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="@((int)Progress)">
-            <div class="progress-bar-fill" style="width:@(Progress.ToString("F0"))%"></div>
+        <div class="progress-bar-wrap" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="@((int)(Progress * 100))">
+            <div class="progress-bar-fill" style="width:@((Progress * 100).ToString("F0"))%"></div>
         </div>
-        <span class="dl-pct">@((int)Progress)%</span>
+        <span class="dl-pct">@((int)(Progress * 100))%</span>
     }
-    @if (ShowSpinner)
+    @if (OnCancel.HasDelegate)
+    {
+        <button type="button" class="icon-btn icon-btn-cancel" @onclick="OnCancel" @onmousedown:stopPropagation
+                data-tooltip="Cancel" aria-label="Cancel download">
+            <span class="spinner"></span>
+            <i class="fa-solid fa-xmark"></i>
+        </button>
+    }
+    else if (ShowSpinner)
     {
         <button type="button" class="icon-btn" disabled aria-busy="true"><span class="spinner"></span></button>
     }
 </div>
 
 @code {
-    [Parameter] public double Progress    { get; set; }
-    [Parameter] public bool   ShowSpinner { get; set; } = true;
+    [Parameter] public double        Progress    { get; set; }
+    [Parameter] public bool          ShowSpinner { get; set; } = true;
+    [Parameter] public EventCallback OnCancel     { get; set; }
 }

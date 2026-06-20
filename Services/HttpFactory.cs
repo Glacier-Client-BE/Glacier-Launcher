@@ -28,21 +28,29 @@ public sealed class ThrottledProgress : IProgress<double>
 {
     private readonly IProgress<double>? _inner;
     private readonly long _minIntervalTicks;
+    private readonly double _completeValue;
+    private readonly double _minDelta;
     private long _lastTicks;
     private double _lastValue;
 
-    public ThrottledProgress(IProgress<double>? inner, int minIntervalMs = 100)
+    public ThrottledProgress(
+        IProgress<double>? inner,
+        int    minIntervalMs = 100,
+        double completeValue = 100,
+        double minDelta      = 1.0)
     {
-        _inner = inner;
+        _inner            = inner;
         _minIntervalTicks = TimeSpan.FromMilliseconds(minIntervalMs).Ticks;
+        _completeValue    = completeValue;
+        _minDelta         = minDelta;
     }
 
     public void Report(double value)
     {
         if (_inner == null) return;
         var now = DateTime.UtcNow.Ticks;
-        if (value <= 0 || value >= 100 || (now - _lastTicks) >= _minIntervalTicks
-            || Math.Abs(value - _lastValue) >= 1.0)
+        if (value <= 0 || value >= _completeValue || (now - _lastTicks) >= _minIntervalTicks
+            || Math.Abs(value - _lastValue) >= _minDelta)
         {
             _lastTicks = now;
             _lastValue = value;

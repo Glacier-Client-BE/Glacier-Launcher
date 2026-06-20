@@ -79,130 +79,138 @@ public sealed class JavaGameLauncher
         }
 
         var instanceLock = AcquireInstanceLock(versionId);
-        var profile = ReadVersionProfile(versionId, mcDir);
-
-        if (_settings.Settings.JavaBackupSavesBeforeLaunch)
-            await _instances.BackupSavesAsync().ConfigureAwait(false);
-
-        var javaw = ResolveJavaRuntime(profile);
-        int requiredMajor = int.TryParse(profile.MinJavaMajor, out var rm) ? rm : 8;
-
-        int actualJavaMajor = !string.IsNullOrEmpty(javaw) ? DetectJavaMajor(javaw) : 0;
-        bool needsJavaDownload = string.IsNullOrEmpty(javaw)
-                           || (actualJavaMajor > 0 && actualJavaMajor < requiredMajor);
-
-        if (needsJavaDownload && requiredMajor >= 8)
+        try
         {
-            onProgress?.Invoke($"Downloading Java {requiredMajor}…", 0);
-            try
-            {
-                javaw = await _javaDownload.DownloadAsync(
-                    requiredMajor,
-                    onProgress: (stage, pct) => onProgress?.Invoke(stage, pct)).ConfigureAwait(false);
-                actualJavaMajor = DetectJavaMajor(javaw);
-            }
-            catch (Exception)
-            {
-                if (string.IsNullOrEmpty(javaw))
-                    throw new InvalidOperationException(
-                        $"Could not find or download Java {requiredMajor}. " +
-                        "Install it manually and set Settings → Java Runtime, or check your internet connection.");
-            }
-        }
+            var profile = ReadVersionProfile(versionId, mcDir);
 
-        if (string.IsNullOrEmpty(javaw))
-            throw new InvalidOperationException(
-                "Could not find javaw.exe. Set Settings → Java Runtime, or install Minecraft (which bundles JREs under .minecraft/runtime).");
+            if (_settings.Settings.JavaBackupSavesBeforeLaunch)
+                await _instances.BackupSavesAsync().ConfigureAwait(false);
 
-        var classpath = BuildClasspath(profile, mcDir);
-        if (classpath.Count == 0)
-            throw new InvalidOperationException(
-                "Couldn't resolve any libraries on disk. Run this version once in the official launcher so libraries download, then retry.");
+            var javaw = ResolveJavaRuntime(profile);
+            int requiredMajor = int.TryParse(profile.MinJavaMajor, out var rm) ? rm : 8;
 
-        var missing = classpath.Where(p => !File.Exists(p)).ToList();
-        if (missing.Count > 0)
-        {
-            onProgress?.Invoke($"Downloading {missing.Count} missing libraries…", 0);
-            try
+            int actualJavaMajor = !string.IsNullOrEmpty(javaw) ? DetectJavaMajor(javaw) : 0;
+            bool needsJavaDownload = string.IsNullOrEmpty(javaw)
+                               || (actualJavaMajor > 0 && actualJavaMajor < requiredMajor);
+
+            if (needsJavaDownload && requiredMajor >= 8)
             {
-                var allVersions = await _versions.GetVersionsAsync().ConfigureAwait(false);
-                var jv = allVersions.FirstOrDefault(v => v.Id == versionId);
-                if (jv != null && !string.IsNullOrEmpty(jv.Url))
+                onProgress?.Invoke($"Downloading Java {requiredMajor}…", 0);
+                try
                 {
-                    await _installer.InstallAsync(jv,
-                        report: p => onProgress?.Invoke(p.Stage, p.Percent)).ConfigureAwait(false);
+                    javaw = await _javaDownload.DownloadAsync(
+                        requiredMajor,
+                        onProgress: (stage, pct) => onProgress?.Invoke(stage, pct)).ConfigureAwait(false);
+                    actualJavaMajor = DetectJavaMajor(javaw);
                 }
-                else
+                catch (Exception)
                 {
-                    throw new InvalidOperationException(
-                        $"Version {versionId} not found in manifest — can't auto-download missing libraries. " +
-                        "Try installing this version from the Versions tab first.");
+                    if (string.IsNullOrEmpty(javaw))
+                        throw new InvalidOperationException(
+                            $"Could not find or download Java {requiredMajor}. " +
+                            "Install it manually and set Settings → Java Runtime, or check your internet connection.");
                 }
             }
-            catch (InvalidOperationException) { throw; }
-            catch (Exception ex)
-            {
+
+            if (string.IsNullOrEmpty(javaw))
                 throw new InvalidOperationException(
-                    $"Auto-install failed: {ex.Message}. Try installing this version from the Versions tab first.");
-            }
-        }
+                    "Could not find javaw.exe. Set Settings → Java Runtime, or install Minecraft (which bundles JREs under .minecraft/runtime).");
 
-        onProgress?.Invoke("Launching…", 100);
+            var classpath = BuildClasspath(profile, mcDir);
+            if (classpath.Count == 0)
+                throw new InvalidOperationException(
+                    "Couldn't resolve any libraries on disk. Run this version once in the official launcher so libraries download, then retry.");
 
-        var console = _console.Open($"Minecraft Java · {versionId}");
-        console?.Info($".minecraft = {mcDir}");
-        console?.Info($"Main class: {profile.MainClass}");
-        console?.Info($"Asset index: {profile.AssetsIndex}  ·  Java major: {(string.IsNullOrEmpty(profile.MinJavaMajor) ? "(legacy)" : profile.MinJavaMajor)}");
-        console?.Info($"Java runtime: {javaw}  (detected major: {actualJavaMajor})");
-        console?.Info($"Classpath entries: {classpath.Count}");
-
-        var auth = await ResolveAuthValuesAsync().ConfigureAwait(false);
-        console?.Info($"Auth: {auth.Name} ({auth.UserType}) · {auth.Uuid}");
-
-        var sb = new StringBuilder();
-        AppendJvmArgs(sb, profile, mcDir, versionId, actualJavaMajor, extraJvmArgs);
-        sb.Append(" -cp ").Append(Quote(string.Join(';', classpath)));
-        sb.Append(' ').Append(profile.MainClass);
-        AppendGameArgs(sb, profile, mcDir, versionId, auth);
-
-        console?.Info("Game args (sanitised):");
-        console?.Info(SanitiseForLog(sb.ToString(), auth));
-
-        var psi = new ProcessStartInfo
-        {
-            FileName        = javaw,
-            Arguments       = sb.ToString(),
-            WorkingDirectory = mcDir,
-            UseShellExecute        = false,
-            CreateNoWindow         = true,
-            RedirectStandardOutput = console != null,
-            RedirectStandardError  = console != null,
-        };
-
-        Process? proc = null;
-        await Task.Run(() => proc = Process.Start(psi)).ConfigureAwait(false);
-
-        if (proc != null)
-        {
-            TrackProcess(proc);
-            proc.EnableRaisingEvents = true;
-            proc.Exited += (_, _) =>
+            var missing = classpath.Where(p => !File.Exists(p)).ToList();
+            if (missing.Count > 0)
             {
-                try { instanceLock.Dispose(); } catch { }
+                onProgress?.Invoke($"Downloading {missing.Count} missing libraries…", 0);
+                try
+                {
+                    var allVersions = await _versions.GetVersionsAsync().ConfigureAwait(false);
+                    var jv = allVersions.FirstOrDefault(v => v.Id == versionId);
+                    if (jv != null && !string.IsNullOrEmpty(jv.Url))
+                    {
+                        await _installer.InstallAsync(jv,
+                            report: p => onProgress?.Invoke(p.Stage, p.Percent)).ConfigureAwait(false);
+                    }
+                    else
+                    {
+                        throw new InvalidOperationException(
+                            $"Version {versionId} not found in manifest — can't auto-download missing libraries. " +
+                            "Try installing this version from the Versions tab first.");
+                    }
+                }
+                catch (InvalidOperationException) { throw; }
+                catch (Exception ex)
+                {
+                    throw new InvalidOperationException(
+                        $"Auto-install failed: {ex.Message}. Try installing this version from the Versions tab first.");
+                }
+            }
+
+            onProgress?.Invoke("Launching…", 100);
+
+            var console = _console.Open($"Minecraft Java · {versionId}");
+            console?.Info($".minecraft = {mcDir}");
+            console?.Info($"Main class: {profile.MainClass}");
+            console?.Info($"Asset index: {profile.AssetsIndex}  ·  Java major: {(string.IsNullOrEmpty(profile.MinJavaMajor) ? "(legacy)" : profile.MinJavaMajor)}");
+            console?.Info($"Java runtime: {javaw}  (detected major: {actualJavaMajor})");
+            console?.Info($"Classpath entries: {classpath.Count}");
+
+            var auth = await ResolveAuthValuesAsync().ConfigureAwait(false);
+            console?.Info($"Auth: {auth.Name} ({auth.UserType}) · {auth.Uuid}");
+
+            var sb = new StringBuilder();
+            AppendJvmArgs(sb, profile, mcDir, versionId, actualJavaMajor, extraJvmArgs);
+            sb.Append(" -cp ").Append(Quote(string.Join(';', classpath)));
+            sb.Append(' ').Append(profile.MainClass);
+            AppendGameArgs(sb, profile, mcDir, versionId, auth);
+
+            console?.Info("Game args (sanitised):");
+            console?.Info(SanitiseForLog(sb.ToString(), auth));
+
+            var psi = new ProcessStartInfo
+            {
+                FileName        = javaw,
+                Arguments       = sb.ToString(),
+                WorkingDirectory = mcDir,
+                UseShellExecute        = false,
+                CreateNoWindow         = true,
+                RedirectStandardOutput = console != null,
+                RedirectStandardError  = console != null,
             };
-            console?.Info($"Started PID {proc.Id}");
-            console?.SetPid(proc.Id);
-            console?.MarkRunning();
-            console?.Attach(proc);
+
+            Process? proc = null;
+            await Task.Run(() => proc = Process.Start(psi)).ConfigureAwait(false);
+
+            if (proc != null)
+            {
+                TrackProcess(proc);
+                proc.EnableRaisingEvents = true;
+                proc.Exited += (_, _) =>
+                {
+                    try { instanceLock.Dispose(); } catch { }
+                };
+                console?.Info($"Started PID {proc.Id}");
+                console?.SetPid(proc.Id);
+                console?.MarkRunning();
+                console?.Attach(proc);
+            }
+            else
+            {
+                instanceLock.Dispose();
+            }
+
+            _settings.Settings.JavaLastUsedVersion = versionId;
+            _instances.SetActiveVersion(versionId);
+            _settings.Save();
         }
-        else
+        catch
         {
             instanceLock.Dispose();
+            throw;
         }
-
-        _settings.Settings.JavaLastUsedVersion = versionId;
-        _instances.SetActiveVersion(versionId);
-        _settings.Save();
     }
 
     private FileStream AcquireInstanceLock(string versionId)
@@ -460,8 +468,12 @@ public sealed class JavaGameLauncher
             sb.Append(" -Djava.library.path=").Append(Quote(nativesDir));
         }
 
-        var ram = Math.Clamp(_settings.Settings.JavaMaxRamMb, 512, 16384);
-        var minRam = Math.Clamp(_settings.Settings.JavaMinRamMb, 256, ram);
+        // Per-instance override wins over the global setting (0 = use global).
+        var inst    = _instances.ActiveInstance;
+        var maxCfg  = inst.MaxRamMb > 0 ? inst.MaxRamMb : _settings.Settings.JavaMaxRamMb;
+        var minCfg  = inst.MinRamMb > 0 ? inst.MinRamMb : _settings.Settings.JavaMinRamMb;
+        var ram     = Math.Clamp(maxCfg, 512, 16384);
+        var minRam  = Math.Clamp(minCfg, 256, ram);
         sb.Append(" -Xmx").Append(ram).Append('M');
         sb.Append(" -Xms").Append(minRam).Append('M');
 

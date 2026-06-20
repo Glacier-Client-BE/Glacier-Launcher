@@ -46,6 +46,7 @@ public partial class MainWindow : Window
         var sc = new ServiceCollection();
         sc.AddWpfBlazorWebView();
         sc.AddSingleton<SettingsService>();
+        sc.AddSingleton<DownloadService>();
         sc.AddSingleton<GameConsoleService>();
         sc.AddSingleton<GameLauncher>();
         sc.AddSingleton<FlarialService>();
@@ -64,6 +65,7 @@ public partial class MainWindow : Window
         sc.AddSingleton<JavaModLoaderService>();
         sc.AddSingleton<LunarBadlionService>();
         sc.AddSingleton<ModrinthService>();
+        sc.AddSingleton<GlacierClientService>();
 
 #if DEBUG
         sc.AddBlazorWebViewDeveloperTools();

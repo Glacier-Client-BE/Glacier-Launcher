@@ -26,6 +26,7 @@ public class GameLauncher
     private readonly SettingsService _settingsService;
     private readonly HttpClient      _httpClient;
     private readonly GameConsoleService? _console;
+    private readonly DownloadService _download = new();
 
     public static string DownloadsDirectory =>
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
@@ -142,30 +143,13 @@ public class GameLauncher
         return apiName;
     }
 
-    public async Task DownloadVersionAsync(MinecraftVersion version, IProgress<double>? progress = null)
+    public async Task DownloadVersionAsync(
+        MinecraftVersion version, IProgress<double>? progress = null, CancellationToken cancel = default)
     {
         if (string.IsNullOrEmpty(version.DownloadUrl))
             throw new InvalidOperationException("This version has no download URL. Refresh the versions list and try again.");
 
-        var dllPath = GetDllPath(version.Tag);
-
-        using var response = await _httpClient.GetAsync(version.DownloadUrl, HttpCompletionOption.ResponseHeadersRead);
-        response.EnsureSuccessStatusCode();
-
-        var total = response.Content.Headers.ContentLength ?? -1;
-        var buf   = new byte[8192];
-        long dl   = 0;
-
-        await using var stream = await response.Content.ReadAsStreamAsync();
-        await using var fs     = File.Create(dllPath);
-
-        int read;
-        while ((read = await stream.ReadAsync(buf)) > 0)
-        {
-            await fs.WriteAsync(buf.AsMemory(0, read));
-            dl += read;
-            if (total > 0) progress?.Report((double)dl / total * 100);
-        }
+        await _download.DownloadAsync(version.DownloadUrl, GetDllPath(version.Tag), progress: progress, cancel: cancel);
 
         version.IsDownloaded = true;
         _settingsService.Settings.LastUsedVersion = version.Tag;

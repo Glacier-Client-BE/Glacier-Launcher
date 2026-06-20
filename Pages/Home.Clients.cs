@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using GlacierLauncher.Components;
 using GlacierLauncher.Models;
 using GlacierLauncher.Services;
 using Microsoft.AspNetCore.Components;
@@ -50,61 +51,65 @@ public partial class Home
     private async Task OpenClients()
     {
         currentView = "clients";
-        flarialDownloaded = Flarial.IsDownloaded;
-        flarialUpToDate   = flarialDownloaded && await Flarial.IsUpToDateAsync();
-        odersoDownloaded  = OderSo.IsDownloaded;
-        odersoUpToDate    = odersoDownloaded  && await OderSo.IsUpToDateAsync();
+        _flarial.Downloaded = Flarial.IsDownloaded;
+        _oderso.Downloaded  = OderSo.IsDownloaded;
+
+        var flarialUpToDate = _flarial.Downloaded ? Flarial.IsUpToDateAsync() : Task.FromResult(false);
+        var odersoUpToDate  = _oderso.Downloaded  ? OderSo.IsUpToDateAsync()  : Task.FromResult(false);
+        await Task.WhenAll(flarialUpToDate, odersoUpToDate);
+
+        _flarial.UpToDate = flarialUpToDate.Result;
+        _oderso.UpToDate  = odersoUpToDate.Result;
         clientsHasBadge   = false;
         StateHasChanged();
     }
 
-    private async Task HandleFlarialDownload()
+    /// <summary>
+    /// Shared download flow for the simple single-file clients (Flarial, OderSo):
+    /// flips the card into its downloading state, streams via the service while
+    /// surfacing 0–1 progress, then refreshes the up-to-date flag.
+    /// </summary>
+    private async Task RunClientDownload(
+        ClientDownloadState                              state,
+        Func<IProgress<double>, CancellationToken, Task> download,
+        Func<Task<bool>>                                 isUpToDate,
+        string                                           clientName)
     {
-        flarialDownloading = true; flarialProgress = 0; flarialError = "";
+        if (state.Downloading) return;
+        var token = state.BeginDownload();
         StateHasChanged();
         try
         {
-            var prog = new ThrottledProgress(new Progress<double>(pct =>
-            { flarialProgress = pct; InvokeAsync(StateHasChanged); }));
-            await Flarial.DownloadAsync(prog);
-            flarialDownloaded = true;
-            flarialUpToDate   = await Flarial.IsUpToDateAsync();
-            _ = ShowToast("Flarial downloaded!", "success");
+            var prog = new ThrottledProgress(new Progress<double>(f =>
+            { state.Progress = f; InvokeAsync(StateHasChanged); }), completeValue: 1.0, minDelta: 0.01);
+            await download(prog, token);
+            state.Downloaded = true;
+            state.UpToDate   = await isUpToDate();
+            _ = ShowToast($"{clientName} downloaded!", "success");
         }
-        catch (Exception ex) { flarialError = ex.Message; }
-        finally { flarialDownloading = false; flarialProgress = 0; }
+        catch (OperationCanceledException) { _ = ShowToast($"{clientName} download cancelled.", "info"); }
+        catch (Exception ex) { state.Error = ex.Message; }
+        finally { state.EndDownload(); }
         StateHasChanged();
     }
+
+    private Task HandleFlarialDownload() =>
+        RunClientDownload(_flarial, Flarial.DownloadAsync, Flarial.IsUpToDateAsync, "Flarial");
 
     private void HandleFlarialDelete()
     {
         Flarial.Delete();
-        flarialDownloaded = false; flarialUpToDate = false;
+        _flarial.MarkRemoved();
         StateHasChanged();
     }
 
-    private async Task HandleOderSoDownload()
-    {
-        odersoDownloading = true; odersoProgress = 0; odersoError = "";
-        StateHasChanged();
-        try
-        {
-            var prog = new ThrottledProgress(new Progress<double>(pct =>
-            { odersoProgress = pct; InvokeAsync(StateHasChanged); }));
-            await OderSo.DownloadAsync(prog);
-            odersoDownloaded = true;
-            odersoUpToDate   = await OderSo.IsUpToDateAsync();
-            _ = ShowToast("OderSo downloaded!", "success");
-        }
-        catch (Exception ex) { odersoError = ex.Message; }
-        finally { odersoDownloading = false; odersoProgress = 0; }
-        StateHasChanged();
-    }
+    private Task HandleOderSoDownload() =>
+        RunClientDownload(_oderso, OderSo.DownloadAsync, OderSo.IsUpToDateAsync, "OderSo");
 
     private void HandleOderSoDelete()
     {
         OderSo.Delete();
-        odersoDownloaded = false; odersoUpToDate = false;
+        _oderso.MarkRemoved();
         if (SettingsService.Settings.SelectedClient == "OderSo Client") SelectClient("Latite Client");
         StateHasChanged();
     }
@@ -179,30 +184,10 @@ public partial class Home
     {
         if (v.IsDownloading)
         {
-            b.OpenElement(0, "div");
-            b.AddAttribute(1, "class", "dl-progress-row");
-            if (downloadProgress > 0)
-            {
-                b.OpenElement(2, "div");
-                b.AddAttribute(3, "class", "progress-bar-wrap");
-                b.OpenElement(4, "div");
-                b.AddAttribute(5, "class", "progress-bar-fill");
-                b.AddAttribute(6, "style", $"width:{downloadProgress:F0}%");
-                b.CloseElement();
-                b.CloseElement();
-                b.OpenElement(7, "span");
-                b.AddAttribute(8, "class", "dl-pct");
-                b.AddContent(9, $"{(int)downloadProgress}%");
-                b.CloseElement();
-            }
-            b.OpenElement(10, "button");
-            b.AddAttribute(11, "class", "icon-btn");
-            b.AddAttribute(12, "disabled", true);
-            b.OpenElement(13, "span");
-            b.AddAttribute(14, "class", "spinner");
-            b.CloseElement();
-            b.CloseElement();
-            b.CloseElement();
+            b.OpenComponent<InlineProgress>(0);
+            b.AddAttribute(1, "Progress", v.Progress);
+            b.AddAttribute(2, "OnCancel", EventCallback.Factory.Create(this, () => v.DownloadCts?.Cancel()));
+            b.CloseComponent();
         }
         else
         {
@@ -266,16 +251,19 @@ public partial class Home
 
     private async Task HandleVersionDownload(MinecraftVersion v)
     {
-        v.IsDownloading = true; v.ErrorMessage = null; downloadProgress = 0; StateHasChanged();
+        if (v.IsDownloading) return;
+        v.DownloadCts = new CancellationTokenSource();
+        v.IsDownloading = true; v.ErrorMessage = null; v.Progress = 0; StateHasChanged();
         try
         {
             var prog = new ThrottledProgress(new Progress<double>(pct =>
-            { downloadProgress = pct; InvokeAsync(StateHasChanged); }));
-            await Launcher.DownloadVersionAsync(v, prog);
+            { v.Progress = pct; InvokeAsync(StateHasChanged); }), completeValue: 1.0, minDelta: 0.01);
+            await Launcher.DownloadVersionAsync(v, prog, v.DownloadCts.Token);
             _ = ShowToast(v.DisplayName + " downloaded!", "success");
         }
+        catch (OperationCanceledException) { _ = ShowToast(v.DisplayName + " download cancelled.", "info"); }
         catch (Exception ex) { v.ErrorMessage = ex.Message; }
-        finally { v.IsDownloading = false; downloadProgress = 0; }
+        finally { v.IsDownloading = false; v.Progress = 0; var cts = v.DownloadCts; v.DownloadCts = null; cts?.Dispose(); }
         StateHasChanged();
     }
 
@@ -326,18 +314,21 @@ public partial class Home
 
     private async Task HandleOderSoEntryDownload(OderSoDllState state)
     {
+        if (state.IsDownloading) return;
+        state.DownloadCts = new CancellationTokenSource();
         state.IsDownloading = true; state.Progress = 0; state.Error = "";
         StateHasChanged();
         try
         {
-            var prog = new ThrottledProgress(new Progress<double>(pct =>
-            { state.Progress = pct; InvokeAsync(StateHasChanged); }));
-            await OderSo.DownloadEntryAsync(state.Entry, prog);
+            var prog = new ThrottledProgress(new Progress<double>(f =>
+            { state.Progress = f; InvokeAsync(StateHasChanged); }), completeValue: 1.0, minDelta: 0.01);
+            await OderSo.DownloadEntryAsync(state.Entry, prog, state.DownloadCts.Token);
             state.IsDownloaded = true;
             _ = ShowToast(state.DisplayName + " downloaded!", "success");
         }
+        catch (OperationCanceledException) { _ = ShowToast(state.DisplayName + " download cancelled.", "info"); }
         catch (Exception ex) { state.Error = ex.Message; }
-        finally { state.IsDownloading = false; state.Progress = 0; }
+        finally { state.IsDownloading = false; state.Progress = 0; var cts = state.DownloadCts; state.DownloadCts = null; cts?.Dispose(); }
         StateHasChanged();
     }
 
@@ -384,30 +375,10 @@ public partial class Home
     {
         if (state.IsDownloading)
         {
-            b.OpenElement(0, "div");
-            b.AddAttribute(1, "class", "dl-progress-row");
-            if (state.Progress > 0)
-            {
-                b.OpenElement(2, "div");
-                b.AddAttribute(3, "class", "progress-bar-wrap");
-                b.OpenElement(4, "div");
-                b.AddAttribute(5, "class", "progress-bar-fill");
-                b.AddAttribute(6, "style", $"width:{state.Progress:F0}%");
-                b.CloseElement();
-                b.CloseElement();
-                b.OpenElement(7, "span");
-                b.AddAttribute(8, "class", "dl-pct");
-                b.AddContent(9, $"{(int)state.Progress}%");
-                b.CloseElement();
-            }
-            b.OpenElement(10, "button");
-            b.AddAttribute(11, "class", "icon-btn");
-            b.AddAttribute(12, "disabled", true);
-            b.OpenElement(13, "span");
-            b.AddAttribute(14, "class", "spinner");
-            b.CloseElement();
-            b.CloseElement();
-            b.CloseElement();
+            b.OpenComponent<InlineProgress>(0);
+            b.AddAttribute(1, "Progress", state.Progress);
+            b.AddAttribute(2, "OnCancel", EventCallback.Factory.Create(this, () => state.DownloadCts?.Cancel()));
+            b.CloseComponent();
         }
         else
         {
@@ -506,7 +477,10 @@ public partial class Home
     {
         currentView = "addons";
         if (IsJava)
+        {
             RefreshJavaInstanceFiles();
+            _ = AnalyzeModsAsync();
+        }
         if (!cfHasSearched && CurseForge.IsAvailable)
             _ = CfSearchAsync();
     }
@@ -718,8 +692,8 @@ public partial class Home
             var file = files.FirstOrDefault();
             if (file == null) { _ = ShowToast("No downloadable file found.", "error"); return; }
 
-            var prog = new ThrottledProgress(new Progress<double>(pct =>
-            { cfDownloadProgress = pct; InvokeAsync(StateHasChanged); }));
+            var prog = new ThrottledProgress(new Progress<double>(f =>
+            { cfDownloadProgress = f; InvokeAsync(StateHasChanged); }), completeValue: 1.0, minDelta: 0.01);
             await CurseForge.DownloadAndInstallAsync(file, addon.ClassId, prog);
             _ = ShowToast(addon.Name + " installed!", "success");
         }
@@ -814,8 +788,8 @@ public partial class Home
             var version = await Modrinth.GetLatestVersionAsync(project.Id);
             if (version == null) { _ = ShowToast("No downloadable file found.", "error"); return; }
 
-            var prog = new ThrottledProgress(new Progress<double>(pct =>
-            { mrDownloadProgress = pct; InvokeAsync(StateHasChanged); }));
+            var prog = new ThrottledProgress(new Progress<double>(f =>
+            { mrDownloadProgress = f; InvokeAsync(StateHasChanged); }), completeValue: 1.0, minDelta: 0.01);
             await Modrinth.DownloadAndInstallAsync(version, project.ProjectType, prog);
             _ = ShowToast(project.Title + " installed!", "success");
         }

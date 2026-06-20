@@ -55,8 +55,9 @@ public class CurseForgeService
             .Trim()
             .Trim('"');
 
-    private readonly HttpClient _http;
+    private readonly HttpClient      _http;
     private readonly SettingsService _settings;
+    private readonly DownloadService _download = new();
 
     public CurseForgeService(SettingsService settings, JavaVersionService javaVersions)
     {
@@ -216,24 +217,11 @@ public class CurseForgeService
         var tmpPath = Path.Combine(Path.GetTempPath(), file.FileName);
         try
         {
-            using var req  = BuildRequest(HttpMethod.Get, file.DownloadUrl);
-            using var resp = await _http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead);
-            resp.EnsureSuccessStatusCode();
-
-            var total = resp.Content.Headers.ContentLength ?? file.FileLength;
-            using var src = await resp.Content.ReadAsStreamAsync();
-            using var dest = File.Create(tmpPath);
-
-            var buf = new byte[81920];
-            long downloaded = 0;
-            int read;
-            while ((read = await src.ReadAsync(buf)) > 0)
-            {
-                await dest.WriteAsync(buf.AsMemory(0, read));
-                downloaded += read;
-                if (total > 0) progress?.Report(downloaded * 100.0 / total);
-            }
-            dest.Close();
+            await _download.DownloadAsync(
+                file.DownloadUrl, tmpPath,
+                progress: progress,
+                knownTotalBytes: file.FileLength,
+                configureRequest: req => req.Headers.TryAddWithoutValidation("x-api-key", EffectiveApiKey));
 
             await InstallAddonFileAsync(tmpPath, classId);
         }

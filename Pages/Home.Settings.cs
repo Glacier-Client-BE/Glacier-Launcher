@@ -140,7 +140,7 @@ public partial class Home
         StateHasChanged();
     }
 
-    private async void SetAccent(string color)
+    private async Task SetAccent(string color)
     {
         SettingsService.Settings.AccentColor = color;
         SettingsService.Save();
@@ -148,7 +148,7 @@ public partial class Home
         StateHasChanged();
     }
 
-    private async void OnThemeChanged(ChangeEventArgs e)
+    private async Task OnThemeChanged(ChangeEventArgs e)
     {
         var val = e.Value?.ToString() ?? "dark";
         SettingsService.Settings.ThemePreset = val;
@@ -157,7 +157,7 @@ public partial class Home
         StateHasChanged();
     }
 
-    private async void OnBlurChanged(ChangeEventArgs e)
+    private async Task OnBlurChanged(ChangeEventArgs e)
     {
         if (int.TryParse(e.Value?.ToString(), out int v))
         {
