@@ -1,0 +1,140 @@
+@using GlacierLauncher.Services
+@inject JavaInstanceService Instances
+
+<div class="panel-overlay">
+    <div class="panel-handle"></div>
+    <div class="panel-header">
+        <div class="panel-title-wrap">
+            <span class="panel-title">World Backups</span>
+            <div class="panel-title-underline"></div>
+        </div>
+        <div class="panel-header-actions">
+            <button class="btn-sm" @onclick="Reload" @onmousedown:stopPropagation>
+                <i class="fa-solid fa-rotate"></i> Refresh
+            </button>
+            <button class="panel-back-btn" @onclick="OnClose" @onmousedown:stopPropagation>
+                <i class="fa-solid fa-chevron-down"></i>
+            </button>
+        </div>
+    </div>
+
+    <div class="panel-body">
+        <span class="panel-section-label">Worlds (@Instances.ActiveInstance.Name)</span>
+        @if (_worlds.Count == 0)
+        {
+            <div class="stats-empty">No worlds in this instance's saves folder yet.</div>
+        }
+        else
+        {
+            @foreach (var w in _worlds)
+            {
+                <div class="version-row">
+                    <div class="version-meta">
+                        <span class="version-name">@w.Name</span>
+                        <span class="version-sub">@FormatSize(w.Size)</span>
+                    </div>
+                    <button class="vcs-btn" @onclick="() => BackupWorld(w.Path)" disabled="@_busy" @onmousedown:stopPropagation>
+                        <i class="fa-solid fa-box-archive"></i>&nbsp;Back up
+                    </button>
+                </div>
+            }
+        }
+
+        <span class="panel-section-label">Backups</span>
+        @if (_backups.Count == 0)
+        {
+            <div class="stats-empty">No backups yet. Backing up a world zips it into the instance's backups folder.</div>
+        }
+        else
+        {
+            @foreach (var b in _backups)
+            {
+                <div class="version-row">
+                    <div class="version-meta">
+                        <span class="version-name">@b.Name</span>
+                        <span class="version-sub">@FormatSize(b.SizeBytes)</span>
+                    </div>
+                    @if (_confirmRestore == b.Path)
+                    {
+                        <button class="vcs-btn" @onclick="() => RestoreBackup(b.Path)" disabled="@_busy" @onmousedown:stopPropagation>
+                            <i class="fa-solid fa-check"></i>&nbsp;Confirm restore
+                        </button>
+                        <button class="vcs-btn vcs-btn-ghost" @onclick="() => _confirmRestore = null" @onmousedown:stopPropagation>Cancel</button>
+                    }
+                    else
+                    {
+                        <button class="vcs-btn vcs-btn-ghost" @onclick="() => _confirmRestore = b.Path" @onmousedown:stopPropagation
+                                data-tooltip="Replaces the current world with this backup">
+                            <i class="fa-solid fa-clock-rotate-left"></i>&nbsp;Restore
+                        </button>
+                        <button class="vcs-btn vcs-btn-ghost" @onclick="() => Delete(b.Path)" @onmousedown:stopPropagation>
+                            <i class="fa-solid fa-trash"></i>
+                        </button>
+                    }
+                </div>
+            }
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter] public EventCallback OnClose { get; set; }
+    [Parameter] public EventCallback<(string Message, string Kind)> OnToast { get; set; }
+
+    private List<(string Name, string Path, long Size, string ModifiedAt)> _worlds = new();
+    private List<Models.JavaInstanceFile> _backups = new();
+    private string? _confirmRestore;
+    private bool _busy;
+
+    protected override void OnInitialized() => Reload();
+
+    private void Reload()
+    {
+        _worlds = Instances.ListWorlds().ToList();
+        _backups = Instances.ListBackups().ToList();
+        _confirmRestore = null;
+    }
+
+    private async Task BackupWorld(string worldDir)
+    {
+        _busy = true; StateHasChanged();
+        try
+        {
+            await Instances.BackupWorldAsync(worldDir);
+            Reload();
+            await OnToast.InvokeAsync(("World backed up.", "success"));
+        }
+        catch (Exception ex) { await OnToast.InvokeAsync((ex.Message, "error")); }
+        finally { _busy = false; StateHasChanged(); }
+    }
+
+    private async Task RestoreBackup(string zip)
+    {
+        _busy = true; _confirmRestore = null; StateHasChanged();
+        try
+        {
+            await Instances.RestoreBackupAsync(zip);
+            Reload();
+            await OnToast.InvokeAsync(("Backup restored.", "success"));
+        }
+        catch (Exception ex) { await OnToast.InvokeAsync((ex.Message, "error")); }
+        finally { _busy = false; StateHasChanged(); }
+    }
+
+    private async Task Delete(string zip)
+    {
+        Instances.DeleteBackup(zip);
+        Reload();
+        await OnToast.InvokeAsync(("Backup deleted.", "info"));
+        StateHasChanged();
+    }
+
+    private static string FormatSize(long bytes)
+    {
+        if (bytes <= 0) return "0 B";
+        string[] u = { "B", "KB", "MB", "GB" };
+        double v = bytes; int i = 0;
+        while (v >= 1024 && i < u.Length - 1) { v /= 1024; i++; }
+        return $"{v:0.#} {u[i]}";
+    }
+}

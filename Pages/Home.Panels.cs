@@ -12,7 +12,7 @@ namespace GlacierLauncher.Pages;
 
 public partial class Home
 {
-    private void OpenCredits() => currentView = "credits";
+    private void OpenCredits() => _ = NavigateAsync(() => currentView = "credits");
 
     private bool   serverModalOpen   = false;
     private SavedServer? editingServer = null;
@@ -38,8 +38,11 @@ public partial class Home
 
     private void OpenServers()
     {
-        currentView = "servers";
-        _ = PingAllServersAsync();
+        _ = NavigateAsync(() =>
+        {
+            currentView = "servers";
+            _ = PingAllServersAsync();
+        });
     }
 
     private static string ServerKey(SavedServer s) => $"{s.Address}:{s.Port}";
@@ -210,8 +213,11 @@ public partial class Home
 
     private async Task OpenMcVersions()
     {
-        currentView = "mcversions";
-        mcVersionsFilter = "";
+        await NavigateAsync(() =>
+        {
+            currentView = "mcversions";
+            mcVersionsFilter = "";
+        });
         if (mcVersionsList.Count == 0) await LoadMcVersionsAsync();
     }
 
@@ -402,8 +408,11 @@ public partial class Home
 
     private async Task OpenJavaVersions()
     {
-        currentView = "javaversions";
-        javaVersionsFilter = "";
+        await NavigateAsync(() =>
+        {
+            currentView = "javaversions";
+            javaVersionsFilter = "";
+        });
         if (javaVersionsList.Count == 0) await LoadJavaVersionsAsync();
     }
 
@@ -513,9 +522,11 @@ public partial class Home
         LunarBadlion.Detect();
         if (string.IsNullOrEmpty(lunarSelectedVersion))
             lunarSelectedVersion = LunarBadlion.LunarInstalledVersions.FirstOrDefault() ?? "";
-        currentView = "javaclients";
-        StateHasChanged();
-        _ = EnsureGlacierManifestAsync();
+        _ = NavigateAsync(() =>
+        {
+            currentView = "javaclients";
+            _ = EnsureGlacierManifestAsync();
+        });
     }
 
     private void RefreshJavaClients()

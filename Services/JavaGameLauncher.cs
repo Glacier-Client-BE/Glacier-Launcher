@@ -638,6 +638,14 @@ public sealed class JavaGameLauncher
     {
         var s = _settings.Settings;
 
+        // Explicit offline mode: skip Microsoft auth entirely and launch with a
+        // deterministic offline UUID. Online-mode servers will reject this.
+        if (s.JavaOfflineMode)
+        {
+            var offlineName = !string.IsNullOrWhiteSpace(s.JavaOfflineUsername) ? s.JavaOfflineUsername.Trim() : "Player";
+            return new AuthValues(offlineName, OfflineUuid(offlineName), "0", "legacy");
+        }
+
         if (!string.IsNullOrEmpty(s.JavaAccessToken)
             && !string.IsNullOrEmpty(s.JavaUuid)
             && !string.IsNullOrEmpty(s.JavaUsername))

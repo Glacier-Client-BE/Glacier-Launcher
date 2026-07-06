@@ -40,11 +40,28 @@ public static class SkinService
 
             using var resp = await HttpFactory.Shared.SendAsync(req).ConfigureAwait(false);
             if (resp.IsSuccessStatusCode) return null;
-            return (int)resp.StatusCode == 401
-                ? "Your session expired — re-sign in with Microsoft."
-                : $"Minecraft rejected the skin (HTTP {(int)resp.StatusCode}).";
+            if ((int)resp.StatusCode == 401)
+                return "Your session expired — re-sign in with Microsoft.";
+            var body = await resp.Content.ReadAsStringAsync().ConfigureAwait(false);
+            var detail = ExtractApiMessage(body);
+            return string.IsNullOrEmpty(detail)
+                ? $"Minecraft rejected the skin (HTTP {(int)resp.StatusCode})."
+                : $"Minecraft rejected the skin: {detail}";
         }
         catch (Exception ex) { return ex.Message; }
+    }
+
+    /// <summary>Pulls the human-readable "errorMessage" out of a Minecraft API error body.</summary>
+    private static string ExtractApiMessage(string body)
+    {
+        if (string.IsNullOrWhiteSpace(body)) return "";
+        try
+        {
+            using var doc = JsonDocument.Parse(body);
+            if (doc.RootElement.TryGetProperty("errorMessage", out var m)) return m.GetString() ?? "";
+        }
+        catch { /* not JSON */ }
+        return "";
     }
 
     public static async Task<string?> ResetSkinAsync(string token)

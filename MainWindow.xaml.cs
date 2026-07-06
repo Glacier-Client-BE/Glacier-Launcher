@@ -37,6 +37,7 @@ public partial class MainWindow : Window
     private WindowState _preFullscreenState;
     private double _preFullscreenWidth, _preFullscreenHeight;
     private double _preFullscreenLeft, _preFullscreenTop;
+    private TrayIcon? _tray;
 
     public MainWindow()
     {
@@ -66,6 +67,12 @@ public partial class MainWindow : Window
         sc.AddSingleton<LunarBadlionService>();
         sc.AddSingleton<ModrinthService>();
         sc.AddSingleton<GlacierClientService>();
+        sc.AddSingleton<ThemeService>();
+        sc.AddSingleton<JavaRuntimeDownloadService>();
+        sc.AddSingleton<ModpackInstallService>();
+        sc.AddSingleton<StatsService>();
+        sc.AddSingleton<LogService>();
+        sc.AddSingleton<SkinLibraryService>();
 
 #if DEBUG
         sc.AddBlazorWebViewDeveloperTools();
@@ -136,6 +143,7 @@ public partial class MainWindow : Window
                     if (msg == "startDrag") { try { DragMove(); } catch { } }
                     else if (msg == "close") Close();
                     else if (msg == "minimize") WindowState = WindowState.Minimized;
+                    else if (msg == "minimizeToTray") MinimizeToTray();
                     else if (msg == "maximize")
                     {
                         if (_isFullscreen) ToggleFullscreen(); // exit fullscreen first
@@ -158,10 +166,43 @@ public partial class MainWindow : Window
             {
                 svc.Settings.WindowWidth = Width;
                 svc.Settings.WindowHeight = Height;
-                svc.Save();
             }
+            // Also lands any pending debounced save from slider/filter writes.
+            svc.Flush();
             _services.GetRequiredService<DiscordRpcService>().Stop();
+            _tray?.Dispose();
         };
+    }
+
+    // Hides the window to a tray icon, creating the icon on first use.
+    private void MinimizeToTray()
+    {
+        try
+        {
+            if (_tray == null)
+            {
+                var iconPath = Path.Combine(AppContext.BaseDirectory, "icon.ico");
+                _tray = new TrayIcon("Glacier Launcher", iconPath);
+                _tray.OnOpen += () => Dispatcher.Invoke(RestoreFromTray);
+                _tray.OnExit += () => Dispatcher.Invoke(Close);
+            }
+            Hide();
+        }
+        catch
+        {
+            // If the tray icon can't be created, fall back to a normal minimize
+            // so the button never appears to do nothing.
+            WindowState = WindowState.Minimized;
+        }
+    }
+
+    private void RestoreFromTray()
+    {
+        Show();
+        WindowState = WindowState.Normal;
+        Activate();
+        Topmost = true;
+        Topmost = false;
     }
 
     private System.Windows.Shell.WindowChrome? _origChrome;

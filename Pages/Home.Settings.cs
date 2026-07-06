@@ -11,7 +11,28 @@ namespace GlacierLauncher.Pages;
 
 public partial class Home
 {
-    private void OpenSettings() { currentView = "settings"; settingsFilter = ""; settingsCategory = "all"; }
+    private void OpenSettings() => OpenSettings("");
+
+    private void OpenSettings(string filter) =>
+        _ = NavigateAsync(() => { currentView = "settings"; settingsFilter = filter; settingsCategory = "all"; });
+
+    private void OpenThemeStudio() => _ = NavigateAsync(() => currentView = "themestudio");
+
+    private void OpenModpacks() => _ = NavigateAsync(() => { SetEditionCore("java"); currentView = "modpacks"; });
+    private void OpenStats()    => _ = NavigateAsync(() => currentView = "stats");
+    private void OpenLogs()     => _ = NavigateAsync(() => { SetEditionCore("java"); currentView = "logs"; });
+    private void OpenSkinLibrary() => _ = NavigateAsync(() => currentView = "skinlibrary");
+    private void OpenBackups()  => _ = NavigateAsync(() => { SetEditionCore("java"); currentView = "backups"; });
+
+    private Task HandleThemeToast((string Message, string Kind) t) => ShowToast(t.Message, t.Kind);
+
+    private void OnModpackInstalled(string instanceId)
+    {
+        JavaInstances.SetActive(instanceId);
+        RefreshJavaInstanceFiles();
+        _ = NavigateAsync(() => currentView = "javaversions");
+        _ = ShowToast("Modpack instance activated.", "success");
+    }
 
     private void SetSettingsCategory(string cat)
     {
@@ -62,6 +83,7 @@ public partial class Home
         ("java",       "Show snapshots",                 "snapshots experimental"),
         ("java",       "Show beta and alpha",            "beta alpha historical old"),
         ("java",       "Close after launch",             "close minimize launch java"),
+        ("java",       "Offline mode",                   "offline mode cracked no account username"),
         ("java",       "Custom JVM args",                "jvm args java options garbage collector gc"),
         ("java",       "Open Minecraft folder",          "minecraft folder dot directory open"),
         ("java",       "Latest crash report",            "crash report log latest open view java"),
@@ -70,9 +92,14 @@ public partial class Home
         ("appearance", "Theme preset",                   "theme dark midnight slate ocean forest sunset light"),
         ("appearance", "Compact mode",                   "compact dense small"),
         ("appearance", "Animations",                     "animations smooth motion"),
+        ("appearance", "Animation speed",                "animation speed motion fast slow multiplier"),
         ("appearance", "Background blur",                "blur background"),
         ("appearance", "Remember window size",           "window size remember"),
         ("appearance", "Custom background wallpaper",    "background wallpaper image custom"),
+        ("appearance", "Background fit",                 "background fit cover contain tile center"),
+        ("appearance", "UI scale",                       "ui scale zoom size interface"),
+        ("appearance", "Font",                           "font family typeface typography"),
+        ("appearance", "Theme Studio",                   "theme studio custom editor create colors design"),
 
         ("account",    "Display name",                   "username name display account"),
         ("account",    "Profile display",                "profile display footer xbox discord switch which"),
@@ -144,6 +171,7 @@ public partial class Home
     {
         SettingsService.Settings.AccentColor = color;
         SettingsService.Save();
+        await DeactivateCustomThemeIfAnyAsync();
         await JS.InvokeVoidAsync("setAccentColor", color);
         StateHasChanged();
     }
@@ -153,7 +181,57 @@ public partial class Home
         var val = e.Value?.ToString() ?? "dark";
         SettingsService.Settings.ThemePreset = val;
         SettingsService.Save();
+        await DeactivateCustomThemeIfAnyAsync();
         await JS.InvokeVoidAsync("setTheme", val);
+        StateHasChanged();
+    }
+
+    // Editing the plain preset/accent while a Theme Studio theme is active
+    // would silently fight the theme's variables — drop the theme instead and
+    // tell the user, so what they see always matches what's stored.
+    private async Task DeactivateCustomThemeIfAnyAsync()
+    {
+        if (string.IsNullOrEmpty(SettingsService.Settings.ActiveThemeId)) return;
+        SettingsService.Settings.ActiveThemeId = "";
+        SettingsService.Save();
+        await ThemeSvc.ClearAsync(JS);
+        await JS.InvokeVoidAsync("setBlurIntensity", SettingsService.Settings.BlurIntensity);
+        await JS.InvokeVoidAsync("setAnimationSpeed", SettingsService.Settings.AnimationSpeed);
+        await JS.InvokeVoidAsync("setCustomBackground", SettingsService.Settings.CustomBackgroundPath);
+        if (!string.IsNullOrEmpty(SettingsService.Settings.FontFamily))
+            await JS.InvokeVoidAsync("setFont", SettingsService.Settings.FontFamily);
+        _ = ShowToast("Custom theme deactivated.", "info");
+    }
+
+    private async Task OnUiScaleChanged(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var v))
+        {
+            SettingsService.Settings.UiScalePct = Math.Clamp(v, 75, 150);
+            SettingsService.SaveDebounced();
+            await JS.InvokeVoidAsync("setUiScale", SettingsService.Settings.UiScalePct);
+            StateHasChanged();
+        }
+    }
+
+    private async Task OnFontChanged(ChangeEventArgs e)
+    {
+        SettingsService.Settings.FontFamily = (e.Value?.ToString() ?? "").Trim();
+        SettingsService.Save();
+        // Only drive the page directly when no theme owns the font.
+        if (string.IsNullOrEmpty(SettingsService.Settings.ActiveThemeId))
+            await JS.InvokeVoidAsync("setFont", SettingsService.Settings.FontFamily);
+        StateHasChanged();
+    }
+
+    private async Task OnBackgroundFitChanged(ChangeEventArgs e)
+    {
+        var val = e.Value?.ToString() ?? "cover";
+        if (val is not ("cover" or "contain" or "tile" or "center")) val = "cover";
+        SettingsService.Settings.BackgroundFit = val;
+        SettingsService.Save();
+        if (string.IsNullOrEmpty(SettingsService.Settings.ActiveThemeId))
+            await JS.InvokeVoidAsync("setBackgroundFit", val, 1.0);
         StateHasChanged();
     }
 
@@ -162,10 +240,30 @@ public partial class Home
         if (int.TryParse(e.Value?.ToString(), out int v))
         {
             SettingsService.Settings.BlurIntensity = v;
-            SettingsService.Save();
+            SettingsService.SaveDebounced();
             await JS.InvokeVoidAsync("setBlurIntensity", v);
             StateHasChanged();
         }
+    }
+
+    private async Task OnAnimSpeedChanged(ChangeEventArgs e)
+    {
+        if (double.TryParse(e.Value?.ToString(), System.Globalization.NumberStyles.Float,
+                            System.Globalization.CultureInfo.InvariantCulture, out var v))
+        {
+            SettingsService.Settings.AnimationSpeed = Math.Clamp(v, 0.25, 2.0);
+            SettingsService.SaveDebounced();
+            await JS.InvokeVoidAsync("setAnimationSpeed", SettingsService.Settings.AnimationSpeed);
+            StateHasChanged();
+        }
+    }
+
+    private void OnOfflineUsernameChanged(ChangeEventArgs e)
+    {
+        var val = (e.Value?.ToString() ?? "").Trim();
+        SettingsService.Settings.JavaOfflineUsername = string.IsNullOrEmpty(val) ? "Player" : val;
+        SettingsService.Save();
+        StateHasChanged();
     }
 
     private void OnCfApiKeyChanged(ChangeEventArgs e)
@@ -318,6 +416,7 @@ public partial class Home
             SettingsService.Settings.CustomBackgroundPath  = imported.CustomBackgroundPath;
             SettingsService.Settings.CompactMode           = imported.CompactMode;
             SettingsService.Settings.AnimationsEnabled     = imported.AnimationsEnabled;
+            SettingsService.Settings.AnimationSpeed        = imported.AnimationSpeed;
             SettingsService.Settings.RememberWindowSize    = imported.RememberWindowSize;
             SettingsService.Settings.MinimizeToTray        = imported.MinimizeToTray;
             SettingsService.Settings.ShowRecentlyLaunched  = imported.ShowRecentlyLaunched;
@@ -337,6 +436,7 @@ public partial class Home
                 SettingsService.Settings.CustomBackgroundPath);
             await JS.InvokeVoidAsync("setCompactMode", SettingsService.Settings.CompactMode);
             await JS.InvokeVoidAsync("setAnimationsEnabled", SettingsService.Settings.AnimationsEnabled);
+            await JS.InvokeVoidAsync("setAnimationSpeed", SettingsService.Settings.AnimationSpeed);
 
             _ = ShowToast("Settings imported.", "success");
             StateHasChanged();
@@ -375,6 +475,7 @@ public partial class Home
             dst.AccentColor, dst.ThemePreset, dst.BlurIntensity, dst.CustomBackgroundPath);
         await JS.InvokeVoidAsync("setCompactMode", dst.CompactMode);
         await JS.InvokeVoidAsync("setAnimationsEnabled", dst.AnimationsEnabled);
+        await JS.InvokeVoidAsync("setAnimationSpeed", dst.AnimationSpeed);
 
         resetConfirmOpen = false;
         _ = ShowToast("Settings reset.", "success");

@@ -112,7 +112,7 @@ public partial class Home
         yield return new("fa-solid fa-images", "Screenshot Gallery (Java)", "Navigation", "Browse your in-game screenshots", "", () => { CloseSearch(); OpenJavaScreenshots(); });
         yield return new("fa-solid fa-newspaper", "What's New / Changelog", "Navigation", "Launcher news and release notes", "", () => { CloseSearch(); _ = OpenNews(); });
         yield return new("fa-solid fa-shirt", "Change Minecraft Skin", "Account", "Upload a new skin (signed-in)", "", () => { CloseSearch(); _ = ChangeSkinAsync(); });
-        yield return new("fa-solid fa-triangle-exclamation", "Check Mod Conflicts (Java)", "Java", "Scan installed mods for missing deps & duplicates", "", () => { CloseSearch(); OpenAddons(); javaModsTab = "mods"; StateHasChanged(); });
+        yield return new("fa-solid fa-triangle-exclamation", "Check Mod Conflicts (Java)", "Java", "Scan installed mods for missing deps & duplicates", "", () => { CloseSearch(); OpenAddons("mods"); });
         yield return new("fa-solid fa-house", "Go Home", "Navigation", "Back to the launch screen", "", () => { CloseSearch(); GoHome(); StateHasChanged(); });
         yield return new("fa-solid fa-id-badge", "Toggle Footer Profile", "Navigation", "Cycle Auto / Xbox / Discord display", "", () => { CloseSearch(); CycleProfileDisplay(); });
 
@@ -262,19 +262,23 @@ public partial class Home
 
     private void OpenJavaProfile()
     {
-        SetEdition("java");          // no-op if already on Java; otherwise resets to home first
-        LoadInstanceRam();
-        currentView = "javaprofile";
-        StateHasChanged();
-        _ = LoadCapesAsync();
+        _ = NavigateAsync(() =>
+        {
+            SetEditionCore("java");   // no-op if already on Java
+            LoadInstanceRam();
+            currentView = "javaprofile";
+            _ = LoadCapesAsync();
+        });
     }
 
     private void OpenJavaScreenshots()
     {
-        SetEdition("java");
-        RefreshJavaInstanceFiles();
-        currentView = "javascreenshots";
-        StateHasChanged();
+        _ = NavigateAsync(() =>
+        {
+            SetEditionCore("java");
+            RefreshJavaInstanceFiles();
+            currentView = "javascreenshots";
+        });
     }
 
     private void OpenScreenshot(JavaInstanceFile shot) => OpenUrl(shot.Path);
@@ -299,7 +303,15 @@ public partial class Home
     // session clock on launch, bank the elapsed time on exit.
     private void AccumulatePlaytime(bool running)
     {
-        if (running) { _sessionStart = DateTime.UtcNow; return; }
+        if (running)
+        {
+            _sessionStart   = DateTime.UtcNow;
+            _sessionEdition = IsJava ? "java" : "bedrock";
+            _sessionLabel   = IsJava
+                ? (string.IsNullOrEmpty(SettingsService.Settings.JavaActiveVersion) ? "Java" : SettingsService.Settings.JavaActiveVersion)
+                : GetFooterVersionLabel();
+            return;
+        }
         if (_sessionStart is { } start)
         {
             var secs = (long)(DateTime.UtcNow - start).TotalSeconds;
@@ -308,9 +320,26 @@ public partial class Home
                 SettingsService.Settings.TotalPlaytimeSeconds += secs;
                 SettingsService.Settings.LastPlayed = DateTime.UtcNow.ToString("o");
                 SettingsService.Save();
+                Stats.RecordSession(start, secs, _sessionEdition, _sessionLabel);
             }
             _sessionStart = null;
         }
+    }
+
+    // After a Java session ends, look for a crash report written in the last
+    // 30 seconds and offer the user a jump to the log viewer.
+    private async Task CheckForCrashAsync()
+    {
+        try
+        {
+            var logs = await Task.Run(() => Logs.ListLogs());
+            var fresh = logs.FirstOrDefault(l => l.IsCrash
+                && DateTime.TryParse(l.ModifiedAt, null, System.Globalization.DateTimeStyles.RoundtripKind, out var dt)
+                && (DateTime.UtcNow - dt).TotalSeconds < 30);
+            if (fresh != null)
+                _ = ShowToast("Minecraft crashed — open Logs to view the report.", "error");
+        }
+        catch { }
     }
 
     private static string FormatPlaytime(long seconds)

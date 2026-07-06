@@ -112,6 +112,119 @@ public sealed class JavaInstanceService
         }
     }
 
+    /// <summary>Duplicates any instance by id (not just the active one).</summary>
+    public JavaInstance? Duplicate(string id)
+    {
+        lock (_sync)
+        {
+            var source = _instances.FirstOrDefault(x => string.Equals(x.Id, id, StringComparison.OrdinalIgnoreCase));
+            if (source == null) return null;
+            var copy = Create(source.Name + " Copy", source.VersionId);
+            copy.MaxRamMb = source.MaxRamMb;
+            copy.MinRamMb = source.MinRamMb;
+            CopyDirectory(source.Directory, copy.Directory);
+            // Persist the RAM carry-over onto the stored record.
+            var stored = _instances.First(x => x.Id == copy.Id);
+            stored.MaxRamMb = source.MaxRamMb;
+            stored.MinRamMb = source.MinRamMb;
+            Save();
+            return Clone(stored);
+        }
+    }
+
+    public void Rename(string id, string newName)
+    {
+        if (string.IsNullOrWhiteSpace(newName)) return;
+        lock (_sync)
+        {
+            var instance = _instances.FirstOrDefault(x => string.Equals(x.Id, id, StringComparison.OrdinalIgnoreCase));
+            if (instance == null) return;
+            instance.Name = newName.Trim();
+            instance.UpdatedAt = DateTime.UtcNow.ToString("o");
+            Save();
+        }
+    }
+
+    /// <summary>Deletes an instance and its files. Never removes the last one.</summary>
+    public bool Delete(string id)
+    {
+        lock (_sync)
+        {
+            var instance = _instances.FirstOrDefault(x => string.Equals(x.Id, id, StringComparison.OrdinalIgnoreCase));
+            if (instance == null || _instances.Count <= 1) return false;
+
+            try { if (Directory.Exists(instance.Directory)) Directory.Delete(instance.Directory, true); }
+            catch { /* files may be locked; drop the index entry regardless */ }
+
+            _instances.Remove(instance);
+
+            // Re-point the active instance if we just removed it.
+            if (string.Equals(_settings.Settings.JavaActiveInstanceId, id, StringComparison.OrdinalIgnoreCase))
+            {
+                _settings.Settings.JavaActiveInstanceId = _instances[0].Id;
+                _settings.Settings.JavaActiveVersion    = _instances[0].VersionId;
+                _settings.Save();
+            }
+            Save();
+            return true;
+        }
+    }
+
+    /// <summary>Absolute path to a subfolder of a specific (not necessarily active) instance.</summary>
+    public string PathForInstance(string id, string child)
+    {
+        lock (_sync)
+        {
+            var instance = _instances.FirstOrDefault(x => string.Equals(x.Id, id, StringComparison.OrdinalIgnoreCase))
+                           ?? _instances.First();
+            EnsureLayout(instance);
+            return Path.Combine(instance.Directory, child);
+        }
+    }
+
+    public void SetInstanceVersion(string id, string versionId)
+    {
+        lock (_sync)
+        {
+            var instance = _instances.FirstOrDefault(x => string.Equals(x.Id, id, StringComparison.OrdinalIgnoreCase));
+            if (instance == null) return;
+            instance.VersionId = versionId;
+            instance.UpdatedAt = DateTime.UtcNow.ToString("o");
+            Save();
+            if (string.Equals(_settings.Settings.JavaActiveInstanceId, id, StringComparison.OrdinalIgnoreCase))
+            {
+                _settings.Settings.JavaActiveVersion = versionId;
+                _settings.Save();
+            }
+        }
+    }
+
+    /// <summary>Extracts a modpack zip's <c>overrides/</c> tree into a target instance.</summary>
+    public async Task ExtractOverridesAsync(string zipPath, string instanceId)
+    {
+        var target = PathForInstance(instanceId, "");
+        await Task.Run(() =>
+        {
+            using var archive = ZipFile.OpenRead(zipPath);
+            foreach (var entry in archive.Entries)
+            {
+                if (string.IsNullOrEmpty(entry.Name)) continue;
+                var path = entry.FullName.Replace('\\', '/');
+                // Modrinth uses "overrides/"; some CF packs also ship "client-overrides/".
+                string? rel = null;
+                if (path.StartsWith("overrides/", StringComparison.OrdinalIgnoreCase))
+                    rel = path["overrides/".Length..];
+                else if (path.StartsWith("client-overrides/", StringComparison.OrdinalIgnoreCase))
+                    rel = path["client-overrides/".Length..];
+                if (rel == null || rel.Length == 0) continue;
+
+                var dest = Path.Combine(target, rel.Replace('/', Path.DirectorySeparatorChar));
+                Directory.CreateDirectory(Path.GetDirectoryName(dest)!);
+                entry.ExtractToFile(dest, true);
+            }
+        });
+    }
+
     public void SetActive(string id)
     {
         lock (_sync)
@@ -230,6 +343,13 @@ public sealed class JavaInstanceService
         return zip;
     }
 
+    /// <summary>
+    /// Imports a zip into a new instance, auto-detecting the layout:
+    /// Modrinth .mrpack (modrinth.index.json), CurseForge manifest.json,
+    /// MultiMC/Prism export (instance.cfg + .minecraft/ or minecraft/), or a
+    /// plain .minecraft folder zip. Only the file tree is copied here; resolving
+    /// mods listed in a CF/Modrinth manifest is done by ModpackInstallService.
+    /// </summary>
     public async Task<JavaInstance> ImportModpackAsync(string zipPath)
     {
         if (!File.Exists(zipPath))
@@ -238,20 +358,161 @@ public sealed class JavaInstanceService
         await Task.Run(() =>
         {
             using var archive = ZipFile.OpenRead(zipPath);
+
+            // Detect the root layout once so we know which prefix to strip.
+            bool hasOverrides = archive.Entries.Any(e =>
+                e.FullName.Replace('\\', '/').StartsWith("overrides/", StringComparison.OrdinalIgnoreCase) ||
+                e.FullName.Replace('\\', '/').StartsWith("client-overrides/", StringComparison.OrdinalIgnoreCase));
+            string? mmcMcRoot = DetectMultiMcRoot(archive);
+
             foreach (var entry in archive.Entries)
             {
-                if (string.IsNullOrEmpty(entry.Name))
-                    continue;
+                if (string.IsNullOrEmpty(entry.Name)) continue;
                 var path = entry.FullName.Replace('\\', '/');
-                if (!path.StartsWith("overrides/", StringComparison.OrdinalIgnoreCase))
-                    continue;
-                var relative = path["overrides/".Length..].Replace('/', Path.DirectorySeparatorChar);
-                var dest = Path.Combine(instance.Directory, relative);
+                string? rel = null;
+
+                if (hasOverrides)
+                {
+                    if (path.StartsWith("overrides/", StringComparison.OrdinalIgnoreCase))
+                        rel = path["overrides/".Length..];
+                    else if (path.StartsWith("client-overrides/", StringComparison.OrdinalIgnoreCase))
+                        rel = path["client-overrides/".Length..];
+                }
+                else if (mmcMcRoot != null)
+                {
+                    if (path.StartsWith(mmcMcRoot, StringComparison.OrdinalIgnoreCase))
+                        rel = path[mmcMcRoot.Length..];
+                }
+                else
+                {
+                    // Plain .minecraft zip — copy everything as-is.
+                    rel = path;
+                }
+
+                if (string.IsNullOrEmpty(rel)) continue;
+                var dest = Path.Combine(instance.Directory, rel.Replace('/', Path.DirectorySeparatorChar));
                 Directory.CreateDirectory(Path.GetDirectoryName(dest)!);
                 entry.ExtractToFile(dest, true);
             }
         });
         return instance;
+    }
+
+    // MultiMC/Prism exports nest game files under ".minecraft/" or "minecraft/",
+    // sometimes below a single top-level pack folder. Returns the prefix to strip.
+    private static string? DetectMultiMcRoot(ZipArchive archive)
+    {
+        bool hasCfg = archive.Entries.Any(e => e.FullName.Replace('\\', '/')
+            .EndsWith("instance.cfg", StringComparison.OrdinalIgnoreCase));
+        if (!hasCfg) return null;
+        foreach (var candidate in new[] { ".minecraft/", "minecraft/" })
+        {
+            var match = archive.Entries.FirstOrDefault(e =>
+            {
+                var p = e.FullName.Replace('\\', '/');
+                return p.EndsWith(candidate, StringComparison.OrdinalIgnoreCase) || p.Contains("/" + candidate, StringComparison.OrdinalIgnoreCase) || p.StartsWith(candidate, StringComparison.OrdinalIgnoreCase);
+            });
+            if (match != null)
+            {
+                var p = match.FullName.Replace('\\', '/');
+                var idx = p.IndexOf(candidate, StringComparison.OrdinalIgnoreCase);
+                return p[..(idx + candidate.Length)];
+            }
+        }
+        return null;
+    }
+
+    /// <summary>Imports the user's official-launcher .minecraft into a new instance.</summary>
+    public async Task<JavaInstance> ImportOfficialMinecraftAsync()
+    {
+        var official = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), ".minecraft");
+        if (!Directory.Exists(official))
+            throw new DirectoryNotFoundException("No official .minecraft folder found in %APPDATA%.");
+        var instance = Create("Official .minecraft");
+        await Task.Run(() =>
+        {
+            // Copy the player-facing folders; skip heavy shared caches that the
+            // instance links to (assets/libraries) and version jars.
+            foreach (var sub in new[] { "mods", "config", "saves", "resourcepacks", "shaderpacks", "screenshots", "options.txt", "servers.dat" })
+            {
+                var src = Path.Combine(official, sub);
+                var dst = Path.Combine(instance.Directory, sub);
+                try
+                {
+                    if (Directory.Exists(src)) CopyDirectory(src, dst);
+                    else if (File.Exists(src)) File.Copy(src, dst, true);
+                }
+                catch { /* skip locked/absent */ }
+            }
+        });
+        return instance;
+    }
+
+    // ── World backups ──────────────────────────────────────────
+    public IReadOnlyList<(string Name, string Path, long Size, string ModifiedAt)> ListWorlds()
+    {
+        var saves = PathFor("saves");
+        Directory.CreateDirectory(saves);
+        return Directory.EnumerateDirectories(saves)
+            .Select(d => new DirectoryInfo(d))
+            .Select(di => (di.Name, di.FullName, DirSize(di.FullName), di.LastWriteTimeUtc.ToString("o")))
+            .OrderByDescending(x => x.Item4)
+            .ToList();
+    }
+
+    public IReadOnlyList<JavaInstanceFile> ListBackups()
+    {
+        var backups = PathFor("backups");
+        Directory.CreateDirectory(backups);
+        return Directory.EnumerateFiles(backups, "*.zip")
+            .Select(p => ToEntry("backups", p))
+            .OrderByDescending(x => x.ModifiedAt)
+            .ToList();
+    }
+
+    public async Task<string> BackupWorldAsync(string worldDir)
+    {
+        if (!Directory.Exists(worldDir))
+            throw new DirectoryNotFoundException("World folder not found.");
+        var backups = PathFor("backups");
+        Directory.CreateDirectory(backups);
+        var name = new DirectoryInfo(worldDir).Name;
+        var zip = Path.Combine(backups, $"{Slug(name)}-{DateTime.Now:yyyyMMdd-HHmmss}.zip");
+        await Task.Run(() => ZipFile.CreateFromDirectory(worldDir, zip, CompressionLevel.Fastest, true));
+        return zip;
+    }
+
+    /// <summary>Restores a backup zip into saves/, replacing a same-named world.</summary>
+    public async Task RestoreBackupAsync(string zipPath)
+    {
+        if (!File.Exists(zipPath))
+            throw new FileNotFoundException("Backup not found.", zipPath);
+        var saves = PathFor("saves");
+        await Task.Run(() =>
+        {
+            using var archive = ZipFile.OpenRead(zipPath);
+            // The zip's single top-level folder is the world name.
+            var top = archive.Entries.Select(e => e.FullName.Replace('\\', '/').Split('/')[0])
+                .FirstOrDefault(s => !string.IsNullOrEmpty(s)) ?? Path.GetFileNameWithoutExtension(zipPath);
+            var target = Path.Combine(saves, top);
+            if (Directory.Exists(target)) Directory.Delete(target, true);
+            ZipFile.ExtractToDirectory(zipPath, saves, true);
+        });
+    }
+
+    public void DeleteBackup(string zipPath)
+    {
+        try { if (File.Exists(zipPath)) File.Delete(zipPath); } catch { }
+    }
+
+    private static long DirSize(string dir)
+    {
+        try
+        {
+            return Directory.EnumerateFiles(dir, "*", SearchOption.AllDirectories)
+                .Sum(f => { try { return new FileInfo(f).Length; } catch { return 0L; } });
+        }
+        catch { return 0; }
     }
 
     private void Load()

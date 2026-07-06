@@ -210,6 +210,58 @@ public class CurseForgeService
         return files;
     }
 
+    // ── Modpack resolution (used by ModpackInstallService) ────
+
+    public bool IsModpackClass(int classId) => classId == JavaClassModpacks;
+
+    /// <summary>Downloads an arbitrary CurseForge file to <paramref name="destPath"/> with the API key attached.</summary>
+    public Task DownloadFileToAsync(CfFile file, string destPath, IProgress<double>? progress = null, System.Threading.CancellationToken cancel = default) =>
+        _download.DownloadAsync(
+            file.DownloadUrl, destPath,
+            progress: progress,
+            knownTotalBytes: file.FileLength,
+            configureRequest: req => req.Headers.TryAddWithoutValidation("x-api-key", EffectiveApiKey),
+            cancel: cancel);
+
+    /// <summary>
+    /// Resolves a single modpack manifest entry (projectID + fileID) to its
+    /// download details. Returns null when CurseForge disallows third-party
+    /// downloads for that file (no downloadUrl) — the caller collects those as
+    /// manual links.
+    /// </summary>
+    public async Task<(CfFile? File, string ProjectName)> ResolveManifestFileAsync(int projectId, int fileId)
+    {
+        var url = $"{BaseUrl}/v1/mods/{projectId}/files/{fileId}";
+        var json = await GetStringWithKeyAsync(url);
+        using var doc = JsonDocument.Parse(json);
+        if (!doc.RootElement.TryGetProperty("data", out var item))
+            return (null, $"project {projectId}");
+
+        var fileName = item.TryGetProperty("fileName", out var fn) ? fn.GetString() ?? "" : "";
+        var length   = item.TryGetProperty("fileLength", out var fl) ? fl.GetInt64() : 0;
+        var dlUrl    = item.TryGetProperty("downloadUrl", out var du) && du.ValueKind != JsonValueKind.Null
+                       ? du.GetString() ?? "" : "";
+
+        if (string.IsNullOrEmpty(dlUrl))
+        {
+            // Reconstruct the CDN URL CurseForge uses when downloadUrl is null but
+            // the file is actually distributable (common for older files).
+            if (fileId > 0 && !string.IsNullOrEmpty(fileName))
+            {
+                var idStr = fileId.ToString();
+                var a = idStr.Length > 4 ? idStr[..(idStr.Length - 3)] : idStr;
+                var b = idStr.Length > 4 ? idStr[(idStr.Length - 3)..].TrimStart('0') : "0";
+                if (string.IsNullOrEmpty(b)) b = "0";
+                dlUrl = $"https://edge.forgecdn.net/files/{a}/{b}/{Uri.EscapeDataString(fileName)}";
+            }
+        }
+
+        if (string.IsNullOrEmpty(dlUrl))
+            return (null, fileName.Length > 0 ? fileName : $"project {projectId}");
+
+        return (new CfFile(fileId, fileName, dlUrl, length, fileName), fileName);
+    }
+
     // ── Download & install ────────────────────────────────────
 
     public async Task DownloadAndInstallAsync(CfFile file, int classId, IProgress<double>? progress = null)
@@ -443,8 +495,10 @@ public class CurseForgeService
     private static CfAddon ParseAddon(JsonElement item)
     {
         var id       = item.GetProperty("id").GetInt32();
-        var name     = item.GetProperty("name").GetString() ?? "";
-        var summary  = item.TryGetProperty("summary", out var s) ? s.GetString() ?? "" : "";
+        // CurseForge delivers rich text HTML-escaped (e.g. "Blocks &amp; Items"); decode
+        // once here so the plain-@ bindings in the UI don't show literal entities.
+        var name     = System.Net.WebUtility.HtmlDecode(item.GetProperty("name").GetString() ?? "");
+        var summary  = System.Net.WebUtility.HtmlDecode(item.TryGetProperty("summary", out var s) ? s.GetString() ?? "" : "");
         var dlCount  = item.TryGetProperty("downloadCount", out var dc) ? (long)dc.GetDouble() : 0;
         var classId  = item.TryGetProperty("classId", out var ci) ? ci.GetInt32() : 0;
 
@@ -454,11 +508,11 @@ public class CurseForgeService
 
         var author = "";
         if (item.TryGetProperty("authors", out var authors) && authors.GetArrayLength() > 0)
-            author = authors[0].GetProperty("name").GetString() ?? "";
+            author = System.Net.WebUtility.HtmlDecode(authors[0].GetProperty("name").GetString() ?? "");
 
         var catName = "";
         if (item.TryGetProperty("categories", out var cats) && cats.GetArrayLength() > 0)
-            catName = cats[0].TryGetProperty("name", out var cn) ? cn.GetString() ?? "" : "";
+            catName = System.Net.WebUtility.HtmlDecode(cats[0].TryGetProperty("name", out var cn) ? cn.GetString() ?? "" : "");
 
         var latestFileId = 0;
         if (item.TryGetProperty("latestFilesIndexes", out var lfi) && lfi.GetArrayLength() > 0)

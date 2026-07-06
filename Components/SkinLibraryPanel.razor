@@ -1,0 +1,161 @@
+@using GlacierLauncher.Services
+@inject SkinLibraryService Library
+@inject SettingsService SettingsService
+@inject XboxProfileService Xbox
+
+<div class="panel-overlay">
+    <div class="panel-handle"></div>
+    <div class="panel-header">
+        <div class="panel-title-wrap">
+            <span class="panel-title">Skin Library</span>
+            <div class="panel-title-underline"></div>
+        </div>
+        <div class="panel-header-actions">
+            <button class="btn-sm" @onclick="SaveCurrent" disabled="@_busy" @onmousedown:stopPropagation
+                    data-tooltip="Save your account's current skin into the library">
+                <i class="fa-solid fa-floppy-disk"></i> Save current
+            </button>
+            <button class="btn-sm" @onclick="AddFromFile" @onmousedown:stopPropagation>
+                <i class="fa-solid fa-upload"></i> Add PNG
+            </button>
+            <button class="panel-back-btn" @onclick="OnClose" @onmousedown:stopPropagation>
+                <i class="fa-solid fa-chevron-down"></i>
+            </button>
+        </div>
+    </div>
+
+    <div class="panel-body">
+        <div class="skinlib-add">
+            <input class="panel-search-input" placeholder="Add by username (grabs their current skin)…"
+                   value="@_username" @oninput="OnUsernameInput"
+                   @onkeydown="OnUserKey" @onmousedown:stopPropagation />
+            <button class="btn-sm" @onclick="AddFromUsername" disabled="@_busy" @onmousedown:stopPropagation>
+                <i class="fa-solid fa-user-plus"></i>
+            </button>
+        </div>
+
+        @if (_skins.Count == 0)
+        {
+            <div class="stats-empty">No saved skins yet. Add a PNG or pull one in by username, then apply it to your signed-in account.</div>
+        }
+        else
+        {
+            <div class="skinlib-grid">
+                @foreach (var s in _skins)
+                {
+                    <div class="skinlib-card">
+                        <div class="skinlib-preview">
+                            <img src="@s.Url" loading="lazy" style="image-rendering:pixelated;" />
+                        </div>
+                        <span class="skinlib-name">@s.Name</span>
+                        <div class="skinlib-actions">
+                            <button class="btn-sm btn-accent" @onclick="() => Apply(s, s.Slim)" disabled="@_busy" @onmousedown:stopPropagation
+                                    data-tooltip="Apply to your account as @(s.Slim ? "slim (Alex)" : "classic (Steve)")">
+                                <i class="fa-solid fa-shirt"></i> Apply
+                            </button>
+                            <button class="btn-sm" @onclick="() => Apply(s, !s.Slim)" disabled="@_busy" @onmousedown:stopPropagation
+                                    data-tooltip="Apply as @(s.Slim ? "classic (Steve)" : "slim (Alex)") instead">@(s.Slim ? "Classic" : "Slim")</button>
+                            <button class="btn-sm ts-danger" @onclick="() => Delete(s)" @onmousedown:stopPropagation
+                                    data-tooltip="Remove from library"><i class="fa-solid fa-trash"></i></button>
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter] public EventCallback OnClose { get; set; }
+    [Parameter] public EventCallback<(string Message, string Kind)> OnToast { get; set; }
+
+    private List<SkinLibraryService.SavedSkin> _skins = new();
+    private string _username = "";
+    private bool _busy;
+
+    protected override void OnInitialized() => Reload();
+
+    private void Reload() => _skins = Library.List().ToList();
+
+    private async Task AddFromFile()
+    {
+        // Native picker — WebView2's file input can't return a usable path.
+        var path = await LauncherUtilityService.PickFileAsync(
+            "Choose a skin PNG", "Minecraft skin (PNG)|*.png|All files|*.*");
+        if (string.IsNullOrEmpty(path)) return;
+        try
+        {
+            await Library.AddFromFileAsync(path, slim: false);
+            Reload();
+            await OnToast.InvokeAsync(("Skin added to library.", "success"));
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (Exception ex) { await OnToast.InvokeAsync((ex.Message, "error")); }
+    }
+
+    private async Task SaveCurrent()
+    {
+        var name = SettingsService.Settings.JavaUsername;
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            await OnToast.InvokeAsync(("Sign in with Microsoft (Java) first to save your current skin.", "error"));
+            return;
+        }
+        _busy = true; StateHasChanged();
+        try
+        {
+            await Library.AddFromUsernameAsync(name);
+            Reload();
+            await OnToast.InvokeAsync(("Your current skin was saved to the library.", "success"));
+        }
+        catch (Exception ex) { await OnToast.InvokeAsync((ex.Message, "error")); }
+        finally { _busy = false; StateHasChanged(); }
+    }
+
+    private void OnUsernameInput(ChangeEventArgs e) => _username = e.Value?.ToString() ?? "";
+
+    private async Task OnUserKey(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await AddFromUsername();
+    }
+
+    private async Task AddFromUsername()
+    {
+        if (string.IsNullOrWhiteSpace(_username)) return;
+        _busy = true; StateHasChanged();
+        try
+        {
+            await Library.AddFromUsernameAsync(_username);
+            _username = "";
+            Reload();
+            await OnToast.InvokeAsync(("Skin saved to library.", "success"));
+        }
+        catch (Exception ex) { await OnToast.InvokeAsync((ex.Message, "error")); }
+        finally { _busy = false; StateHasChanged(); }
+    }
+
+    private async Task Apply(SkinLibraryService.SavedSkin s, bool slim)
+    {
+        if (string.IsNullOrEmpty(SettingsService.Settings.JavaAccessToken))
+        {
+            await OnToast.InvokeAsync(("Sign in with Microsoft (Java) first to apply skins.", "error"));
+            return;
+        }
+        _busy = true; StateHasChanged();
+        // Refresh a possibly-expired Minecraft token so the upload actually lands.
+        await Xbox.ValidateSessionAsync();
+        var error = await SkinService.UploadSkinAsync(SettingsService.Settings.JavaAccessToken, s.Path, slim);
+        _busy = false; StateHasChanged();
+        await OnToast.InvokeAsync(error == null
+            ? ($"Applied \"{s.Name}\" as {(slim ? "slim" : "classic")}.", "success")
+            : (error, "error"));
+    }
+
+    private async Task Delete(SkinLibraryService.SavedSkin s)
+    {
+        Library.Delete(s.Path);
+        Reload();
+        await OnToast.InvokeAsync(("Skin removed.", "info"));
+        StateHasChanged();
+    }
+}

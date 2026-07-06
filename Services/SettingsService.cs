@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Text.Json;
+using System.Threading;
 using GlacierLauncher.Models;
 
 namespace GlacierLauncher.Services;
@@ -12,6 +13,7 @@ public class SettingsService
     private readonly string _settingsPath;
     private readonly object _sync = new();
     private string _lastSerialized = "";
+    private Timer? _debounceTimer;
 
     public LauncherSettings Settings { get; private set; } = new();
 
@@ -63,6 +65,10 @@ public class SettingsService
         {
             lock (_sync)
             {
+                // A direct save supersedes any pending debounced one.
+                _debounceTimer?.Dispose();
+                _debounceTimer = null;
+
                 // Serialize under the lock so two concurrent saves can't interleave
                 // and so the dedupe check and write stay consistent.
                 var json = JsonSerializer.Serialize(Settings, SerializerOptions);
@@ -75,4 +81,22 @@ public class SettingsService
         }
         catch { }
     }
+
+    /// <summary>
+    /// Coalesces bursts of writes (slider drags, per-keystroke filters) into a
+    /// single disk write. Anything that must survive an immediate crash — auth
+    /// tokens, launch state — should keep calling <see cref="Save"/> directly.
+    /// Call <see cref="Flush"/> on shutdown so a pending save can't be lost.
+    /// </summary>
+    public void SaveDebounced(int delayMs = 800)
+    {
+        lock (_sync)
+        {
+            _debounceTimer?.Dispose();
+            _debounceTimer = new Timer(_ => Save(), null, delayMs, Timeout.Infinite);
+        }
+    }
+
+    /// <summary>Writes any pending debounced save immediately.</summary>
+    public void Flush() => Save();
 }

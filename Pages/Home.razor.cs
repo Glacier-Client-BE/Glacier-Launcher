@@ -28,19 +28,34 @@ public partial class Home : IDisposable
     private List<MinecraftVersion> versions = new();
     private string versionsFilter = "";
     private string versionsClient = "Latite";
-    private IEnumerable<MinecraftVersion> FilteredVersions
+
+    // Filter + sort results are memoized: Home re-renders on every state change
+    // and recomputing LINQ chains over hundreds of versions each time is the
+    // main render cost of the version panels. The key includes a cheap
+    // downloaded/installed tally so flag flips (download finished) invalidate.
+    private List<MinecraftVersion>? _filteredVersionsCache;
+    private string _filteredVersionsKey = "";
+
+    private IReadOnlyList<MinecraftVersion> FilteredVersions
     {
         get
         {
-            IEnumerable<MinecraftVersion> q = versions;
-            if (!string.IsNullOrWhiteSpace(versionsFilter))
+            var key = $"{versions.Count}|{versions.Count(v => v.IsDownloaded)}|{versionsFilter}|" +
+                      $"{SettingsService.Settings.ShowOnlyDownloaded}|{SettingsService.Settings.VersionSortMode}";
+            if (_filteredVersionsCache == null || key != _filteredVersionsKey)
             {
-                q = q.Where(v => v.DisplayName.Contains(versionsFilter, StringComparison.OrdinalIgnoreCase)
-                              || v.Tag.Contains(versionsFilter, StringComparison.OrdinalIgnoreCase));
+                IEnumerable<MinecraftVersion> q = versions;
+                if (!string.IsNullOrWhiteSpace(versionsFilter))
+                {
+                    q = q.Where(v => v.DisplayName.Contains(versionsFilter, StringComparison.OrdinalIgnoreCase)
+                                  || v.Tag.Contains(versionsFilter, StringComparison.OrdinalIgnoreCase));
+                }
+                if (SettingsService.Settings.ShowOnlyDownloaded)
+                    q = q.Where(v => v.IsDownloaded);
+                _filteredVersionsCache = SortedVersions(q).ToList();
+                _filteredVersionsKey   = key;
             }
-            if (SettingsService.Settings.ShowOnlyDownloaded)
-                q = q.Where(v => v.IsDownloaded);
-            return SortedVersions(q);
+            return _filteredVersionsCache;
         }
     }
 
@@ -79,14 +94,23 @@ public partial class Home : IDisposable
     private string storeInstallStage  = "";
     private string storeInstallDetail = "";
 
-    private IEnumerable<VanillaVersion> FilteredMcVersions
+    private List<VanillaVersion>? _filteredMcCache;
+    private string _filteredMcKey = "";
+
+    private IReadOnlyList<VanillaVersion> FilteredMcVersions
     {
         get
         {
-            IEnumerable<VanillaVersion> q = mcVersionsList;
-            if (!string.IsNullOrWhiteSpace(mcVersionsFilter))
-                q = q.Where(v => v.Version.Contains(mcVersionsFilter, StringComparison.OrdinalIgnoreCase));
-            return q;
+            var key = $"{mcVersionsList.Count}|{mcVersionsList.Count(v => v.IsDownloaded)}|{mcVersionsFilter}";
+            if (_filteredMcCache == null || key != _filteredMcKey)
+            {
+                IEnumerable<VanillaVersion> q = mcVersionsList;
+                if (!string.IsNullOrWhiteSpace(mcVersionsFilter))
+                    q = q.Where(v => v.Version.Contains(mcVersionsFilter, StringComparison.OrdinalIgnoreCase));
+                _filteredMcCache = q.ToList();
+                _filteredMcKey   = key;
+            }
+            return _filteredMcCache;
         }
     }
 
@@ -105,18 +129,28 @@ public partial class Home : IDisposable
     private bool IsBedrock => !IsJava;
     private bool IsJava    => string.Equals(SettingsService.Settings.Edition, "java", StringComparison.OrdinalIgnoreCase);
 
-    private IEnumerable<JavaVersion> FilteredJavaVersions
+    private List<JavaVersion>? _filteredJavaCache;
+    private string _filteredJavaKey = "";
+
+    private IReadOnlyList<JavaVersion> FilteredJavaVersions
     {
         get
         {
-            IEnumerable<JavaVersion> q = javaVersionsList;
-            if (!SettingsService.Settings.JavaShowSnapshots)
-                q = q.Where(v => v.Type != "snapshot");
-            if (!SettingsService.Settings.JavaShowHistorical)
-                q = q.Where(v => v.Type != "old_beta" && v.Type != "old_alpha");
-            if (!string.IsNullOrWhiteSpace(javaVersionsFilter))
-                q = q.Where(v => v.Id.Contains(javaVersionsFilter, StringComparison.OrdinalIgnoreCase));
-            return q;
+            var key = $"{javaVersionsList.Count}|{javaVersionsList.Count(v => v.IsInstalled)}|{javaVersionsFilter}|" +
+                      $"{SettingsService.Settings.JavaShowSnapshots}|{SettingsService.Settings.JavaShowHistorical}";
+            if (_filteredJavaCache == null || key != _filteredJavaKey)
+            {
+                IEnumerable<JavaVersion> q = javaVersionsList;
+                if (!SettingsService.Settings.JavaShowSnapshots)
+                    q = q.Where(v => v.Type != "snapshot");
+                if (!SettingsService.Settings.JavaShowHistorical)
+                    q = q.Where(v => v.Type != "old_beta" && v.Type != "old_alpha");
+                if (!string.IsNullOrWhiteSpace(javaVersionsFilter))
+                    q = q.Where(v => v.Id.Contains(javaVersionsFilter, StringComparison.OrdinalIgnoreCase));
+                _filteredJavaCache = q.ToList();
+                _filteredJavaKey   = key;
+            }
+            return _filteredJavaCache;
         }
     }
 
@@ -177,16 +211,68 @@ public partial class Home : IDisposable
     private bool   checkingUpdatesManual = false;
     private string lastUpdateCheckLabel  = "Never checked";
 
-    private record ToastItem(string Message, string Kind, string Icon);
+    private record ToastItem(string Message, string Kind, string Icon)
+    {
+        public bool Closing { get; set; }
+    }
     private List<ToastItem> _toasts = new();
 
     private bool mcRunning = false;
     private DateTime? _sessionStart;
+    private string _sessionLabel = "";
+    private string _sessionEdition = "";
     private CancellationTokenSource? _mcPollCts;
 
     private bool _isFullscreen = false;
 
     private DotNetObjectReference<Home>? _selfRef;
+
+    // ── View-transition navigation ──────────────────────────────
+    // Runs a view-state mutation inside a browser View Transition so the old
+    // and new screens animate (crossfade / panel slide) instead of swapping
+    // instantly. Falls back to an immediate swap when JS isn't ready yet,
+    // animations are disabled, or a transition is already in flight.
+    private Action? _pendingNav;
+    private bool    _navBusy;
+
+    private async Task NavigateAsync(Action mutate)
+    {
+        if (_selfRef == null || _navBusy)
+        {
+            mutate();
+            StateHasChanged();
+            return;
+        }
+        _navBusy    = true;
+        _pendingNav = mutate;
+        try { await JS.InvokeVoidAsync("glacierViewTransition", _selfRef); }
+        catch { }
+        finally
+        {
+            _navBusy = false;
+            // JS never called back (old WebView2 runtime, interop failure) —
+            // apply the pending mutation directly so navigation always works.
+            if (_pendingNav != null)
+            {
+                var m = _pendingNav;
+                _pendingNav = null;
+                m();
+                StateHasChanged();
+            }
+        }
+    }
+
+    [JSInvokable]
+    public async Task ApplyPendingNav()
+    {
+        await InvokeAsync(() =>
+        {
+            var m = _pendingNav;
+            _pendingNav = null;
+            m?.Invoke();
+            StateHasChanged();
+        });
+    }
 
     private static readonly string[] _accentSwatches =
         { "#7289da", "#5865f2", "#3ba55d", "#faa61a", "#f04747", "#eb459e", "#00d8ff", "#ff7043",
@@ -234,7 +320,25 @@ public partial class Home : IDisposable
             SettingsService.Settings.BlurIntensity,
             SettingsService.Settings.CustomBackgroundPath,
             SettingsService.Settings.CompactMode,
-            SettingsService.Settings.AnimationsEnabled);
+            SettingsService.Settings.AnimationsEnabled,
+            SettingsService.Settings.AnimationSpeed);
+        if (SettingsService.Settings.UiScalePct != 100)
+            await JS.InvokeVoidAsync("setUiScale", SettingsService.Settings.UiScalePct);
+
+        // A custom theme overrides the plain preset look entirely; otherwise
+        // the standalone font / background-fit settings apply.
+        var activeTheme = ThemeSvc.Get(SettingsService.Settings.ActiveThemeId);
+        if (activeTheme != null)
+        {
+            await ThemeSvc.ApplyAsync(JS, activeTheme);
+        }
+        else
+        {
+            if (!string.IsNullOrEmpty(SettingsService.Settings.FontFamily))
+                await JS.InvokeVoidAsync("setFont", SettingsService.Settings.FontFamily);
+            if (SettingsService.Settings.BackgroundFit != "cover")
+                await JS.InvokeVoidAsync("setBackgroundFit", SettingsService.Settings.BackgroundFit, 1.0);
+        }
         clientsHasBadge = !Flarial.IsDownloaded || !OderSo.IsDownloaded;
 
         if (!string.IsNullOrEmpty(SettingsService.Settings.LastUpdateCheck))
@@ -265,9 +369,14 @@ public partial class Home : IDisposable
                 catch { }
                 if (running != mcRunning)
                 {
+                    bool justExited = mcRunning && !running;
+                    var exitedEdition = _sessionEdition;
                     mcRunning = running;
                     AccumulatePlaytime(running);
                     await InvokeAsync(StateHasChanged);
+                    // Surface a crash toast if Java left a fresh crash report behind.
+                    if (justExited && exitedEdition == "java")
+                        _ = CheckForCrashAsync();
                 }
                 await Task.Delay(running ? 2500 : 4000, token);
             }
@@ -293,6 +402,21 @@ public partial class Home : IDisposable
         if (ext == ".dll")
         {
             OnDllDropped(path);
+            return;
+        }
+        if (ext == ".mrpack")
+        {
+            SetEditionCore("java");
+            _ = ShowToast("Installing modpack…", "info");
+            try
+            {
+                var cts = new CancellationTokenSource();
+                var instance = await Modpacks.InstallMrpackFileAsync(
+                    path, System.IO.Path.GetFileNameWithoutExtension(path), null, cts.Token);
+                OnModpackInstalled(instance.Id);
+            }
+            catch (Exception ex) { _ = ShowToast("Modpack install failed: " + ex.Message, "error"); }
+            await InvokeAsync(StateHasChanged);
             return;
         }
         if (IsJava && ext == ".zip")
@@ -413,7 +537,8 @@ public partial class Home : IDisposable
             await JS.InvokeVoidAsync("minimizeWindow");
     }
 
-    private void GoHome()              { currentView = "home"; hoveredBtn = ""; Discord.SetIdlePresence(); }
+    private void GoHome() =>
+        _ = NavigateAsync(() => { currentView = "home"; hoveredBtn = ""; Discord.SetIdlePresence(); });
     private void SetHover(string btn) => hoveredBtn = btn;
     private void ClearHover()         => hoveredBtn = "";
 
@@ -478,6 +603,9 @@ public partial class Home : IDisposable
         _toasts.Add(t);
         StateHasChanged();
         await Task.Delay(2800);
+        t.Closing = true;
+        StateHasChanged();
+        await Task.Delay(240);
         _toasts.Remove(t);
         StateHasChanged();
     }
@@ -653,6 +781,21 @@ public partial class Home : IDisposable
         if (string.Equals(SettingsService.Settings.Edition, ed, StringComparison.OrdinalIgnoreCase))
             return;
 
+        _ = NavigateAsync(() =>
+        {
+            SetEditionCore(ed);
+            currentView = "home";
+            hoveredBtn  = "";
+        });
+    }
+
+    // Edition switch without the navigation reset — used by flows that land on
+    // a specific Java view (profile, screenshots) instead of home.
+    private void SetEditionCore(string ed)
+    {
+        if (string.Equals(SettingsService.Settings.Edition, ed, StringComparison.OrdinalIgnoreCase))
+            return;
+
         SettingsService.Settings.Edition = ed;
         SettingsService.Save();
 
@@ -660,9 +803,6 @@ public partial class Home : IDisposable
         cfResults.Clear();
         cfHasSearched = false;
         settingsCategory = "all";
-        currentView = "home";
-        hoveredBtn  = "";
-        StateHasChanged();
     }
 
     private string FormatMarkdown(string text)

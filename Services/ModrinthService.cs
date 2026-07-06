@@ -83,8 +83,8 @@ public class ModrinthService
             {
                 var id = item.GetProperty("project_id").GetString() ?? "";
                 var slug = item.TryGetProperty("slug", out var sl) ? sl.GetString() ?? "" : "";
-                var title = item.TryGetProperty("title", out var t) ? t.GetString() ?? "" : "";
-                var desc = item.TryGetProperty("description", out var d) ? d.GetString() ?? "" : "";
+                var title = System.Net.WebUtility.HtmlDecode(item.TryGetProperty("title", out var t) ? t.GetString() ?? "" : "");
+                var desc = System.Net.WebUtility.HtmlDecode(item.TryGetProperty("description", out var d) ? d.GetString() ?? "" : "");
                 var icon = item.TryGetProperty("icon_url", out var ic) ? ic.GetString() ?? "" : "";
                 var author = item.TryGetProperty("author", out var a) ? a.GetString() ?? "" : "";
                 var downloads = item.TryGetProperty("downloads", out var dl) ? dl.GetInt64() : 0;
@@ -131,6 +131,18 @@ public class ModrinthService
         }
         return null;
     }
+
+    /// <summary>Fetches the primary downloadable file for a project's latest version (used for .mrpack).</summary>
+    public async Task<MrVersion?> GetModpackFileAsync(string projectId) => await GetLatestVersionAsync(projectId);
+
+    /// <summary>Downloads any Modrinth file (e.g. a .mrpack) to a specific path.</summary>
+    public Task DownloadToAsync(MrVersion version, string destPath, IProgress<double>? progress = null, System.Threading.CancellationToken cancel = default) =>
+        _download.DownloadAsync(
+            version.Url, destPath,
+            progress: progress,
+            knownTotalBytes: version.Size,
+            configureRequest: req => req.Headers.TryAddWithoutValidation("User-Agent", "GlacierLauncher/1.0 (glacier-launcher)"),
+            cancel: cancel);
 
     public async Task DownloadAndInstallAsync(MrVersion version, string projectType, IProgress<double>? progress = null)
     {

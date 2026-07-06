@@ -1,0 +1,138 @@
+@using GlacierLauncher.Services
+@inject LogService Logs
+@inject IJSRuntime JS
+
+<div class="panel-overlay">
+    <div class="panel-handle"></div>
+    <div class="panel-header">
+        <div class="panel-title-wrap">
+            <span class="panel-title">Logs & Crashes</span>
+            <div class="panel-title-underline"></div>
+        </div>
+        <div class="panel-header-actions">
+            <button class="btn-sm" @onclick="Refresh" @onmousedown:stopPropagation>
+                <i class="fa-solid fa-rotate"></i> Refresh
+            </button>
+            <button class="panel-back-btn" @onclick="OnClose" @onmousedown:stopPropagation>
+                <i class="fa-solid fa-chevron-down"></i>
+            </button>
+        </div>
+    </div>
+
+    <div class="panel-body">
+        @if (_files.Count == 0)
+        {
+            <div class="stats-empty">No logs or crash reports found for the active instance yet.</div>
+        }
+        else
+        {
+            <div class="logs-file-list">
+                @foreach (var f in _files)
+                {
+                    <button class="logs-file @(f.Path == _openPath ? "active" : "") @(f.IsCrash ? "crash" : "")"
+                            @onclick="() => OpenFile(f)" @onmousedown:stopPropagation>
+                        <i class="@(f.IsCrash ? "fa-solid fa-triangle-exclamation" : "fa-solid fa-file-lines")"></i>
+                        <span class="logs-file-name">@f.Name</span>
+                        <span class="logs-file-size">@FormatSize(f.Size)</span>
+                    </button>
+                }
+            </div>
+
+            @if (_openPath != null)
+            {
+                <div class="logs-toolbar">
+                    <span class="logs-open-name">@System.IO.Path.GetFileName(_openPath)</span>
+                    <div style="flex:1"></div>
+                    <button class="btn-sm" @onclick="CopyLog" @onmousedown:stopPropagation><i class="fa-solid fa-copy"></i> Copy</button>
+                    <button class="btn-sm btn-accent" @onclick="ShareLog" disabled="@_sharing" @onmousedown:stopPropagation>
+                        @if (_sharing) { <span class="spinner"></span> } else { <i class="fa-solid fa-share-nodes"></i> }
+                        <span>&nbsp;Share to mclo.gs</span>
+                    </button>
+                </div>
+                @if (!string.IsNullOrEmpty(_shareUrl))
+                {
+                    <div class="logs-share-url">
+                        <i class="fa-solid fa-link"></i>
+                        <a href="@_shareUrl" @onclick="OpenShareUrl" @onclick:preventDefault>@_shareUrl</a>
+                        <button class="btn-sm" @onclick="CopyShareUrl" @onmousedown:stopPropagation><i class="fa-solid fa-copy"></i></button>
+                    </div>
+                }
+                <pre class="logs-view">@_content</pre>
+            }
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter] public EventCallback OnClose { get; set; }
+    [Parameter] public EventCallback<(string Message, string Kind)> OnToast { get; set; }
+
+    private List<LogService.LogFile> _files = new();
+    private string? _openPath;
+    private string  _content = "";
+    private bool    _sharing;
+    private string  _shareUrl = "";
+
+    protected override void OnInitialized() => Refresh();
+
+    private void Refresh()
+    {
+        _files = Logs.ListLogs().ToList();
+        // Auto-open the newest file so the panel isn't empty on entry.
+        if (_openPath == null && _files.Count > 0)
+            _ = OpenFile(_files[0]);
+    }
+
+    private async Task OpenFile(LogService.LogFile f)
+    {
+        _openPath = f.Path;
+        _shareUrl = "";
+        _content = "Loading…";
+        StateHasChanged();
+        _content = await Logs.ReadLogAsync(f.Path);
+        StateHasChanged();
+    }
+
+    private async Task CopyLog()
+    {
+        await JS.InvokeVoidAsync("copyToClipboard", _content);
+        await OnToast.InvokeAsync(("Log copied.", "info"));
+    }
+
+    private async Task ShareLog()
+    {
+        if (string.IsNullOrEmpty(_content)) return;
+        _sharing = true; StateHasChanged();
+        try
+        {
+            _shareUrl = await Logs.ShareAsync(_content);
+            await OnToast.InvokeAsync(("Shared — tokens were redacted.", "success"));
+        }
+        catch (Exception ex)
+        {
+            await OnToast.InvokeAsync(("Share failed: " + ex.Message, "error"));
+        }
+        finally { _sharing = false; StateHasChanged(); }
+    }
+
+    private async Task CopyShareUrl()
+    {
+        await JS.InvokeVoidAsync("copyToClipboard", _shareUrl);
+        await OnToast.InvokeAsync(("Link copied.", "info"));
+    }
+
+    private void OpenShareUrl()
+    {
+        if (!string.IsNullOrEmpty(_shareUrl))
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo { FileName = _shareUrl, UseShellExecute = true });
+    }
+
+    private static string FormatSize(long bytes)
+    {
+        if (bytes <= 0) return "0 B";
+        string[] u = { "B", "KB", "MB", "GB" };
+        double v = bytes; int i = 0;
+        while (v >= 1024 && i < u.Length - 1) { v /= 1024; i++; }
+        return $"{v:0.#} {u[i]}";
+    }
+}

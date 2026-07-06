@@ -1,0 +1,532 @@
+@using GlacierLauncher.Models
+@using GlacierLauncher.Services
+@inject ThemeService Themes
+@inject SettingsService SettingsService
+@inject IJSRuntime JS
+@implements IDisposable
+
+<div class="panel-overlay">
+    <div class="panel-handle"></div>
+    <div class="panel-header">
+        <div class="panel-title-wrap">
+            <span class="panel-title">Theme Studio</span>
+            <div class="panel-title-underline"></div>
+        </div>
+        <div class="panel-header-actions">
+            <button class="btn-sm" @onclick="NewTheme" @onmousedown:stopPropagation>
+                <i class="fa-solid fa-plus"></i> New
+            </button>
+            <button class="btn-sm" @onclick="ImportTheme" @onmousedown:stopPropagation>
+                <i class="fa-solid fa-file-import"></i> Import
+            </button>
+            <button class="panel-back-btn" @onclick="ClosePanel" @onmousedown:stopPropagation>
+                <i class="fa-solid fa-chevron-down"></i>
+            </button>
+        </div>
+    </div>
+
+    <div class="panel-body">
+        @if (Themes.Themes.Count == 0)
+        {
+            <div class="ts-empty">
+                <i class="fa-solid fa-palette"></i>
+                <span>No custom themes yet</span>
+                <small>Start from the current preset and make it yours — every color, radius and font is editable.</small>
+                <button class="btn-sm" @onclick="NewTheme">
+                    <i class="fa-solid fa-plus"></i> Create your first theme
+                </button>
+            </div>
+        }
+        else
+        {
+            <div class="ts-chips">
+                @foreach (var t in Themes.Themes)
+                {
+                    <button class="ts-chip @(t.Id == _sel?.Id ? "selected" : "") @(IsActive(t) ? "active" : "")"
+                            @onclick="() => SelectTheme(t)" @onmousedown:stopPropagation>
+                        <span class="ts-chip-swatch" style="background:@t.Accent"></span>
+                        @t.Name
+                        @if (IsActive(t))
+                        {
+                            <i class="fa-solid fa-circle-check"></i>
+                        }
+                    </button>
+                }
+            </div>
+
+            @if (_sel != null)
+            {
+                <div class="ts-actions">
+                    @if (IsActive(_sel))
+                    {
+                        <button class="btn-sm ts-active-btn" @onclick="DeactivateTheme">
+                            <i class="fa-solid fa-circle-check"></i> Active — click to stop using
+                        </button>
+                    }
+                    else
+                    {
+                        <button class="btn-sm btn-accent" @onclick="ActivateTheme">
+                            <i class="fa-solid fa-wand-magic-sparkles"></i> Use this theme
+                        </button>
+                    }
+                    <button class="btn-sm" @onclick="DuplicateTheme"><i class="fa-solid fa-copy"></i> Duplicate</button>
+                    <button class="btn-sm" @onclick="ExportTheme"><i class="fa-solid fa-file-export"></i> Export</button>
+                    <button class="btn-sm ts-danger" @onclick="DeleteTheme"><i class="fa-solid fa-trash"></i> Delete</button>
+                </div>
+
+                <div class="panel-section-label">Identity</div>
+
+                <div class="setting-row">
+                    <div class="setting-meta">
+                        <span class="setting-label">Name</span>
+                        <span class="setting-hint">Shown in the theme list and export file name</span>
+                    </div>
+                    <input class="setting-input" value="@_sel.Name" maxlength="40"
+                           @oninput='e => { _sel.Name = e.Value?.ToString() ?? ""; MarkDirty(applyLive: false); }' />
+                </div>
+
+                <div class="setting-row">
+                    <div class="setting-meta">
+                        <span class="setting-label">Base preset</span>
+                        <span class="setting-hint">Inherits component styling — pick Light for light themes</span>
+                    </div>
+                    <div style="display:flex; align-items:center; gap:6px;">
+                        <select class="setting-select" value="@_sel.BasePreset"
+                                @onchange='async e => { _sel.BasePreset = e.Value?.ToString() ?? "dark"; await MarkDirtyAsync(); }'>
+                            @foreach (var p in ThemeService.PresetSeeds)
+                            {
+                                <option value="@p.Preset">@p.Label</option>
+                            }
+                        </select>
+                        <button class="btn-sm" title="Reset colors to this preset's defaults" @onclick="ReseedFromPreset">
+                            <i class="fa-solid fa-rotate-left"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="panel-section-label">Colors</div>
+
+                <div class="ts-color-grid">
+                    @ColorSwatch("Accent",     "accent",  _sel.Accent,  v => _sel.Accent  = v)
+                    @ColorSwatch("Background", "bg",      _sel.Bg,      v => _sel.Bg      = v)
+                    @ColorSwatch("Panels",     "panels",  _sel.BgPanel, v => _sel.BgPanel = v)
+                    @ColorSwatch("Text",       "text",    _sel.Text,    v => _sel.Text    = v)
+                    @ColorSwatch("Muted text", "textdim", _sel.TextDim, v => _sel.TextDim = v)
+                    @ColorSwatch("Error",      "red",     _sel.Red,     v => _sel.Red     = v)
+                    @ColorSwatch("Success",    "green",   _sel.Green,   v => _sel.Green   = v)
+                    @ColorSwatch("Warning",    "orange",  _sel.Orange,  v => _sel.Orange  = v)
+                </div>
+
+                @if (_editSetter != null)
+                {
+                    <div class="ts-color-editor">
+                        <div class="ts-color-editor-head">
+                            <span class="ts-color-editor-title">@_editLabel</span>
+                        </div>
+                        <ColorPicker Value="@_editValue" ValueChanged="OnColorChanged" OnClose="CloseColorEditor" />
+                    </div>
+                }
+
+                <div class="panel-section-label">Shape & effects</div>
+
+                <div class="setting-row">
+                    <div class="setting-meta">
+                        <span class="setting-label">Corner radius</span>
+                        <span class="setting-hint">Small controls / large cards</span>
+                    </div>
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        <input type="range" min="0" max="24" step="1" value="@_sel.RadiusSm"
+                               @oninput='async e => { _sel.RadiusSm = ParseInt(e, 0, 24); await MarkDirtyAsync(); }' />
+                        <span class="ts-slider-val">@(_sel.RadiusSm)px</span>
+                        <input type="range" min="0" max="32" step="1" value="@_sel.RadiusMd"
+                               @oninput='async e => { _sel.RadiusMd = ParseInt(e, 0, 32); await MarkDirtyAsync(); }' />
+                        <span class="ts-slider-val">@(_sel.RadiusMd)px</span>
+                    </div>
+                </div>
+
+                <div class="setting-row">
+                    <div class="setting-meta">
+                        <span class="setting-label">Panel blur</span>
+                        <span class="setting-hint">Backdrop blur behind panels — 0 disables (fastest)</span>
+                    </div>
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        <input type="range" min="0" max="30" step="2" value="@_sel.Blur"
+                               @oninput='async e => { _sel.Blur = ParseInt(e, 0, 30); await MarkDirtyAsync(); }' />
+                        <span class="ts-slider-val">@(_sel.Blur)px</span>
+                    </div>
+                </div>
+
+                <div class="setting-row">
+                    <div class="setting-meta">
+                        <span class="setting-label">Overlay strength</span>
+                        <span class="setting-hint">How much the wallpaper is dimmed toward the background color</span>
+                    </div>
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        <input type="range" min="0" max="100" step="5" value="@((int)(_sel.OverlayStrength * 100))"
+                               @oninput='async e => { _sel.OverlayStrength = ParseInt(e, 0, 100) / 100.0; await MarkDirtyAsync(); }' />
+                        <span class="ts-slider-val">@((int)(_sel.OverlayStrength * 100))%</span>
+                    </div>
+                </div>
+
+                <div class="panel-section-label">Background</div>
+
+                <div class="setting-row">
+                    <div class="setting-meta">
+                        <span class="setting-label">Wallpaper</span>
+                        <span class="setting-hint">
+                            @(string.IsNullOrEmpty(_sel.BackgroundImage)
+                                ? "Default background"
+                                : System.IO.Path.GetFileName(_sel.BackgroundImage))
+                        </span>
+                    </div>
+                    <div style="display:flex; align-items:center; gap:6px;">
+                        <button class="btn-sm" @onclick="PickBackground"><i class="fa-solid fa-image"></i> Choose</button>
+                        @if (!string.IsNullOrEmpty(_sel.BackgroundImage))
+                        {
+                            <button class="btn-sm" @onclick="ClearBackground"><i class="fa-solid fa-xmark"></i></button>
+                        }
+                    </div>
+                </div>
+
+                <div class="setting-row">
+                    <div class="setting-meta">
+                        <span class="setting-label">Wallpaper fit</span>
+                        <span class="setting-hint">How the image fills the window</span>
+                    </div>
+                    <select class="setting-select" value="@_sel.BackgroundFit"
+                            @onchange='async e => { _sel.BackgroundFit = e.Value?.ToString() ?? "cover"; await MarkDirtyAsync(); }'>
+                        <option value="cover">Fill (cover)</option>
+                        <option value="contain">Fit (contain)</option>
+                        <option value="tile">Tile</option>
+                        <option value="center">Center</option>
+                    </select>
+                </div>
+
+                <div class="setting-row">
+                    <div class="setting-meta">
+                        <span class="setting-label">Wallpaper opacity</span>
+                        <span class="setting-hint">Fade the image itself</span>
+                    </div>
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        <input type="range" min="10" max="100" step="5" value="@((int)(_sel.BackgroundOpacity * 100))"
+                               @oninput='async e => { _sel.BackgroundOpacity = ParseInt(e, 10, 100) / 100.0; await MarkDirtyAsync(); }' />
+                        <span class="ts-slider-val">@((int)(_sel.BackgroundOpacity * 100))%</span>
+                    </div>
+                </div>
+
+                <div class="panel-section-label">Typography & motion</div>
+
+                <div class="setting-row">
+                    <div class="setting-meta">
+                        <span class="setting-label">Font family</span>
+                        <span class="setting-hint">Any installed font — empty uses Segoe UI</span>
+                    </div>
+                    <input class="setting-input" list="ts-font-suggestions" placeholder="Segoe UI"
+                           value="@_sel.FontFamily"
+                           @onchange='async e => { _sel.FontFamily = e.Value?.ToString() ?? ""; await MarkDirtyAsync(); }' />
+                    <datalist id="ts-font-suggestions">
+                        <option value="Segoe UI" /><option value="Inter" /><option value="Roboto" />
+                        <option value="Arial" /><option value="Verdana" /><option value="Tahoma" />
+                        <option value="Trebuchet MS" /><option value="Georgia" /><option value="Cascadia Code" />
+                        <option value="Consolas" /><option value="JetBrains Mono" /><option value="Comic Sans MS" />
+                    </datalist>
+                </div>
+
+                <div class="setting-row">
+                    <div class="setting-meta">
+                        <span class="setting-label">Animation speed</span>
+                        <span class="setting-hint">Bundled with the theme — 1× is default</span>
+                    </div>
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        <input type="range" min="0.25" max="2" step="0.25"
+                               value="@_sel.AnimationSpeed.ToString(System.Globalization.CultureInfo.InvariantCulture)"
+                               @oninput='async e => { _sel.AnimationSpeed = ParseDouble(e, 0.25, 2.0); await MarkDirtyAsync(); }' />
+                        <span class="ts-slider-val">@(_sel.AnimationSpeed.ToString("0.##"))×</span>
+                    </div>
+                </div>
+
+                <div class="panel-section-label">Custom CSS</div>
+
+                <div class="ts-css-editor">
+                    <textarea class="setting-input ts-css-textarea" spellcheck="false" rows="6"
+                              placeholder=".action-btn { border: 1px solid var(--accent); }"
+                              value="@_sel.CustomCss"
+                              @onchange='e => _sel.CustomCss = e.Value?.ToString() ?? ""'></textarea>
+                    <div class="ts-css-actions">
+                        <button class="btn-sm" @onclick="ApplyCustomCss"><i class="fa-solid fa-play"></i> Apply</button>
+                        <button class="btn-sm" @onclick="ResetCustomCss"><i class="fa-solid fa-rotate-left"></i> Reset</button>
+                        <span class="setting-hint">Injected last, so it wins over everything. Reset removes it instantly if something breaks.</span>
+                    </div>
+                </div>
+            }
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter] public EventCallback OnClose { get; set; }
+    [Parameter] public EventCallback<(string Message, string Kind)> OnToast { get; set; }
+
+    private ThemeDefinition? _sel;
+    private DotNetObjectReference<ThemeStudioPanel>? _selfRef;
+    private System.Threading.Timer? _saveTimer;
+    private bool _appliedPreview;
+
+    protected override void OnInitialized()
+    {
+        _selfRef = DotNetObjectReference.Create(this);
+        _sel = Themes.Get(SettingsService.Settings.ActiveThemeId) ?? Themes.Themes.FirstOrDefault();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && _sel != null)
+            await PreviewAsync();
+    }
+
+    private bool IsActive(ThemeDefinition t) => SettingsService.Settings.ActiveThemeId == t.Id;
+
+    private async Task SelectTheme(ThemeDefinition t)
+    {
+        _sel = t;
+        await PreviewAsync();
+    }
+
+    private async Task PreviewAsync()
+    {
+        if (_sel == null) return;
+        _appliedPreview = true;
+        await Themes.ApplyAsync(JS, _sel);
+    }
+
+    // Live-apply the working copy and debounce persistence so slider drags
+    // don't hammer themes.json (atomic write per change would be wasteful).
+    private void MarkDirty(bool applyLive = true)
+    {
+        _saveTimer?.Dispose();
+        _saveTimer = new System.Threading.Timer(_ => Themes.Save(), null, 700, System.Threading.Timeout.Infinite);
+        if (applyLive) _ = PreviewAsync();
+    }
+
+    private async Task MarkDirtyAsync()
+    {
+        MarkDirty(applyLive: false);
+        await PreviewAsync();
+    }
+
+    private async Task NewTheme()
+    {
+        var seed = ThemeService.SeedFrom(SettingsService.Settings.ThemePreset, SettingsService.Settings.AccentColor);
+        seed.Blur = SettingsService.Settings.BlurIntensity;
+        seed.AnimationSpeed = SettingsService.Settings.AnimationSpeed;
+        _sel = Themes.Add(seed);
+        await PreviewAsync();
+    }
+
+    private async Task DuplicateTheme()
+    {
+        if (_sel == null) return;
+        var copy = Themes.Duplicate(_sel.Id);
+        if (copy != null) { _sel = copy; await PreviewAsync(); }
+    }
+
+    private async Task DeleteTheme()
+    {
+        if (_sel == null) return;
+        var wasActive = IsActive(_sel);
+        Themes.Delete(_sel.Id);
+        if (wasActive)
+        {
+            SettingsService.Settings.ActiveThemeId = "";
+            SettingsService.Save();
+            await RestoreNonThemeLookAsync();
+        }
+        _sel = Themes.Themes.FirstOrDefault();
+        if (_sel != null) await PreviewAsync();
+        await OnToast.InvokeAsync(("Theme deleted.", "info"));
+    }
+
+    private async Task ActivateTheme()
+    {
+        if (_sel == null) return;
+        Themes.Save();
+        SettingsService.Settings.ActiveThemeId = _sel.Id;
+        SettingsService.Save();
+        await PreviewAsync();
+        await OnToast.InvokeAsync(($"Theme \"{_sel.Name}\" active.", "success"));
+    }
+
+    private async Task DeactivateTheme()
+    {
+        SettingsService.Settings.ActiveThemeId = "";
+        SettingsService.Save();
+        await RestoreNonThemeLookAsync();
+        await OnToast.InvokeAsync(("Back to the standard preset.", "info"));
+    }
+
+    private async Task ExportTheme()
+    {
+        if (_sel == null) return;
+        try
+        {
+            Themes.Save();
+            var path = Themes.Export(_sel);
+            await OnToast.InvokeAsync(("Exported " + System.IO.Path.GetFileName(path), "success"));
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            { FileName = Themes.ExportsDir, UseShellExecute = true });
+        }
+        catch (Exception ex)
+        {
+            await OnToast.InvokeAsync(("Export failed: " + ex.Message, "error"));
+        }
+    }
+
+    private async Task ImportTheme() => await JS.InvokeVoidAsync("pickThemeFile", _selfRef);
+
+    [JSInvokable]
+    public async Task OnThemeFilePicked(string path)
+    {
+        var imported = Themes.Import(path);
+        if (imported == null)
+        {
+            await OnToast.InvokeAsync(("That file isn't a valid Glacier theme.", "error"));
+            return;
+        }
+        _sel = imported;
+        await PreviewAsync();
+        await OnToast.InvokeAsync(($"Imported \"{imported.Name}\".", "success"));
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task PickBackground() => await JS.InvokeVoidAsync("pickImageFile", _selfRef);
+
+    [JSInvokable]
+    public async Task OnWallpaperPicked(string path)
+    {
+        if (_sel == null || string.IsNullOrEmpty(path)) return;
+        var stored = await Themes.StashBackgroundAsync(path, _sel.Id);
+        if (stored == null)
+        {
+            await OnToast.InvokeAsync(("Couldn't use that image (missing or over 20 MB).", "error"));
+            return;
+        }
+        _sel.BackgroundImage = stored;
+        MarkDirty(applyLive: false);
+        await PreviewAsync();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task ClearBackground()
+    {
+        if (_sel == null) return;
+        _sel.BackgroundImage = "";
+        MarkDirty(applyLive: false);
+        await JS.InvokeVoidAsync("setCustomBackground", "");
+        await PreviewAsync();
+    }
+
+    private async Task ReseedFromPreset()
+    {
+        if (_sel == null) return;
+        var seed = ThemeService.SeedFrom(_sel.BasePreset, _sel.Accent);
+        _sel.Bg = seed.Bg; _sel.BgPanel = seed.BgPanel;
+        _sel.Text = seed.Text; _sel.TextDim = seed.TextDim;
+        await MarkDirtyAsync();
+    }
+
+    private async Task ApplyCustomCss() => await MarkDirtyAsync();
+
+    private async Task ResetCustomCss()
+    {
+        if (_sel == null) return;
+        _sel.CustomCss = "";
+        await MarkDirtyAsync();
+    }
+
+    private async Task ClosePanel()
+    {
+        Themes.Save();
+        _saveTimer?.Dispose();
+        // If the user was previewing a theme that isn't the active one, put the
+        // real look back before leaving.
+        var active = Themes.Get(SettingsService.Settings.ActiveThemeId);
+        if (active != null)
+        {
+            if (_sel?.Id != active.Id) await Themes.ApplyAsync(JS, active);
+        }
+        else if (_appliedPreview)
+        {
+            await RestoreNonThemeLookAsync();
+        }
+        await OnClose.InvokeAsync();
+    }
+
+    // Return the page to the plain preset + stored appearance settings.
+    private async Task RestoreNonThemeLookAsync()
+    {
+        await Themes.ClearAsync(JS);
+        var s = SettingsService.Settings;
+        try
+        {
+            await JS.InvokeVoidAsync("setTheme", s.ThemePreset);
+            await JS.InvokeVoidAsync("setAccentColor", s.AccentColor);
+            await JS.InvokeVoidAsync("setBlurIntensity", s.BlurIntensity);
+            await JS.InvokeVoidAsync("setAnimationSpeed", s.AnimationSpeed);
+            await JS.InvokeVoidAsync("setCustomBackground", s.CustomBackgroundPath);
+            await JS.InvokeVoidAsync("setFont", s.FontFamily);
+            await JS.InvokeVoidAsync("setBackgroundFit", s.BackgroundFit, 1.0);
+        }
+        catch { }
+    }
+
+    // ── Colour swatches + shared inline editor (custom picker, no native input) ──
+    private string? _editKey;
+    private string _editLabel = "";
+    private string _editValue = "#000000";
+    private Action<string>? _editSetter;
+
+    private RenderFragment ColorSwatch(string label, string key, string value, Action<string> set) => builder =>
+    {
+        builder.OpenElement(0, "button");
+        builder.AddAttribute(1, "type", "button");
+        builder.AddAttribute(2, "class", "ts-color-cell" + (_editKey == key ? " ts-color-active" : ""));
+        builder.AddAttribute(3, "onclick", EventCallback.Factory.Create(this, () => OpenColorEditor(label, key, value, set)));
+        builder.OpenElement(4, "span");
+        builder.AddAttribute(5, "class", "ts-color-dot");
+        builder.AddAttribute(6, "style", $"--dot-color:{value};");
+        builder.CloseElement();
+        builder.OpenElement(7, "span");
+        builder.AddContent(8, label);
+        builder.CloseElement();
+        builder.CloseElement();
+    };
+
+    private void OpenColorEditor(string label, string key, string value, Action<string> set)
+    {
+        if (_editKey == key) { CloseColorEditor(); return; }   // click the active swatch again to close
+        _editKey = key; _editLabel = label; _editValue = value; _editSetter = set;
+    }
+
+    private void CloseColorEditor() { _editKey = null; _editSetter = null; }
+
+    private async Task OnColorChanged(string hex)
+    {
+        _editValue = hex;
+        _editSetter?.Invoke(hex);
+        await MarkDirtyAsync();
+    }
+
+    private static int ParseInt(ChangeEventArgs e, int min, int max) =>
+        int.TryParse(e.Value?.ToString(), out var v) ? Math.Clamp(v, min, max) : min;
+
+    private static double ParseDouble(ChangeEventArgs e, double min, double max) =>
+        double.TryParse(e.Value?.ToString(), System.Globalization.NumberStyles.Float,
+            System.Globalization.CultureInfo.InvariantCulture, out var v)
+            ? Math.Clamp(v, min, max) : min;
+
+    public void Dispose()
+    {
+        _saveTimer?.Dispose();
+        _selfRef?.Dispose();
+    }
+}

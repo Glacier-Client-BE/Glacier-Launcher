@@ -21,12 +21,21 @@ const MAX_SCALE = 3.0;
 function applyScale() {
     const scaleX = window.innerWidth  / BASE_W;
     const scaleY = window.innerHeight / BASE_H;
-    const scale  = Math.max(MIN_SCALE, Math.min(MAX_SCALE, Math.min(scaleX, scaleY)));
+    let scale    = Math.max(MIN_SCALE, Math.min(MAX_SCALE, Math.min(scaleX, scaleY)));
+    // User UI-scale preference multiplies the automatic window fit.
+    scale = Math.max(0.5, Math.min(MAX_SCALE, scale * (window._glacierUserScale || 1)));
     document.documentElement.style.setProperty('--scale', scale);
     // Use CSS zoom — supported in WebView2 (Chromium) and scales everything
     // including fonts, borders, shadows without any pixel math in CSS.
     document.body.style.zoom = scale;
 }
+
+// pct: 100 = automatic fit; 75–150 scales the whole UI relative to that.
+window.setUiScale = (pct) => {
+    const p = Number(pct);
+    window._glacierUserScale = (p && p > 0) ? p / 100 : 1;
+    applyScale();
+};
 
 window.addEventListener('resize', applyScale);
 // Run once immediately when the page loads
@@ -133,7 +142,7 @@ document.addEventListener('drop', e => {
     e.preventDefault();
     document.body.classList.remove('drop-active');
     const files = Array.from(e.dataTransfer.files || [])
-        .filter(f => ['.dll', '.zip', '.jar'].some(ext => f.name.toLowerCase().endsWith(ext)));
+        .filter(f => ['.dll', '.zip', '.jar', '.mrpack'].some(ext => f.name.toLowerCase().endsWith(ext)));
     if (!files.length) return;
     if (files[0].path && window._glacierDotNet)
         window._glacierDotNet.invokeMethodAsync('OnFileDropped', files[0].path);
@@ -218,19 +227,165 @@ window.setCompactMode = (enabled) => {
     document.documentElement.classList.toggle('compact', !!enabled);
 };
 
+// Animations can be killed by either the on/off toggle or a speed of 0 —
+// both funnel into the single .no-animations class.
+window._glacierAnimEnabled = true;
+window._glacierAnimSpeed   = 1;
+
+function recomputeNoAnimations() {
+    document.documentElement.classList.toggle('no-animations',
+        !window._glacierAnimEnabled || window._glacierAnimSpeed <= 0);
+}
+
 window.setAnimationsEnabled = (enabled) => {
-    document.documentElement.classList.toggle('no-animations', !enabled);
+    window._glacierAnimEnabled = !!enabled;
+    recomputeNoAnimations();
 };
 
-window.applyStoredSettings = (accent, theme, blur, customBg, compact, animations) => {
+// speed is a user-facing multiplier (2 = twice as fast). CSS consumes the
+// inverse as a duration multiplier via --anim-mult.
+window.setAnimationSpeed = (speed) => {
+    const s = Math.max(0, Math.min(3, Number(speed) || 0));
+    window._glacierAnimSpeed = s;
+    document.documentElement.style.setProperty('--anim-mult', s > 0 ? String(1 / s) : '1');
+    recomputeNoAnimations();
+};
+
+// ── View transitions (navigation morphs) ─────────────────────
+// Wraps a pending .NET view mutation in document.startViewTransition so the
+// old and new screens animate. Falls back to a direct call when the API is
+// missing, animations are off, or the panel is mid-drag (its inline height
+// would snapshot in a half-dragged state).
+window.glacierViewTransition = (dotNetRef) => {
+    const apply = () => dotNetRef.invokeMethodAsync('ApplyPendingNav');
+    const root = document.documentElement;
+    if (!document.startViewTransition
+        || root.classList.contains('no-animations')
+        || document.querySelector('.panel-overlay.dragging')) {
+        return apply();
+    }
+    root.classList.add('vt-active');
+    let vt;
+    try {
+        vt = document.startViewTransition(async () => {
+            await apply();
+            // Give Blazor's render batch a frame to reach the DOM before the
+            // new-state snapshot is captured.
+            await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+        });
+    } catch {
+        root.classList.remove('vt-active');
+        return apply();
+    }
+    return vt.finished.catch(() => { }).finally(() => root.classList.remove('vt-active'));
+};
+
+window.applyStoredSettings = (accent, theme, blur, customBg, compact, animations, animSpeed) => {
     if (accent) window.setAccentColor(accent);
     if (theme)  window.setTheme(theme);
     if (blur != null) window.setBlurIntensity(blur);
     if (customBg) window.setCustomBackground(customBg);
     if (compact != null) window.setCompactMode(compact);
     if (animations != null) window.setAnimationsEnabled(animations);
+    if (animSpeed != null) window.setAnimationSpeed(animSpeed);
     applyScale();
 };
+
+// ── Theme Studio setters ──────────────────────────────────────
+// Bulk-apply CSS custom properties. Tracks which keys were set so
+// clearThemeVars can return to the stylesheet defaults.
+window._glacierThemeKeys = [];
+window.setThemeVars = (map) => {
+    const root = document.documentElement;
+    for (const k of window._glacierThemeKeys) root.style.removeProperty(k);
+    window._glacierThemeKeys = [];
+    if (!map) return;
+    for (const [k, v] of Object.entries(map)) {
+        root.style.setProperty(k, v);
+        window._glacierThemeKeys.push(k);
+    }
+};
+
+window.clearThemeVars = () => window.setThemeVars(null);
+
+window.setFont = (family) => {
+    document.body.style.fontFamily = family
+        ? family + ", 'Segoe UI', system-ui, sans-serif"
+        : '';
+};
+
+// Injects user CSS into a dedicated <style> tag; empty string removes it.
+window.setCustomCss = (css) => {
+    let tag = document.getElementById('glacier-custom-css');
+    if (!css) { if (tag) tag.remove(); return; }
+    if (!tag) {
+        tag = document.createElement('style');
+        tag.id = 'glacier-custom-css';
+        document.head.appendChild(tag);
+    }
+    tag.textContent = css;
+};
+
+// fit: cover | contain | tile | center — how the wallpaper fills the window.
+window.setBackgroundFit = (fit, opacity) => {
+    const bg = document.querySelector('.window-bg');
+    if (!bg) return;
+    switch (fit) {
+        case 'contain':
+            bg.style.backgroundSize = 'contain';
+            bg.style.backgroundRepeat = 'no-repeat';
+            bg.style.backgroundPosition = 'center';
+            break;
+        case 'tile':
+            bg.style.backgroundSize = 'auto';
+            bg.style.backgroundRepeat = 'repeat';
+            bg.style.backgroundPosition = 'top left';
+            break;
+        case 'center':
+            bg.style.backgroundSize = 'auto';
+            bg.style.backgroundRepeat = 'no-repeat';
+            bg.style.backgroundPosition = 'center';
+            break;
+        default: // cover
+            bg.style.backgroundSize = 'cover';
+            bg.style.backgroundRepeat = 'no-repeat';
+            bg.style.backgroundPosition = 'center';
+            break;
+    }
+    const op = Number(opacity);
+    bg.style.opacity = isFinite(op) && op >= 0 && op <= 1 ? String(op) : '';
+};
+
+// ── File picker (Theme .glaciertheme.json) ────────────────────
+window.pickThemeFile = async (dotNetRef) => {
+    return new Promise(resolve => {
+        const input = document.createElement('input');
+        input.type   = 'file';
+        input.accept = '.json,.glaciertheme';
+        input.style.display = 'none';
+        document.body.appendChild(input);
+        input.onchange = () => {
+            const file = input.files[0];
+            if (file) dotNetRef.invokeMethodAsync('OnThemeFilePicked', file.path || file.name);
+            document.body.removeChild(input);
+            resolve();
+        };
+        input.oncancel = () => { document.body.removeChild(input); resolve(); };
+        input.click();
+    });
+};
+
+// ── Custom colour-picker helpers ──────────────────────────────
+// Fraction (saturation, value) of a pointer position within the SV square,
+// computed from the live bounding rect so it stays correct under UI scaling.
+window.cpickFraction = (el, clientX, clientY) => {
+    const r = el.getBoundingClientRect();
+    const s = r.width  ? (clientX - r.left) / r.width  : 0;
+    const v = r.height ? 1 - (clientY - r.top) / r.height : 0;
+    return [Math.min(1, Math.max(0, s)), Math.min(1, Math.max(0, v))];
+};
+// Pointer capture so dragging keeps updating even outside the square.
+window.cpickCapture = (el, pointerId) => { try { el.setPointerCapture(pointerId); } catch (e) {} };
 
 window.openDiscordOAuth = (clientId) => {
     const redirect = encodeURIComponent('https://glacierclient.xyz/auth');

@@ -50,9 +50,13 @@ public partial class Home
 
     private async Task OpenClients()
     {
-        currentView = "clients";
-        _flarial.Downloaded = Flarial.IsDownloaded;
-        _oderso.Downloaded  = OderSo.IsDownloaded;
+        await NavigateAsync(() =>
+        {
+            currentView = "clients";
+            _flarial.Downloaded = Flarial.IsDownloaded;
+            _oderso.Downloaded  = OderSo.IsDownloaded;
+            clientsHasBadge     = false;
+        });
 
         var flarialUpToDate = _flarial.Downloaded ? Flarial.IsUpToDateAsync() : Task.FromResult(false);
         var odersoUpToDate  = _oderso.Downloaded  ? OderSo.IsUpToDateAsync()  : Task.FromResult(false);
@@ -60,7 +64,6 @@ public partial class Home
 
         _flarial.UpToDate = flarialUpToDate.Result;
         _oderso.UpToDate  = odersoUpToDate.Result;
-        clientsHasBadge   = false;
         StateHasChanged();
     }
 
@@ -118,9 +121,12 @@ public partial class Home
 
     private async Task OpenVersions()
     {
-        if (currentView != "versions") versionsBackTarget = currentView;
-        currentView = "versions"; versionsFilter = "";
-        versionsHasBadge = false;
+        await NavigateAsync(() =>
+        {
+            if (currentView != "versions") versionsBackTarget = currentView;
+            currentView = "versions"; versionsFilter = "";
+            versionsHasBadge = false;
+        });
         if (versionsClient == "Latite" && versions.Count == 0) await LoadVersionsAsync();
         else if (versionsClient == "OderSo" && oderSoVersions.Count == 0) await LoadOderSoVersionsAsync();
     }
@@ -473,16 +479,22 @@ public partial class Home
         StateHasChanged();
     }
 
-    private void OpenAddons()
+    private void OpenAddons() => OpenAddons("");
+
+    private void OpenAddons(string tab)
     {
-        currentView = "addons";
-        if (IsJava)
+        _ = NavigateAsync(() =>
         {
-            RefreshJavaInstanceFiles();
-            _ = AnalyzeModsAsync();
-        }
-        if (!cfHasSearched && CurseForge.IsAvailable)
-            _ = CfSearchAsync();
+            currentView = "addons";
+            if (!string.IsNullOrEmpty(tab)) javaModsTab = tab;
+            if (IsJava)
+            {
+                RefreshJavaInstanceFiles();
+                _ = AnalyzeModsAsync();
+            }
+            if (!cfHasSearched && CurseForge.IsAvailable)
+                _ = CfSearchAsync();
+        });
     }
 
     private void RefreshJavaInstanceFiles()
@@ -561,6 +573,141 @@ public partial class Home
         finally { javaUtilityBusy = false; StateHasChanged(); }
     }
 
+    // ── Instance manager (profile panel) ─────────────────────────
+    private string _renamingInstanceId = "";
+    private string _renameInstanceValue = "";
+    private string _confirmDeleteInstanceId = "";
+
+    private void SwitchInstance(string id)
+    {
+        JavaInstances.SetActive(id);
+        javaVersionsList.Clear();
+        LoadInstanceRam();
+        RefreshJavaInstanceFiles();
+        _ = ShowToast("Instance switched.", "info");
+        StateHasChanged();
+    }
+
+    private void NewJavaInstance()
+    {
+        var instance = JavaInstances.Create("New Instance");
+        JavaInstances.SetActive(instance.Id);
+        javaVersionsList.Clear();
+        LoadInstanceRam();
+        RefreshJavaInstanceFiles();
+        _ = ShowToast("Instance created.", "success");
+        StateHasChanged();
+    }
+
+    private async Task CloneJavaInstance(string id)
+    {
+        javaUtilityBusy = true; StateHasChanged();
+        try
+        {
+            var copy = await Task.Run(() => JavaInstances.Duplicate(id));
+            if (copy != null) _ = ShowToast($"Cloned to \"{copy.Name}\".", "success");
+        }
+        catch (Exception ex) { _ = ShowToast(ex.Message, "error"); }
+        finally { javaUtilityBusy = false; StateHasChanged(); }
+    }
+
+    private void BeginRenameInstance(string id, string current)
+    {
+        _renamingInstanceId = id;
+        _renameInstanceValue = current;
+        StateHasChanged();
+    }
+
+    private void OnRenameInstanceInput(ChangeEventArgs e) => _renameInstanceValue = e.Value?.ToString() ?? "";
+
+    private void OnRenameInstanceKey(Microsoft.AspNetCore.Components.Web.KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") CommitRenameInstance();
+    }
+
+    private void CommitRenameInstance()
+    {
+        if (!string.IsNullOrWhiteSpace(_renamingInstanceId) && !string.IsNullOrWhiteSpace(_renameInstanceValue))
+            JavaInstances.Rename(_renamingInstanceId, _renameInstanceValue);
+        _renamingInstanceId = "";
+        _ = ShowToast("Instance renamed.", "success");
+        StateHasChanged();
+    }
+
+    private void ConfirmDeleteInstance(string id) { _confirmDeleteInstanceId = id; StateHasChanged(); }
+    private void CancelDeleteInstance()           { _confirmDeleteInstanceId = ""; StateHasChanged(); }
+
+    private void DeleteJavaInstance(string id)
+    {
+        if (JavaInstances.Delete(id))
+        {
+            javaVersionsList.Clear();
+            LoadInstanceRam();
+            RefreshJavaInstanceFiles();
+            _ = ShowToast("Instance deleted.", "info");
+        }
+        else
+        {
+            _ = ShowToast("Can't delete the last instance.", "error");
+        }
+        _confirmDeleteInstanceId = "";
+        StateHasChanged();
+    }
+
+    private async Task ImportOfficialMinecraft()
+    {
+        javaUtilityBusy = true; StateHasChanged();
+        try
+        {
+            var instance = await JavaInstances.ImportOfficialMinecraftAsync();
+            JavaInstances.SetActive(instance.Id);
+            javaVersionsList.Clear();
+            RefreshJavaInstanceFiles();
+            _ = ShowToast("Imported .minecraft into a new instance.", "success");
+        }
+        catch (Exception ex) { _ = ShowToast(ex.Message, "error"); }
+        finally { javaUtilityBusy = false; StateHasChanged(); }
+    }
+
+    private async Task ImportInstanceZip()
+    {
+        var path = await Task.Run(() =>
+        {
+            string? result = null;
+            var thread = new System.Threading.Thread(() =>
+            {
+                var dlg = new Microsoft.Win32.OpenFileDialog
+                {
+                    Title  = "Import instance / modpack",
+                    Filter = "Modpacks & instances|*.zip;*.mrpack|All files|*.*"
+                };
+                if (dlg.ShowDialog() == true) result = dlg.FileName;
+            });
+            thread.SetApartmentState(System.Threading.ApartmentState.STA);
+            thread.Start();
+            thread.Join();
+            return result;
+        });
+        if (string.IsNullOrEmpty(path)) return;
+
+        javaUtilityBusy = true; StateHasChanged();
+        try
+        {
+            var ext = System.IO.Path.GetExtension(path).ToLowerInvariant();
+            Models.JavaInstance instance;
+            if (ext == ".mrpack")
+                instance = await Modpacks.InstallMrpackFileAsync(path, System.IO.Path.GetFileNameWithoutExtension(path), null, default);
+            else
+                instance = await JavaInstances.ImportModpackAsync(path);
+            JavaInstances.SetActive(instance.Id);
+            javaVersionsList.Clear();
+            RefreshJavaInstanceFiles();
+            _ = ShowToast("Instance imported.", "success");
+        }
+        catch (Exception ex) { _ = ShowToast(ex.Message, "error"); }
+        finally { javaUtilityBusy = false; StateHasChanged(); }
+    }
+
     private async Task InstallFabricForActive() => await InstallLoaderForActive("fabric");
 
     private async Task InstallQuiltForActive() => await InstallLoaderForActive("quilt");
@@ -627,7 +774,7 @@ public partial class Home
         finally { javaUtilityBusy = false; StateHasChanged(); }
     }
 
-    private void OpenSettingsCurseForge() { OpenSettings(); settingsFilter = "curseforge"; StateHasChanged(); }
+    private void OpenSettingsCurseForge() => OpenSettings("curseforge");
 
     private async Task OnCfSearchKeyDown(KeyboardEventArgs e)
     {

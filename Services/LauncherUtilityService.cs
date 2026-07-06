@@ -16,6 +16,33 @@ public static class LauncherUtilityService
 
     public static string CacheDir => Path.Combine(LauncherRoot, "cache");
 
+    /// <summary>
+    /// Shows a native Win32 open-file dialog on a dedicated STA thread and returns the
+    /// chosen path (null if cancelled). WebView2's &lt;input type=file&gt; does NOT expose
+    /// the real filesystem path (file.path is Electron-only), so any picker that needs a
+    /// usable path must go native — otherwise File.Exists fails with "file not found".
+    /// </summary>
+    public static Task<string?> PickFileAsync(string title, string filter)
+    {
+        return Task.Run(() =>
+        {
+            string? result = null;
+            var thread = new System.Threading.Thread(() =>
+            {
+                try
+                {
+                    var dlg = new Microsoft.Win32.OpenFileDialog { Title = title, Filter = filter };
+                    if (dlg.ShowDialog() == true) result = dlg.FileName;
+                }
+                catch { result = null; }
+            });
+            thread.SetApartmentState(System.Threading.ApartmentState.STA);
+            thread.Start();
+            thread.Join();
+            return result;
+        });
+    }
+
     /// <summary>Total size of every file under <paramref name="path"/>, best-effort.</summary>
     public static long DirectorySize(string path)
     {

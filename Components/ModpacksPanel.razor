@@ -1,0 +1,227 @@
+@using GlacierLauncher.Models
+@using GlacierLauncher.Services
+@inject CurseForgeService CurseForge
+@inject ModrinthService Modrinth
+@inject ModpackInstallService Installer
+@inject JavaInstanceService Instances
+@implements IDisposable
+
+<div class="panel-overlay">
+    <div class="panel-handle"></div>
+    <div class="panel-header">
+        <div class="panel-title-wrap">
+            <span class="panel-title">Modpacks</span>
+            <div class="panel-title-underline"></div>
+        </div>
+        <div class="panel-header-actions">
+            <button class="panel-back-btn" @onclick="OnClose" @onmousedown:stopPropagation>
+                <i class="fa-solid fa-chevron-down"></i>
+            </button>
+        </div>
+    </div>
+
+    <div class="panel-body">
+        @if (_installing)
+        {
+            <div class="modpack-install">
+                <span class="modpack-install-title"><span class="spinner"></span> Installing @_installName</span>
+                <span class="version-sub">@_progress.Stage</span>
+                <div class="progress-bar-wrap">
+                    <div class="progress-bar-fill" style="width:@($"{_progress.Percent:F0}%")"></div>
+                </div>
+                <button class="btn-sm ts-danger" @onclick="CancelInstall" @onmousedown:stopPropagation>
+                    <i class="fa-solid fa-xmark"></i> Cancel
+                </button>
+            </div>
+        }
+        else
+        {
+            <div class="modpack-source-tabs">
+                <button class="vcs-btn @(_source == "cf" ? "active" : "")" @onclick='() => SetSource("cf")' @onmousedown:stopPropagation>CurseForge</button>
+                <button class="vcs-btn @(_source == "mr" ? "active" : "")" @onclick='() => SetSource("mr")' @onmousedown:stopPropagation>Modrinth</button>
+            </div>
+
+            <div class="modpack-search">
+                <input class="panel-search-input" placeholder="Search modpacks…"
+                       value="@_query" @oninput="OnQueryInput" @onkeydown="OnSearchKey" @onmousedown:stopPropagation />
+                <button class="btn-sm" @onclick="Search" @onmousedown:stopPropagation><i class="fa-solid fa-magnifying-glass"></i></button>
+            </div>
+
+            @if (_source == "cf" && !CurseForge.IsAvailable)
+            {
+                <div class="stats-empty">A CurseForge API key is required to browse CurseForge. Add one in Settings, or use Modrinth (no key needed).</div>
+            }
+
+            @if (_searching)
+            {
+                <div class="versions-loading"><span class="spinner"></span><span>Searching…</span></div>
+            }
+            else if (!string.IsNullOrEmpty(_error))
+            {
+                <div class="versions-loading versions-error"><i class="fa-solid fa-triangle-exclamation"></i><span>@_error</span></div>
+            }
+            else if (_results.Count == 0 && _searched)
+            {
+                <div class="stats-empty">No modpacks found for "@_query".</div>
+            }
+
+            @foreach (var r in _results)
+            {
+                <div class="modpack-row">
+                    @if (!string.IsNullOrEmpty(r.Icon))
+                    {
+                        <img class="modpack-icon" src="@r.Icon" loading="lazy" />
+                    }
+                    else
+                    {
+                        <div class="modpack-icon modpack-icon-fallback"><i class="fa-solid fa-cubes"></i></div>
+                    }
+                    <div class="modpack-meta">
+                        <span class="version-name">@r.Title</span>
+                        <span class="version-sub">@r.Author · @FormatDownloads(r.Downloads)</span>
+                        <span class="modpack-summary">@Truncate(r.Summary, 90)</span>
+                    </div>
+                    <button class="vcs-btn" @onclick="() => Install(r)" @onmousedown:stopPropagation>
+                        <i class="fa-solid fa-download"></i>&nbsp;Install
+                    </button>
+                </div>
+            }
+
+            @if (_manual.Count > 0)
+            {
+                <span class="panel-section-label">Couldn't auto-download</span>
+                <div class="stats-empty">
+                    These files disallow third-party downloads — grab them manually and drop them into the new instance's mods folder:
+                    <ul class="modpack-manual-list">
+                        @foreach (var m in _manual) { <li>@m</li> }
+                    </ul>
+                </div>
+            }
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter] public EventCallback OnClose { get; set; }
+    [Parameter] public EventCallback<(string Message, string Kind)> OnToast { get; set; }
+    [Parameter] public EventCallback<string> OnInstalled { get; set; }   // passes the new instance id
+
+    private record PackResult(string Id, int NumericId, string Title, string Author, string Summary, string Icon, long Downloads, string Source);
+
+    private string _source = "mr";   // default to Modrinth (no key needed)
+    private string _query = "";
+    private bool   _searching;
+    private bool   _searched;
+    private string _error = "";
+    private List<PackResult> _results = new();
+
+    private bool _installing;
+    private string _installName = "";
+    private ModpackInstallService.Progress _progress = new();
+    private List<string> _manual = new();
+    private System.Threading.CancellationTokenSource? _installCts;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // CurseForge needs a key; if absent, Modrinth is the only usable source.
+        if (!CurseForge.IsAvailable) _source = "mr";
+        await Search();
+    }
+
+    private void SetSource(string s)
+    {
+        if (_source == s) return;
+        _source = s;
+        _ = Search();
+    }
+
+    private void OnQueryInput(ChangeEventArgs e) => _query = e.Value?.ToString() ?? "";
+
+    private async Task OnSearchKey(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await Search();
+    }
+
+    private async Task Search()
+    {
+        _searching = true; _error = ""; _searched = true; StateHasChanged();
+        try
+        {
+            _results.Clear();
+            if (_source == "cf")
+            {
+                if (!CurseForge.IsAvailable) { _searching = false; StateHasChanged(); return; }
+                var res = await CurseForge.SearchAsync(_query, "modpacks", 25, 0);
+                foreach (var a in res.Addons)
+                    _results.Add(new PackResult(a.Id.ToString(), a.Id, a.Name, a.AuthorName, a.Summary, a.ThumbnailUrl, a.DownloadCount, "cf"));
+            }
+            else
+            {
+                var res = await Modrinth.SearchAsync(_query, "modpack", 25, 0);
+                foreach (var pr in res.Projects)
+                    _results.Add(new PackResult(pr.Id, 0, pr.Title, pr.Author, pr.Description, pr.IconUrl, pr.Downloads, "mr"));
+            }
+        }
+        catch (Exception ex) { _error = ex.Message; }
+        finally { _searching = false; StateHasChanged(); }
+    }
+
+    private async Task Install(PackResult r)
+    {
+        _installing = true; _installName = r.Title; _manual.Clear();
+        _progress = new ModpackInstallService.Progress();
+        _installCts = new System.Threading.CancellationTokenSource();
+        StateHasChanged();
+
+        var reporter = new Action<ModpackInstallService.Progress>(p =>
+            InvokeAsync(() => { _progress = p; StateHasChanged(); }));
+
+        try
+        {
+            JavaInstance instance = r.Source == "cf"
+                ? await Installer.InstallCurseForgeAsync(r.NumericId, r.Title, reporter, _installCts.Token)
+                : await Installer.InstallModrinthAsync(r.Id, r.Title, reporter, _installCts.Token);
+
+            _manual = _progress.ManualDownloads.ToList();
+            if (_manual.Count > 0)
+                await OnToast.InvokeAsync(($"Installed \"{r.Title}\" — {_manual.Count} file(s) need manual download.", "info"));
+            else
+                await OnToast.InvokeAsync(($"Installed \"{r.Title}\".", "success"));
+
+            await OnInstalled.InvokeAsync(instance.Id);
+        }
+        catch (OperationCanceledException)
+        {
+            await OnToast.InvokeAsync(("Install cancelled — the partial instance was removed.", "info"));
+        }
+        catch (Exception ex)
+        {
+            await OnToast.InvokeAsync(("Install failed: " + ex.Message, "error"));
+        }
+        finally
+        {
+            _installing = false;
+            _installCts?.Dispose();
+            _installCts = null;
+            StateHasChanged();
+        }
+    }
+
+    private void CancelInstall() => _installCts?.Cancel();
+
+    private static string Truncate(string s, int n) =>
+        string.IsNullOrEmpty(s) ? "" : (s.Length <= n ? s : s[..n].TrimEnd() + "…");
+
+    private static string FormatDownloads(long count) => count switch
+    {
+        >= 1_000_000 => $"{count / 1_000_000.0:F1}M downloads",
+        >= 1_000     => $"{count / 1_000.0:F1}K downloads",
+        _            => $"{count} downloads"
+    };
+
+    public void Dispose()
+    {
+        _installCts?.Cancel();
+        _installCts?.Dispose();
+    }
+}

@@ -1,0 +1,132 @@
+@using GlacierLauncher.Models
+@using GlacierLauncher.Services
+@inject StatsService Stats
+@inject SettingsService SettingsService
+
+<div class="panel-overlay">
+    <div class="panel-handle"></div>
+    <div class="panel-header">
+        <div class="panel-title-wrap">
+            <span class="panel-title">Statistics</span>
+            <div class="panel-title-underline"></div>
+        </div>
+        <div class="panel-header-actions">
+            <button class="panel-back-btn" @onclick="OnClose" @onmousedown:stopPropagation>
+                <i class="fa-solid fa-chevron-down"></i>
+            </button>
+        </div>
+    </div>
+
+    <div class="panel-body">
+        <div class="stats-cards">
+            <div class="stats-card">
+                <i class="fa-solid fa-stopwatch"></i>
+                <span class="stats-val">@FormatH(SettingsService.Settings.TotalPlaytimeSeconds)</span>
+                <span class="stats-label">Total playtime</span>
+            </div>
+            <div class="stats-card">
+                <i class="fa-solid fa-gamepad"></i>
+                <span class="stats-val">@Stats.SessionCount</span>
+                <span class="stats-label">Sessions</span>
+            </div>
+            <div class="stats-card">
+                <i class="fa-solid fa-trophy"></i>
+                <span class="stats-val">@FormatH(Stats.LongestSessionSeconds)</span>
+                <span class="stats-label">Longest session</span>
+            </div>
+            <div class="stats-card">
+                <i class="fa-solid fa-calendar-day"></i>
+                <span class="stats-val">@(string.IsNullOrEmpty(SettingsService.Settings.LastPlayed) ? "—" : Rel(SettingsService.Settings.LastPlayed))</span>
+                <span class="stats-label">Last played</span>
+            </div>
+        </div>
+
+        <span class="panel-section-label">Last 14 days</span>
+        @{
+            var daily = Stats.DailyTotals(14);
+            var max = Math.Max(1, daily.Count == 0 ? 1 : daily.Max(d => d.Seconds));
+        }
+        @if (daily.All(d => d.Seconds == 0))
+        {
+            <div class="stats-empty">No play sessions recorded yet — launch the game to start tracking.</div>
+        }
+        else
+        {
+            <div class="stats-chart">
+                @foreach (var d in daily)
+                {
+                    var pct = (int)Math.Round(d.Seconds / (double)max * 100);
+                    <div class="stats-bar-col" title="@d.Day.ToString("MMM d"): @FormatH(d.Seconds)">
+                        <div class="stats-bar-track">
+                            <div class="stats-bar-fill" style="height:@(Math.Max(d.Seconds > 0 ? 4 : 0, pct))%"></div>
+                        </div>
+                        <span class="stats-bar-day">@d.Day.Day</span>
+                    </div>
+                }
+            </div>
+        }
+
+        @{
+            var top = Stats.TopLabels(5);
+        }
+        @if (top.Count > 0)
+        {
+            <span class="panel-section-label">Most played</span>
+            @foreach (var t in top)
+            {
+                <div class="version-row">
+                    <div class="version-meta">
+                        <span class="version-name">@t.Label</span>
+                    </div>
+                    <span class="version-sub">@t.Count session@(t.Count == 1 ? "" : "s")</span>
+                </div>
+            }
+        }
+
+        @{
+            var recent = Stats.RecentSessions(15);
+        }
+        @if (recent.Count > 0)
+        {
+            <span class="panel-section-label">Recent sessions</span>
+            @foreach (var s in recent)
+            {
+                <div class="version-row">
+                    <div class="version-meta">
+                        <span class="version-name">@(string.IsNullOrEmpty(s.Label) ? "Session" : s.Label)</span>
+                        <span class="version-sub">@Rel(s.StartedAt) · @(s.Edition == "java" ? "Java" : "Bedrock")</span>
+                    </div>
+                    <span class="version-sub">@FormatH(s.Seconds)</span>
+                </div>
+            }
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    private static string FormatH(long seconds)
+    {
+        if (seconds <= 0) return "0m";
+        var h = seconds / 3600;
+        var m = (seconds % 3600) / 60;
+        if (h > 0) return m > 0 ? $"{h}h {m}m" : $"{h}h";
+        return $"{m}m";
+    }
+
+    private static string Rel(string iso)
+    {
+        try
+        {
+            var dt = DateTime.Parse(iso, null, System.Globalization.DateTimeStyles.RoundtripKind);
+            var diff = DateTime.UtcNow - dt;
+            if (diff.TotalMinutes < 2) return "just now";
+            if (diff.TotalHours < 1)   return $"{(int)diff.TotalMinutes}m ago";
+            if (diff.TotalDays < 1)    return $"{(int)diff.TotalHours}h ago";
+            if (diff.TotalDays < 7)    return $"{(int)diff.TotalDays}d ago";
+            return dt.ToLocalTime().ToString("MMM d");
+        }
+        catch { return "—"; }
+    }
+}

@@ -19,6 +19,11 @@
 @inject LunarBadlionService LunarBadlion
 @inject ModrinthService Modrinth
 @inject GlacierClientService Glacier
+@inject ThemeService ThemeSvc
+@inject ModpackInstallService Modpacks
+@inject StatsService Stats
+@inject LogService Logs
+@inject SkinLibraryService SkinLibrary
 @inject IJSRuntime JS
 @implements IDisposable
 
@@ -33,7 +38,7 @@
         <small>Saved to clients folder and selected automatically</small>
     </div>
 
-    <!-- â”€â”€ GLOBAL SEARCH OVERLAY â”€â”€ -->
+    <!-- ── GLOBAL SEARCH OVERLAY ── -->
     @if (searchOpen)
     {
         <div class="search-overlay" @onclick="CloseSearch">
@@ -72,7 +77,7 @@
                                     {
                                         <div class="kbs"><kbd>@r.Shortcut</kbd></div>
                                     }
-                                    <span class="search-result-enter">â†µ</span>
+                                    <span class="search-result-enter">↵</span>
                                 </div>
                             }
                         }
@@ -101,7 +106,7 @@
                                         <span class="search-result-label">@((MarkupString)Highlight(r.Label, searchQuery))</span>
                                         @if (!string.IsNullOrEmpty(r.Sub)) { <span class="search-result-sub">@((MarkupString)Highlight(r.Sub, searchQuery))</span> }
                                     </div>
-                                    <span class="search-result-enter">â†µ</span>
+                                    <span class="search-result-enter">↵</span>
                                 </div>
                             }
                         }
@@ -111,7 +116,7 @@
         </div>
     }
 
-    <!-- â”€â”€ LAUNCHER UPDATE MODAL â”€â”€ -->
+    <!-- ── LAUNCHER UPDATE MODAL ── -->
     @if (launcherUpdateModalOpen && launcherUpdateInfo != null)
     {
         <div class="modal-overlay" @onclick="CloseUpdateModal">
@@ -171,7 +176,7 @@
         </div>
     }
 
-    <!-- â”€â”€ RESET CONFIRM MODAL â”€â”€ -->
+    <!-- ── RESET CONFIRM MODAL ── -->
     @if (resetConfirmOpen)
     {
         <div class="modal-overlay" @onclick="CancelResetSettings">
@@ -201,7 +206,7 @@
         </div>
     }
 
-    <!-- â”€â”€ DISCORD MODAL â”€â”€ -->
+    <!-- ── DISCORD MODAL ── -->
     @if (discordModalOpen)
     {
         <div class="modal-overlay" @onclick="CloseDiscordModal">
@@ -243,7 +248,7 @@
             </div>
         </div>
     }
-<!-- â”€â”€ XBOX PROFILE MODAL â”€â”€ -->
+<!-- ── XBOX PROFILE MODAL ── -->
 
     @if (xboxModalOpen)
     {
@@ -293,7 +298,7 @@
                             <div class="xbox-stat-card">
                                 <i class="fa-solid fa-id-badge" style="color:#107c10;"></i>
                                 <div class="xbox-stat-detail">
-                                    <span class="xbox-stat-value xbox-xuid-val">@(string.IsNullOrEmpty(Xbox.CurrentProfile?.Xuid) ? "â€”" : Xbox.CurrentProfile.Xuid)</span>
+                                    <span class="xbox-stat-value xbox-xuid-val">@(string.IsNullOrEmpty(Xbox.CurrentProfile?.Xuid) ? "—" : Xbox.CurrentProfile.Xuid)</span>
                                     <span class="xbox-stat-label">XUID</span>
                                 </div>
                             </div>
@@ -347,7 +352,7 @@
         </div>
     }
 
-    <!-- â”€â”€ TOP BAR â”€â”€ -->
+    <!-- ── TOP BAR ── -->
     <div class="top-bar">
         <div class="branding">
             <img class="logo-icon" src="images/icon.png" alt="" />
@@ -357,7 +362,7 @@
             </div>
             @if (launcherUpdateAvailable)
             {
-                <button class="update-pill" @onclick="OpenUpdateModal" @onmousedown:stopPropagation data-tooltip="Launcher update available â€” click to update">
+                <button class="update-pill" @onclick="OpenUpdateModal" @onmousedown:stopPropagation data-tooltip="Launcher update available — click to update">
                     <i class="fa-solid fa-arrow-up"></i>
                     <span>Update</span>
                 </button>
@@ -435,7 +440,7 @@
         </div>
     </div>
 
-    <!-- â”€â”€ MAIN CONTENT â”€â”€ -->
+    <!-- ── MAIN CONTENT ── -->
     <div class="main-content @(currentView != "home" ? "panel-open" : "")">
         <div class="btn-row">
             <button class="action-btn @(hoveredBtn == "launch" || isLaunching ? "btn-wide btn-blue" : "btn-sq") @(isLaunching ? "launching" : "")"
@@ -599,7 +604,7 @@
         }
     </div>
 
-    <!-- â”€â”€ FOOTER â”€â”€ -->
+    <!-- ── FOOTER ── -->
     <div class="footer">
         @{
             var footerProfile = EffectiveProfile();
@@ -668,14 +673,14 @@
                         </div>
                         <div class="xbox-hover-stat">
                             <i class="fa-solid fa-id-badge" style="color:#107c10;"></i>
-                            <span class="xbox-hover-stat-val xbox-hover-xuid">@(string.IsNullOrEmpty(Xbox.CurrentProfile?.Xuid) ? "â€”" : Xbox.CurrentProfile.Xuid)</span>
+                            <span class="xbox-hover-stat-val xbox-hover-xuid">@(string.IsNullOrEmpty(Xbox.CurrentProfile?.Xuid) ? "—" : Xbox.CurrentProfile.Xuid)</span>
                             <span class="xbox-hover-stat-lbl">XUID</span>
                         </div>
                     </div>
                     <div class="xbox-hover-footer">
                         <i class="fa-solid fa-gamepad" style="color:#107c10;"></i>
                         <span>Xbox Live</span>
-                        <span class="xbox-hover-dot">â€¢</span>
+                        <span class="xbox-hover-dot">•</span>
                         <span>Click to manage</span>
                     </div>
                 </div>
@@ -699,7 +704,7 @@
                     <div class="xbox-hover-footer">
                         <i class="fa-brands fa-discord" style="color:#5865f2;"></i>
                         <span>Discord</span>
-                        <span class="xbox-hover-dot">â€¢</span>
+                        <span class="xbox-hover-dot">•</span>
                         <span>Click to manage</span>
                     </div>
                 </div>
@@ -745,7 +750,7 @@
     <div class="toast-container">
         @foreach (var t in _toasts)
         {
-            <div class="toast @(t.Kind)">
+            <div class="toast @(t.Kind) @(t.Closing ? "closing" : "")">
                 <i class="@(t.Icon)"></i>
                 @t.Message
             </div>
@@ -774,7 +779,43 @@
         </div>
     </div>
 
-    <!-- â”€â”€ SETTINGS PANEL â”€â”€ -->
+    <!-- ── THEME STUDIO PANEL ── -->
+    @if (currentView == "themestudio")
+    {
+        <ThemeStudioPanel OnClose="GoHome" OnToast="HandleThemeToast" />
+    }
+
+    <!-- ── MODPACKS PANEL ── -->
+    @if (currentView == "modpacks")
+    {
+        <ModpacksPanel OnClose="GoHome" OnToast="HandleThemeToast" OnInstalled="OnModpackInstalled" />
+    }
+
+    <!-- ── STATS PANEL ── -->
+    @if (currentView == "stats")
+    {
+        <StatsPanel OnClose="GoHome" />
+    }
+
+    <!-- ── LOGS PANEL ── -->
+    @if (currentView == "logs")
+    {
+        <LogsPanel OnClose="GoHome" OnToast="HandleThemeToast" />
+    }
+
+    <!-- ── SKIN LIBRARY PANEL ── -->
+    @if (currentView == "skinlibrary")
+    {
+        <SkinLibraryPanel OnClose="GoHome" OnToast="HandleThemeToast" />
+    }
+
+    <!-- ── WORLD BACKUPS PANEL ── -->
+    @if (currentView == "backups")
+    {
+        <BackupsPanel OnClose="GoHome" OnToast="HandleThemeToast" />
+    }
+
+    <!-- ── SETTINGS PANEL ── -->
     @if (currentView == "settings")
     {
         <div class="panel-overlay">
@@ -842,7 +883,7 @@
                 @if (visibleCount == 0)
                 {
                     <div class="settings-empty">
-                        <i class="fa-regular fa-folder-open"></i>
+                        <i class="fa-solid fa-folder-open"></i>
                         <span class="settings-empty-title">No matching settings</span>
                         <span class="settings-empty-sub">
                             @if (!string.IsNullOrWhiteSpace(settingsFilter))
@@ -893,7 +934,7 @@
                             How long to wait after game launches before injecting
                             @if (SettingsService.Settings.SelectedClient == "Vanilla")
                             {
-                                <span style="color:var(--text-dim); opacity:0.7;"> Â· ignored in Vanilla</span>
+                                <span style="color:var(--text-dim); opacity:0.7;"> · ignored in Vanilla</span>
                             }
                         </span>
                     </div>
@@ -975,7 +1016,7 @@
                      @onclick="ToggleJavaUseDotMinecraft">
                     <div class="setting-meta">
                         <span class="setting-label">Store game files in .minecraft</span>
-                        <span class="setting-hint">On: use %APPDATA%\.minecraft. Off: keep versions &amp; saves in the Glacier Launcher folder.</span>
+                        <span class="setting-hint">On: use %APPDATA%\.minecraft. Off: keep versions & saves in the Glacier Launcher folder.</span>
                     </div>
                     <div class="toggle @(SettingsService.Settings.JavaUseDotMinecraft ? "on" : "")"></div>
                 </div>
@@ -1018,7 +1059,7 @@
                 <div class="setting-row clickable @(SH("Show beta and alpha","beta alpha historical old"))"
                      @onclick='() => ToggleProp(() => SettingsService.Settings.JavaShowHistorical = !SettingsService.Settings.JavaShowHistorical)'>
                     <div class="setting-meta">
-                        <span class="setting-label">Show beta &amp; alpha</span>
+                        <span class="setting-label">Show beta & alpha</span>
                         <span class="setting-hint">Include the original pre-release builds</span>
                     </div>
                     <div class="toggle @(SettingsService.Settings.JavaShowHistorical ? "on" : "")"
@@ -1036,6 +1077,31 @@
                          @onclick:stopPropagation
                          @onclick='() => ToggleProp(() => SettingsService.Settings.CloseAfterLaunch = !SettingsService.Settings.CloseAfterLaunch)'></div>
                 </div>
+
+                <div class="setting-row clickable @(SH("Offline mode","offline mode cracked no account username"))"
+                     @onclick='() => ToggleProp(() => SettingsService.Settings.JavaOfflineMode = !SettingsService.Settings.JavaOfflineMode)'>
+                    <div class="setting-meta">
+                        <span class="setting-label">Offline mode</span>
+                        <span class="setting-hint">Launch without signing in — online-mode servers will reject it</span>
+                    </div>
+                    <div class="toggle @(SettingsService.Settings.JavaOfflineMode ? "on" : "")"
+                         @onclick:stopPropagation
+                         @onclick='() => ToggleProp(() => SettingsService.Settings.JavaOfflineMode = !SettingsService.Settings.JavaOfflineMode)'></div>
+                </div>
+
+                @if (SettingsService.Settings.JavaOfflineMode)
+                {
+                    <div class="setting-row @(SH("Offline username","offline username name player"))">
+                        <div class="setting-meta">
+                            <span class="setting-label">Offline username</span>
+                            <span class="setting-hint">The name used for offline launches</span>
+                        </div>
+                        <input class="setting-input" style="width:150px;" type="text" maxlength="16"
+                               placeholder="Player"
+                               value="@SettingsService.Settings.JavaOfflineUsername"
+                               @onchange="OnOfflineUsernameChanged" @onclick:stopPropagation />
+                    </div>
+                }
 
                 <div class="setting-row @(SH("Custom JVM args","jvm args java options garbage collector gc"))">
                     <div class="setting-meta">
@@ -1146,7 +1212,7 @@
                 <div class="setting-row @(SH("Theme preset","theme dark midnight slate ocean forest sunset light"))">
                     <div class="setting-meta">
                         <span class="setting-label">Theme preset</span>
-                        <span class="setting-hint">Background tone â€” affects panels and overlays</span>
+                        <span class="setting-hint">Background tone — affects panels and overlays</span>
                     </div>
                     <select class="setting-select" value="@SettingsService.Settings.ThemePreset"
                             @onchange="OnThemeChanged" @onclick:stopPropagation>
@@ -1165,7 +1231,7 @@
                      @onclick='() => ToggleProp(() => { SettingsService.Settings.CompactMode = !SettingsService.Settings.CompactMode; _ = JS.InvokeVoidAsync("setCompactMode", SettingsService.Settings.CompactMode); })'>
                     <div class="setting-meta">
                         <span class="setting-label">Compact mode</span>
-                        <span class="setting-hint">Tighter spacing â€” fits more on screen</span>
+                        <span class="setting-hint">Tighter spacing — fits more on screen</span>
                     </div>
                     <Toggle On="SettingsService.Settings.CompactMode"
                             OnClick='() => ToggleProp(() => { SettingsService.Settings.CompactMode = !SettingsService.Settings.CompactMode; _ = JS.InvokeVoidAsync("setCompactMode", SettingsService.Settings.CompactMode); })' />
@@ -1180,6 +1246,24 @@
                     <Toggle On="SettingsService.Settings.AnimationsEnabled"
                             OnClick='() => ToggleProp(() => { SettingsService.Settings.AnimationsEnabled = !SettingsService.Settings.AnimationsEnabled; _ = JS.InvokeVoidAsync("setAnimationsEnabled", SettingsService.Settings.AnimationsEnabled); })' />
                 </div>
+
+                @if (SettingsService.Settings.AnimationsEnabled)
+                {
+                    <div class="setting-row @(SH("Animation speed","animation speed motion fast slow multiplier"))">
+                        <div class="setting-meta">
+                            <span class="setting-label">Animation speed</span>
+                            <span class="setting-hint">0.25× slow-mo to 2× snappy — 1× is default</span>
+                        </div>
+                        <div style="display:flex; align-items:center; gap:8px;">
+                            <input type="range" min="0.25" max="2" step="0.25"
+                                   value="@SettingsService.Settings.AnimationSpeed.ToString(System.Globalization.CultureInfo.InvariantCulture)"
+                                   @oninput="OnAnimSpeedChanged" />
+                            <span style="font-size:11px; color:var(--text-dim); width:32px; text-align:right;">
+                                @(SettingsService.Settings.AnimationSpeed.ToString("0.##"))×
+                            </span>
+                        </div>
+                    </div>
+                }
 
                 <div class="setting-row @(SH("Background blur","blur background"))">
                     <div class="setting-meta">
@@ -1213,7 +1297,7 @@
                         <span class="setting-hint">
                             @if (!string.IsNullOrEmpty(SettingsService.Settings.CustomBackgroundPath))
                             {
-                                @("Custom â€” " + System.IO.Path.GetFileName(SettingsService.Settings.CustomBackgroundPath))
+                                @("Custom — " + System.IO.Path.GetFileName(SettingsService.Settings.CustomBackgroundPath))
                             }
                             else
                             {
@@ -1232,6 +1316,67 @@
                             <i class="fa-solid fa-image"></i> Choose
                         </button>
                     </div>
+                </div>
+
+                <div class="setting-row @(SH("Background fit","background fit cover contain tile center"))">
+                    <div class="setting-meta">
+                        <span class="setting-label">Background fit</span>
+                        <span class="setting-hint">How the wallpaper fills the window</span>
+                    </div>
+                    <select class="setting-select" value="@SettingsService.Settings.BackgroundFit"
+                            @onchange="OnBackgroundFitChanged" @onclick:stopPropagation>
+                        <option value="cover">Fill (cover)</option>
+                        <option value="contain">Fit (contain)</option>
+                        <option value="tile">Tile</option>
+                        <option value="center">Center</option>
+                    </select>
+                </div>
+
+                <div class="setting-row @(SH("UI scale","ui scale zoom size interface"))">
+                    <div class="setting-meta">
+                        <span class="setting-label">UI scale</span>
+                        <span class="setting-hint">On top of the automatic window fit — 100% is default</span>
+                    </div>
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        <input type="range" min="75" max="150" step="5"
+                               value="@SettingsService.Settings.UiScalePct"
+                               @oninput="OnUiScaleChanged" />
+                        <span style="font-size:11px; color:var(--text-dim); width:36px; text-align:right;">
+                            @(SettingsService.Settings.UiScalePct)%
+                        </span>
+                    </div>
+                </div>
+
+                <div class="setting-row @(SH("Font","font family typeface typography"))">
+                    <div class="setting-meta">
+                        <span class="setting-label">Font</span>
+                        <span class="setting-hint">Any installed font — empty uses Segoe UI</span>
+                    </div>
+                    <input class="setting-input" style="width:150px;" list="font-suggestions"
+                           placeholder="Segoe UI"
+                           value="@SettingsService.Settings.FontFamily"
+                           @onchange="OnFontChanged" @onclick:stopPropagation />
+                    <datalist id="font-suggestions">
+                        <option value="Segoe UI" /><option value="Inter" /><option value="Roboto" />
+                        <option value="Arial" /><option value="Verdana" /><option value="Tahoma" />
+                        <option value="Trebuchet MS" /><option value="Georgia" /><option value="Cascadia Code" />
+                        <option value="Consolas" /><option value="JetBrains Mono" /><option value="Comic Sans MS" />
+                    </datalist>
+                </div>
+
+                <div class="setting-row clickable @(SH("Theme Studio","theme studio custom editor create colors design"))"
+                     @onclick="OpenThemeStudio">
+                    <div class="setting-meta">
+                        <span class="setting-label">Theme Studio</span>
+                        <span class="setting-hint">
+                            @(string.IsNullOrEmpty(SettingsService.Settings.ActiveThemeId)
+                                ? "Build fully custom themes — every color, radius and font"
+                                : "Custom theme active — click to edit or switch")
+                        </span>
+                    </div>
+                    <button class="btn-sm" @onclick="OpenThemeStudio" @onclick:stopPropagation @onmousedown:stopPropagation>
+                        <i class="fa-solid fa-palette"></i> Open
+                    </button>
                 </div>
 
                 </div>
@@ -1257,7 +1402,7 @@
                 <div class="setting-row @(SH("Profile display","profile display footer xbox discord switch which"))">
                     <div class="setting-meta">
                         <span class="setting-label">Profile display</span>
-                        <span class="setting-hint">Which account fills the bottom-left avatar &amp; name.</span>
+                        <span class="setting-hint">Which account fills the bottom-left avatar & name.</span>
                     </div>
                     <select class="setting-select" value="@SettingsService.Settings.ProfileDisplayMode"
                             @onchange="OnProfileDisplayChanged" @onclick:stopPropagation>
@@ -1415,7 +1560,7 @@
                 <div class="setting-row @(SH("Open Minecraft folder","minecraft com mojang folder"))">
                     <div class="setting-meta">
                         <span class="setting-label">Minecraft data folder</span>
-                        <span class="setting-hint">com.mojang â€” resource packs, worlds, behaviour packs</span>
+                        <span class="setting-hint">com.mojang — resource packs, worlds, behaviour packs</span>
                     </div>
                     <button class="btn-sm" @onclick="OpenMinecraftFolder" @onmousedown:stopPropagation>
                         <i class="fa-solid fa-cubes"></i> Open
@@ -1443,7 +1588,7 @@
                             }
                             else
                             {
-                                @("Required for Addons tab â€” get one free from CurseForge")
+                                @("Required for Addons tab — get one free from CurseForge")
                             }
                         </span>
                     </div>
@@ -1490,7 +1635,7 @@
                 <div class="setting-row @(SH("Reset settings","reset default factory settings"))">
                     <div class="setting-meta">
                         <span class="setting-label">Reset to defaults</span>
-                        <span class="setting-hint">Clears all preferences â€” does not delete clients</span>
+                        <span class="setting-hint">Clears all preferences — does not delete clients</span>
                     </div>
                     <button class="btn-sm" style="color:var(--red);" @onclick="ConfirmResetSettings" @onmousedown:stopPropagation>
                         <i class="fa-solid fa-arrow-rotate-left"></i> Reset
@@ -1507,7 +1652,7 @@
                 <div class="setting-row @(SH("Keyboard shortcuts","shortcuts keyboard help"))">
                     <div class="setting-meta">
                         <span class="setting-label">Keyboard shortcuts</span>
-                        <span class="setting-hint">Ctrl+K search Â· Ctrl+L launch Â· Ctrl+1/2/3/4/5 panels Â· Ctrl+, settings Â· Ctrl+Tab cycle Â· F11 fullscreen Â· Esc close</span>
+                        <span class="setting-hint">Ctrl+K search · Ctrl+L launch · Ctrl+1/2/3/4/5 panels · Ctrl+, settings · Ctrl+Tab cycle · F11 fullscreen · Esc close</span>
                     </div>
                     <div class="kbs"><kbd>?</kbd></div>
                 </div>
@@ -1523,28 +1668,24 @@
 
             </div>
             <div class="panel-tabs">
-                <button class="panel-tab active" @onmousedown:stopPropagation><i class="fa-solid fa-gear"></i>Settings</button>
                 @if (IsBedrock)
                 {
+                    <button class="panel-tab active" @onmousedown:stopPropagation><i class="fa-solid fa-gear"></i>Settings</button>
                     <button class="panel-tab" @onclick="OpenClients" @onmousedown:stopPropagation><i class="fa-solid fa-puzzle-piece"></i>Clients</button>
                     <button class="panel-tab" @onclick="OpenAddons" @onmousedown:stopPropagation><i class="fa-solid fa-cube"></i>Addons</button>
                     <button class="panel-tab" @onclick="OpenServers" @onmousedown:stopPropagation><i class="fa-solid fa-server"></i>Servers</button>
                     <button class="panel-tab" @onclick="OpenMcVersions" @onmousedown:stopPropagation><i class="fa-solid fa-box-archive"></i>MC Versions</button>
+                    <button class="panel-tab" @onclick="OpenCredits" @onmousedown:stopPropagation><i class="fa-solid fa-heart"></i>Credits</button>
                 }
                 else
                 {
-                    <button class="panel-tab" @onclick="OpenJavaClients" @onmousedown:stopPropagation><i class="fa-solid fa-rocket"></i>Launchers</button>
-                    <button class="panel-tab" @onclick="OpenAddons" @onmousedown:stopPropagation><i class="fa-solid fa-puzzle-piece"></i>Mods</button>
-                    <button class="panel-tab" @onclick="OpenJavaVersions" @onmousedown:stopPropagation><i class="fa-solid fa-box-archive"></i>Versions</button>
-                    <button class="panel-tab" @onclick="OpenJavaProfile" @onmousedown:stopPropagation><i class="fa-solid fa-user"></i>Profile</button>
-                    <button class="panel-tab" @onclick="OpenJavaScreenshots" @onmousedown:stopPropagation><i class="fa-solid fa-images"></i>Photos</button>
+                    @JavaTabs("settings")
                 }
-                <button class="panel-tab" @onclick="OpenCredits" @onmousedown:stopPropagation><i class="fa-solid fa-heart"></i>Credits</button>
             </div>
         </div>
     }
 
-    <!-- â”€â”€ CLIENTS PANEL â”€â”€ -->
+    <!-- ── CLIENTS PANEL ── -->
     @if (currentView == "clients")
     {
         <div class="panel-overlay">
@@ -1739,7 +1880,7 @@
 
                 <div class="drop-hint-row">
                     <i class="fa-solid fa-file-arrow-down"></i>
-                    <span>Drag &amp; drop a DLL onto the window</span>
+                    <span>Drag & drop a DLL onto the window</span>
                     <button class="btn-sm" @onclick="PickDllFile" @onmousedown:stopPropagation style="margin-left:auto;">
                         <i class="fa-solid fa-folder-open"></i> Browse...
                     </button>
@@ -1757,7 +1898,7 @@
         </div>
     }
 
-    <!-- â”€â”€ VERSIONS PANEL â”€â”€ -->
+    <!-- ── VERSIONS PANEL ── -->
     @if (currentView == "versions")
     {
         <div class="panel-overlay">
@@ -1810,7 +1951,7 @@
 
             <div class="panel-body">
 
-                <!-- â”€â”€ Latite list â”€â”€ -->
+                <!-- ── Latite list ── -->
                 @if (versionsClient == "Latite")
                 {
                     @if (!string.IsNullOrEmpty(latiteFetchError) && versions.Count > 0)
@@ -1862,9 +2003,8 @@
                             <div class="versions-loading"><span style="opacity:0.5;">No results for "@versionsFilter"</span></div>
                         }
 
-                        @foreach (var v in unpinnedList)
-                        {
-                            <div class="version-row @(v.ErrorMessage != null ? "error-row" : "")">
+                        <Virtualize Items="unpinnedList" ItemSize="54" Context="v">
+                            <div class="version-row @(v.ErrorMessage != null ? "error-row" : "")" @key="v.Tag">
                                 <div class="version-meta">
                                     <span class="version-name">@v.DisplayName</span>
                                     @if (v.ErrorMessage != null) { <span class="error-text">@v.ErrorMessage</span> }
@@ -1872,11 +2012,11 @@
                                 </div>
                                 @if (v.ErrorMessage == null) { @VersionActions(v) }
                             </div>
-                        }
+                        </Virtualize>
                     }
                 }
 
-                <!-- â”€â”€ OderSo list â”€â”€ -->
+                <!-- ── OderSo list ── -->
                 @if (versionsClient == "OderSo")
                 {
                     @if (!string.IsNullOrEmpty(oderSoFetchError) && oderSoVersions.Count > 0)
@@ -1922,7 +2062,7 @@
                                         @if (state.IsActive) { <span class="tag-active">Active</span> }
                                     </div>
                                     @if (!string.IsNullOrEmpty(state.Error)) { <span class="error-text">@state.Error</span> }
-                                    else if (state.IsDownloaded && !state.IsDownloading) { <span class="version-sub">Ready Â· @state.SizeLabel</span> }
+                                    else if (state.IsDownloaded && !state.IsDownloading) { <span class="version-sub">Ready · @state.SizeLabel</span> }
                                     else if (!state.IsDownloaded) { <span class="version-sub">@state.SizeLabel</span> }
                                 </div>
                                 @OderSoVersionActions(state)
@@ -1935,7 +2075,7 @@
         </div>
     }
 
-    <!-- â”€â”€ ADDONS PANEL (CurseForge MCBE) â”€â”€ -->
+    <!-- ── ADDONS PANEL (CurseForge MCBE) ── -->
     @if (currentView == "addons")
     {
         <div class="panel-overlay">
@@ -1946,6 +2086,12 @@
                     <div class="panel-title-underline"></div>
                 </div>
                 <div class="panel-header-actions">
+                    @if (IsJava)
+                    {
+                        <button class="btn-sm" @onclick="OpenModpacks" @onmousedown:stopPropagation>
+                            <i class="fa-solid fa-cubes"></i> Modpacks
+                        </button>
+                    }
                     <button class="panel-back-btn" @onclick="GoHome" @onmousedown:stopPropagation>
                         <i class="fa-solid fa-chevron-down"></i>
                     </button>
@@ -2340,7 +2486,7 @@
                                         }
                                         else
                                         {
-                                            <button class="icon-btn" data-tooltip="Download &amp; Install"
+                                            <button class="icon-btn" data-tooltip="Download & Install"
                                                     @onclick="() => HandleCfDownload(a)" @onmousedown:stopPropagation>
                                                 <i class="fa-solid fa-download"></i>
                                             </button>
@@ -2456,7 +2602,7 @@
                                         }
                                         else
                                         {
-                                            <button class="icon-btn" data-tooltip="Download &amp; Install"
+                                            <button class="icon-btn" data-tooltip="Download & Install"
                                                     @onclick="() => HandleMrDownload(p)" @onmousedown:stopPropagation>
                                                 <i class="fa-solid fa-download"></i>
                                             </button>
@@ -2481,26 +2627,24 @@
             }
 
             <div class="panel-tabs">
-                <button class="panel-tab" @onclick="OpenSettings" @onmousedown:stopPropagation><i class="fa-solid fa-gear"></i>Settings</button>
                 @if (IsBedrock)
                 {
+                    <button class="panel-tab" @onclick="OpenSettings" @onmousedown:stopPropagation><i class="fa-solid fa-gear"></i>Settings</button>
                     <button class="panel-tab" @onclick="OpenClients" @onmousedown:stopPropagation><i class="fa-solid fa-puzzle-piece"></i>Clients</button>
                     <button class="panel-tab active" @onmousedown:stopPropagation><i class="fa-solid fa-cube"></i>Addons</button>
                     <button class="panel-tab" @onclick="OpenServers" @onmousedown:stopPropagation><i class="fa-solid fa-server"></i>Servers</button>
                     <button class="panel-tab" @onclick="OpenMcVersions" @onmousedown:stopPropagation><i class="fa-solid fa-box-archive"></i>MC Versions</button>
+                    <button class="panel-tab" @onclick="OpenCredits" @onmousedown:stopPropagation><i class="fa-solid fa-heart"></i>Credits</button>
                 }
                 else
                 {
-                    <button class="panel-tab" @onclick="OpenJavaClients" @onmousedown:stopPropagation><i class="fa-solid fa-rocket"></i>Launchers</button>
-                    <button class="panel-tab active" @onmousedown:stopPropagation><i class="fa-solid fa-puzzle-piece"></i>Mods</button>
-                    <button class="panel-tab" @onclick="OpenJavaVersions" @onmousedown:stopPropagation><i class="fa-solid fa-box-archive"></i>Versions</button>
+                    @JavaTabs("mods")
                 }
-                <button class="panel-tab" @onclick="OpenCredits" @onmousedown:stopPropagation><i class="fa-solid fa-heart"></i>Credits</button>
             </div>
         </div>
     }
 
-    <!-- â”€â”€ SERVERS PANEL â”€â”€ -->
+    <!-- ── SERVERS PANEL ── -->
     @if (currentView == "servers")
     {
         <div class="panel-overlay">
@@ -2561,7 +2705,7 @@
                                         @onclick="() => CopyServerAddress(s)" @onmousedown:stopPropagation>
                                     <i class="fa-solid fa-copy"></i>
                                 </button>
-                                <button class="icon-btn" data-tooltip="Launch &amp; connect"
+                                <button class="icon-btn" data-tooltip="Launch & connect"
                                         @onclick="() => LaunchServer(s)" @onmousedown:stopPropagation
                                         disabled="@isLaunching">
                                     <i class="fa-solid fa-play"></i>
@@ -2596,7 +2740,7 @@
                                         @onclick="() => SaveSuggestedServer(s)" @onmousedown:stopPropagation>
                                     <i class="fa-solid fa-bookmark"></i>
                                 </button>
-                                <button class="icon-btn" data-tooltip="Launch &amp; connect"
+                                <button class="icon-btn" data-tooltip="Launch & connect"
                                         @onclick="() => LaunchServer(s)" @onmousedown:stopPropagation
                                         disabled="@isLaunching">
                                     <i class="fa-solid fa-play"></i>
@@ -2618,7 +2762,7 @@
         </div>
     }
 
-    <!-- â”€â”€ ADD/EDIT SERVER MODAL â”€â”€ -->
+    <!-- ── ADD/EDIT SERVER MODAL ── -->
     @if (serverModalOpen)
     {
         <div class="modal-overlay" @onclick="CloseServerModal">
@@ -2664,7 +2808,7 @@
         </div>
     }
 
-    <!-- â”€â”€ MC VERSIONS PANEL (Vanilla Version Switcher) â”€â”€ -->
+    <!-- ── MC VERSIONS PANEL (Vanilla Version Switcher) ── -->
     @if (currentView == "mcversions")
     {
         <div class="panel-overlay">
@@ -2691,7 +2835,7 @@
                 <span>Switch between Minecraft Bedrock versions. Sideload requires Developer Mode; the Microsoft Store option below does not.</span>
             </div>
 
-            <!-- â”€â”€ Microsoft Store install (BedrockUpdater method) â”€â”€ -->
+            <!-- ── Microsoft Store install (BedrockUpdater method) ── -->
             <div class="mcv-store-row">
                 <div class="mcv-store-meta">
                     @if (storeInstallBusy)
@@ -2775,7 +2919,7 @@
                                         <span class="tag-active">Active</span>
                                     </div>
                                     @if (!string.IsNullOrEmpty(v.ErrorMessage)) { <span class="error-text">@v.ErrorMessage</span> }
-                                    else if (v.IsDownloaded) { <span class="version-sub">Ready Â· @v.SizeLabel</span> }
+                                    else if (v.IsDownloaded) { <span class="version-sub">Ready · @v.SizeLabel</span> }
                                 </div>
                                 @McVersionActions(v)
                             </div>
@@ -2783,18 +2927,17 @@
                         <span class="panel-section-label">All Versions</span>
                     }
 
-                    @foreach (var v in restList)
-                    {
-                        <div class="version-row @(!string.IsNullOrEmpty(v.ErrorMessage) ? "error-row" : "")">
+                    <Virtualize Items="restList" ItemSize="54" Context="v">
+                        <div class="version-row @(!string.IsNullOrEmpty(v.ErrorMessage) ? "error-row" : "")" @key="v.Version">
                             <div class="version-meta">
                                 <span class="version-name">Minecraft @v.Version</span>
                                 @if (!string.IsNullOrEmpty(v.ErrorMessage)) { <span class="error-text">@v.ErrorMessage</span> }
-                                else if (v.IsDownloaded && !v.IsDownloading) { <span class="version-sub">Ready Â· @v.SizeLabel</span> }
+                                else if (v.IsDownloaded && !v.IsDownloading) { <span class="version-sub">Ready · @v.SizeLabel</span> }
                                 else if (!v.IsDownloaded && !v.IsDownloading) { <span class="version-sub">@v.SizeLabel</span> }
                             </div>
                             @McVersionActions(v)
                         </div>
-                    }
+                    </Virtualize>
                 }
             </div>
 
@@ -2808,7 +2951,7 @@
             </div>
         </div>
     }
-    <!-- â”€â”€ JAVA LAUNCHERS PANEL â”€â”€ -->
+    <!-- ── JAVA LAUNCHERS PANEL ── -->
     @if (currentView == "javaclients")
     {
         <div class="panel-overlay">
@@ -2978,7 +3121,7 @@
         </div>
     }
 
-    <!-- â”€â”€ JAVA VERSIONS PANEL â”€â”€ -->
+    <!-- ── JAVA VERSIONS PANEL ── -->
     @if (currentView == "javaversions")
     {
         <div class="panel-overlay">
@@ -3064,7 +3207,7 @@
                                     </div>
                                     @if (!string.IsNullOrEmpty(v.ErrorMessage)) { <span class="error-text">@v.ErrorMessage</span> }
                                     else if (v.HasJar) { <span class="version-sub">Ready to launch</span> }
-                                    else { <span class="version-sub" style="color:var(--orange);">Profile present but jar missing â€” open in official launcher once</span> }
+                                    else { <span class="version-sub" style="color:var(--orange);">Profile present but jar missing — open in official launcher once</span> }
                                 </div>
                                 <button class="vcs-btn" @onclick='() => HandleJavaLaunch(v)'
                                         disabled="@(v.IsLaunching || !v.HasJar)" @onmousedown:stopPropagation>
@@ -3082,9 +3225,8 @@
                     @if (others.Count > 0)
                     {
                         <span class="panel-section-label">Available (@others.Count)</span>
-                        @foreach (var v in others)
-                        {
-                            <div class="version-row @(!string.IsNullOrEmpty(v.ErrorMessage) ? "error-row" : "")">
+                        <Virtualize Items="others" ItemSize="54" Context="v">
+                            <div class="version-row @(!string.IsNullOrEmpty(v.ErrorMessage) ? "error-row" : "")" @key="v.Id">
                                 <div class="version-meta">
                                     <span class="version-name">Minecraft @v.Id</span>
                                     @if (!string.IsNullOrEmpty(v.ErrorMessage))
@@ -3097,7 +3239,7 @@
                                     }
                                     else
                                     {
-                                        <span class="version-sub" style="opacity:0.6;">@v.TypeLabel @(string.IsNullOrEmpty(v.ReleaseTime) ? "" : "Â· " + v.ReleaseTime[..Math.Min(10, v.ReleaseTime.Length)])</span>
+                                        <span class="version-sub" style="opacity:0.6;">@v.TypeLabel @(string.IsNullOrEmpty(v.ReleaseTime) ? "" : "· " + v.ReleaseTime[..Math.Min(10, v.ReleaseTime.Length)])</span>
                                     }
                                 </div>
                                 @if (v.IsInstalling)
@@ -3114,7 +3256,7 @@
                                     </button>
                                 }
                             </div>
-                        }
+                        </Virtualize>
                     }
 
                     @if (installed.Count == 0 && others.Count == 0)
@@ -3210,8 +3352,14 @@
                             <div class="profile-actions">
                                 <button class="skin-btn" @onclick="OpenPlayerNameMc" @onmousedown:stopPropagation><i class="fa-solid fa-id-card"></i> NameMC</button>
                                 <button class="skin-btn" @onclick="ChangeSkinAsync" @onmousedown:stopPropagation><i class="fa-solid fa-upload"></i> Change skin</button>
+                                <button class="skin-btn" @onclick="OpenSkinLibrary" @onmousedown:stopPropagation><i class="fa-solid fa-shirt"></i> Skin library</button>
                                 <button class="skin-btn skin-btn-ghost" @onclick="DownloadPlayerSkin" @onmousedown:stopPropagation><i class="fa-solid fa-download"></i> Download</button>
                                 <button class="skin-btn skin-btn-ghost" @onclick="ResetSkinAsync" @onmousedown:stopPropagation><i class="fa-solid fa-eraser"></i> Reset</button>
+                            </div>
+                            <div class="profile-actions">
+                                <button class="skin-btn skin-btn-ghost" @onclick="OpenStats" @onmousedown:stopPropagation><i class="fa-solid fa-chart-simple"></i> Statistics</button>
+                                <button class="skin-btn skin-btn-ghost" @onclick="OpenBackups" @onmousedown:stopPropagation><i class="fa-solid fa-box-archive"></i> World backups</button>
+                                <button class="skin-btn skin-btn-ghost" @onclick="OpenLogs" @onmousedown:stopPropagation><i class="fa-solid fa-file-lines"></i> Logs</button>
                             </div>
                             <label class="skin-slim-toggle" @onmousedown:stopPropagation>
                                 <input type="checkbox" checked="@_changeSkinSlim"
@@ -3260,6 +3408,48 @@
                         <span class="instance-ram-unit">MB max</span>
                     </div>
                     <small class="instance-hint">0 = use the global setting (@SettingsService.Settings.JavaMaxRamMb MB).</small>
+                </div>
+
+                <div class="instance-card">
+                    <div class="instance-card-head">
+                        <span><i class="fa-solid fa-cubes-stacked"></i> Instances</span>
+                        <div style="flex:1"></div>
+                        <button class="btn-sm" @onclick="NewJavaInstance" @onmousedown:stopPropagation><i class="fa-solid fa-plus"></i> New</button>
+                        <button class="btn-sm" @onclick="ImportInstanceZip" disabled="@javaUtilityBusy" @onmousedown:stopPropagation><i class="fa-solid fa-file-import"></i> Import</button>
+                        <button class="btn-sm" @onclick="ImportOfficialMinecraft" disabled="@javaUtilityBusy" @onmousedown:stopPropagation data-tooltip="Import your official .minecraft"><i class="fa-brands fa-microsoft"></i></button>
+                    </div>
+                    @foreach (var inst in JavaInstances.Instances)
+                    {
+                        var isActive = inst.Id == JavaInstances.ActiveInstance.Id;
+                        <div class="instance-row @(isActive ? "active" : "")">
+                            @if (_renamingInstanceId == inst.Id)
+                            {
+                                <input class="setting-input instance-rename" value="@_renameInstanceValue"
+                                       @oninput="OnRenameInstanceInput"
+                                       @onkeydown="OnRenameInstanceKey"
+                                       @onmousedown:stopPropagation />
+                                <button class="vcs-btn" @onclick="CommitRenameInstance" @onmousedown:stopPropagation><i class="fa-solid fa-check"></i></button>
+                            }
+                            else
+                            {
+                                <button class="instance-name-btn" @onclick="() => SwitchInstance(inst.Id)" @onmousedown:stopPropagation>
+                                    @if (isActive) { <i class="fa-solid fa-circle-check"></i> } else { <i class="fa-regular fa-circle"></i> }
+                                    <span>@inst.Name</span>
+                                </button>
+                                <button class="instance-icon-btn" @onclick="() => BeginRenameInstance(inst.Id, inst.Name)" @onmousedown:stopPropagation data-tooltip="Rename"><i class="fa-solid fa-pen"></i></button>
+                                <button class="instance-icon-btn" @onclick="() => CloneJavaInstance(inst.Id)" disabled="@javaUtilityBusy" @onmousedown:stopPropagation data-tooltip="Clone"><i class="fa-solid fa-copy"></i></button>
+                                @if (_confirmDeleteInstanceId == inst.Id)
+                                {
+                                    <button class="instance-icon-btn instance-del" @onclick="() => DeleteJavaInstance(inst.Id)" @onmousedown:stopPropagation data-tooltip="Confirm delete"><i class="fa-solid fa-check"></i></button>
+                                    <button class="instance-icon-btn" @onclick="CancelDeleteInstance" @onmousedown:stopPropagation><i class="fa-solid fa-xmark"></i></button>
+                                }
+                                else
+                                {
+                                    <button class="instance-icon-btn" @onclick="() => ConfirmDeleteInstance(inst.Id)" @onmousedown:stopPropagation data-tooltip="Delete"><i class="fa-solid fa-trash"></i></button>
+                                }
+                            }
+                        </div>
+                    }
                 </div>
             </div>
 
@@ -3328,7 +3518,7 @@
             <div class="panel-handle"></div>
             <div class="panel-header">
                 <div class="panel-title-wrap">
-                    <span class="panel-title">News &amp; Updates</span>
+                    <span class="panel-title">News & Updates</span>
                     <div class="panel-title-underline"></div>
                 </div>
                 <div class="panel-header-actions">
@@ -3411,7 +3601,7 @@
         </div>
     }
 
-    <!-- â”€â”€ CREDITS PANEL â”€â”€ -->
+    <!-- ── CREDITS PANEL ── -->
     @if (currentView == "credits")
     {
         <div class="panel-overlay">
@@ -3435,7 +3625,7 @@
                 <div class="credits-card-icon" style="padding:6px;"><img src="https://media.discordapp.net/attachments/1252981510223429693/1491099168612028497/1000167923-removebg-preview.png?ex=69d675d1&is=69d52451&hm=f8489d83a088d107f933b54625e9ebd93dd1d726788804f0dbc498720a3b689f&=&width=320&height=320" style="width:100%;height:100%;object-fit:contain;"/></div>
                     <div class="credits-card-meta">
                         <span class="credits-card-name">Glacier Launcher</span>
-                        <span class="credits-card-sub">Built by Pepe Â· Glacier Productions</span>
+                        <span class="credits-card-sub">Built by Pepe · Glacier Productions</span>
                     </div>
                     <div class="credits-card-actions">
                         <button class="credits-link-btn" data-tooltip="GitHub"
@@ -3459,7 +3649,7 @@
                     <div class="credits-card-icon" style="padding:6px;"><img src="images/clients/latite.png" style="width:100%;height:100%;object-fit:contain;"/></div>
                     <div class="credits-card-meta">
                         <span class="credits-card-name">Latite Client</span>
-                        <span class="credits-card-sub">by Imrglop &amp; contributors</span>
+                        <span class="credits-card-sub">by Imrglop & contributors</span>
                     </div>
                     <div class="credits-card-actions">
                         <button class="credits-link-btn" data-tooltip="GitHub Releases"
@@ -3517,23 +3707,19 @@
 
             </div>
             <div class="panel-tabs">
-                <button class="panel-tab" @onclick="OpenSettings" @onmousedown:stopPropagation><i class="fa-solid fa-gear"></i>Settings</button>
                 @if (IsBedrock)
                 {
+                    <button class="panel-tab" @onclick="OpenSettings" @onmousedown:stopPropagation><i class="fa-solid fa-gear"></i>Settings</button>
                     <button class="panel-tab" @onclick="OpenClients" @onmousedown:stopPropagation><i class="fa-solid fa-puzzle-piece"></i>Clients</button>
                     <button class="panel-tab" @onclick="OpenAddons" @onmousedown:stopPropagation><i class="fa-solid fa-cube"></i>Addons</button>
                     <button class="panel-tab" @onclick="OpenServers" @onmousedown:stopPropagation><i class="fa-solid fa-server"></i>Servers</button>
                     <button class="panel-tab" @onclick="OpenMcVersions" @onmousedown:stopPropagation><i class="fa-solid fa-box-archive"></i>MC Versions</button>
+                    <button class="panel-tab active" @onmousedown:stopPropagation><i class="fa-solid fa-heart"></i>Credits</button>
                 }
                 else
                 {
-                    <button class="panel-tab" @onclick="OpenJavaClients" @onmousedown:stopPropagation><i class="fa-solid fa-rocket"></i>Launchers</button>
-                    <button class="panel-tab" @onclick="OpenAddons" @onmousedown:stopPropagation><i class="fa-solid fa-puzzle-piece"></i>Mods</button>
-                    <button class="panel-tab" @onclick="OpenJavaVersions" @onmousedown:stopPropagation><i class="fa-solid fa-box-archive"></i>Versions</button>
-                    <button class="panel-tab" @onclick="OpenJavaProfile" @onmousedown:stopPropagation><i class="fa-solid fa-user"></i>Profile</button>
-                    <button class="panel-tab" @onclick="OpenJavaScreenshots" @onmousedown:stopPropagation><i class="fa-solid fa-images"></i>Photos</button>
+                    @JavaTabs("credits")
                 }
-                <button class="panel-tab active" @onmousedown:stopPropagation><i class="fa-solid fa-heart"></i>Credits</button>
             </div>
         </div>
     }

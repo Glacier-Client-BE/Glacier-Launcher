@@ -33,26 +33,29 @@ public partial class Home
     // ── Shared Java panel tab bar ────────────────────────────────────────────
     // One definition drives every Java panel so Profile (skin/cape) and Photos
     // (screenshots) are first-class tabs everywhere, not buttons buried in Versions.
+    // Sequence numbers are LITERAL per tab (base offset + fixed sub-index), never a
+    // runtime counter. Blazor's diff relies on stable, compile-time-style sequence
+    // numbers; a mutating counter can make the renderer add/drop nodes unpredictably.
     private RenderFragment JavaTabs(string active) => builder =>
     {
-        int seq = 0;
-        void Tab(string view, string icon, string label, Action go)
+        void Tab(int seq, string view, string icon, string label, Action go)
         {
-            builder.OpenElement(seq++, "button");
-            builder.AddAttribute(seq++, "class", active == view ? "panel-tab active" : "panel-tab");
-            builder.AddAttribute(seq++, "onclick", EventCallback.Factory.Create(this, go));
-            builder.OpenElement(seq++, "i");
-            builder.AddAttribute(seq++, "class", icon);
+            builder.OpenElement(seq, "button");
+            builder.AddAttribute(seq + 1, "class", active == view ? "panel-tab active" : "panel-tab");
+            builder.AddAttribute(seq + 2, "onclick", EventCallback.Factory.Create(this, go));
+            builder.OpenElement(seq + 3, "i");
+            builder.AddAttribute(seq + 4, "class", icon);
             builder.CloseElement();
-            builder.AddContent(seq++, label);
+            builder.AddContent(seq + 5, label);
             builder.CloseElement();
         }
-        Tab("settings",  "fa-solid fa-gear",         "Settings",  OpenSettings);
-        Tab("launchers", "fa-solid fa-rocket",       "Launchers", OpenJavaClients);
-        Tab("mods",      "fa-solid fa-puzzle-piece", "Mods",      OpenAddons);
-        Tab("versions",  "fa-solid fa-box-archive",  "Versions",  () => { _ = OpenJavaVersions(); });
-        Tab("profile",   "fa-solid fa-user",         "Profile",   OpenJavaProfile);
-        Tab("photos",    "fa-solid fa-images",       "Photos",    OpenJavaScreenshots);
+        Tab(0,  "settings",  "fa-solid fa-gear",         "Settings",  OpenSettings);
+        Tab(10, "launchers", "fa-solid fa-rocket",       "Launchers", OpenJavaClients);
+        Tab(20, "mods",      "fa-solid fa-puzzle-piece", "Mods",      OpenAddons);
+        Tab(30, "versions",  "fa-solid fa-box-archive",  "Versions",  () => { _ = OpenJavaVersions(); });
+        Tab(40, "profile",   "fa-solid fa-user",         "Profile",   OpenJavaProfile);
+        Tab(50, "photos",    "fa-solid fa-images",       "Photos",    OpenJavaScreenshots);
+        Tab(60, "credits",   "fa-solid fa-heart",        "Credits",   OpenCredits);
     };
 
     // ── News + changelog ─────────────────────────────────────────────────────
@@ -62,9 +65,8 @@ public partial class Home
 
     private async Task OpenNews()
     {
-        currentView = "news";
+        await NavigateAsync(() => currentView = "news");
         if (_releases.Count == 0 && _newsPosts.Count == 0) await LoadNewsAsync();
-        else StateHasChanged();
     }
 
     private async Task LoadNewsAsync()
@@ -121,17 +123,33 @@ public partial class Home
             _ = ShowToast("Sign in with Microsoft first.", "error");
             return;
         }
-        if (_selfRef != null) await JS.InvokeVoidAsync("pickSkinFile", _selfRef);
+        // Native picker: WebView2's <input type=file> can't hand back a real path,
+        // which was the "skin file not found" bug.
+        var path = await LauncherUtilityService.PickFileAsync(
+            "Choose a skin PNG", "Minecraft skin (PNG)|*.png|All files|*.*");
+        if (string.IsNullOrEmpty(path)) return;
+        await ApplyPickedSkinAsync(path);
     }
 
     [JSInvokable]
-    public async Task OnSkinPicked(string path)
+    public Task OnSkinPicked(string path) => ApplyPickedSkinAsync(path);
+
+    private async Task ApplyPickedSkinAsync(string path)
     {
         if (string.IsNullOrWhiteSpace(path)) return;
+        if (!System.IO.File.Exists(path)) { _ = ShowToast("That skin file no longer exists.", "error"); return; }
+
         _ = ShowToast("Uploading skin…", "info");
+        // Refresh the Minecraft token first — a stale one makes the upload no-op/401.
+        await Xbox.ValidateSessionAsync();
         var err = await SkinService.UploadSkinAsync(SettingsService.Settings.JavaAccessToken, path, _changeSkinSlim);
-        _ = ShowToast(err == null ? "Skin updated! Give it a minute to appear." : "Skin change failed: " + err,
-                      err == null ? "success" : "error");
+        if (err == null)
+        {
+            // Keep a copy in the library so an applied skin is never lost.
+            try { await SkinLibrary.AddFromFileAsync(path, _changeSkinSlim); } catch { /* library copy is best-effort */ }
+            _ = ShowToast("Skin updated! Saved to your library. Give it a minute to appear.", "success");
+        }
+        else _ = ShowToast("Skin change failed: " + err, "error");
         await InvokeAsync(StateHasChanged);
     }
 

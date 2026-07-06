@@ -1,0 +1,210 @@
+@using System.Globalization
+
+@* Custom colour picker that matches the launcher UI (replaces the native
+   <input type=color>). Three rounded pill sliders — Hue, Shade, Alpha —
+   plus a live preview swatch and hex field. *@
+<div class="cpick" @onmousedown:stopPropagation>
+    <input class="cpick-slider cpick-hue" type="range" min="0" max="360" step="1"
+           value="@((int)Math.Round(_h))" @oninput="HueInput" />
+
+    <input class="cpick-slider cpick-shade" type="range" min="0" max="100" step="1"
+           style="--cpick-grad: linear-gradient(to right, #000, @PureHueHex);"
+           value="@((int)Math.Round(_shade * 100))" @oninput="ShadeInput" />
+
+    <input class="cpick-slider cpick-alpha" type="range" min="0" max="100" step="1"
+           style="--cpick-grad: linear-gradient(to right, transparent, @OpaqueHex);"
+           value="@((int)Math.Round(_a * 100))" @oninput="AlphaInput" />
+
+    <div class="cpick-foot">
+        <span class="cpick-preview" style="--dot-color:@CurrentColor;"></span>
+        <div class="cpick-hexwrap">
+            <span class="cpick-hash">#</span>
+            <input class="cpick-hex" value="@HexBody" @onchange="HexInput"
+                   spellcheck="false" autocomplete="off" maxlength="8" />
+        </div>
+        <button type="button" class="btn-sm btn-accent" @onclick="OnClose">Done</button>
+    </div>
+</div>
+
+@code {
+    [Parameter] public string Value { get; set; } = "#000000";
+    [Parameter] public EventCallback<string> ValueChanged { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    private double _h;      // hue 0..360
+    private double _shade;  // 0 (black) .. 1 (pure hue)
+    private double _a = 1;  // alpha 0..1
+    private string _lastEmitted = "";
+
+    private string PureHueHex => HsvToHex(_h, 1, 1);
+    private string OpaqueHex  => ShadeHex(_h, _shade);
+    private string CurrentColor => ComposeColor(_h, _shade, _a);
+    private string HexBody
+    {
+        get
+        {
+            var (r, g, b) = HexToRgb(OpaqueHex);
+            return _a >= 0.999
+                ? $"{r:X2}{g:X2}{b:X2}"
+                : $"{r:X2}{g:X2}{b:X2}{(int)Math.Round(_a * 255):X2}";
+        }
+    }
+
+    protected override void OnParametersSet()
+    {
+        // Sync from the incoming value unless this is our own echo (avoids a
+        // drag -> emit -> re-parse feedback loop that fights the slider).
+        if (!string.Equals(Value, _lastEmitted, StringComparison.OrdinalIgnoreCase))
+        {
+            var (r, g, b, a) = ParseColor(Value);
+            var (h, s, v) = RgbToHsv(r, g, b);
+            _h = h;
+            // Collapse (s, v) onto the single black<->pure-hue axis the shade
+            // slider controls: shade = v * s (matches how ShadeHex composes it).
+            _shade = Math.Clamp(s * v, 0, 1);
+            _a = a;
+        }
+    }
+
+    private async Task HueInput(ChangeEventArgs e)
+    {
+        if (double.TryParse(e.Value?.ToString(), NumberStyles.Any, CultureInfo.InvariantCulture, out var h))
+        { _h = Math.Clamp(h, 0, 360); await EmitAsync(); }
+    }
+
+    private async Task ShadeInput(ChangeEventArgs e)
+    {
+        if (double.TryParse(e.Value?.ToString(), NumberStyles.Any, CultureInfo.InvariantCulture, out var s))
+        { _shade = Math.Clamp(s / 100.0, 0, 1); await EmitAsync(); }
+    }
+
+    private async Task AlphaInput(ChangeEventArgs e)
+    {
+        if (double.TryParse(e.Value?.ToString(), NumberStyles.Any, CultureInfo.InvariantCulture, out var a))
+        { _a = Math.Clamp(a / 100.0, 0, 1); await EmitAsync(); }
+    }
+
+    private async Task HexInput(ChangeEventArgs e)
+    {
+        if (TryParseHexInput(e.Value?.ToString(), out var r, out var g, out var b, out var a))
+        {
+            var (h, s, v) = RgbToHsv(r, g, b);
+            _h = h; _shade = Math.Clamp(s * v, 0, 1); _a = a;
+            await EmitAsync();
+        }
+    }
+
+    private async Task EmitAsync()
+    {
+        var color = ComposeColor(_h, _shade, _a);
+        _lastEmitted = color;
+        Value = color;
+        await ValueChanged.InvokeAsync(color);
+    }
+
+    // ── colour math ──────────────────────────────────────────────────────────
+    // The shade axis walks black -> the fully saturated hue in a single lerp
+    // (matches the reference design's black-to-color bar); full HSV coverage
+    // isn't reachable from the sliders alone, but the hex field covers it.
+    private static string ShadeHex(double h, double shade)
+    {
+        var (r, g, b) = HexToRgb(HsvToHex(h, 1, 1));
+        int L(int c) => (int)Math.Round(c * shade);
+        return $"#{L(r):X2}{L(g):X2}{L(b):X2}";
+    }
+
+    private static string ComposeColor(double h, double shade, double a)
+    {
+        var hex = ShadeHex(h, shade);
+        if (a >= 0.999) return hex;
+        var (r, g, b) = HexToRgb(hex);
+        return $"rgba({r},{g},{b},{a.ToString("0.###", CultureInfo.InvariantCulture)})";
+    }
+
+    private static (double h, double s, double v) RgbToHsv(int r, int g, int b)
+    {
+        double rf = r / 255.0, gf = g / 255.0, bf = b / 255.0;
+        double max = Math.Max(rf, Math.Max(gf, bf)), min = Math.Min(rf, Math.Min(gf, bf));
+        double d = max - min, h = 0;
+        if (d > 0)
+        {
+            if (max == rf) h = ((gf - bf) / d) % 6;
+            else if (max == gf) h = (bf - rf) / d + 2;
+            else h = (rf - gf) / d + 4;
+            h *= 60; if (h < 0) h += 360;
+        }
+        double s = max <= 0 ? 0 : d / max;
+        return (h, s, max);
+    }
+
+    private static string HsvToHex(double h, double s, double v)
+    {
+        h = ((h % 360) + 360) % 360;
+        double c = v * s, x = c * (1 - Math.Abs((h / 60) % 2 - 1)), m = v - c;
+        double r, g, b;
+        if (h < 60) { r = c; g = x; b = 0; }
+        else if (h < 120) { r = x; g = c; b = 0; }
+        else if (h < 180) { r = 0; g = c; b = x; }
+        else if (h < 240) { r = 0; g = x; b = c; }
+        else if (h < 300) { r = x; g = 0; b = c; }
+        else { r = c; g = 0; b = x; }
+        int R = Math.Clamp((int)Math.Round((r + m) * 255), 0, 255);
+        int G = Math.Clamp((int)Math.Round((g + m) * 255), 0, 255);
+        int B = Math.Clamp((int)Math.Round((b + m) * 255), 0, 255);
+        return $"#{R:X2}{G:X2}{B:X2}";
+    }
+
+    private static (int r, int g, int b) HexToRgb(string? hex)
+    {
+        var s = (hex ?? "").Trim().TrimStart('#');
+        if (s.Length == 3) s = $"{s[0]}{s[0]}{s[1]}{s[1]}{s[2]}{s[2]}";
+        if (s.Length < 6) return (0, 0, 0);
+        try
+        {
+            return (Convert.ToInt32(s.Substring(0, 2), 16),
+                    Convert.ToInt32(s.Substring(2, 2), 16),
+                    Convert.ToInt32(s.Substring(4, 2), 16));
+        }
+        catch { return (0, 0, 0); }
+    }
+
+    /// <summary>Parses "#RRGGBB", "#RGB", "#RRGGBBAA" or "rgba(r,g,b,a)"/"rgb(r,g,b)".</summary>
+    private static (int r, int g, int b, double a) ParseColor(string? input)
+    {
+        var s = (input ?? "").Trim();
+        if (s.StartsWith("rgb", StringComparison.OrdinalIgnoreCase))
+        {
+            try
+            {
+                var inner = s[(s.IndexOf('(') + 1)..s.IndexOf(')')];
+                var parts = inner.Split(',', StringSplitOptions.TrimEntries);
+                int r = int.Parse(parts[0]), g = int.Parse(parts[1]), b = int.Parse(parts[2]);
+                double a = parts.Length > 3 ? double.Parse(parts[3], CultureInfo.InvariantCulture) : 1.0;
+                return (r, g, b, Math.Clamp(a, 0, 1));
+            }
+            catch { return (0, 0, 0, 1); }
+        }
+        var h = s.TrimStart('#');
+        if (h.Length == 3) h = $"{h[0]}{h[0]}{h[1]}{h[1]}{h[2]}{h[2]}";
+        if (h.Length < 6) return (0, 0, 0, 1);
+        try
+        {
+            var (r, g, b) = HexToRgb("#" + h[..6]);
+            var a = h.Length >= 8 ? Convert.ToInt32(h[6..8], 16) / 255.0 : 1.0;
+            return (r, g, b, a);
+        }
+        catch { return (0, 0, 0, 1); }
+    }
+
+    private static bool TryParseHexInput(string? input, out int r, out int g, out int b, out double a)
+    {
+        r = g = b = 0; a = 1;
+        var s = (input ?? "").Trim().TrimStart('#');
+        if (s.Length == 3) s = $"{s[0]}{s[0]}{s[1]}{s[1]}{s[2]}{s[2]}";
+        if (s.Length != 6 && s.Length != 8) return false;
+        foreach (var ch in s) if (!Uri.IsHexDigit(ch)) return false;
+        (r, g, b) = HexToRgb("#" + s[..6]);
+        a = s.Length == 8 ? Convert.ToInt32(s[6..8], 16) / 255.0 : 1.0;
+        return true;
+    }
+}

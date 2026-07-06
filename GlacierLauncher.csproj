@@ -37,7 +37,19 @@
     <EmbeddedResource Include="wwwroot\**" />
     <Content Remove="wwwroot\**" />
     <EmbeddedResource Include="wwwroot.zip" LogicalName="wwwroot.zip" />
+    <!-- Ship icon.ico beside the exe so the tray icon can load it at runtime. -->
+    <Content Include="icon.ico" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
+
+  <!-- Publish hygiene: keep NuGet XML docs and loose PDBs out of the publish
+       folder. The runtime is a hard size floor (WPF can't be trimmed), so this
+       is the realistic lever alongside the recompressed icon. -->
+  <Target Name="StripDocsAndSymbols" AfterTargets="ComputeFilesToPublish">
+    <ItemGroup>
+      <ResolvedFileToPublish Remove="@(ResolvedFileToPublish)"
+        Condition="'%(Extension)' == '.xml' Or '%(Extension)' == '.pdb'" />
+    </ItemGroup>
+  </Target>
 
   <Target Name="CreateWwwrootZip" BeforeTargets="PrepareForBuild">
     <PropertyGroup>

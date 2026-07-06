@@ -1,3 +1,22 @@
+/* ── Glacier brand typefaces (vendored, offline) ──
+   Roboto for display/headings, Plus Jakarta Sans for body & UI. Both are
+   variable woff2 (latin subset) so a single file covers the full weight range. */
+@font-face {
+    font-family: 'Plus Jakarta Sans';
+    font-style: normal;
+    font-weight: 400 700;
+    font-display: swap;
+    src: url('../vendor/fonts/PlusJakartaSans-latin.woff2') format('woff2');
+}
+
+@font-face {
+    font-family: 'Roboto';
+    font-style: normal;
+    font-weight: 400 700;
+    font-display: swap;
+    src: url('../vendor/fonts/Roboto-latin.woff2') format('woff2');
+}
+
 *,
 *::before,
 *::after {
@@ -7,35 +26,71 @@
 }
 
 :root {
+    /* ── Glacier brand tokens (Figma: Glacier Brand Assets) ──
+       Accent — Blurple over deep slate; semantic status from the Discord family.
+       Radii, spacing and typography follow the same brand guide. */
     --accent: #7289da;
     --accent-hover: #8ea0e0;
+    --accent-press: #5b6eb8;
     --accent-glow: rgba(114, 137, 218, 0.42);
     --accent-bg: rgba(114, 137, 218, 0.10);
     --bg: #23272a;
     --bg-panel: #2c2f33;
+    --bg-inset: #1f2227;
     --bg-item: rgba(255, 255, 255, 0.04);
     --bg-item-hover: rgba(255, 255, 255, 0.075);
     --text: #ffffff;
     --text-dim: #99aab5;
-    --red: #ff5c5c;
+    /* Semantic status (brand — Discord family) */
+    --red: #f04747;
     --green: #43b581;
-...
+    --orange: #faa61a;
+    --yellow: #fee75c;
+    --pink: #eb459e;
+    /* Brand typography: Roboto 700 for display/headings, Plus Jakarta Sans for body/UI */
+    --font-body: 'Plus Jakarta Sans', 'Segoe UI', system-ui, sans-serif;
+    --font-display: 'Roboto', 'Segoe UI', system-ui, sans-serif;
+    /* Corner radii (brand scale) */
+    --r-sm: 12px;
+    --r-md: 18px;
+    --r-lg: 28px;
+    --r-pill: 999px;
+    /* Duration multiplier driven by the Animation Speed setting (inverse of
+       the user-facing speed: 2× speed → 0.5 multiplier). Every transition
+       that uses --t scales with it automatically. */
+    --anim-mult: 1;
+    /* Motion system (Emil Kowalski curves): strong ease-out gives instant, intentional
+       feedback on entrances/press; ease-in-out for on-screen movement. The built-in
+       `ease` is too weak — everything on --t now rides the custom curve. */
+    --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+    --ease-in-out: cubic-bezier(0.76, 0, 0.24, 1);
+    --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);   /* iOS-like sheet slide */
+    --ease-bounce: var(--ease-bounce); /* playful overshoot — rare/celebratory only */
+    --t: calc(0.15s * var(--anim-mult)) var(--ease-out);
+    --blur: 14px;
+    --scale: 1;
+    --overlay-top: rgba(35, 39, 42, 0.55);
+    --overlay-mid: rgba(35, 39, 42, 0.20);
+    --overlay-bot: rgba(35, 39, 42, 0.85);
+}
+
+/* ── Brand display type ──
+   Roboto 700 with tight tracking for the prominent headings/titles, per the
+   Glacier typography guide. Body/UI text stays on Plus Jakarta Sans. */
+.branding-title,
+.panel-title,
+.modal-title,
+.xbox-gamertag {
+    font-family: var(--font-display);
+    letter-spacing: -0.022em;
+}
+
 /* ── Search Highlighting ── */
 .search-highlight {
     color: var(--accent);
     font-weight: 600;
     text-decoration: underline;
     text-underline-offset: 2px;
-}
-    --orange: #faa61a;
-    --r-sm: 8px;
-    --r-md: 12px;
-    --t: 0.15s ease;
-    --blur: 14px;
-    --scale: 1;
-    --overlay-top: rgba(35, 39, 42, 0.55);
-    --overlay-mid: rgba(35, 39, 42, 0.20);
-    --overlay-bot: rgba(35, 39, 42, 0.85);
 }
 
 /* ── Theme presets ── */
@@ -176,7 +231,8 @@
 }
 
 [data-theme="light"] .panel-tab.active {
-    background: var(--accent-bg);
+    background: var(--accent);
+    color: #fff;
 }
 
 /* ── Animations toggle ──
@@ -316,7 +372,9 @@ body {
     width: 100%;
     height: 100%;
     overflow: hidden;
-    font-family: 'Segoe UI', system-ui, sans-serif;
+    font-family: var(--font-body);
+    /* Brand body spec: a hair of negative tracking. */
+    letter-spacing: -0.006em;
     color: var(--text);
     user-select: none;
     -webkit-user-select: none;
@@ -693,7 +751,7 @@ body {
     gap: 8px;
     overflow: hidden;
     white-space: nowrap;
-    transition: width 0.22s cubic-bezier(0.25, 0.46, 0.45, 0.94), background 0.15s ease, box-shadow 0.18s ease;
+    transition: width 0.22s var(--ease-out), background 0.15s ease, box-shadow 0.18s ease;
     backdrop-filter: blur(14px);
     outline: none;
     position: relative;
@@ -746,7 +804,7 @@ body {
 .force-close-btn {
     background: rgba(240, 71, 71, 0.18);
     color: var(--red);
-    animation: force-close-pop 0.18s cubic-bezier(0.34, 1.56, 0.64, 1);
+    animation: force-close-pop 0.18s var(--ease-bounce);
 }
 
 .force-close-btn:hover {
@@ -787,16 +845,18 @@ body {
     background: var(--red);
     border: 2px solid var(--bg);
     box-shadow: 0 0 6px rgba(240, 71, 71, 0.7);
-    animation: badge-pop 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    animation: badge-pop 0.3s var(--ease-bounce);
 }
 
 @keyframes badge-pop {
     from {
-        transform: scale(0)
+        transform: scale(0.9);
+        opacity: 0;
     }
 
     to {
-        transform: scale(1)
+        transform: scale(1);
+        opacity: 1;
     }
 }
 
@@ -1542,7 +1602,7 @@ body {
        integrated graphics. */
     backdrop-filter: blur(var(--blur, 14px));
     -webkit-backdrop-filter: blur(var(--blur, 14px));
-    animation: slideUp 0.24s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    animation: slideUp calc(0.34s * var(--anim-mult)) var(--ease-drawer);
     overflow: hidden;
     box-shadow: 0 -8px 40px rgba(0, 0, 0, 0.55);
 }
@@ -1825,25 +1885,10 @@ body {
 }
 
 .panel-tab.active {
-    background: var(--accent-bg);
-    color: var(--accent);
-}
-
-.panel-tab::before {
-    content: '';
-    position: absolute;
-    bottom: 0;
-    left: 50%;
-    width: 0;
-    height: 2px;
+    /* Solid accent fill instead of the old growing underline — clearer
+       affordance, and the fill tracks the Theme Studio accent (default #7289da). */
     background: var(--accent);
-    border-radius: 1px;
-    transform: translateX(-50%);
-    transition: width 0.24s cubic-bezier(0.2, 0.8, 0.2, 1);
-}
-
-.panel-tab.active::before {
-    width: 60%;
+    color: #fff;
 }
 
 .panel-tab i {
@@ -1887,7 +1932,7 @@ body {
     padding: 12px 16px;
     gap: 12px;
     border-left: 0px solid transparent;
-    transition: background var(--t), border-left-color 0.18s cubic-bezier(0.2, 0.8, 0.2, 1), border-left-width 0.18s cubic-bezier(0.2, 0.8, 0.2, 1);
+    transition: background var(--t), border-left-color 0.18s var(--ease-out), border-left-width 0.18s var(--ease-out);
 }
 
 .setting-row:hover {
@@ -2001,7 +2046,7 @@ body {
     height: 17px;
     border-radius: 50%;
     background: #fff;
-    transition: transform 0.32s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s ease;
+    transition: transform 0.32s var(--ease-bounce), box-shadow 0.2s ease;
     box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
 }
 
@@ -2046,7 +2091,7 @@ body {
     padding: 12px 14px;
     gap: 12px;
     border-left: 0px solid transparent;
-    transition: background var(--t), border-left-color 0.18s cubic-bezier(0.2, 0.8, 0.2, 1), border-left-width 0.18s cubic-bezier(0.2, 0.8, 0.2, 1);
+    transition: background var(--t), border-left-color 0.18s var(--ease-out), border-left-width 0.18s var(--ease-out);
 }
 
 .version-row:hover {
@@ -2569,7 +2614,7 @@ input[type=range]::-webkit-slider-thumb {
     border: 2px solid var(--accent);
     box-shadow: 0 1px 6px rgba(0, 0, 0, 0.30), 0 0 0 0 var(--accent-glow);
     cursor: pointer;
-    transition: box-shadow 0.18s cubic-bezier(0.2, 0.8, 0.2, 1), transform 0.18s cubic-bezier(0.2, 0.8, 0.2, 1);
+    transition: box-shadow 0.18s var(--ease-out), transform 0.18s var(--ease-out);
 }
 
 input[type=range]::-webkit-slider-thumb:hover {
@@ -2620,7 +2665,7 @@ input[type=range]:active::-webkit-slider-thumb {
     border-radius: 14px;
     box-shadow: 0 24px 80px rgba(0, 0, 0, 0.70);
     overflow: hidden;
-    animation: search-slide-down 0.18s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    animation: search-slide-down 0.18s var(--ease-out);
 }
 
 @keyframes search-slide-down {
@@ -2789,7 +2834,7 @@ input[type=range]:active::-webkit-slider-thumb {
     border-radius: 16px;
     box-shadow: 0 24px 80px rgba(0, 0, 0, 0.70);
     overflow: hidden;
-    animation: search-slide-down 0.18s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    animation: search-slide-down 0.18s var(--ease-out);
 }
 
 .modal-header {
@@ -2982,7 +3027,7 @@ input[type=range]:active::-webkit-slider-thumb {
     font-weight: 500;
     color: var(--text);
     box-shadow: 0 4px 24px rgba(0, 0, 0, 0.55);
-    animation: toast-in 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+    animation: toast-in 0.25s var(--ease-bounce);
     pointer-events: none;
 }
 
@@ -3552,7 +3597,7 @@ input[type=range]:active::-webkit-slider-thumb {
     border-radius: var(--r-md);
     padding: 6px;
     box-shadow: 0 16px 48px rgba(0, 0, 0, 0.55), 0 2px 8px rgba(0, 0, 0, 0.30);
-    animation: sort-pop 0.16s cubic-bezier(0.34, 1.56, 0.64, 1);
+    animation: sort-pop 0.16s var(--ease-bounce);
     transform-origin: top right;
 }
 
@@ -3797,7 +3842,21 @@ select:focus-visible,
 
 .client-card,
 .credits-card {
-    transition: background var(--t), border-color var(--t), transform 0.12s ease;
+    transition: background var(--t), border-color var(--t),
+                transform calc(0.14s * var(--anim-mult, 1)) var(--ease-out);
+}
+
+/* Press feedback on the big pressable surfaces — pressing "into" the hover lift
+   makes the card feel physical (Emil: every pressable thing acknowledges the click). */
+.client-card:active,
+.credits-card:active {
+    transform: translateY(0) scale(0.985);
+}
+
+.modpack-row:active,
+.logs-file:active,
+.skinlib-card:active {
+    transform: scale(0.985);
 }
 
 /* ── Sort menu / MC pill mobile-ish small windows ──────────── */
@@ -3955,7 +4014,8 @@ input[type=range]:disabled {
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
     backdrop-filter: blur(var(--blur, 14px));
     -webkit-backdrop-filter: blur(var(--blur, 14px));
-    transition: opacity 0.16s ease, transform 0.16s ease;
+    transition: opacity calc(0.16s * var(--anim-mult, 1)) var(--ease-out),
+                transform calc(0.16s * var(--anim-mult, 1)) var(--ease-out);
 }
 
 [data-tooltip]:hover::after,
@@ -4073,7 +4133,7 @@ input[type=range]:disabled {
 .client-card,
 .progress-bar-fill,
 .update-progress-fill {
-    transition-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1);
+    transition-timing-function: var(--ease-out);
 }
 
 .panel-back-btn,
@@ -4141,8 +4201,15 @@ input[type=range]:disabled {
     transform: translateY(-1px);
 }
 
+/* The active tab is already accent-filled; keep its color on hover instead of
+   letting the dim hover rule override it. */
+.panel-tab.active:hover {
+    background: var(--accent-hover);
+    color: #fff;
+}
+
 .panel-tab.active {
-    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 28%, transparent);
+    box-shadow: 0 2px 10px var(--accent-glow);
 }
 
 .setting-row {
@@ -4233,7 +4300,7 @@ input[type=range]:disabled {
 }
 
 .toggle::after {
-    transition-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1);
+    transition-timing-function: var(--ease-out);
 }
 
 .toggle.on::after {
@@ -4245,7 +4312,7 @@ input[type=range]:disabled {
 .panel-search-input,
 .modal-input,
 input[type=range] {
-    transition-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1);
+    transition-timing-function: var(--ease-out);
 }
 
 .setting-input:focus,
@@ -4256,7 +4323,7 @@ input[type=range] {
 }
 
 input[type=range] {
-    transition: opacity 0.18s cubic-bezier(0.2, 0.8, 0.2, 1), filter 0.18s cubic-bezier(0.2, 0.8, 0.2, 1);
+    transition: opacity 0.18s var(--ease-out), filter 0.18s var(--ease-out);
 }
 
 input[type=range]:hover:not(:disabled),
@@ -4270,15 +4337,15 @@ input[type=range]:focus-visible:not(:disabled) {
 
 .progress-bar-fill,
 .update-progress-fill {
-    transition: width 0.28s cubic-bezier(0.2, 0.8, 0.2, 1);
+    transition: width 0.28s var(--ease-out);
 }
 
 .modal-overlay {
-    animation: refined-fade-in 0.18s cubic-bezier(0.2, 0.8, 0.2, 1);
+    animation: refined-fade-in 0.18s var(--ease-out);
 }
 
 .modal-box {
-    animation: refined-dialog-in 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
+    animation: refined-dialog-in 0.22s var(--ease-out);
     transform-origin: center;
 }
 
@@ -4308,7 +4375,7 @@ input[type=range]:focus-visible:not(:disabled) {
 .panel-body .client-card,
 .panel-body .version-row,
 .panel-body .credits-card {
-    animation: refined-item-in 0.28s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+    animation: refined-item-in 0.28s var(--ease-out) backwards;
 }
 
 .panel-body > :nth-child(1) { animation-delay: 0ms; }
@@ -4910,3 +4977,721 @@ input[type=range]:focus-visible:not(:disabled) {
 .profile-stat > i { font-size: 14px; color: var(--accent); margin-bottom: 2px; }
 .profile-stat-value { font-size: 15px; font-weight: 700; color: #fff; }
 .profile-stat-label { font-size: 10px; color: var(--text-dim); letter-spacing: 0.03em; }
+
+/* ══ View transitions & fluid motion ═════════════════════════
+   Navigation runs through document.startViewTransition (interop.js
+   glacierViewTransition). Panel↔panel swaps morph; panel open/close slide.
+   Every duration is scaled by --anim-mult (Animation Speed setting). */
+
+::view-transition-old(root),
+::view-transition-new(root) {
+    animation-duration: calc(0.16s * var(--anim-mult, 1));
+}
+
+.panel-overlay {
+    view-transition-name: panel;
+}
+
+/* While a view transition drives the panel, its own entry keyframe must not
+   double-fire inside the live snapshot. */
+html.vt-active .panel-overlay {
+    animation: none;
+}
+
+/* Panel appearing with nothing to morph from → slide up.
+   Panel disappearing with no replacement → slide down. */
+::view-transition-new(panel):only-child {
+    /* literal curve: ::view-transition pseudos don't reliably inherit :root vars */
+    animation: vt-panel-in calc(0.26s * var(--anim-mult, 1)) cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+::view-transition-old(panel):only-child {
+    animation: vt-panel-out calc(0.2s * var(--anim-mult, 1)) cubic-bezier(0.55, 0.06, 0.68, 0.19) both;
+}
+
+@keyframes vt-panel-in {
+    from { transform: translateY(22%); opacity: 0.4; }
+    to   { transform: translateY(0);   opacity: 1; }
+}
+
+@keyframes vt-panel-out {
+    from { transform: translateY(0);   opacity: 1; }
+    to   { transform: translateY(28%); opacity: 0; }
+}
+
+/* ── Toast exit ── */
+.toast.closing {
+    animation: toast-out calc(0.22s * var(--anim-mult, 1)) cubic-bezier(0.4, 0, 1, 0.6) forwards;
+}
+
+@keyframes toast-out {
+    from { opacity: 1; transform: translateY(0)   scale(1); }
+    to   { opacity: 0; transform: translateY(8px) scale(0.92); }
+}
+
+/* ── Press feedback ── */
+.action-btn:active:not(:disabled),
+.btn-sm:active:not(:disabled),
+.vcs-btn:active,
+.panel-tab:active,
+.icon-btn:active,
+.panel-back-btn:active,
+.window-btn:active {
+    transform: scale(0.96);
+}
+
+/* ── Animation Speed applies to the existing keyframe animations ── */
+.panel-overlay          { animation-duration: calc(0.24s * var(--anim-mult, 1)); }
+.modal-overlay          { animation-duration: calc(0.18s * var(--anim-mult, 1)); }
+.modal-box              { animation-duration: calc(0.22s * var(--anim-mult, 1)); }
+.toast                  { animation-duration: calc(0.25s * var(--anim-mult, 1)); }
+.search-modal           { animation-duration: calc(0.18s * var(--anim-mult, 1)); }
+
+.panel-body .setting-row,
+.panel-body .client-card,
+.panel-body .version-row,
+.panel-body .credits-card {
+    animation-duration: calc(0.28s * var(--anim-mult, 1));
+}
+
+/* Mid-drag panels must never animate (duplicated from the .dragging rule so
+   the duration overrides above can't resurrect it). */
+.panel-overlay.dragging {
+    animation: none;
+}
+
+/* ══ Theme Studio ════════════════════════════════════════════ */
+.ts-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    padding: 40px 20px;
+    text-align: center;
+    color: var(--text-dim);
+}
+
+.ts-empty i {
+    font-size: 28px;
+    color: var(--accent);
+    margin-bottom: 4px;
+}
+
+.ts-empty span {
+    color: var(--text);
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.ts-empty small {
+    max-width: 320px;
+    line-height: 1.5;
+}
+
+.ts-empty .btn-sm {
+    margin-top: 8px;
+}
+
+.ts-chips {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    padding: 4px 0 10px;
+}
+
+.ts-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    height: 30px;
+    padding: 0 12px;
+    font-size: 12px;
+    color: var(--text);
+    background: var(--bg-item);
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    border-radius: 15px;
+    cursor: pointer;
+    transition: background var(--t), border-color var(--t);
+}
+
+.ts-chip:hover {
+    background: var(--bg-item-hover);
+}
+
+.ts-chip.selected {
+    border-color: var(--accent);
+    background: var(--accent-bg);
+}
+
+.ts-chip.active i {
+    color: var(--green);
+    font-size: 11px;
+}
+
+.ts-chip-swatch {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    flex-shrink: 0;
+}
+
+.ts-actions {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    padding-bottom: 8px;
+}
+
+.ts-actions .btn-accent {
+    background: var(--accent);
+    color: #fff;
+    box-shadow: 0 0 14px var(--accent-glow);
+}
+
+.ts-active-btn {
+    color: var(--green);
+    border: 1px solid color-mix(in srgb, var(--green) 40%, transparent);
+    background: color-mix(in srgb, var(--green) 8%, transparent);
+}
+
+.ts-danger:hover {
+    background: rgba(240, 71, 71, 0.15);
+    color: var(--red);
+}
+
+.ts-color-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+    padding: 4px 0 8px;
+}
+
+.ts-color-cell {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    padding: 10px 6px;
+    background: var(--bg-item);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: var(--r-md);
+    font-size: 11px;
+    color: var(--text-dim);
+    cursor: pointer;
+    font-family: inherit;
+}
+
+.ts-color-cell:hover { background: var(--bg-item-hover); color: var(--text); }
+
+.ts-color-cell.ts-color-active {
+    border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+    background: color-mix(in srgb, var(--accent) 10%, transparent);
+    color: var(--text);
+}
+
+.ts-color-dot {
+    position: relative;
+    width: 42px;
+    height: 30px;
+    border-radius: 7px;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.15);
+    overflow: hidden;
+    background: repeating-conic-gradient(#8888 0% 25%, transparent 0% 50%);
+    background-size: 10px 10px;
+}
+
+.ts-color-dot::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: var(--dot-color);
+}
+
+/* ── Custom colour picker (SV square + hue slider + hex) ── */
+.ts-color-editor {
+    margin: 4px 0 10px;
+    padding: 12px;
+    background: var(--bg-item);
+    border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+    border-radius: var(--r-md);
+    animation: refined-dialog-in calc(0.2s * var(--anim-mult, 1)) var(--ease-out);
+}
+
+.ts-color-editor-head { margin-bottom: 10px; }
+
+.ts-color-editor-title {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+}
+
+.cpick { display: flex; flex-direction: column; gap: 14px; }
+
+/* Shared pill-slider chrome. Each variant supplies its own track background
+   (rainbow / --cpick-grad / checkerboard) but the shape, height and thumb
+   are identical across all three — that repetition is what reads as "one
+   picker" instead of three unrelated controls.
+   Selectors are qualified as `input.cpick-slider` (type + class, not just
+   class) so they out-specify the app-wide `input[type=range]` rules —
+   those generic rules (width:100px, height:4px, background:rgba(...))
+   have TYPE+ATTRIBUTE specificity, which beats a bare class selector and
+   was silently shrinking these to 100px×4px with a flat grey overlay. */
+/* The gradient is painted on the INPUT's own background — with
+   -webkit-appearance:none that IS the visible track. This is the pattern every
+   other range slider in this app uses (see `input[type=range]` above), and it's
+   the reliable one: painting a single-layer gradient on
+   ::-webkit-slider-runnable-track renders blank in this WebView2/Chromium build
+   unless an explicit background-size is also set (that's the only reason the
+   alpha track happened to work — it set background-size, hue/shade didn't).
+   Keeping the track pseudo transparent lets the input background show through. */
+.cpick input.cpick-slider {
+    -webkit-appearance: none;
+    appearance: none;
+    display: block;
+    width: 100%;
+    height: 32px;
+    border-radius: 16px;
+    outline: none;
+    cursor: pointer;
+    border: 1px solid rgba(0, 0, 0, 0.22);
+    background-color: transparent;
+    background-repeat: no-repeat;
+    background-size: 100% 100%;
+    accent-color: transparent;
+    flex-shrink: 1;
+}
+
+.cpick input.cpick-hue {
+    background-image: linear-gradient(to right,
+        #ff0000 0%, #ffff00 17%, #00ff00 33%, #00ffff 50%,
+        #0000ff 67%, #ff00ff 83%, #ff0000 100%);
+}
+
+.cpick input.cpick-shade {
+    background-image: var(--cpick-grad);
+}
+
+/* Checkerboard shows through the transparent end of the alpha gradient. */
+.cpick input.cpick-alpha {
+    background-image: var(--cpick-grad), repeating-conic-gradient(#8888 0% 25%, transparent 0% 50%);
+    background-size: 100% 100%, 14px 14px;
+    background-repeat: no-repeat, repeat;
+}
+
+.cpick input.cpick-slider::-webkit-slider-runnable-track {
+    height: 32px;
+    border: none;
+    background: transparent;
+}
+
+.cpick input.cpick-slider::-moz-range-track {
+    height: 32px;
+    border-radius: 16px;
+    border: none;
+    background: transparent;
+}
+
+.cpick input.cpick-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    margin-top: -4px;                 /* center a 40px thumb on a 32px track */
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: transparent;
+    border: 4px solid #fff;
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.45), 0 2px 8px rgba(0, 0, 0, 0.45);
+    cursor: pointer;
+}
+
+.cpick input.cpick-slider::-moz-range-thumb {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: transparent;
+    border: 4px solid #fff;
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.45), 0 2px 8px rgba(0, 0, 0, 0.45);
+    cursor: pointer;
+}
+
+.cpick-foot { display: flex; align-items: center; gap: 8px; }
+
+.cpick-preview {
+    position: relative;
+    width: 30px;
+    height: 30px;
+    border-radius: var(--r-sm);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    flex-shrink: 0;
+    overflow: hidden;
+    background: repeating-conic-gradient(#8888 0% 25%, transparent 0% 50%);
+    background-size: 10px 10px;
+}
+
+.cpick-preview::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: var(--dot-color);
+}
+
+.cpick-hexwrap {
+    display: flex;
+    align-items: center;
+    flex: 1;
+    background: var(--bg);
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    border-radius: var(--r-sm);
+    padding: 0 10px;
+    height: 32px;
+}
+
+.cpick-hash { color: var(--text-dim); font-size: 13px; margin-right: 2px; }
+
+.cpick-hex {
+    flex: 1;
+    min-width: 0;
+    border: none;
+    background: transparent;
+    color: var(--text);
+    font-family: 'Consolas', 'SF Mono', monospace;
+    font-size: 13px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    outline: none;
+}
+
+.ts-slider-val {
+    font-size: 11px;
+    color: var(--text-dim);
+    width: 34px;
+    text-align: right;
+    flex-shrink: 0;
+}
+
+.ts-css-editor {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 4px 0 16px;
+}
+
+.ts-css-textarea {
+    width: 100%;
+    resize: vertical;
+    min-height: 90px;
+    font-family: Consolas, 'Cascadia Code', monospace;
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+.ts-css-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.ts-css-actions .setting-hint {
+    flex: 1;
+}
+
+/* ══ Stats dashboard ═════════════════════════════════════════ */
+.stats-cards {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+    padding: 4px 0 10px;
+}
+.stats-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    padding: 14px 8px;
+    background: var(--bg-item);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: var(--r-md);
+}
+.stats-card > i { font-size: 15px; color: var(--accent); margin-bottom: 3px; }
+.stats-val { font-size: 16px; font-weight: 700; color: #fff; text-align: center; }
+.stats-label { font-size: 10px; color: var(--text-dim); text-align: center; }
+
+.stats-empty {
+    padding: 20px;
+    text-align: center;
+    color: var(--text-dim);
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+.stats-chart {
+    display: flex;
+    align-items: flex-end;
+    gap: 4px;
+    height: 120px;
+    padding: 8px 0 4px;
+}
+.stats-bar-col {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    height: 100%;
+}
+.stats-bar-track {
+    flex: 1;
+    width: 100%;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+}
+.stats-bar-fill {
+    width: 70%;
+    min-height: 0;
+    background: linear-gradient(to top, var(--accent), var(--accent-hover));
+    border-radius: 3px 3px 0 0;
+    transition: height 0.4s var(--ease-out);
+}
+.stats-bar-day { font-size: 9px; color: var(--text-dim); }
+
+/* ══ Logs panel ══════════════════════════════════════════════ */
+.logs-file-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding-bottom: 8px;
+}
+.logs-file {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    background: var(--bg-item);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-left: 2px solid transparent;
+    border-radius: var(--r-sm);
+    cursor: pointer;
+    color: var(--text);
+    font-size: 12px;
+    transition: background var(--t), border-color var(--t);
+}
+.logs-file:hover { background: var(--bg-item-hover); }
+.logs-file.active { border-left-color: var(--accent); background: var(--accent-bg); }
+.logs-file.crash > i { color: var(--red); }
+.logs-file > i:first-child { color: var(--text-dim); }
+.logs-file-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.logs-file-size { font-size: 10px; color: var(--text-dim); }
+
+.logs-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 0;
+}
+.logs-open-name { font-size: 12px; color: var(--text-dim); font-family: Consolas, monospace; }
+
+.logs-share-url {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    background: rgba(67, 181, 129, 0.08);
+    border: 1px solid rgba(67, 181, 129, 0.25);
+    border-radius: var(--r-sm);
+    font-size: 12px;
+    margin-bottom: 6px;
+}
+.logs-share-url a { color: var(--accent); text-decoration: underline; cursor: pointer; flex: 1; overflow: hidden; text-overflow: ellipsis; }
+
+.logs-view {
+    max-height: 320px;
+    overflow: auto;
+    padding: 10px 12px;
+    background: rgba(0, 0, 0, 0.35);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: var(--r-sm);
+    font-family: Consolas, 'Cascadia Code', monospace;
+    font-size: 11px;
+    line-height: 1.5;
+    color: #cdd3da;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+/* ══ Modpacks panel ══════════════════════════════════════════ */
+.modpack-source-tabs { display: flex; gap: 6px; padding-bottom: 8px; }
+.modpack-search { display: flex; gap: 6px; padding-bottom: 10px; }
+.modpack-search .panel-search-input { flex: 1; }
+
+.modpack-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px;
+    background: var(--bg-item);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: var(--r-md);
+    margin-bottom: 6px;
+}
+.modpack-icon {
+    width: 44px;
+    height: 44px;
+    border-radius: 8px;
+    object-fit: cover;
+    flex-shrink: 0;
+    background: rgba(0, 0, 0, 0.2);
+}
+.modpack-icon-fallback {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-dim);
+    font-size: 18px;
+}
+.modpack-meta { flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.modpack-summary {
+    font-size: 11px;
+    color: var(--text-dim);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.modpack-install {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 24px 16px;
+    align-items: center;
+    text-align: center;
+}
+.modpack-install-title { font-size: 14px; font-weight: 600; color: #fff; display: flex; align-items: center; gap: 8px; }
+.modpack-install .progress-bar-wrap { width: 100%; }
+.modpack-manual-list { text-align: left; margin: 8px 0 0; padding-left: 18px; }
+.modpack-manual-list li { margin: 2px 0; }
+
+/* ══ Skin library ════════════════════════════════════════════ */
+.skinlib-add { display: flex; gap: 6px; padding-bottom: 10px; }
+.skinlib-add .panel-search-input { flex: 1; }
+.skinlib-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+}
+.skinlib-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    padding: 10px;
+    background: var(--bg-item);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: var(--r-md);
+}
+.skinlib-preview {
+    width: 100%;
+    height: 90px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 8px;
+}
+.skinlib-preview img { height: 80px; image-rendering: pixelated; }
+.skinlib-name { font-size: 11px; color: var(--text); text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+.skinlib-actions { display: flex; gap: 4px; flex-wrap: wrap; justify-content: center; }
+
+/* ══ Instance manager ════════════════════════════════════════ */
+.instance-card-head { display: flex; align-items: center; gap: 8px; }
+.instance-row {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 8px;
+    border-radius: var(--r-sm);
+    border-left: 2px solid transparent;
+    margin-top: 4px;
+    background: rgba(255, 255, 255, 0.02);
+}
+.instance-row.active { border-left-color: var(--accent); background: var(--accent-bg); }
+.instance-name-btn {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: transparent;
+    border: none;
+    color: var(--text);
+    font-size: 12px;
+    cursor: pointer;
+    text-align: left;
+    padding: 4px;
+}
+.instance-name-btn > i { color: var(--accent); font-size: 12px; }
+.instance-icon-btn {
+    width: 26px;
+    height: 26px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 255, 255, 0.05);
+    border: none;
+    border-radius: 6px;
+    color: var(--text-dim);
+    cursor: pointer;
+    font-size: 11px;
+    transition: background var(--t), color var(--t);
+}
+.instance-icon-btn:hover { background: rgba(255, 255, 255, 0.1); color: var(--text); }
+.instance-icon-btn.instance-del { color: var(--red); }
+.instance-rename { flex: 1; height: 28px; }
+
+/* ══ Taste polish: tactile feedback on the new panels ════════
+   Emil Kowalski's principle — every pressable element should feel like it
+   heard the click. Strong ease-out curve (var(--ease-out)),
+   press-scale under 0.98, subtle hover lift. Duration scales with --anim-mult. */
+.ts-chip,
+.logs-file,
+.modpack-row,
+.skinlib-card,
+.instance-name-btn,
+.instance-icon-btn,
+.ts-color-cell {
+    transition: background calc(0.16s * var(--anim-mult, 1)) var(--ease-out),
+                border-color calc(0.16s * var(--anim-mult, 1)) var(--ease-out),
+                transform calc(0.16s * var(--anim-mult, 1)) var(--ease-out);
+}
+
+.ts-chip:active,
+.instance-icon-btn:active,
+.skinlib-card .btn-sm:active {
+    transform: scale(0.97);
+}
+
+/* Row-style items lift a hair on hover — reads as "this is pressable" without
+   shouting. Kept to translateY only (GPU-cheap, no layout). */
+.modpack-row:hover,
+.logs-file:hover {
+    transform: translateY(-1px);
+}
+
+.instance-name-btn:active {
+    transform: scale(0.98);
+}
+
+/* Theme swatch cells get a gentle press so the color picker feels physical. */
+.ts-color-cell:active { transform: scale(0.97); }
+
+/* Reduced-motion: honor the OS setting — kill the movement, keep it instant.
+   (Complements the in-app Animations toggle / .no-animations class.) */
+@media (prefers-reduced-motion: reduce) {
+    .ts-chip, .logs-file, .modpack-row, .skinlib-card,
+    .instance-name-btn, .instance-icon-btn, .ts-color-cell,
+    .modpack-row:hover, .logs-file:hover {
+        transition-duration: 0.001ms;
+        transform: none;
+    }
+}

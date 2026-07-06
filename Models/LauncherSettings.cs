@@ -24,6 +24,11 @@ public class LauncherSettings
     public string CustomBackgroundPath { get; set; } = "";       // empty = default bg
     public bool   CompactMode          { get; set; } = false;    // tighter spacing throughout
     public bool   AnimationsEnabled    { get; set; } = true;     // disables some animations on low-end
+    public double AnimationSpeed       { get; set; } = 1.0;      // 0.25 slow-mo … 2.0 snappy; 1.0 default
+    public string ActiveThemeId        { get; set; } = "";       // custom Theme Studio theme (empty = preset)
+    public string FontFamily           { get; set; } = "";       // UI font when no theme is active (empty = Segoe UI)
+    public int    UiScalePct           { get; set; } = 100;      // 75-150, multiplies the automatic window fit
+    public string BackgroundFit        { get; set; } = "cover";  // cover | contain | tile | center
 
     // ── Window ───────────────────────────────────────────────────
     public double WindowWidth          { get; set; } = 740;
@@ -84,6 +89,10 @@ public class LauncherSettings
     public string JavaUsername          { get; set; } = "";
     public string JavaUuid              { get; set; } = "";
     public string JavaAccessToken       { get; set; } = "";
+    // Offline mode: launch Java without Microsoft auth. Online-mode servers
+    // reject offline sessions, but singleplayer + LAN + offline servers work.
+    public bool   JavaOfflineMode       { get; set; } = false;
+    public string JavaOfflineUsername   { get; set; } = "Player";
     public string JavaAccessTokenExpiry { get; set; } = "";
     public string JavaSkinUrl           { get; set; } = "";
     public string ActiveJavaAccountId   { get; set; } = "";
