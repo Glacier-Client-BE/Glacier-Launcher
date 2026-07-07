@@ -106,20 +106,23 @@ public class VanillaVersionService
         resp.EnsureSuccessStatusCode();
         var text = await resp.Content.ReadAsStringAsync();
 
-        var seen = new Dictionary<string, VanillaVersion>();
+        var seen = new Dictionary<string, VanillaVersion>(StringComparer.OrdinalIgnoreCase);
 
-        foreach (var line in text.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+        // Enumerate over lines by memory span or simple index search to avoid array instantiation of lines if possible, or use simple split
+        var lines = text.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        foreach (var line in lines)
         {
+            if (line.Length == 0) continue;
             if (line.StartsWith("Releases", StringComparison.OrdinalIgnoreCase) ||
                 line.StartsWith("Betas", StringComparison.OrdinalIgnoreCase) ||
                 line.StartsWith("Previews", StringComparison.OrdinalIgnoreCase))
                 continue;
 
-            var parts = line.Trim().Split(' ', 2, StringSplitOptions.RemoveEmptyEntries);
-            if (parts.Length < 2) continue;
+            var spaceIdx = line.IndexOf(' ');
+            if (spaceIdx <= 0) continue;
 
-            var updateId    = parts[0];
-            var packageName = parts[1];
+            var updateId = line.Substring(0, spaceIdx);
+            var packageName = line.Substring(spaceIdx + 1).TrimStart();
 
             if (!packageName.Contains("x64", StringComparison.OrdinalIgnoreCase)) continue;
             if (packageName.Contains(".EAppx", StringComparison.OrdinalIgnoreCase)) continue;

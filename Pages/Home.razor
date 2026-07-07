@@ -443,16 +443,14 @@
     <!-- ── MAIN CONTENT ── -->
     <div class="main-content @(currentView != "home" ? "panel-open" : "")">
         <div class="btn-row">
-            <button class="action-btn @(hoveredBtn == "launch" || isLaunching ? "btn-wide btn-blue" : "btn-sq") @(isLaunching ? "launching" : "")"
-                    @onmouseenter='() => SetHover("launch")' @onmouseleave="ClearHover"
+            @* Hover grow/label-swap is pure CSS (.hover-grow) — the old C#-driven
+               @onmouseenter round-tripped JS→.NET and re-rendered this whole page
+               component (including any open panel) on every dock hover. *@
+            <button class="action-btn hover-grow launch-btn @(isLaunching ? "btn-wide btn-blue launching" : "btn-sq")"
                     @onclick="HandleLaunch" @onmousedown:stopPropagation disabled="@isLaunching"
                     data-tooltip="Launch (Ctrl+L)">
-                @if (hoveredBtn == "launch" || isLaunching)
-                {
-                    @if (isLaunching) { <span class="spinner"></span><span>Launching...</span> }
-                    else              { <span>Launch</span> }
-                }
-                else { <i class="fa-solid fa-play"></i> }
+                @if (isLaunching) { <span class="spinner"></span><span>Launching...</span> }
+                else { <i class="fa-solid fa-play"></i><span class="btn-label">Launch</span> }
             </button>
 
             @if (isLaunching)
@@ -464,107 +462,87 @@
             }
 
             <div class="btn-badge-wrap">
-                <button class="action-btn @(hoveredBtn == "settings" ? "btn-wide" : "btn-sq")"
-                        @onmouseenter='() => SetHover("settings")' @onmouseleave="ClearHover"
+                <button class="action-btn btn-sq hover-grow"
                         @onclick="OpenSettings" @onmousedown:stopPropagation
                         data-tooltip="Settings (Ctrl+,)">
-                    @if (hoveredBtn == "settings") { <span>Settings</span> }
-                    else { <i class="fa-solid fa-gear"></i> }
+                    <i class="fa-solid fa-gear"></i><span class="btn-label">Settings</span>
                 </button>
             </div>
 
             @if (IsBedrock)
             {
                 <div class="btn-badge-wrap">
-                    <button class="action-btn @(hoveredBtn == "clients" ? "btn-wide" : "btn-sq")"
-                            @onmouseenter='() => SetHover("clients")' @onmouseleave="ClearHover"
+                    <button class="action-btn btn-sq hover-grow"
                             @onclick="OpenClients" @onmousedown:stopPropagation
                             data-tooltip="Clients (Ctrl+1)">
-                        @if (hoveredBtn == "clients") { <span>Clients</span> }
-                        else { <i class="fa-solid fa-puzzle-piece"></i> }
+                        <i class="fa-solid fa-puzzle-piece"></i><span class="btn-label">Clients</span>
                     </button>
                     @if (clientsHasBadge) { <span class="notification-badge"></span> }
                 </div>
 
                 <div class="btn-badge-wrap">
-                    <button class="action-btn @(hoveredBtn == "addons" ? "btn-wide" : "btn-sq")"
-                            @onmouseenter='() => SetHover("addons")' @onmouseleave="ClearHover"
+                    <button class="action-btn btn-sq hover-grow"
                             @onclick="OpenAddons" @onmousedown:stopPropagation
                             data-tooltip="Addons (Ctrl+2)">
-                        @if (hoveredBtn == "addons") { <span>Addons</span> }
-                        else { <i class="fa-solid fa-cube"></i> }
+                        <i class="fa-solid fa-cube"></i><span class="btn-label">Addons</span>
                     </button>
                 </div>
 
                 <div class="btn-badge-wrap">
-                    <button class="action-btn @(hoveredBtn == "servers" ? "btn-wide" : "btn-sq")"
-                            @onmouseenter='() => SetHover("servers")' @onmouseleave="ClearHover"
+                    <button class="action-btn btn-sq hover-grow"
                             @onclick="OpenServers" @onmousedown:stopPropagation
                             data-tooltip="Servers (Ctrl+3)">
-                        @if (hoveredBtn == "servers") { <span>Servers</span> }
-                        else { <i class="fa-solid fa-server"></i> }
+                        <i class="fa-solid fa-server"></i><span class="btn-label">Servers</span>
                     </button>
                 </div>
 
                 <div class="btn-badge-wrap">
-                    <button class="action-btn @(hoveredBtn == "mcversions" ? "btn-wide" : "btn-sq")"
-                            @onmouseenter='() => SetHover("mcversions")' @onmouseleave="ClearHover"
+                    <button class="action-btn btn-sq hover-grow"
                             @onclick="OpenMcVersions" @onmousedown:stopPropagation
                             data-tooltip="MC Versions (Ctrl+4)">
-                        @if (hoveredBtn == "mcversions") { <span>MC Versions</span> }
-                        else { <i class="fa-solid fa-box-archive"></i> }
+                        <i class="fa-solid fa-box-archive"></i><span class="btn-label">MC Versions</span>
                     </button>
                 </div>
             }
             else
             {
                 <div class="btn-badge-wrap">
-                    <button class="action-btn @(hoveredBtn == "javaclients" ? "btn-wide" : "btn-sq")"
-                            @onmouseenter='() => SetHover("javaclients")' @onmouseleave="ClearHover"
+                    <button class="action-btn btn-sq hover-grow"
                             @onclick="OpenJavaClients" @onmousedown:stopPropagation
                             data-tooltip="Launchers (Ctrl+1)">
-                        @if (hoveredBtn == "javaclients") { <span>Launchers</span> }
-                        else { <i class="fa-solid fa-rocket"></i> }
+                        <i class="fa-solid fa-rocket"></i><span class="btn-label">Launchers</span>
                     </button>
                 </div>
 
                 <div class="btn-badge-wrap">
-                    <button class="action-btn @(hoveredBtn == "addons" ? "btn-wide" : "btn-sq")"
-                            @onmouseenter='() => SetHover("addons")' @onmouseleave="ClearHover"
+                    <button class="action-btn btn-sq hover-grow"
                             @onclick="OpenAddons" @onmousedown:stopPropagation
                             data-tooltip="Mods (Ctrl+2)">
-                        @if (hoveredBtn == "addons") { <span>Mods</span> }
-                        else { <i class="fa-solid fa-puzzle-piece"></i> }
+                        <i class="fa-solid fa-puzzle-piece"></i><span class="btn-label">Mods</span>
                     </button>
                 </div>
 
                 <div class="btn-badge-wrap">
-                    <button class="action-btn @(hoveredBtn == "javaversions" ? "btn-wide" : "btn-sq")"
-                            @onmouseenter='() => SetHover("javaversions")' @onmouseleave="ClearHover"
+                    <button class="action-btn btn-sq hover-grow"
                             @onclick="OpenJavaVersions" @onmousedown:stopPropagation
                             data-tooltip="Versions (Ctrl+3)">
-                        @if (hoveredBtn == "javaversions") { <span>Versions</span> }
-                        else { <i class="fa-solid fa-box-archive"></i> }
+                        <i class="fa-solid fa-box-archive"></i><span class="btn-label">Versions</span>
                     </button>
                 </div>
 
                 <div class="btn-badge-wrap">
-                    <button class="action-btn @(hoveredBtn == "javaprofile" ? "btn-wide" : "btn-sq")"
-                            @onmouseenter='() => SetHover("javaprofile")' @onmouseleave="ClearHover"
+                    <button class="action-btn btn-sq hover-grow"
                             @onclick="OpenJavaProfile" @onmousedown:stopPropagation
                             data-tooltip="Profile">
-                        @if (hoveredBtn == "javaprofile") { <span>Profile</span> }
-                        else { <i class="fa-solid fa-user"></i> }
+                        <i class="fa-solid fa-user"></i><span class="btn-label">Profile</span>
                     </button>
                 </div>
 
                 <div class="btn-badge-wrap">
-                    <button class="action-btn @(hoveredBtn == "javaphotos" ? "btn-wide" : "btn-sq")"
-                            @onmouseenter='() => SetHover("javaphotos")' @onmouseleave="ClearHover"
+                    <button class="action-btn btn-sq hover-grow"
                             @onclick="OpenJavaScreenshots" @onmousedown:stopPropagation
                             data-tooltip="Screenshots">
-                        @if (hoveredBtn == "javaphotos") { <span>Photos</span> }
-                        else { <i class="fa-solid fa-images"></i> }
+                        <i class="fa-solid fa-images"></i><span class="btn-label">Photos</span>
                     </button>
                 </div>
             }
@@ -619,8 +597,23 @@
                               :                              "";
         }
         <div class="footer-profile-area" @onclick="OpenActiveProfileModal" @onmousedown:stopPropagation>
-            <img class="avatar @footerAvatar"
-                 src="@(GetAvatarSrc())" alt="" />
+            @{
+                @* Right after a skin change the render CDNs still serve the old
+                   head, so crop the head straight out of the local skin PNG
+                   (hat layer over head layer) — updates the instant it's applied. *@
+                var localHead = IsJava && !string.IsNullOrEmpty(SettingsService.Settings.JavaUuid)
+                    ? LastAppliedSkinUrl : "";
+            }
+            @if (!string.IsNullOrEmpty(localHead))
+            {
+                <span class="avatar avatar-mchead @footerAvatar"
+                      style="background-image:url('@localHead'), url('@localHead');"></span>
+            }
+            else
+            {
+                <img class="avatar @footerAvatar"
+                     src="@(GetAvatarSrc())" alt="" />
+            }
             <div class="user-info">
                 <span class="username">@footerName</span>
                 <span class="user-handle">@footerHandle</span>
@@ -3306,7 +3299,9 @@
                         <div class="profile-card-bg"></div>
 
                         <div class="profile-skin-col">
-                            <SkinViewer Uuid="@SettingsService.Settings.JavaUuid" Username="@PlayerName" CapeUrl="@ActiveCapeUrl" />
+                            <SkinViewer Uuid="@SettingsService.Settings.JavaUuid" Username="@PlayerName" CapeUrl="@ActiveCapeUrl"
+                                        Version="@SettingsService.Settings.SkinChangedTicks"
+                                        LocalSkinUrl="@LastAppliedSkinUrl" />
                         </div>
 
                         <div class="profile-info-col">

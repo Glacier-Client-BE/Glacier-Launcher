@@ -142,9 +142,25 @@
             return;
         }
         _busy = true; StateHasChanged();
+        // Optimistic preview: this PNG IS the new skin, so the footer avatar and
+        // 3D viewer switch instantly while the (seconds-long) token refresh +
+        // Mojang upload run behind it. Rolled back if the upload fails.
+        var prevPath  = SettingsService.Settings.LastAppliedSkinPath;
+        var prevTicks = SettingsService.Settings.SkinChangedTicks;
+        SettingsService.Settings.LastAppliedSkinPath = s.Path;
+        SettingsService.Settings.SkinChangedTicks    = DateTime.UtcNow.Ticks;
+        SettingsService.Save();
+        await OnToast.InvokeAsync(("Applying skin…", "info"));   // also re-renders the footer
+
         // Refresh a possibly-expired Minecraft token so the upload actually lands.
         await Xbox.ValidateSessionAsync();
         var error = await SkinService.UploadSkinAsync(SettingsService.Settings.JavaAccessToken, s.Path, slim);
+        if (error != null)
+        {
+            SettingsService.Settings.LastAppliedSkinPath = prevPath;
+            SettingsService.Settings.SkinChangedTicks    = prevTicks;
+            SettingsService.Save();
+        }
         _busy = false; StateHasChanged();
         await OnToast.InvokeAsync(error == null
             ? ($"Applied \"{s.Name}\" as {(slim ? "slim" : "classic")}.", "success")

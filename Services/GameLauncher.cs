@@ -241,7 +241,13 @@ public class GameLauncher
         Path.Combine(LatiteDirectory, $"Latite_{tag}.dll");
 
     /// <summary>True if a Minecraft.Windows process is currently running.</summary>
-    public static bool IsMinecraftRunning() => GetMinecraftProcess() != null;
+    public static bool IsMinecraftRunning()
+    {
+        // This runs on the 2.5–4 s status poll for the whole app lifetime, so
+        // the handle GetMinecraftProcess opens must be released, not leaked.
+        using var proc = GetMinecraftProcess();
+        return proc != null;
+    }
 
     // ── Core launch + inject ─────────────────────────────────────
 

@@ -86,10 +86,11 @@ public sealed class JavaVersionService
         var active = _settings.Settings.JavaActiveVersion;
         var known  = new HashSet<string>(knownIds, StringComparer.OrdinalIgnoreCase);
 
+        // Pre-allocate directories list to prevent mid-iteration issues or allocations
         foreach (var dir in Directory.EnumerateDirectories(VersionsDir))
         {
             var id   = Path.GetFileName(dir);
-            if (known.Contains(id)) continue;
+            if (string.IsNullOrEmpty(id) || known.Contains(id)) continue;
 
             var jsonPath = Path.Combine(dir, id + ".json");
             if (!File.Exists(jsonPath)) continue;
@@ -100,7 +101,7 @@ public sealed class JavaVersionService
                 Type         = "custom",
                 IsInstalled  = true,
                 HasJar       = File.Exists(Path.Combine(dir, id + ".jar")),
-                IsActive     = id == active
+                IsActive     = string.Equals(id, active, StringComparison.OrdinalIgnoreCase)
             });
         }
 

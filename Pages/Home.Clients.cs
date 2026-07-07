@@ -481,17 +481,24 @@ public partial class Home
 
     private void OpenAddons() => OpenAddons("");
 
-    private void OpenAddons(string tab)
+    private void OpenAddons(string tab) => _ = OpenAddonsAsync(tab);
+
+    // The instance-file scan happens BEFORE the navigation, on a worker thread.
+    // It used to run inside the NavigateAsync mutate callback, which executes
+    // inside document.startViewTransition — where the browser freezes all
+    // rendering until the callback returns. Five directory scans there = the
+    // "tab switch hangs" feel on slow disks/CPUs.
+    private async Task OpenAddonsAsync(string tab)
     {
-        _ = NavigateAsync(() =>
+        if (IsJava)
+        {
+            await RefreshJavaInstanceFilesAsync();
+            _ = AnalyzeModsAsync();
+        }
+        await NavigateAsync(() =>
         {
             currentView = "addons";
             if (!string.IsNullOrEmpty(tab)) javaModsTab = tab;
-            if (IsJava)
-            {
-                RefreshJavaInstanceFiles();
-                _ = AnalyzeModsAsync();
-            }
             if (!cfHasSearched && CurseForge.IsAvailable)
                 _ = CfSearchAsync();
         });
@@ -504,6 +511,23 @@ public partial class Home
         javaResourcePacks = JavaInstances.ListFiles("resourcepacks").ToList();
         javaShaderPacks = JavaInstances.ListFiles("shaderpacks").ToList();
         javaSchematics = JavaInstances.ListFiles("schematics").Concat(JavaInstances.ListFiles("litematica")).ToList();
+    }
+
+    // Async variant for navigation paths: scans on a worker thread, then swaps
+    // the lists in on the UI thread so a concurrent render never sees a torn set.
+    private async Task RefreshJavaInstanceFilesAsync()
+    {
+        var (mods, shots, packs, shaders, schematics) = await Task.Run(() => (
+            JavaInstances.ListFiles("mods").ToList(),
+            JavaInstances.ListFiles("screenshots").ToList(),
+            JavaInstances.ListFiles("resourcepacks").ToList(),
+            JavaInstances.ListFiles("shaderpacks").ToList(),
+            JavaInstances.ListFiles("schematics").Concat(JavaInstances.ListFiles("litematica")).ToList()));
+        javaMods = mods;
+        javaScreenshots = shots;
+        javaResourcePacks = packs;
+        javaShaderPacks = shaders;
+        javaSchematics = schematics;
     }
 
     private void OpenJavaFolder(string kind)

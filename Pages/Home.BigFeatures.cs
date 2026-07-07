@@ -139,25 +139,90 @@ public partial class Home
         if (string.IsNullOrWhiteSpace(path)) return;
         if (!System.IO.File.Exists(path)) { _ = ShowToast("That skin file no longer exists.", "error"); return; }
 
-        _ = ShowToast("Uploading skin…", "info");
+        // Optimistic preview: the picked PNG IS the new skin, so show it in the
+        // viewer/avatar immediately and let the upload run behind it. The wait
+        // here is pure network (token refresh chain + Mojang POST can be several
+        // seconds); there is nothing visual to wait for. Rolls back on failure.
+        var prevPath  = SettingsService.Settings.LastAppliedSkinPath;
+        var prevTicks = SettingsService.Settings.SkinChangedTicks;
+        string stored = "";
+        try { stored = await SkinLibrary.AddFromFileAsync(path, _changeSkinSlim); } catch { /* library copy is best-effort */ }
+        MarkSkinChanged(string.IsNullOrEmpty(stored) ? path : stored);
+        _ = ShowToast("Applying skin…", "info");
+        await InvokeAsync(StateHasChanged);
+
         // Refresh the Minecraft token first — a stale one makes the upload no-op/401.
         await Xbox.ValidateSessionAsync();
         var err = await SkinService.UploadSkinAsync(SettingsService.Settings.JavaAccessToken, path, _changeSkinSlim);
         if (err == null)
         {
-            // Keep a copy in the library so an applied skin is never lost.
-            try { await SkinLibrary.AddFromFileAsync(path, _changeSkinSlim); } catch { /* library copy is best-effort */ }
-            _ = ShowToast("Skin updated! Saved to your library. Give it a minute to appear.", "success");
+            _ = ShowToast("Skin updated! Saved to your library.", "success");
         }
-        else _ = ShowToast("Skin change failed: " + err, "error");
+        else
+        {
+            // Mojang said no — the account still wears the old skin, so put the
+            // preview back and drop the library copy we just made.
+            SettingsService.Settings.LastAppliedSkinPath = prevPath;
+            SettingsService.Settings.SkinChangedTicks    = prevTicks;
+            SettingsService.Save();
+            if (!string.IsNullOrEmpty(stored)) SkinLibrary.Delete(stored);
+            _ = ShowToast("Skin change failed: " + err, "error");
+        }
         await InvokeAsync(StateHasChanged);
     }
 
     private async Task ResetSkinAsync()
     {
         var err = await SkinService.ResetSkinAsync(SettingsService.Settings.JavaAccessToken);
+        if (err == null) MarkSkinChanged("");
         _ = ShowToast(err == null ? "Skin reset to default." : "Reset failed: " + err,
                       err == null ? "success" : "error");
+    }
+
+    /// <summary>
+    /// Records that the account skin just changed: bumps the persisted
+    /// cache-bust token (render CDNs / the WebView cache would otherwise keep
+    /// showing the old skin) and remembers the local PNG so the 3D preview can
+    /// show the new skin immediately.
+    /// </summary>
+    private void MarkSkinChanged(string localPngPath)
+    {
+        SettingsService.Settings.LastAppliedSkinPath = localPngPath;
+        SettingsService.Settings.SkinChangedTicks    = DateTime.UtcNow.Ticks;
+        SettingsService.Save();
+    }
+
+    // Memoized: this runs on every render of the profile view and hits the
+    // filesystem to validate the path — only recompute when the skin changes.
+    private string _skinUrlKey = "";
+    private string _skinUrlCached = "";
+
+    private string LastAppliedSkinUrl
+    {
+        get
+        {
+            var p     = SettingsService.Settings.LastAppliedSkinPath;
+            var ticks = SettingsService.Settings.SkinChangedTicks;
+            var key   = p + "|" + ticks;
+            if (key == _skinUrlKey) return _skinUrlCached;
+
+            // The local PNG is only authoritative while the render CDNs may
+            // still be stale (minutes). Past that, defer to mc-heads — the
+            // user may have changed their skin outside the launcher since.
+            bool recent = ticks > 0 && ticks <= DateTime.MaxValue.Ticks
+                && (DateTime.UtcNow - new DateTime(Math.Min(ticks, DateTime.MaxValue.Ticks), DateTimeKind.Utc)) < TimeSpan.FromHours(1);
+
+            string url = "";
+            if (recent && !string.IsNullOrEmpty(p) && System.IO.File.Exists(p))
+            {
+                url = FileToLocalUrl(p);
+                if (!string.IsNullOrEmpty(url))
+                    url += "?v=" + ticks;
+            }
+            _skinUrlKey = key;
+            _skinUrlCached = url;
+            return url;
+        }
     }
 
     // ── Cape wardrobe ────────────────────────────────────────────────────────

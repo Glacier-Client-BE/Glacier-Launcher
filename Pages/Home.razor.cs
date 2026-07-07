@@ -14,7 +14,6 @@ namespace GlacierLauncher.Pages;
 public partial class Home : IDisposable
 {
     private string currentView   = "home";
-    private string hoveredBtn    = "";
     private bool   isLaunching   = false;
     private bool   isDownloading = false;
     private string downloadStage = "";
@@ -47,8 +46,9 @@ public partial class Home : IDisposable
                 IEnumerable<MinecraftVersion> q = versions;
                 if (!string.IsNullOrWhiteSpace(versionsFilter))
                 {
-                    q = q.Where(v => v.DisplayName.Contains(versionsFilter, StringComparison.OrdinalIgnoreCase)
-                                  || v.Tag.Contains(versionsFilter, StringComparison.OrdinalIgnoreCase));
+                    var filter = versionsFilter.Trim();
+                    q = q.Where(v => v.DisplayName.Contains(filter, StringComparison.OrdinalIgnoreCase)
+                                  || v.Tag.Contains(filter, StringComparison.OrdinalIgnoreCase));
                 }
                 if (SettingsService.Settings.ShowOnlyDownloaded)
                     q = q.Where(v => v.IsDownloaded);
@@ -106,7 +106,10 @@ public partial class Home : IDisposable
             {
                 IEnumerable<VanillaVersion> q = mcVersionsList;
                 if (!string.IsNullOrWhiteSpace(mcVersionsFilter))
-                    q = q.Where(v => v.Version.Contains(mcVersionsFilter, StringComparison.OrdinalIgnoreCase));
+                {
+                    var filter = mcVersionsFilter.Trim();
+                    q = q.Where(v => v.Version.Contains(filter, StringComparison.OrdinalIgnoreCase));
+                }
                 _filteredMcCache = q.ToList();
                 _filteredMcKey   = key;
             }
@@ -146,7 +149,10 @@ public partial class Home : IDisposable
                 if (!SettingsService.Settings.JavaShowHistorical)
                     q = q.Where(v => v.Type != "old_beta" && v.Type != "old_alpha");
                 if (!string.IsNullOrWhiteSpace(javaVersionsFilter))
-                    q = q.Where(v => v.Id.Contains(javaVersionsFilter, StringComparison.OrdinalIgnoreCase));
+                {
+                    var filter = javaVersionsFilter.Trim();
+                    q = q.Where(v => v.Id.Contains(filter, StringComparison.OrdinalIgnoreCase));
+                }
                 _filteredJavaCache = q.ToList();
                 _filteredJavaKey   = key;
             }
@@ -538,9 +544,7 @@ public partial class Home : IDisposable
     }
 
     private void GoHome() =>
-        _ = NavigateAsync(() => { currentView = "home"; hoveredBtn = ""; Discord.SetIdlePresence(); });
-    private void SetHover(string btn) => hoveredBtn = btn;
-    private void ClearHover()         => hoveredBtn = "";
+        _ = NavigateAsync(() => { currentView = "home"; Discord.SetIdlePresence(); });
 
     private async Task OpenSearch()
     {
@@ -716,7 +720,13 @@ public partial class Home : IDisposable
     private string GetAvatarSrc()
     {
         if (IsJava && !string.IsNullOrEmpty(SettingsService.Settings.JavaUuid))
-            return "https://mc-heads.net/avatar/" + SettingsService.Settings.JavaUuid.Replace("-", "");
+        {
+            // ?v= keeps the avatar in step with skin changes made through the
+            // launcher — without it the WebView cache pins the old head.
+            var ticks = SettingsService.Settings.SkinChangedTicks;
+            return "https://mc-heads.net/avatar/" + SettingsService.Settings.JavaUuid.Replace("-", "")
+                 + (ticks > 0 ? "?v=" + ticks : "");
+        }
         var which = EffectiveProfile();
         if (which == "xbox" && !string.IsNullOrEmpty(Xbox.CurrentProfile?.GamerPictureUrl))
             return Xbox.CurrentProfile.GamerPictureUrl;
@@ -785,7 +795,6 @@ public partial class Home : IDisposable
         {
             SetEditionCore(ed);
             currentView = "home";
-            hoveredBtn  = "";
         });
     }
 

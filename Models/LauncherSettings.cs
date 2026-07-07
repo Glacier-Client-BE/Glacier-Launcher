@@ -95,6 +95,14 @@ public class LauncherSettings
     public string JavaOfflineUsername   { get; set; } = "Player";
     public string JavaAccessTokenExpiry { get; set; } = "";
     public string JavaSkinUrl           { get; set; } = "";
+    // Bumped every time the account skin is changed through the launcher.
+    // Third-party render URLs (mc-heads/crafatar) carry this as a ?v= token so
+    // the WebView's HTTP cache can't keep serving the pre-change render.
+    // Persisted: the browser cache survives launcher restarts. 0 = never changed.
+    public long   SkinChangedTicks      { get; set; } = 0;
+    // Library copy of the last skin we uploaded — the authoritative texture for
+    // the 3D preview until the render CDNs catch up (they cache for minutes).
+    public string LastAppliedSkinPath   { get; set; } = "";
     public string ActiveJavaAccountId   { get; set; } = "";
     public List<JavaAccount> JavaAccounts { get; set; } = new();
 

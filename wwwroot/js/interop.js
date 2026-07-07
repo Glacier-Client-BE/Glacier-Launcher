@@ -268,16 +268,37 @@ window.glacierViewTransition = (dotNetRef) => {
     let vt;
     try {
         vt = document.startViewTransition(async () => {
+            // Wait for Blazor's render batch to land in the DOM before the
+            // new-state snapshot is captured. CRITICAL: requestAnimationFrame
+            // NEVER fires inside a view-transition update callback — rendering
+            // is suppressed until this promise resolves — so the old
+            // double-rAF wait deadlocked here and every navigation froze until
+            // Chromium's ~4 s transition timeout, then skipped the animation
+            // (the "5 second tab lag"). MutationObserver callbacks and timers
+            // still run during suppression, so watch for the render batch's
+            // DOM mutation instead, capped at 250 ms as a safety net.
+            const mutated = new Promise((resolve) => {
+                const mo = new MutationObserver(() => { mo.disconnect(); resolve(); });
+                mo.observe(document.body, { childList: true, subtree: true, attributes: true });
+                setTimeout(() => { mo.disconnect(); resolve(); }, 250);
+            });
             await apply();
-            // Give Blazor's render batch a frame to reach the DOM before the
-            // new-state snapshot is captured.
-            await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+            await mutated;
         });
     } catch {
         root.classList.remove('vt-active');
         return apply();
     }
-    return vt.finished.catch(() => { }).finally(() => root.classList.remove('vt-active'));
+    return vt.finished.catch(() => { }).finally(() => {
+        // Panels that arrived via this transition are already on screen.
+        // vt-active suppressed their CSS entry animation; removing the class
+        // would make `slideUp` newly apply and REPLAY after the morph —
+        // every tab switch did a 0.26s morph followed by a redundant 0.34s
+        // slide. Pin animation off for the panels that exist right now;
+        // future panels (fresh elements) still animate normally.
+        document.querySelectorAll('.panel-overlay').forEach(el => { el.style.animation = 'none'; });
+        root.classList.remove('vt-active');
+    });
 };
 
 window.applyStoredSettings = (accent, theme, blur, customBg, compact, animations, animSpeed) => {
@@ -402,6 +423,28 @@ window.glacierSkin = (function () {
     let libPromise = null;
     const viewers = {};
 
+    // The viewer runs a continuous WebGL loop (auto-rotate + walk animation).
+    // Pause it whenever the canvas can't actually be seen — window minimized /
+    // hidden (visibilitychange) or scrolled out of view (IntersectionObserver).
+    // Nothing visual changes; the loop resumes exactly where it stopped.
+    function updatePauseState(canvasId) {
+        const v = viewers[canvasId];
+        if (v) v.renderPaused = document.hidden || !!v._glacierOffscreen;
+    }
+
+    document.addEventListener('visibilitychange', () => {
+        for (const id of Object.keys(viewers)) updatePauseState(id);
+    });
+
+    const io = ('IntersectionObserver' in window)
+        ? new IntersectionObserver(entries => {
+            for (const e of entries) {
+                const v = viewers[e.target.id];
+                if (v) { v._glacierOffscreen = !e.isIntersecting; updatePauseState(e.target.id); }
+            }
+        }, { threshold: 0.01 })
+        : null;
+
     function loadScript(src) {
         return new Promise(resolve => {
             const s = document.createElement('script');
@@ -446,6 +489,8 @@ window.glacierSkin = (function () {
                 try { viewer.animation = new skinview3d.WalkingAnimation(); viewer.animation.speed = 0.6; } catch (e) {}
                 if (capeUrl) { try { await viewer.loadCape(capeUrl); } catch (e) { /* no cape texture */ } }
                 viewers[canvasId] = viewer;
+                if (io) io.observe(canvas);
+                updatePauseState(canvasId);
                 return true;
             } catch (e) {
                 return false;
@@ -478,6 +523,7 @@ window.glacierSkin = (function () {
             });
         },
         dispose: function (canvasId) {
+            if (io) { const c = document.getElementById(canvasId); if (c) io.unobserve(c); }
             if (viewers[canvasId]) { try { viewers[canvasId].dispose(); } catch (e) {} delete viewers[canvasId]; }
         }
     };

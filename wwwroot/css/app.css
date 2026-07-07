@@ -276,7 +276,10 @@
 
 /* When the user dials Background Blur to 0 we strip backdrop-filter completely
    (a 0 px filter still creates a compositor layer on most GPUs). */
-.no-blur * {
+.no-blur,
+.no-blur *,
+.no-blur *::before,
+.no-blur *::after {
     backdrop-filter: none !important;
     -webkit-backdrop-filter: none !important;
 }
@@ -791,6 +794,48 @@ body {
     box-shadow: 0 0 20px var(--accent-glow), 0 4px 14px rgba(0, 0, 0, 0.35);
 }
 
+/* ── CSS-only dock hover (.hover-grow) ──────────────────────────
+   The grow + icon→label swap used to be driven from C# via @onmouseenter,
+   which round-tripped JS→.NET and re-rendered the whole page component on
+   every hover. Pure :hover starts the same 0.22s width transition on the
+   compositor thread's schedule with zero UI-thread work — and kills the
+   one-frame flicker where :hover styles landed before the class swap. */
+.action-btn.hover-grow > .btn-label {
+    display: none;
+}
+
+.action-btn.hover-grow:hover:not(:disabled) > .btn-label {
+    display: inline;
+}
+
+.action-btn.hover-grow:hover:not(:disabled) > i {
+    display: none;
+}
+
+.action-btn.hover-grow:hover:not(:disabled) {
+    width: 134px;
+    padding: 0 18px;
+    /* .btn-sq pins flex-shrink:0; the old .btn-wide class swap re-allowed
+       shrinking in tight rows — keep that exact layout behavior. */
+    flex-shrink: 1;
+}
+
+.compact .action-btn.hover-grow:hover:not(:disabled) {
+    width: 120px;
+}
+
+/* Parity with .action-btn.btn-wide:not(.btn-blue): expanded buttons go accent. */
+.action-btn.hover-grow:not(.launch-btn):hover:not(:disabled) {
+    background: var(--accent);
+    box-shadow: 0 0 20px var(--accent-glow), 0 4px 14px rgba(0, 0, 0, 0.35);
+}
+
+/* Parity with .btn-wide.btn-blue:hover for the launch button. */
+.action-btn.launch-btn:hover:not(:disabled) {
+    background: var(--accent-hover);
+    box-shadow: 0 0 22px var(--accent-glow), 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+
 .action-btn i {
     font-size: 15px;
     line-height: 1;
@@ -1002,6 +1047,20 @@ body {
     border: 2px solid rgba(255, 255, 255, 0.10);
     transition: border-color var(--t);
     cursor: pointer;
+}
+
+/* Avatar head cropped straight from the local 64x64 skin PNG (two layers of
+   the same image: hat overlay at (40,8) on top, head at (8,8) below). Used
+   right after a skin change while the render CDNs still serve the old head.
+   Percentages: an 8px cell of a 64px texture at background-size 800% lands at
+   offset/(scaled-size - element) → col n of 8 = n/7 of 100%. */
+.avatar.avatar-mchead {
+    display: block;
+    background-color: var(--bg-panel);
+    background-size: 800% 800%;
+    background-position: 71.4286% 14.2857%, 14.2857% 14.2857%;
+    background-repeat: no-repeat;
+    image-rendering: pixelated;
 }
 
 .avatar:hover {
@@ -1527,6 +1586,8 @@ body {
     z-index: 10;
     overflow: hidden;
     border-top: 1px solid rgba(255, 255, 255, 0.06);
+    /* Isolate the marquee: its repaints must never invalidate ancestors. */
+    contain: layout paint;
 }
 
 @keyframes ticker {
@@ -1545,9 +1606,23 @@ body {
     animation: ticker 28s linear infinite;
     white-space: nowrap;
     padding: 6px 0;
+    /* Persistent transform animation → keep it on its own compositor layer. */
+    will-change: transform;
 }
 
 .news-track:hover {
+    animation-play-state: paused;
+}
+
+/* Every panel/modal overlay covers (or dims + blurs over) the ticker. Moving
+   content underneath a backdrop-filter forces the blur to be recomputed every
+   frame across the whole overlay — the single biggest GPU drain on integrated
+   graphics while a panel is open. The ticker can't meaningfully be seen back
+   there, so pause it; it resumes the moment the overlay closes. */
+.window:has(.panel-overlay) .news-track,
+.window:has(.search-overlay) .news-track,
+.window:has(.modal-overlay) .news-track,
+body.drop-active .news-track {
     animation-play-state: paused;
 }
 
@@ -1602,7 +1677,13 @@ body {
        integrated graphics. */
     backdrop-filter: blur(var(--blur, 14px));
     -webkit-backdrop-filter: blur(var(--blur, 14px));
-    animation: slideUp calc(0.34s * var(--anim-mult)) var(--ease-drawer);
+    /* panel-blur-hold keeps the backdrop-filter OFF for exactly the duration
+       of the slide. Re-blurring 78% of the window every frame while the panel
+       moves is the most expensive thing an iGPU can be asked to do, and it's
+       invisible behind this 0.97-alpha surface; the blur lands when the slide
+       ends (the keyframe stops applying — no fill mode). */
+    animation: slideUp calc(0.34s * var(--anim-mult)) var(--ease-drawer),
+               panel-blur-hold calc(0.34s * var(--anim-mult)) linear;
     overflow: hidden;
     box-shadow: 0 -8px 40px rgba(0, 0, 0, 0.55);
 }
@@ -1617,6 +1698,25 @@ body {
         transform: translateY(0);
         opacity: 1
     }
+}
+
+/* Constant "no blur" for the duration it runs alongside slideUp above. */
+@keyframes panel-blur-hold {
+
+    from,
+    to {
+        backdrop-filter: none;
+        -webkit-backdrop-filter: none;
+    }
+}
+
+/* Same reasoning while the user drags the panel handle or a view transition
+   is morphing the panel: content in motion + backdrop-filter = per-frame
+   full-surface re-blur. Behind rgba(...,0.97) the difference is invisible. */
+html.vt-active .panel-overlay,
+.panel-overlay.dragging {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
 }
 
 /* Drag handle for resizing / closing the panel.
@@ -2518,11 +2618,17 @@ body {
     border-radius: 12px;
     pointer-events: none;
     opacity: 0;
-    transition: opacity 0.18s ease;
+    /* visibility:hidden keeps this full-window blurred layer out of the
+       compositor while idle — at opacity:0 alone the GPU still pays for it.
+       The fade is unchanged: visibility flips only after opacity finishes. */
+    visibility: hidden;
+    transition: opacity 0.18s ease, visibility 0s 0.18s;
 }
 
 body.drop-active .drop-zone-overlay {
     opacity: 1;
+    visibility: visible;
+    transition: opacity 0.18s ease, visibility 0s;
 }
 
 .drop-zone-overlay i {
@@ -3274,8 +3380,11 @@ input[type=range]:active::-webkit-slider-thumb {
     font-weight: 700;
     letter-spacing: 0.03em;
     text-transform: uppercase;
-    box-shadow: 0 0 10px color-mix(in srgb, var(--accent) 60%, transparent);
-    animation: pulse-pill 2.4s ease-in-out infinite;
+    /* The pulsing glow lives on a ::before that fades in and out. Animating
+       box-shadow directly forces a CPU repaint every frame for the whole
+       session the pill is visible; crossfading a pre-rendered shadow via
+       opacity runs entirely on the compositor. Same look, ~free. */
+    box-shadow: 0 0 8px color-mix(in srgb, var(--accent) 50%, transparent);
     /* Stack above the drag-zone (z-index: 1) and explicitly opt back into pointer events
        — .branding is pointer-events:none so children must opt in. Without the explicit
        z-index/position the drag-zone occasionally won the hit-test under WebView2 and
@@ -3286,6 +3395,17 @@ input[type=range]:active::-webkit-slider-thumb {
     transition: filter var(--t);
 }
 
+.update-pill::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    box-shadow: 0 0 18px color-mix(in srgb, var(--accent) 80%, transparent);
+    opacity: 0;
+    animation: glow-pulse 2.4s ease-in-out infinite;
+}
+
 .update-pill:hover {
     filter: brightness(1.15);
 }
@@ -3294,15 +3414,16 @@ input[type=range]:active::-webkit-slider-thumb {
     font-size: 9px;
 }
 
-@keyframes pulse-pill {
+/* Compositor-only glow pulse shared by the pills (replaces animated box-shadow). */
+@keyframes glow-pulse {
 
     0%,
     100% {
-        box-shadow: 0 0 8px color-mix(in srgb, var(--accent) 50%, transparent);
+        opacity: 0;
     }
 
     50% {
-        box-shadow: 0 0 18px color-mix(in srgb, var(--accent) 80%, transparent);
+        opacity: 1;
     }
 }
 
@@ -3452,26 +3573,28 @@ input[type=range]:active::-webkit-slider-thumb {
     letter-spacing: 0.04em;
     pointer-events: all;
     flex-shrink: 0;
-    box-shadow: 0 0 10px rgba(67, 181, 129, 0.35);
-    animation: mc-running-pulse 2.4s ease-in-out infinite;
+    position: relative;
+    /* Static base glow; the pulse is an opacity crossfade on ::before. This
+       pill animates for the entire play session — an animated box-shadow here
+       would repaint every frame and steal CPU/GPU from the running game. */
+    box-shadow: 0 0 6px rgba(67, 181, 129, 0.30);
+}
+
+.mc-running-pill::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    box-shadow: 0 0 16px rgba(67, 181, 129, 0.55);
+    opacity: 0;
+    animation: glow-pulse 2.4s ease-in-out infinite;
 }
 
 .mc-running-pill i {
     font-size: 6px;
     line-height: 1;
     animation: pulse-dot 1.6s ease-in-out infinite;
-}
-
-@keyframes mc-running-pulse {
-
-    0%,
-    100% {
-        box-shadow: 0 0 6px rgba(67, 181, 129, 0.30);
-    }
-
-    50% {
-        box-shadow: 0 0 16px rgba(67, 181, 129, 0.55);
-    }
 }
 
 .chip-dot.live {
@@ -3930,8 +4053,11 @@ select:focus-visible,
     }
 }
 
-/* ── Subtle accent gradient on the launch button hover halo ── */
-.btn-blue:not(:disabled):hover::after {
+/* ── Subtle accent gradient on the launch button hover halo ──
+   (.launch-btn no longer gains .btn-blue on hover — the grow is CSS-only —
+   so it needs its own selector for the same halo.) */
+.btn-blue:not(:disabled):hover::after,
+.action-btn.launch-btn:not(:disabled):hover::after {
     content: '';
     position: absolute;
     inset: -1px;
@@ -4010,17 +4136,23 @@ input[type=range]:disabled {
     white-space: nowrap;
     pointer-events: none;
     opacity: 0;
+    /* Hidden tooltips must not cost anything: dozens of these blurred pseudo
+       elements exist at once, and at opacity:0 they'd still hold compositor
+       layers. visibility flips in sync with the existing fade timings. */
+    visibility: hidden;
     z-index: 200;
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
     backdrop-filter: blur(var(--blur, 14px));
     -webkit-backdrop-filter: blur(var(--blur, 14px));
     transition: opacity calc(0.16s * var(--anim-mult, 1)) var(--ease-out),
-                transform calc(0.16s * var(--anim-mult, 1)) var(--ease-out);
+                transform calc(0.16s * var(--anim-mult, 1)) var(--ease-out),
+                visibility calc(0.16s * var(--anim-mult, 1));
 }
 
 [data-tooltip]:hover::after,
 [data-tooltip]:focus-visible::after {
     opacity: 1;
+    visibility: visible;
     transform: translateX(-50%) translateY(0);
     transition-delay: 0.35s;
 }

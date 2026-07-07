@@ -49,8 +49,13 @@ public sealed class ThrottledProgress : IProgress<double>
     {
         if (_inner == null) return;
         var now = DateTime.UtcNow.Ticks;
-        if (value <= 0 || value >= _completeValue || (now - _lastTicks) >= _minIntervalTicks
-            || Math.Abs(value - _lastValue) >= _minDelta)
+        // Boundaries (reset / completion) always pass. Everything else must
+        // clear BOTH gates: enough time elapsed AND enough movement. With the
+        // old OR-logic a fast download hit the delta gate every few
+        // milliseconds and re-rendered the UI up to 100×/s; a progress bar
+        // repainting 10×/s in ≥1% steps is visually identical.
+        if (value <= 0 || value >= _completeValue
+            || ((now - _lastTicks) >= _minIntervalTicks && Math.Abs(value - _lastValue) >= _minDelta))
         {
             _lastTicks = now;
             _lastValue = value;

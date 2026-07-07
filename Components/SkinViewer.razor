@@ -39,6 +39,13 @@
     [Parameter] public string Uuid     { get; set; } = "";
     [Parameter] public string Username { get; set; } = "";
     [Parameter] public string CapeUrl  { get; set; } = "";
+    // Cache-bust token: bumped by the launcher whenever the skin is changed, so
+    // mc-heads/crafatar URLs stop being served from the WebView's HTTP cache.
+    [Parameter] public long   Version  { get; set; }
+    // The exact PNG the launcher just uploaded (glacier-files.local URL). When
+    // set, the 3D model renders THIS texture — instantly correct even while the
+    // third-party render CDNs still cache the old skin.
+    [Parameter] public string LocalSkinUrl { get; set; } = "";
 
     private readonly string _canvasId = "skin-" + Guid.NewGuid().ToString("N")[..8];
     private string _mode        = "2d";       // 2d (static image) | 3d (interactive)
@@ -47,28 +54,66 @@
     private bool   _need3dInit;
     private string _capeMode    = "cape";     // cape | elytra | off
     private string _appliedCape = "";
+    private long   _appliedVersion;
+    private string _appliedLocalSkin = "";
+    private bool   _paramsSeen;
 
     private string CleanUuid         => (Uuid ?? "").Replace("-", "").Trim();
     private string DisplayName       => string.IsNullOrWhiteSpace(Username) ? "Player" : Username;
-    private string SkinTextureUrl    => $"https://mc-heads.net/skin/{CleanUuid}";
-    private string BodyRenderUrl     => $"https://mc-heads.net/body/{CleanUuid}/right";
-    private string FallbackRenderUrl => $"https://crafatar.com/renders/body/{CleanUuid}?overlay&scale=10";
+    private string VersionQuery      => Version > 0 ? $"?v={Version}" : "";
+    private string SkinTextureUrl    => !string.IsNullOrEmpty(LocalSkinUrl)
+                                        ? LocalSkinUrl
+                                        : $"https://mc-heads.net/skin/{CleanUuid}{VersionQuery}";
+    private string BodyRenderUrl     => $"https://mc-heads.net/body/{CleanUuid}/right{VersionQuery}";
+    private string FallbackRenderUrl => $"https://crafatar.com/renders/body/{CleanUuid}?overlay&scale=10{(Version > 0 ? $"&v={Version}" : "")}";
     private string CapeLabel         => _capeMode switch { "elytra" => "Elytra", "off" => "No cape", _ => "Cape" };
 
     // A cape selected in the wardrobe arrives via CapeUrl. Show it on the model —
     // which means switching to 3D, since the static render can't display capes.
     protected override void OnParametersSet()
     {
-        if (CapeUrl == _appliedCape) return;
-        _appliedCape = CapeUrl;
-        if (!string.IsNullOrEmpty(CapeUrl))
+        bool first = !_paramsSeen;
+        _paramsSeen = true;
+
+        if (CapeUrl != _appliedCape)
         {
-            _mode = "3d"; _ready = false; _capeMode = "cape"; _need3dInit = true;
+            _appliedCape = CapeUrl;
+            if (!string.IsNullOrEmpty(CapeUrl))
+            {
+                _mode = "3d"; _ready = false; _capeMode = "cape"; _need3dInit = true;
+            }
+            else if (_mode == "3d")
+            {
+                _need3dInit = true;   // re-init to drop the cape
+            }
         }
-        else if (_mode == "3d")
+
+        if (Version != _appliedVersion || LocalSkinUrl != _appliedLocalSkin)
         {
-            _need3dInit = true;   // re-init to drop the cape
+            _appliedVersion   = Version;
+            _appliedLocalSkin = LocalSkinUrl;
+            // React when the skin changes DURING the viewer's life (the user
+            // just applied one) — and on first mount when the change is only
+            // minutes old, because the 2D CDN render likely still shows the
+            // old skin while the local texture is exactly what was uploaded.
+            if (!first)
+            {
+                if (!string.IsNullOrEmpty(LocalSkinUrl)) { _mode = "3d"; _ready = false; }
+                if (_mode == "3d") _need3dInit = true;
+                // 2D needs nothing: the <img> src string changed, so the
+                // browser refetches on its own.
+            }
+            else if (!string.IsNullOrEmpty(LocalSkinUrl) && IsRecentChange())
+            {
+                _mode = "3d"; _ready = false; _need3dInit = true;
+            }
         }
+    }
+
+    private bool IsRecentChange()
+    {
+        if (Version <= 0 || Version > DateTime.MaxValue.Ticks) return false;
+        return (DateTime.UtcNow - new DateTime(Version, DateTimeKind.Utc)) < TimeSpan.FromMinutes(10);
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)

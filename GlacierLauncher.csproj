@@ -13,7 +13,10 @@
     <Version Condition="'$(Version)' == ''">0.0.0-dev</Version>
     <CurseForgeApiKey Condition="'$(CurseForgeApiKey)' == ''"></CurseForgeApiKey>
     <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
-    <PublishReadyToRun>false</PublishReadyToRun>
+    <!-- R2R pre-compiles IL to native code at publish time. On low-end CPUs
+         the JIT dominates cold start, so this is the single biggest startup
+         lever; the exe grows, which is the accepted trade. -->
+    <PublishReadyToRun>true</PublishReadyToRun>
     <CopyDocumentationFilesFromPackages>false</CopyDocumentationFilesFromPackages>
     <DebugType Condition="'$(Configuration)' == 'Release'">embedded</DebugType>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
@@ -34,7 +37,10 @@
   </ItemGroup>
 
   <ItemGroup>
-    <EmbeddedResource Include="wwwroot\**" />
+    <!-- wwwroot ships ONLY inside wwwroot.zip (extracted at startup by
+         EnsureWwwroot). Embedding the loose files as well doubled every asset
+         inside the assembly (~1.5 MB incl. the skinview3d bundle and Font
+         Awesome) for resources nothing ever read. -->
     <Content Remove="wwwroot\**" />
     <EmbeddedResource Include="wwwroot.zip" LogicalName="wwwroot.zip" />
     <!-- Ship icon.ico beside the exe so the tray icon can load it at runtime. -->

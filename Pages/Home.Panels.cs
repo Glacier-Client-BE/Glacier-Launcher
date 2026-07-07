@@ -517,12 +517,16 @@ public partial class Home
         }
     }
 
-    private void OpenJavaClients()
+    private void OpenJavaClients() => _ = OpenJavaClientsAsync();
+
+    private async Task OpenJavaClientsAsync()
     {
-        LunarBadlion.Detect();
+        // Detect() walks the filesystem for Lunar/Badlion installs — worker
+        // thread, so the click never stalls the UI before the panel opens.
+        await Task.Run(LunarBadlion.Detect);
         if (string.IsNullOrEmpty(lunarSelectedVersion))
             lunarSelectedVersion = LunarBadlion.LunarInstalledVersions.FirstOrDefault() ?? "";
-        _ = NavigateAsync(() =>
+        await NavigateAsync(() =>
         {
             currentView = "javaclients";
             _ = EnsureGlacierManifestAsync();

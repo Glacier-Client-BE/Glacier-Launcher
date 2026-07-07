@@ -271,14 +271,16 @@ public partial class Home
         });
     }
 
-    private void OpenJavaScreenshots()
+    private void OpenJavaScreenshots() => _ = OpenJavaScreenshotsAsync();
+
+    private async Task OpenJavaScreenshotsAsync()
     {
-        _ = NavigateAsync(() =>
-        {
-            SetEditionCore("java");
-            RefreshJavaInstanceFiles();
-            currentView = "javascreenshots";
-        });
+        // Neither call renders anything on its own, so doing them before the
+        // view transition keeps the swap visually atomic — but the directory
+        // scan now runs on a worker thread instead of freezing the transition.
+        SetEditionCore("java");
+        await RefreshJavaInstanceFilesAsync();
+        await NavigateAsync(() => currentView = "javascreenshots");
     }
 
     private void OpenScreenshot(JavaInstanceFile shot) => OpenUrl(shot.Path);
