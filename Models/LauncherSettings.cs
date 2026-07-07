@@ -95,6 +95,9 @@ public class LauncherSettings
     public string JavaOfflineUsername   { get; set; } = "Player";
     public string JavaAccessTokenExpiry { get; set; } = "";
     public string JavaSkinUrl           { get; set; } = "";
+    // Remembers the last "Upload as Slim (Alex) model" checkbox state so it
+    // doesn't silently reset to Classic on every restart.
+    public bool   JavaSkinSlimModel     { get; set; } = false;
     // Bumped every time the account skin is changed through the launcher.
     // Third-party render URLs (mc-heads/crafatar) carry this as a ?v= token so
     // the WebView's HTTP cache can't keep serving the pre-change render.
