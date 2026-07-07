@@ -114,7 +114,11 @@ public partial class Home
     }
 
     // ── Change skin (Minecraft Services API) ─────────────────────────────────
-    private bool _changeSkinSlim;
+    private bool _changeSkinSlim
+    {
+        get => SettingsService.Settings.JavaSkinSlimModel;
+        set { SettingsService.Settings.JavaSkinSlimModel = value; SettingsService.Save(); }
+    }
 
     private async Task ChangeSkinAsync()
     {

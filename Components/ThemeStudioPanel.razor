@@ -526,7 +526,11 @@
 
     public void Dispose()
     {
+        // The panel can be torn down by navigating elsewhere directly (sidebar
+        // nav, edition switch) instead of the back button — flush any pending
+        // debounced edit instead of dropping it, same as ClosePanel does.
         _saveTimer?.Dispose();
+        Themes.Save();
         _selfRef?.Dispose();
     }
 }

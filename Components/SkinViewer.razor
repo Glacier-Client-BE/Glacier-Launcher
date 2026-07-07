@@ -1,4 +1,5 @@
 @inject IJSRuntime JS
+@inject SettingsService SettingsService
 @implements IAsyncDisposable
 
 @* Player skin display. Defaults to a reliable static body render (mc-heads), with
@@ -68,6 +69,16 @@
     private string FallbackRenderUrl => $"https://crafatar.com/renders/body/{CleanUuid}?overlay&scale=10{(Version > 0 ? $"&v={Version}" : "")}";
     private string CapeLabel         => _capeMode switch { "elytra" => "Elytra", "off" => "No cape", _ => "Cape" };
 
+    // Restore the viewer's last mode/model/cape choice instead of always
+    // starting from 2D/Steve/Cape.
+    protected override void OnInitialized()
+    {
+        _mode     = SettingsService.Settings.SkinViewerMode;
+        _model    = SettingsService.Settings.SkinViewerModel;
+        _capeMode = SettingsService.Settings.SkinViewerCapeMode;
+        if (_mode == "3d") _need3dInit = true;
+    }
+
     // A cape selected in the wardrobe arrives via CapeUrl. Show it on the model —
     // which means switching to 3D, since the static render can't display capes.
     protected override void OnParametersSet()
@@ -78,13 +89,22 @@
         if (CapeUrl != _appliedCape)
         {
             _appliedCape = CapeUrl;
-            if (!string.IsNullOrEmpty(CapeUrl))
+            if (!first)
             {
-                _mode = "3d"; _ready = false; _capeMode = "cape"; _need3dInit = true;
+                // A genuinely new cape equip (mid-session) — jump to 3D and show
+                // it so the change is obviously visible.
+                if (!string.IsNullOrEmpty(CapeUrl))
+                {
+                    _mode = "3d"; _ready = false; _capeMode = "cape"; _need3dInit = true;
+                }
+                else if (_mode == "3d")
+                {
+                    _need3dInit = true;   // re-init to drop the cape
+                }
             }
             else if (_mode == "3d")
             {
-                _need3dInit = true;   // re-init to drop the cape
+                _need3dInit = true;   // first load already in 3D — make sure init runs
             }
         }
 
@@ -129,6 +149,8 @@
     {
         if (_mode == mode) return;
         _mode = mode; _ready = false;
+        SettingsService.Settings.SkinViewerMode = mode;
+        SettingsService.Save();
         if (mode == "3d") _need3dInit = true;
         else { try { await JS.InvokeVoidAsync("glacierSkin.dispose", _canvasId); } catch { } }
         StateHasChanged();
@@ -138,6 +160,8 @@
     {
         if (_model == model) return;
         _model = model;
+        SettingsService.Settings.SkinViewerModel = model;
+        SettingsService.Save();
         if (_mode == "3d" && _ready)
         {
             try { await JS.InvokeAsync<bool>("glacierSkin.setModel", _canvasId, SkinTextureUrl, _model); } catch { }
@@ -145,6 +169,8 @@
         else
         {
             _mode = "3d"; _ready = false; _need3dInit = true;   // jump to 3D so the change is visible
+            SettingsService.Settings.SkinViewerMode = "3d";
+            SettingsService.Save();
         }
         StateHasChanged();
     }
@@ -168,6 +194,8 @@
     private async Task CycleCape()
     {
         _capeMode = _capeMode switch { "cape" => "elytra", "elytra" => "off", _ => "cape" };
+        SettingsService.Settings.SkinViewerCapeMode = _capeMode;
+        SettingsService.Save();
         try { await JS.InvokeAsync<bool>("glacierSkin.setCape", _canvasId, CapeUrl, _capeMode); } catch { }
         StateHasChanged();
     }

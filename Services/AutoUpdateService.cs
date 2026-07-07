@@ -158,7 +158,24 @@ public class AutoUpdateService
                     timeout /t 1 /nobreak >NUL
                     goto waitloop
                 )
+                set RETRIES=0
+                :copyloop
                 copy /Y "{tmpPath}" "{currentExe}" >NUL
+                if errorlevel 1 (
+                    set /a RETRIES+=1
+                    if %RETRIES% LSS 10 (
+                        rem The old exe's file handle (antivirus scan, OS cleanup) can
+                        rem outlive the process for a moment — retry instead of silently
+                        rem relaunching the un-updated exe.
+                        timeout /t 1 /nobreak >NUL
+                        goto copyloop
+                    )
+                    rem Copy never succeeded — leave the download in place and relaunch
+                    rem the old exe rather than deleting the update we couldn't apply.
+                    start "" "{currentExe}"
+                    del "%~f0"
+                    exit /b 1
+                )
                 del "{tmpPath}" >NUL
                 start "" "{currentExe}"
                 del "%~f0"
