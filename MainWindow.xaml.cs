@@ -116,7 +116,16 @@ public partial class MainWindow : Window
         Loaded += async (_, _) =>
         {
             await blazorWebView.WebView.EnsureCoreWebView2Async();
-            blazorWebView.WebView.DefaultBackgroundColor = System.Drawing.Color.FromArgb(255, 35, 39, 42);
+
+            // The await above yields the UI thread; if the window was closed (and the
+            // WebView2 control disposed) while we were suspended, touching any
+            // CoreWebView2 member now throws InvalidOperationException/COMException on a
+            // dead COM object. Bail out cleanly instead of crashing the process.
+            if (!IsLoaded || blazorWebView.WebView.CoreWebView2 == null) return;
+
+            try
+            {
+                blazorWebView.WebView.DefaultBackgroundColor = System.Drawing.Color.FromArgb(255, 35, 39, 42);
 
             // Map the user's Glacier Launcher folder to a virtual host so the WebView can load
             // local files (custom wallpaper, etc.) without falling foul of WebView2's same-origin
@@ -156,7 +165,12 @@ public partial class MainWindow : Window
                         try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(url) { UseShellExecute = true }); } catch { }
                     }
                 });
-            };
+                };
+            }
+            catch (Exception ex) when (ex is InvalidOperationException || ex is System.Runtime.InteropServices.COMException)
+            {
+                // WebView disposed mid-initialization (window closed during startup) — ignore.
+            }
         };
 
         Closed += (_, _) =>
