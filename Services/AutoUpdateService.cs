@@ -133,6 +133,12 @@ public class AutoUpdateService
         }
     }
 
+    // Marker dropped by the swap script when the copy never succeeded, so the *next*
+    // launch (which no longer races its own shutdown teardown) gets a clean second try
+    // instead of silently staying on the old version forever.
+    private static string PendingMarkerPath =>
+        Path.Combine(Path.GetTempPath(), "GlacierLauncher_pending_update.txt");
+
     /// <summary>
     /// Downloads the update asset to %TEMP%, replaces the original exe, relaunches, then shuts down.
     /// </summary>
@@ -142,51 +148,10 @@ public class AutoUpdateService
 
         await _download.DownloadAsync(info.DownloadUrl, tmpPath, progress: progress, knownTotalBytes: info.AssetSize);
 
-        // Replace the original exe so shortcuts keep working.
-        // A running exe can't overwrite itself, so we use a small batch script
-        // that waits for this process to exit, copies the new exe over, then launches it.
         var currentExe = Environment.ProcessPath ?? Process.GetCurrentProcess().MainModule?.FileName;
         if (!string.IsNullOrEmpty(currentExe) && File.Exists(currentExe))
         {
-            var pid = Environment.ProcessId;
-            var batPath = Path.Combine(Path.GetTempPath(), "GlacierLauncher_update.bat");
-            var script = $"""
-                @echo off
-                :waitloop
-                tasklist /FI "PID eq {pid}" 2>NUL | find /I "{pid}" >NUL
-                if not errorlevel 1 (
-                    timeout /t 1 /nobreak >NUL
-                    goto waitloop
-                )
-                set RETRIES=0
-                :copyloop
-                copy /Y "{tmpPath}" "{currentExe}" >NUL
-                if errorlevel 1 (
-                    set /a RETRIES+=1
-                    if %RETRIES% LSS 10 (
-                        rem The old exe's file handle (antivirus scan, OS cleanup) can
-                        rem outlive the process for a moment — retry instead of silently
-                        rem relaunching the un-updated exe.
-                        timeout /t 1 /nobreak >NUL
-                        goto copyloop
-                    )
-                    rem Copy never succeeded — leave the download in place and relaunch
-                    rem the old exe rather than deleting the update we couldn't apply.
-                    start "" "{currentExe}"
-                    del "%~f0"
-                    exit /b 1
-                )
-                del "{tmpPath}" >NUL
-                start "" "{currentExe}"
-                del "%~f0"
-                """;
-            File.WriteAllText(batPath, script);
-            Process.Start(new ProcessStartInfo(batPath)
-            {
-                UseShellExecute = true,
-                CreateNoWindow  = true,
-                WindowStyle     = ProcessWindowStyle.Hidden
-            });
+            LaunchSwapScript(tmpPath, currentExe, Environment.ProcessId);
         }
         else
         {
@@ -195,6 +160,83 @@ public class AutoUpdateService
         }
 
         Application.Current.Dispatcher.Invoke(() => Application.Current.Shutdown());
+    }
+
+    /// <summary>
+    /// If a previous update attempt left a pending swap behind (the copy-retry loop ran out
+    /// while the old exe's file handle was still held), retry it now. Called at process startup,
+    /// before any window is shown, so there's no shutdown-teardown race this time. Returns true
+    /// if a resume was kicked off — the caller should exit immediately without starting the UI.
+    /// </summary>
+    public static bool TryResumePendingUpdate()
+    {
+        try
+        {
+            if (!File.Exists(PendingMarkerPath)) return false;
+
+            var tmpPath = File.ReadAllText(PendingMarkerPath).Trim();
+            File.Delete(PendingMarkerPath);
+
+            if (string.IsNullOrEmpty(tmpPath) || !File.Exists(tmpPath)) return false;
+
+            var currentExe = Environment.ProcessPath ?? Process.GetCurrentProcess().MainModule?.FileName;
+            if (string.IsNullOrEmpty(currentExe) || !File.Exists(currentExe)) return false;
+
+            LaunchSwapScript(tmpPath, currentExe, Environment.ProcessId);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    // Replace the original exe so shortcuts keep working.
+    // A running exe can't overwrite itself, so we use a small batch script
+    // that waits for this process to exit, copies the new exe over, then launches it.
+    private static void LaunchSwapScript(string tmpPath, string currentExe, int pid)
+    {
+        var batPath = Path.Combine(Path.GetTempPath(), "GlacierLauncher_update.bat");
+        var script = $"""
+            @echo off
+            :waitloop
+            tasklist /FI "PID eq {pid}" 2>NUL | find /I "{pid}" >NUL
+            if not errorlevel 1 (
+                timeout /t 1 /nobreak >NUL
+                goto waitloop
+            )
+            set RETRIES=0
+            :copyloop
+            copy /Y "{tmpPath}" "{currentExe}" >NUL
+            if errorlevel 1 (
+                set /a RETRIES+=1
+                if %RETRIES% LSS 30 (
+                    rem The old exe's file handle (antivirus scan, OS cleanup) can
+                    rem outlive the process for a moment — retry instead of silently
+                    rem relaunching the un-updated exe.
+                    timeout /t 1 /nobreak >NUL
+                    goto copyloop
+                )
+                rem Copy never succeeded even after 30s. Leave the download in place,
+                rem drop a marker so the next launch retries the swap before showing
+                rem any UI, and relaunch the old exe for now instead of failing silently.
+                echo {tmpPath}> "{PendingMarkerPath}"
+                start "" "{currentExe}"
+                del "%~f0"
+                exit /b 1
+            )
+            if exist "{PendingMarkerPath}" del "{PendingMarkerPath}"
+            del "{tmpPath}" >NUL
+            start "" "{currentExe}"
+            del "%~f0"
+            """;
+        File.WriteAllText(batPath, script);
+        Process.Start(new ProcessStartInfo(batPath)
+        {
+            UseShellExecute = true,
+            CreateNoWindow  = true,
+            WindowStyle     = ProcessWindowStyle.Hidden
+        });
     }
 
     /// <summary>Recent launcher releases (newest first) for the in-app changelog viewer.</summary>
