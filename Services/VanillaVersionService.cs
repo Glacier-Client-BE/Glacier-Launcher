@@ -48,30 +48,40 @@ public class VanillaVersionService
     public async Task<List<VanillaVersion>> GetVersionsAsync()
     {
         LastError = null;
-        var versions = new List<VanillaVersion>();
+        var errors = new List<string>();
+        var merged = new Dictionary<string, VanillaVersion>(StringComparer.OrdinalIgnoreCase);
 
+        // Community DB gives us historical coverage (older WU updates fall out of the live
+        // sync tree), but the upstream dump can go stale for months at a time.
         try
         {
-            versions = await FetchFromCommunityDbAsync();
+            foreach (var v in await FetchFromCommunityDbAsync())
+                merged[MergeKey(v)] = v;
         }
         catch (Exception ex)
         {
-            LastError = $"Community DB failed: {ex.Message}";
+            errors.Add($"Community DB failed: {ex.Message}");
         }
 
-        if (versions.Count == 0)
+        // Store API is always queried too (not just as a fallback) so newly released
+        // versions show up immediately instead of waiting on the community dump to catch up.
+        // Entries here overwrite community DB ones for the same version/channel since they're live.
+        try
         {
-            try
-            {
-                versions = await FetchFromStoreApiAsync();
-                LastError = null;
-            }
-            catch (Exception ex)
-            {
-                var storeErr = $"Store API failed: {ex.Message}";
-                LastError = LastError != null ? $"{LastError} | {storeErr}" : storeErr;
-            }
+            foreach (var v in await FetchFromStoreApiAsync())
+                merged[MergeKey(v)] = v;
         }
+        catch (Exception ex)
+        {
+            errors.Add($"Store API failed: {ex.Message}");
+        }
+
+        if (errors.Count > 0)
+            LastError = string.Join(" | ", errors);
+
+        var versions = merged.Values
+            .OrderByDescending(v => TryParseVersion(v.Version))
+            .ToList();
 
         if (versions.Count > 0)
         {
@@ -97,6 +107,11 @@ public class VanillaVersionService
 
         return versions;
     }
+
+    private static string MergeKey(VanillaVersion v) => $"{v.Version}|{v.Channel}";
+
+    private static string DetectChannel(string packageName) =>
+        packageName.Contains("WindowsBeta", StringComparison.OrdinalIgnoreCase) ? "Preview" : "Release";
 
     // ── Community Version Database ─────────────────────────────────
 
@@ -130,13 +145,16 @@ public class VanillaVersionService
             var ver = ParseVersionFromPackage(packageName);
             if (string.IsNullOrEmpty(ver)) continue;
 
-            if (!seen.ContainsKey(ver))
+            var channel = DetectChannel(packageName);
+            var key = $"{ver}|{channel}";
+            if (!seen.ContainsKey(key))
             {
-                seen[ver] = new VanillaVersion
+                seen[key] = new VanillaVersion
                 {
                     Version     = ver,
                     UpdateId    = updateId,
                     PackageName = packageName,
+                    Channel     = channel,
                 };
             }
         }
@@ -164,7 +182,8 @@ public class VanillaVersionService
                 Version     = ver,
                 UpdateId    = u.UpdateId,
                 PackageName = u.PackageName,
-                SizeBytes   = u.Size
+                SizeBytes   = u.Size,
+                Channel     = DetectChannel(u.PackageName)
             });
         }
 
@@ -402,7 +421,8 @@ public class VanillaVersionService
         {
             try
             {
-                if (!fragmentXml.Contains("Microsoft.MinecraftUWP", StringComparison.OrdinalIgnoreCase))
+                if (!fragmentXml.Contains("Microsoft.MinecraftUWP", StringComparison.OrdinalIgnoreCase) &&
+                    !fragmentXml.Contains("Microsoft.MinecraftWindowsBeta", StringComparison.OrdinalIgnoreCase))
                     continue;
                 if (fragmentXml.Contains(".EAppx", StringComparison.OrdinalIgnoreCase))
                     continue;
@@ -491,8 +511,8 @@ public class VanillaVersionService
     {
         try
         {
-            var result = await RunPowerShellAsync(
-                "Get-AppxPackage -Name Microsoft.MinecraftUWP | Remove-AppxPackage");
+            await RunPowerShellAsync(
+                "Get-AppxPackage -Name Microsoft.MinecraftUWP,Microsoft.MinecraftWindowsBeta | Remove-AppxPackage");
             return "";
         }
         catch (Exception ex)
@@ -559,11 +579,19 @@ public class VanillaVersionService
 
     // ── Version parsing ──────────────────────────────────────────
 
+    // Newer calendar-based marketing versions (e.g. "v26.1") when present literally in the
+    // package moniker, checked first so they take priority over the raw appx build number.
+    private static readonly Regex NamedSchemeRegex =
+        new(@"[_\-]v(\d{1,3}\.\d{1,3}(?:\.\d{1,3})?)(?=[_\-]|$)", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
     private static readonly Regex VersionRegex =
         new(@"(\d+\.\d+\.\d+(?:\.\d+)?)", RegexOptions.Compiled);
 
     private static string? ParseVersionFromPackage(string packageName)
     {
+        var named = NamedSchemeRegex.Match(packageName);
+        if (named.Success) return named.Groups[1].Value;
+
         var m = VersionRegex.Match(packageName);
         return m.Success ? m.Groups[1].Value : null;
     }
@@ -581,7 +609,7 @@ public class VanillaVersionService
         {
             var dir = Path.GetDirectoryName(CacheFile)!;
             Directory.CreateDirectory(dir);
-            var data = versions.Select(v => new { v.Version, v.UpdateId, v.PackageName, v.SizeBytes }).ToList();
+            var data = versions.Select(v => new { v.Version, v.UpdateId, v.PackageName, v.SizeBytes, v.Channel }).ToList();
             var json = JsonSerializer.Serialize(data, new JsonSerializerOptions { WriteIndented = true });
             File.WriteAllText(CacheFile, json);
         }
@@ -604,6 +632,7 @@ public class VanillaVersionService
                 var uid = el.GetProperty("UpdateId").GetString() ?? "";
                 var pkg = el.GetProperty("PackageName").GetString() ?? "";
                 var sz  = el.TryGetProperty("SizeBytes", out var szp) ? szp.GetInt64() : 0;
+                var channel = el.TryGetProperty("Channel", out var chp) ? (chp.GetString() ?? "Release") : "Release";
 
                 var versionDir = Path.Combine(VersionsDirectory, ver);
                 list.Add(new VanillaVersion
@@ -612,6 +641,7 @@ public class VanillaVersionService
                     UpdateId     = uid,
                     PackageName  = pkg,
                     SizeBytes    = sz,
+                    Channel      = channel,
                     IsDownloaded = File.Exists(Path.Combine(versionDir, "AppxManifest.xml")),
                     IsActive     = ver == active
                 });

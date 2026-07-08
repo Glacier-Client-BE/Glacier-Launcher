@@ -2864,6 +2864,15 @@
                        @onkeydown:stopPropagation />
             </div>
 
+            <div class="mcv-channel-tabs">
+                <button class="mcv-channel-tab @(mcVersionsChannel == "all" ? "active" : "")"
+                        @onclick='() => mcVersionsChannel = "all"' @onmousedown:stopPropagation>All</button>
+                <button class="mcv-channel-tab @(mcVersionsChannel == "release" ? "active" : "")"
+                        @onclick='() => mcVersionsChannel = "release"' @onmousedown:stopPropagation>Releases</button>
+                <button class="mcv-channel-tab @(mcVersionsChannel == "preview" ? "active" : "")"
+                        @onclick='() => mcVersionsChannel = "preview"' @onmousedown:stopPropagation>Previews</button>
+            </div>
+
             <div class="panel-body">
                 @if (isLoadingMcVersions)
                 {
@@ -2908,7 +2917,7 @@
                             <div class="version-row mcv-active-row">
                                 <div class="version-meta">
                                     <div style="display:flex; align-items:center; gap:6px;">
-                                        <span class="version-name">Minecraft @v.Version</span>
+                                        <span class="version-name">Minecraft @v.DisplayName</span>
                                         <span class="tag-active">Active</span>
                                     </div>
                                     @if (!string.IsNullOrEmpty(v.ErrorMessage)) { <span class="error-text">@v.ErrorMessage</span> }
@@ -2923,7 +2932,7 @@
                     <Virtualize Items="restList" ItemSize="54" Context="v">
                         <div class="version-row @(!string.IsNullOrEmpty(v.ErrorMessage) ? "error-row" : "")" @key="v.Version">
                             <div class="version-meta">
-                                <span class="version-name">Minecraft @v.Version</span>
+                                <span class="version-name">Minecraft @v.DisplayName</span>
                                 @if (!string.IsNullOrEmpty(v.ErrorMessage)) { <span class="error-text">@v.ErrorMessage</span> }
                                 else if (v.IsDownloaded && !v.IsDownloading) { <span class="version-sub">Ready · @v.SizeLabel</span> }
                                 else if (!v.IsDownloaded && !v.IsDownloading) { <span class="version-sub">@v.SizeLabel</span> }

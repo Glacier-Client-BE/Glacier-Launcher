@@ -88,6 +88,7 @@ public partial class Home : IDisposable
     private List<VanillaVersion> mcVersionsList = new();
     private string mcVersionsFilter = "";
     private string? mcVersionsError = null;
+    private string mcVersionsChannel = "all"; // "all" | "release" | "preview"
 
     private bool   storeInstallBusy   = false;
     private double storeInstallPct    = 0;
@@ -101,10 +102,14 @@ public partial class Home : IDisposable
     {
         get
         {
-            var key = $"{mcVersionsList.Count}|{mcVersionsList.Count(v => v.IsDownloaded)}|{mcVersionsFilter}";
+            var key = $"{mcVersionsList.Count}|{mcVersionsList.Count(v => v.IsDownloaded)}|{mcVersionsFilter}|{mcVersionsChannel}";
             if (_filteredMcCache == null || key != _filteredMcKey)
             {
                 IEnumerable<VanillaVersion> q = mcVersionsList;
+                if (mcVersionsChannel == "release")
+                    q = q.Where(v => v.Channel != "Preview");
+                else if (mcVersionsChannel == "preview")
+                    q = q.Where(v => v.Channel == "Preview");
                 if (!string.IsNullOrWhiteSpace(mcVersionsFilter))
                 {
                     var filter = mcVersionsFilter.Trim();

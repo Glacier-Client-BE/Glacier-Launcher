@@ -4254,6 +4254,37 @@ input[type=range]:disabled {
     background: var(--accent-hover) !important;
 }
 
+.mcv-channel-tabs {
+    display: flex;
+    gap: 6px;
+    margin: 10px 16px 0;
+    flex-shrink: 0;
+}
+
+.mcv-channel-tab {
+    flex: 1;
+    padding: 6px 10px;
+    font-size: 11.5px;
+    font-weight: 600;
+    color: var(--text-dim);
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background var(--ease-out), color var(--ease-out), border-color var(--ease-out);
+}
+
+.mcv-channel-tab:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--text);
+}
+
+.mcv-channel-tab.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+}
+
 .panel-back-btn,
 .panel-icon-btn,
 .panel-tab,
