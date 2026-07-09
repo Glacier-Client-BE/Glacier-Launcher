@@ -14,16 +14,24 @@ namespace GlacierLauncher.Services;
 /// </summary>
 public class BedrockPackService
 {
-    public static string ResourcePacksDir => CurseForgeService.ResourcePacksDir;
-    public static string BehaviorPacksDir => CurseForgeService.BehaviorPacksDir;
-    public static string SkinPacksDir     => CurseForgeService.SkinPacksDir;
+    public static string ResourcePacksDir    => CurseForgeService.ResourcePacksDir;
+    public static string BehaviorPacksDir    => CurseForgeService.BehaviorPacksDir;
+    public static string SkinPacksDir        => CurseForgeService.SkinPacksDir;
+    public static string DevResourcePacksDir => CurseForgeService.DevResourcePacksDir;
+    public static string DevBehaviorPacksDir => CurseForgeService.DevBehaviorPacksDir;
+    public static string DevSkinPacksDir     => CurseForgeService.DevSkinPacksDir;
 
     public static string DirFor(string kind) => kind switch
     {
-        "behavior" => BehaviorPacksDir,
-        "skin"     => SkinPacksDir,
-        _          => ResourcePacksDir
+        "behavior"     => BehaviorPacksDir,
+        "skin"         => SkinPacksDir,
+        "resource-dev" => DevResourcePacksDir,
+        "behavior-dev" => DevBehaviorPacksDir,
+        "skin-dev"     => DevSkinPacksDir,
+        _              => ResourcePacksDir
     };
+
+    private static readonly string[] IconNames = { "pack_icon.png", "pack_icon.jpg", "pack_icon.jpeg" };
 
     public List<BedrockPack> ListPacks(string kind)
     {
@@ -42,13 +50,24 @@ public class BedrockPackService
                     FolderPath = packDir,
                     Kind       = kind,
                     SizeBytes  = DirectorySize(packDir),
-                    ModifiedAt = Directory.GetLastWriteTimeUtc(packDir).ToString("o")
+                    ModifiedAt = Directory.GetLastWriteTimeUtc(packDir).ToString("o"),
+                    IconPath   = FindIcon(packDir)
                 });
             }
             catch { /* skip unreadable pack, keep listing the rest */ }
         }
 
         return result.OrderBy(p => p.Name, StringComparer.OrdinalIgnoreCase).ToList();
+    }
+
+    private static string? FindIcon(string packDir)
+    {
+        foreach (var iconName in IconNames)
+        {
+            var path = Path.Combine(packDir, iconName);
+            if (File.Exists(path)) return path;
+        }
+        return null;
     }
 
     private static string? ReadPackName(string packDir)

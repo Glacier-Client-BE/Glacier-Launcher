@@ -2262,6 +2262,23 @@ html.vt-active .panel-overlay,
     flex: 1;
 }
 
+.version-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: var(--r-sm, 6px);
+    object-fit: cover;
+    flex-shrink: 0;
+    background: var(--bg-item-hover);
+}
+
+.version-icon-placeholder {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-dim);
+    font-size: 14px;
+}
+
 .version-name {
     font-size: 13px;
     font-weight: 500;
@@ -3194,6 +3211,10 @@ input[type=range]:active::-webkit-slider-thumb {
 
 .toast.info i {
     color: var(--accent);
+}
+
+.toast.warning i {
+    color: var(--orange);
 }
 
 @keyframes toast-in {
@@ -5855,6 +5876,13 @@ html.vt-active .panel-overlay {
 .instance-icon-btn:hover { background: rgba(255, 255, 255, 0.1); color: var(--text); }
 .instance-icon-btn.instance-del { color: var(--red); }
 .instance-rename { flex: 1; height: 28px; }
+.instance-version-select {
+    flex: 0 0 auto;
+    max-width: 130px;
+    height: 26px;
+    font-size: 11px;
+    padding: 2px 6px;
+}
 
 /* ══ Taste polish: tactile feedback on the new panels ════════
    Emil Kowalski's principle — every pressable element should feel like it

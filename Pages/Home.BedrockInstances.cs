@@ -15,6 +15,7 @@ public partial class Home
     {
         SetEditionCore("bedrock");
         await NavigateAsync(() => currentView = "bedrockinstances");
+        if (mcVersionsList.Count == 0) await LoadMcVersionsAsync();
     }
 
     private async Task SwitchBedrockInstance(string id)
@@ -25,9 +26,12 @@ public partial class Home
         StateHasChanged();
         try
         {
-            await BedrockInstances.SwitchToAsync(id);
+            var warning = await BedrockInstances.SwitchToAsync(id);
             await RefreshBedrockWorldsAsync();
-            _ = ShowToast($"Switched to '{BedrockInstances.ActiveInstance.Name}'.", "success");
+            if (string.IsNullOrEmpty(warning))
+                _ = ShowToast($"Switched to '{BedrockInstances.ActiveInstance.Name}'.", "success");
+            else
+                _ = ShowToast(warning, "warning");
         }
         catch (Exception ex) { _ = ShowToast(ex.Message, "error"); }
         finally { isSwitchingBedrockInstance = false; StateHasChanged(); }
@@ -37,6 +41,12 @@ public partial class Home
     {
         var instance = BedrockInstances.Create("New Instance");
         _ = ShowToast($"Created '{instance.Name}'. Switch to it to start using its own worlds and packs.", "info");
+        StateHasChanged();
+    }
+
+    private void OnBedrockInstanceVersionChanged(string id, Microsoft.AspNetCore.Components.ChangeEventArgs e)
+    {
+        BedrockInstances.SetVersion(id, e.Value?.ToString() ?? "");
         StateHasChanged();
     }
 

@@ -24,14 +24,16 @@ public sealed class BedrockInstanceService
 {
     private readonly SettingsService _settings;
     private readonly BedrockBackupService _backup;
+    private readonly VanillaVersionService _vanillaVersions;
     private readonly string _indexPath;
     private readonly object _sync = new();
     private List<BedrockInstance> _instances = new();
 
-    public BedrockInstanceService(SettingsService settings, BedrockBackupService backup)
+    public BedrockInstanceService(SettingsService settings, BedrockBackupService backup, VanillaVersionService vanillaVersions)
     {
         _settings = settings;
         _backup = backup;
+        _vanillaVersions = vanillaVersions;
         _indexPath = Path.Combine(RootDir, "instances.json");
         Directory.CreateDirectory(RootDir);
         Directory.CreateDirectory(InstancesDir);
@@ -90,6 +92,19 @@ public sealed class BedrockInstanceService
         }
     }
 
+    /// <summary>Sets which downloaded vanilla version this instance registers when switched to. Pass "" to leave the registered version alone.</summary>
+    public void SetVersion(string id, string versionTag)
+    {
+        lock (_sync)
+        {
+            var instance = _instances.FirstOrDefault(x => string.Equals(x.Id, id, StringComparison.OrdinalIgnoreCase));
+            if (instance == null) return;
+            instance.VersionTag = versionTag ?? "";
+            instance.UpdatedAt = DateTime.UtcNow.ToString("o");
+            Save();
+        }
+    }
+
     public void Rename(string id, string newName)
     {
         if (string.IsNullOrWhiteSpace(newName)) return;
@@ -131,7 +146,15 @@ public sealed class BedrockInstanceService
     /// brand-new (never-activated) target instance simply starts the live
     /// folder empty, matching the "new isolated profile" expectation.
     /// </summary>
-    public async Task SwitchToAsync(string id)
+    /// <summary>
+    /// Switches instance data, and — if the target instance has a version
+    /// tag set — also swaps the machine-wide registered Bedrock appx to match.
+    /// Returns "" on full success, or a warning message if the data switch
+    /// succeeded but the version switch didn't (data switch is never rolled
+    /// back for a version-switch failure — worlds/packs are more important
+    /// than which build is currently registered).
+    /// </summary>
+    public async Task<string> SwitchToAsync(string id)
     {
         BedrockInstance? target;
         BedrockInstance? current;
@@ -141,7 +164,7 @@ public sealed class BedrockInstanceService
             target = _instances.FirstOrDefault(x => string.Equals(x.Id, id, StringComparison.OrdinalIgnoreCase));
             if (target == null) throw new InvalidOperationException("Instance not found.");
             if (string.Equals(_settings.Settings.BedrockActiveInstanceId, id, StringComparison.OrdinalIgnoreCase))
-                return; // already active
+                return ""; // already active
             current = _instances.FirstOrDefault(x => string.Equals(x.Id, _settings.Settings.BedrockActiveInstanceId, StringComparison.OrdinalIgnoreCase));
         }
 
@@ -159,6 +182,22 @@ public sealed class BedrockInstanceService
             var stored = _instances.First(x => x.Id == target.Id);
             stored.UpdatedAt = DateTime.UtcNow.ToString("o");
             Save();
+        }
+
+        if (string.IsNullOrWhiteSpace(target.VersionTag)) return "";
+
+        try
+        {
+            var versionDir = Path.Combine(VanillaVersionService.VersionsDirectory, target.VersionTag);
+            if (!File.Exists(Path.Combine(versionDir, "AppxManifest.xml")))
+                return $"Switched instance data, but Minecraft {target.VersionTag} isn't downloaded — game version left as-is.";
+
+            var warning = await _vanillaVersions.SwitchVersionAsync(new VanillaVersion { Version = target.VersionTag });
+            return string.IsNullOrEmpty(warning) ? "" : $"Switched instance data, but couldn't switch game version: {warning}";
+        }
+        catch (Exception ex)
+        {
+            return $"Switched instance data, but couldn't switch game version: {ex.Message}";
         }
     }
 

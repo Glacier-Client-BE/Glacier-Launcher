@@ -4,9 +4,11 @@ public class BedrockInstance
 {
     public string Id          { get; set; } = "";
     public string Name        { get; set; } = "";
-    // Informational only — Bedrock only has one installed package at a time,
-    // so this doesn't drive an automatic reinstall; it just reminds the user
-    // which version they were playing with this instance's data.
+    // Which downloaded vanilla version (VanillaVersionService.VersionsDirectory)
+    // this instance should register when switched to. Empty = leave whatever
+    // version is currently registered alone. Bedrock only has one installed
+    // package at a time, so switching TO this instance also swaps the
+    // machine-wide registered appx to match.
     public string VersionTag  { get; set; } = "";
     public string Directory   { get; set; } = "";
     public string CreatedAt   { get; set; } = "";

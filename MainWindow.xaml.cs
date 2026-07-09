@@ -168,6 +168,22 @@ public partial class MainWindow : Window
             }
             catch { /* best effort */ }
 
+            // Bedrock world/pack icons (world_icon.jpeg, pack_icon.png) live under
+            // com.mojang, outside every folder mapped above — map it separately so
+            // the Worlds/Packs panels can render thumbnails.
+            try
+            {
+                var comMojangRoot = CurseForgeService.ComMojangRoot;
+                if (Directory.Exists(comMojangRoot))
+                {
+                    blazorWebView.WebView.CoreWebView2.SetVirtualHostNameToFolderMapping(
+                        "glacier-mojang.local",
+                        comMojangRoot,
+                        Microsoft.Web.WebView2.Core.CoreWebView2HostResourceAccessKind.Allow);
+                }
+            }
+            catch { /* best effort */ }
+
             blazorWebView.WebView.CoreWebView2.WebMessageReceived += (_, args) =>
             {
                 var msg = args.TryGetWebMessageAsString();

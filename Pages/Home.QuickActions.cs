@@ -114,7 +114,7 @@ public partial class Home
         yield return new("fa-solid fa-boxes-stacked", "Bedrock Packs", "Navigation", "Manage resource, behavior, and skin packs", "", () => { CloseSearch(); _ = OpenBedrockPacks(); });
         yield return new("fa-solid fa-clock-rotate-left", "Bedrock Backups", "Navigation", "Snapshot or restore your worlds and packs", "", () => { CloseSearch(); _ = OpenBedrockBackups(); });
         yield return new("fa-solid fa-layer-group", "Bedrock Instances", "Navigation", "Isolated worlds/packs profiles you can switch between", "", () => { CloseSearch(); _ = OpenBedrockInstances(); });
-        yield return new("fa-solid fa-images", "Screenshot Gallery (Bedrock)", "Navigation", "Browse Xbox Game Bar Minecraft screenshots", "", () => { CloseSearch(); _ = OpenBedrockScreenshots(); });
+        yield return new("fa-solid fa-images", "Screenshot Gallery (Bedrock)", "Navigation", "Browse in-game and Xbox Game Bar Minecraft screenshots", "", () => { CloseSearch(); _ = OpenBedrockScreenshots(); });
         yield return new("fa-solid fa-download", "Download Manager", "Navigation", "See active and past downloads", "", () => { CloseSearch(); OpenDownloadManager(); });
         yield return new("fa-solid fa-newspaper", "What's New / Changelog", "Navigation", "Launcher news and release notes", "", () => { CloseSearch(); _ = OpenNews(); });
         yield return new("fa-solid fa-shirt", "Change Minecraft Skin", "Account", "Upload a new skin (signed-in)", "", () => { CloseSearch(); _ = ChangeSkinAsync(); });
@@ -291,10 +291,14 @@ public partial class Home
 
     private void OpenScreenshot(JavaInstanceFile shot) => OpenUrl(shot.Path);
 
-    // Same idea as FileToLocalUrl but for Videos\Captures, mapped separately
-    // since it lives outside the Glacier Launcher folder.
+    // Bedrock screenshots come from two roots — com.mojang\Screenshots (in-game
+    // captures) and Videos\Captures (Xbox Game Bar) — each mapped to its own
+    // virtual host, so try both and use whichever one the path is actually under.
     private static string FileToCapturesUrl(string absolutePath)
     {
+        var mojangUrl = FileToMojangUrl(absolutePath);
+        if (!string.IsNullOrEmpty(mojangUrl)) return mojangUrl;
+
         try
         {
             var root = Services.BedrockScreenshotService.CapturesDir;
@@ -303,6 +307,22 @@ public partial class Home
             var rel = full[root.Length..].TrimStart('\\', '/').Replace('\\', '/');
             var encoded = string.Join('/', rel.Split('/').Select(Uri.EscapeDataString));
             return $"https://glacier-captures.local/{encoded}";
+        }
+        catch { return ""; }
+    }
+
+    // Same idea, but for pack/world icons under com.mojang (glacier-mojang.local).
+    private static string FileToMojangUrl(string? absolutePath)
+    {
+        if (string.IsNullOrEmpty(absolutePath)) return "";
+        try
+        {
+            var root = CurseForgeService.ComMojangRoot;
+            var full = Path.GetFullPath(absolutePath);
+            if (!full.StartsWith(root, StringComparison.OrdinalIgnoreCase)) return "";
+            var rel = full[root.Length..].TrimStart('\\', '/').Replace('\\', '/');
+            var encoded = string.Join('/', rel.Split('/').Select(Uri.EscapeDataString));
+            return $"https://glacier-mojang.local/{encoded}";
         }
         catch { return ""; }
     }

@@ -17,6 +17,8 @@ public class BedrockWorldService
 {
     public static string WorldsDir => CurseForgeService.WorldsDir;
 
+    private static readonly string[] IconNames = { "world_icon.jpeg", "world_icon.jpg", "world_icon.png" };
+
     public List<BedrockWorld> ListWorlds()
     {
         var result = new List<BedrockWorld>();
@@ -40,13 +42,24 @@ public class BedrockWorldService
                     Name       = name,
                     FolderPath = dir,
                     SizeBytes  = size,
-                    ModifiedAt = modified
+                    ModifiedAt = modified,
+                    IconPath   = FindIcon(dir)
                 });
             }
             catch { /* skip unreadable folder, keep listing the rest */ }
         }
 
         return result.OrderByDescending(w => w.ModifiedAt).ToList();
+    }
+
+    private static string? FindIcon(string worldDir)
+    {
+        foreach (var iconName in IconNames)
+        {
+            var path = Path.Combine(worldDir, iconName);
+            if (File.Exists(path)) return path;
+        }
+        return null;
     }
 
     private static string? ReadWorldName(string worldDir)

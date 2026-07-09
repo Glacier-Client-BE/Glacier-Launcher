@@ -637,7 +637,7 @@ public partial class Home : IDisposable
 
     private async Task ShowToast(string message, string kind = "info")
     {
-        var icon = kind switch { "success" => "fa-solid fa-circle-check", "error" => "fa-solid fa-circle-xmark", _ => "fa-solid fa-circle-info" };
+        var icon = kind switch { "success" => "fa-solid fa-circle-check", "error" => "fa-solid fa-circle-xmark", "warning" => "fa-solid fa-triangle-exclamation", _ => "fa-solid fa-circle-info" };
         var t = new ToastItem(message, kind, icon);
         _toasts.Add(t);
         StateHasChanged();

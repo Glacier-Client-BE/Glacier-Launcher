@@ -1070,7 +1070,7 @@
 
             <div class="panel-search-wrap">
                 <i class="fa-solid fa-magnifying-glass"></i>
-                <input class="panel-search-input" placeholder="Filter settingsc"
+                <input class="panel-search-input" placeholder="Filter settings"
                        @bind="settingsFilter" @bind:event="oninput"
                        @onkeydown:stopPropagation />
                 @if (!string.IsNullOrEmpty(settingsFilter))
@@ -3264,7 +3264,16 @@
                     @foreach (var w in bedrockWorlds)
                     {
                         var world = w;
+                        var worldIconUrl = FileToMojangUrl(world.IconPath);
                         <div class="version-row">
+                            @if (!string.IsNullOrEmpty(worldIconUrl))
+                            {
+                                <img class="version-icon" src="@worldIconUrl" alt="" />
+                            }
+                            else
+                            {
+                                <div class="version-icon version-icon-placeholder"><i class="fa-solid fa-globe"></i></div>
+                            }
                             <div class="version-meta">
                                 <span class="version-name">@world.Name</span>
                                 <span class="version-sub">@FormatSize(world.SizeBytes) · @FormatRelativeTime(world.ModifiedAt)</span>
@@ -3357,6 +3366,15 @@
                     <button class="ts-chip @(bedrockPacksKind == "skin" ? "selected" : "")" @onclick='() => SwitchBedrockPacksKind("skin")' @onmousedown:stopPropagation>
                         <i class="fa-solid fa-shirt"></i> Skin
                     </button>
+                    <button class="ts-chip @(bedrockPacksKind == "resource-dev" ? "selected" : "")" @onclick='() => SwitchBedrockPacksKind("resource-dev")' @onmousedown:stopPropagation>
+                        <i class="fa-solid fa-code"></i> Resource (dev)
+                    </button>
+                    <button class="ts-chip @(bedrockPacksKind == "behavior-dev" ? "selected" : "")" @onclick='() => SwitchBedrockPacksKind("behavior-dev")' @onmousedown:stopPropagation>
+                        <i class="fa-solid fa-code"></i> Behavior (dev)
+                    </button>
+                    <button class="ts-chip @(bedrockPacksKind == "skin-dev" ? "selected" : "")" @onclick='() => SwitchBedrockPacksKind("skin-dev")' @onmousedown:stopPropagation>
+                        <i class="fa-solid fa-code"></i> Skin (dev)
+                    </button>
                 </div>
 
                 @if (isLoadingBedrockPacks)
@@ -3376,7 +3394,16 @@
                     @foreach (var p in bedrockPacks)
                     {
                         var pack = p;
+                        var packIconUrl = FileToMojangUrl(pack.IconPath);
                         <div class="version-row">
+                            @if (!string.IsNullOrEmpty(packIconUrl))
+                            {
+                                <img class="version-icon" src="@packIconUrl" alt="" />
+                            }
+                            else
+                            {
+                                <div class="version-icon version-icon-placeholder"><i class="fa-solid fa-boxes-stacked"></i></div>
+                            }
                             <div class="version-meta">
                                 <span class="version-name">@pack.Name</span>
                                 <span class="version-sub">@FormatSize(pack.SizeBytes) · @FormatRelativeTime(pack.ModifiedAt)</span>
@@ -3572,7 +3599,8 @@
             <div class="panel-body">
                 <div class="empty-state" style="padding:14px 16px 4px; text-align:left; align-items:flex-start;">
                     <small>Each instance keeps its own worlds, packs, and local settings. Switching copies the active instance's
-                    data out and the new one's data in — give it a moment on large worlds.</small>
+                    data out and the new one's data in — give it a moment on large worlds. Optionally pin a downloaded game
+                    version per instance in <a href="javascript:void(0)" @onclick="OpenMcVersions" @onmousedown:stopPropagation>MC Versions</a> — switching to that instance registers it too.</small>
                 </div>
                 @foreach (var inst in BedrockInstances.Instances)
                 {
@@ -3591,6 +3619,15 @@
                                 @if (isActive) { <i class="fa-solid fa-circle-check"></i> } else { <i class="fa-regular fa-circle"></i> }
                                 <span>@inst.Name</span>
                             </button>
+                            <select class="setting-select instance-version-select" value="@inst.VersionTag"
+                                    @onchange="e => OnBedrockInstanceVersionChanged(inst.Id, e)" @onclick:stopPropagation
+                                    data-tooltip="Game version to register when switching to this instance">
+                                <option value="">Current version</option>
+                                @foreach (var v in mcVersionsList.Where(v => v.IsDownloaded))
+                                {
+                                    <option value="@v.Version">@v.DisplayName</option>
+                                }
+                            </select>
                             <button class="instance-icon-btn" @onclick="() => BeginRenameBedrockInstance(inst.Id, inst.Name)" @onmousedown:stopPropagation data-tooltip="Rename"><i class="fa-solid fa-pen"></i></button>
                             <button class="instance-icon-btn" @onclick="() => BackupBedrockInstance(inst)" @onmousedown:stopPropagation data-tooltip="Back up"><i class="fa-solid fa-camera"></i></button>
                             @if (_confirmDeleteBedrockInstanceId == inst.Id)
@@ -3657,7 +3694,7 @@
                     <div class="empty-state" style="padding:28px 20px;">
                         <i class="fa-solid fa-image"></i>
                         <span>No screenshots yet</span>
-                        <small>Press Win+Alt+PrtScn in-game to capture one with Xbox Game Bar — they'll show up here.</small>
+                        <small>In-game screenshots and Xbox Game Bar captures (Win+Alt+PrtScn) both show up here.</small>
                     </div>
                 }
                 else

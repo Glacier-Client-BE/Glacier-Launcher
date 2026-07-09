@@ -23,7 +23,10 @@ public class BedrockBackupService
     // minecraftpe/logs, etc.) to keep backups small and fast. Also used by
     // BedrockInstanceService to know what to copy-sync between instances.
     public static readonly string[] ManagedFolders =
-        { "minecraftWorlds", "resource_packs", "behaviour_packs", "skin_packs", "minecraftpe" };
+        {
+            "minecraftWorlds", "resource_packs", "behavior_packs", "skin_packs", "minecraftpe",
+            "development_resource_packs", "development_behavior_packs", "development_skin_packs"
+        };
 
     public static string ComMojangRoot => Path.GetDirectoryName(CurseForgeService.WorldsDir)!;
 

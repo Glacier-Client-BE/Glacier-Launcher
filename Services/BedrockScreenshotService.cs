@@ -7,38 +7,65 @@ using GlacierLauncher.Models;
 namespace GlacierLauncher.Services;
 
 /// <summary>
-/// Bedrock (UWP) has no built-in screenshot key of its own — players capture
-/// with Xbox Game Bar (Win+Alt+PrtScn), which saves everything to
-/// Videos\Captures. This lists just the Minecraft-named ones from there.
+/// Bedrock screenshots come from two places: the game's own in-game capture
+/// (F1 by default, or bound in controls), saved as .jpeg files under
+/// com.mojang\Screenshots\&lt;xbox-user-id&gt;\, and Xbox Game Bar
+/// (Win+Alt+PrtScn), which saves everything to Videos\Captures. Both are
+/// listed here, merged and sorted by most recent.
 /// </summary>
 public class BedrockScreenshotService
 {
     public static string CapturesDir =>
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyVideos), "Captures");
 
+    public static string ComMojangScreenshotsDir =>
+        Path.Combine(CurseForgeService.ComMojangRoot, "Screenshots");
+
     public List<JavaInstanceFile> ListScreenshots()
     {
         var result = new List<JavaInstanceFile>();
-        if (!Directory.Exists(CapturesDir)) return result;
 
-        foreach (var file in Directory.EnumerateFiles(CapturesDir, "*.png", SearchOption.TopDirectoryOnly))
+        if (Directory.Exists(ComMojangScreenshotsDir))
         {
-            var name = Path.GetFileName(file);
-            if (!name.Contains("minecraft", StringComparison.OrdinalIgnoreCase)) continue;
-
-            try
+            foreach (var file in Directory.EnumerateFiles(ComMojangScreenshotsDir, "*.jpeg", SearchOption.AllDirectories))
             {
-                var info = new FileInfo(file);
-                result.Add(new JavaInstanceFile
+                try
                 {
-                    Name = name,
-                    Path = info.FullName,
-                    Kind = "screenshot",
-                    SizeBytes = info.Length,
-                    ModifiedAt = info.LastWriteTimeUtc.ToString("o")
-                });
+                    var info = new FileInfo(file);
+                    result.Add(new JavaInstanceFile
+                    {
+                        Name = Path.GetFileName(file),
+                        Path = info.FullName,
+                        Kind = "screenshot",
+                        SizeBytes = info.Length,
+                        ModifiedAt = info.LastWriteTimeUtc.ToString("o")
+                    });
+                }
+                catch { /* skip unreadable file, keep listing the rest */ }
             }
-            catch { /* skip unreadable file, keep listing the rest */ }
+        }
+
+        if (Directory.Exists(CapturesDir))
+        {
+            foreach (var file in Directory.EnumerateFiles(CapturesDir, "*.png", SearchOption.TopDirectoryOnly))
+            {
+                var name = Path.GetFileName(file);
+                if (!name.Contains("minecraft", StringComparison.OrdinalIgnoreCase)) continue;
+
+                try
+                {
+                    var info = new FileInfo(file);
+                    result.Add(new JavaInstanceFile
+                    {
+                        Name = name,
+                        Path = info.FullName,
+                        Kind = "screenshot",
+                        SizeBytes = info.Length,
+                        ModifiedAt = info.LastWriteTimeUtc.ToString("o")
+                    });
+                }
+                catch { /* skip unreadable file, keep listing the rest */ }
+            }
         }
 
         return result.OrderByDescending(f => f.ModifiedAt).ToList();
@@ -46,10 +73,13 @@ public class BedrockScreenshotService
 
     public void OpenFolder()
     {
-        Directory.CreateDirectory(CapturesDir);
+        // Prefer the real in-game screenshots folder; Game Bar's Captures is the
+        // fallback when the player hasn't taken any in-game screenshots yet.
+        var dir = Directory.Exists(ComMojangScreenshotsDir) ? ComMojangScreenshotsDir : CapturesDir;
+        Directory.CreateDirectory(dir);
         System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
         {
-            FileName = CapturesDir,
+            FileName = dir,
             UseShellExecute = true
         });
     }
