@@ -58,13 +58,16 @@ public class BedrockBackupService
         return result.OrderByDescending(b => b.CreatedAt).ToList();
     }
 
-    public Task<string> CreateBackupAsync(string? label = null) => CreateBackupFromFolderAsync(ComMojangRoot, label);
+    public Task<string> CreateBackupAsync(string? label = null) => CreateBackupFromFolderAsync(ComMojangRoot, label, sourceIsLive: true);
 
-    public Task RestoreBackupAsync(string backupPath) => RestoreBackupIntoFolderAsync(backupPath, ComMojangRoot);
+    public Task RestoreBackupAsync(string backupPath) => RestoreBackupIntoFolderAsync(backupPath, ComMojangRoot, targetIsLive: true);
 
     /// <summary>Zips the managed subfolders of <paramref name="sourceRoot"/> (either the live
-    /// com.mojang folder or a stored instance folder) into a backup under <see cref="BackupsDir"/>.</summary>
-    public async Task<string> CreateBackupFromFolderAsync(string sourceRoot, string? label = null)
+    /// com.mojang folder or a stored instance folder) into a backup under <see cref="BackupsDir"/>.
+    /// When <paramref name="sourceIsLive"/> is set, <paramref name="sourceRoot"/> is only used as a
+    /// fallback — each folder resolves its own live account folder via
+    /// <see cref="CurseForgeService.LiveRootFor"/> since worlds/packs can live under different ones.</summary>
+    public async Task<string> CreateBackupFromFolderAsync(string sourceRoot, string? label = null, bool sourceIsLive = false)
     {
         Directory.CreateDirectory(BackupsDir);
 
@@ -81,13 +84,16 @@ public class BedrockBackupService
 
             foreach (var folder in ManagedFolders)
             {
-                var srcDir = Path.Combine(sourceRoot, folder);
+                var folderRoot = sourceIsLive ? CurseForgeService.LiveRootFor(folder) : sourceRoot;
+                var srcDir = Path.Combine(folderRoot, folder);
                 if (!Directory.Exists(srcDir)) continue;
                 foundAny = true;
 
                 foreach (var file in Directory.EnumerateFiles(srcDir, "*", SearchOption.AllDirectories))
                 {
-                    var relative = Path.GetRelativePath(sourceRoot, file).Replace('\\', '/');
+                    // Store under the folder name regardless of which account folder it
+                    // actually came from, so restores always land back under ManagedFolders.
+                    var relative = folder + "/" + Path.GetRelativePath(srcDir, file).Replace('\\', '/');
                     try { archive.CreateEntryFromFile(file, relative, CompressionLevel.Optimal); }
                     catch { /* skip locked/unreadable file, keep the rest of the backup */ }
                 }
@@ -101,8 +107,10 @@ public class BedrockBackupService
     }
 
     /// <summary>Restores a backup zip into <paramref name="targetRoot"/>, wiping the top-level
-    /// folders the backup contains first so no stale data survives the restore.</summary>
-    public async Task RestoreBackupIntoFolderAsync(string backupPath, string targetRoot)
+    /// folders the backup contains first so no stale data survives the restore. When
+    /// <paramref name="targetIsLive"/> is set, each folder resolves its own live account folder via
+    /// <see cref="CurseForgeService.LiveRootFor"/> instead of always using <paramref name="targetRoot"/>.</summary>
+    public async Task RestoreBackupIntoFolderAsync(string backupPath, string targetRoot, bool targetIsLive = false)
     {
         if (!File.Exists(backupPath))
             throw new FileNotFoundException("Backup file not found.", backupPath);
@@ -119,7 +127,8 @@ public class BedrockBackupService
 
             foreach (var folder in topLevelFolders)
             {
-                var target = Path.Combine(targetRoot, folder);
+                var folderRoot = targetIsLive ? CurseForgeService.LiveRootFor(folder) : targetRoot;
+                var target = Path.Combine(folderRoot, folder);
                 if (Directory.Exists(target))
                 {
                     try { Directory.Delete(target, recursive: true); } catch { /* best effort */ }
@@ -129,7 +138,9 @@ public class BedrockBackupService
             foreach (var entry in archive.Entries)
             {
                 if (string.IsNullOrEmpty(entry.Name)) continue; // directory entry
-                var destPath = Path.Combine(targetRoot, entry.FullName.Replace('/', Path.DirectorySeparatorChar));
+                var folder = entry.FullName.Split('/')[0];
+                var folderRoot = targetIsLive ? CurseForgeService.LiveRootFor(folder) : targetRoot;
+                var destPath = Path.Combine(folderRoot, entry.FullName.Replace('/', Path.DirectorySeparatorChar));
                 Directory.CreateDirectory(Path.GetDirectoryName(destPath)!);
                 entry.ExtractToFile(destPath, overwrite: true);
             }

@@ -312,12 +312,14 @@ public partial class Home
     }
 
     // Same idea, but for pack/world icons under com.mojang (glacier-mojang.local).
+    // Mapped at the "Users" level since worlds/packs can resolve to different
+    // account folders (see CurseForgeService.ResolveBestRootFor).
     private static string FileToMojangUrl(string? absolutePath)
     {
         if (string.IsNullOrEmpty(absolutePath)) return "";
         try
         {
-            var root = CurseForgeService.ComMojangRoot;
+            var root = CurseForgeService.UsersRoot;
             var full = Path.GetFullPath(absolutePath);
             if (!full.StartsWith(root, StringComparison.OrdinalIgnoreCase)) return "";
             var rel = full[root.Length..].TrimStart('\\', '/').Replace('\\', '/');

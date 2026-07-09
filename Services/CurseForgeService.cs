@@ -34,18 +34,21 @@ public class CurseForgeService
     private const int JavaClassShaderPacks      = 6552;
 
     // The "Users" folder under "Minecraft Bedrock" contains a "Shared" folder
-    // plus one folder per signed-in Xbox account (numeric id). Actual world/pack
-    // data lives under whichever one the game is actually using, which is not
-    // always "Shared" — so pick the folder that actually has content, and only
-    // fall back to "Shared" if nothing else does.
-    public static readonly string ComMojangRoot = ResolveComMojangRoot();
+    // plus one folder per signed-in Xbox account (numeric id). Different data
+    // can live under different ones on the same machine — e.g. worlds under
+    // the numeric account folder but packs under "Shared" — so ComMojangRoot
+    // (worlds/settings/backups) and each pack folder are resolved independently
+    // by picking whichever candidate actually has content for that folder,
+    // rather than assuming one root serves everything.
+    public static readonly string ComMojangRoot = ResolveBestRootFor("minecraftWorlds");
 
-    private static string ResolveComMojangRoot()
+    public static string UsersRoot => Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+        "Minecraft Bedrock", "Users");
+
+    private static string ResolveBestRootFor(string subFolderName)
     {
-        var usersRoot = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-            "Minecraft Bedrock", "Users");
-
+        var usersRoot  = UsersRoot;
         var sharedRoot = Path.Combine(usersRoot, "Shared", "games", "com.mojang");
 
         try
@@ -53,19 +56,17 @@ public class CurseForgeService
             if (Directory.Exists(usersRoot))
             {
                 string? best = null;
-                var bestWorldCount = 0;
+                var bestCount = 0;
                 foreach (var userDir in Directory.EnumerateDirectories(usersRoot))
                 {
                     var candidate = Path.Combine(userDir, "games", "com.mojang");
-                    var worldsDir = Path.Combine(candidate, "minecraftWorlds");
-                    if (!Directory.Exists(worldsDir)) continue;
+                    var target = Path.Combine(candidate, subFolderName);
+                    if (!Directory.Exists(target)) continue;
 
-                    var worldCount = Directory.EnumerateDirectories(worldsDir).Take(1).Count() > 0
-                        ? Directory.EnumerateDirectories(worldsDir).Count()
-                        : 0;
-                    if (worldCount > bestWorldCount)
+                    var count = Directory.EnumerateFileSystemEntries(target).Count();
+                    if (count > bestCount)
                     {
-                        bestWorldCount = worldCount;
+                        bestCount = count;
                         best = candidate;
                     }
                 }
@@ -78,17 +79,33 @@ public class CurseForgeService
         return sharedRoot;
     }
 
-    public static string ResourcePacksDir  => Path.Combine(ComMojangRoot, "resource_packs");
-    public static string BehaviorPacksDir  => Path.Combine(ComMojangRoot, "behavior_packs");
-    public static string SkinPacksDir      => Path.Combine(ComMojangRoot, "skin_packs");
+    public static string ResourcePacksDir  => Path.Combine(ResolveBestRootFor("resource_packs"), "resource_packs");
+    public static string BehaviorPacksDir  => Path.Combine(ResolveBestRootFor("behavior_packs"), "behavior_packs");
+    public static string SkinPacksDir      => Path.Combine(ResolveBestRootFor("skin_packs"), "skin_packs");
     public static string WorldsDir         => Path.Combine(ComMojangRoot, "minecraftWorlds");
     public static string WorldTemplatesDir => Path.Combine(ComMojangRoot, "world_templates");
 
     // Unpacked/dev-mode packs — created when "Content Log" / dev tools are enabled in
     // Minecraft, or dropped in manually for local development (e.g. LeviLamina work).
-    public static string DevResourcePacksDir => Path.Combine(ComMojangRoot, "development_resource_packs");
-    public static string DevBehaviorPacksDir => Path.Combine(ComMojangRoot, "development_behavior_packs");
-    public static string DevSkinPacksDir     => Path.Combine(ComMojangRoot, "development_skin_packs");
+    public static string DevResourcePacksDir => Path.Combine(ResolveBestRootFor("development_resource_packs"), "development_resource_packs");
+    public static string DevBehaviorPacksDir => Path.Combine(ResolveBestRootFor("development_behavior_packs"), "development_behavior_packs");
+    public static string DevSkinPacksDir     => Path.Combine(ResolveBestRootFor("development_skin_packs"), "development_skin_packs");
+
+    // Live com.mojang root for a specific managed folder name — resolves
+    // independently per folder since worlds/packs can live under different
+    // account folders (see ResolveBestRootFor). Used by backups and instance
+    // switching so they read/write the account folder each folder actually
+    // lives in instead of assuming one shared root for everything.
+    public static string LiveRootFor(string folderName) => folderName switch
+    {
+        "resource_packs"             => ResolveBestRootFor("resource_packs"),
+        "behavior_packs"             => ResolveBestRootFor("behavior_packs"),
+        "skin_packs"                 => ResolveBestRootFor("skin_packs"),
+        "development_resource_packs" => ResolveBestRootFor("development_resource_packs"),
+        "development_behavior_packs" => ResolveBestRootFor("development_behavior_packs"),
+        "development_skin_packs"     => ResolveBestRootFor("development_skin_packs"),
+        _                             => ComMojangRoot
+    };
 
     // Java paths resolve against the JavaVersionService's MinecraftDir at
     // install time — we don't capture them statically because the user can

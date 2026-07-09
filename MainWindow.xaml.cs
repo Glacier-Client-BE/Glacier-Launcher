@@ -170,15 +170,18 @@ public partial class MainWindow : Window
 
             // Bedrock world/pack icons (world_icon.jpeg, pack_icon.png) live under
             // com.mojang, outside every folder mapped above — map it separately so
-            // the Worlds/Packs panels can render thumbnails.
+            // the Worlds/Packs panels can render thumbnails. Mapped at the "Users"
+            // level (not a single com.mojang root) because worlds and packs can
+            // resolve to different account folders on the same machine (e.g.
+            // worlds under a numeric Xbox account id, packs under "Shared").
             try
             {
-                var comMojangRoot = CurseForgeService.ComMojangRoot;
-                if (Directory.Exists(comMojangRoot))
+                var usersRoot = CurseForgeService.UsersRoot;
+                if (Directory.Exists(usersRoot))
                 {
                     blazorWebView.WebView.CoreWebView2.SetVirtualHostNameToFolderMapping(
                         "glacier-mojang.local",
-                        comMojangRoot,
+                        usersRoot,
                         Microsoft.Web.WebView2.Core.CoreWebView2HostResourceAccessKind.Allow);
                 }
             }

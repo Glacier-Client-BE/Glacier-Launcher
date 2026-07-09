@@ -145,8 +145,7 @@ public sealed class BedrockInstanceService
     /// copies the target instance's stored folder into the live folder. A
     /// brand-new (never-activated) target instance simply starts the live
     /// folder empty, matching the "new isolated profile" expectation.
-    /// </summary>
-    /// <summary>
+    ///
     /// Switches instance data, and — if the target instance has a version
     /// tag set — also swaps the machine-wide registered Bedrock appx to match.
     /// Returns "" on full success, or a warning message if the data switch
@@ -171,9 +170,9 @@ public sealed class BedrockInstanceService
         var root = BedrockBackupService.ComMojangRoot;
 
         if (current != null)
-            await Task.Run(() => SyncFolderSet(root, current.Directory));
+            await Task.Run(() => SyncFolderSet(root, current.Directory, sourceIsLive: true));
 
-        await Task.Run(() => SyncFolderSet(target.Directory, root));
+        await Task.Run(() => SyncFolderSet(target.Directory, root, destIsLive: true));
 
         lock (_sync)
         {
@@ -205,7 +204,7 @@ public sealed class BedrockInstanceService
     public async Task SaveActiveAsync()
     {
         var active = ActiveInstance;
-        await Task.Run(() => SyncFolderSet(BedrockBackupService.ComMojangRoot, active.Directory));
+        await Task.Run(() => SyncFolderSet(BedrockBackupService.ComMojangRoot, active.Directory, sourceIsLive: true));
     }
 
     public Task<string> BackupInstanceAsync(BedrockInstance instance) =>
@@ -214,13 +213,18 @@ public sealed class BedrockInstanceService
     public Task RestoreIntoInstanceAsync(string backupPath, BedrockInstance instance) =>
         _backup.RestoreBackupIntoFolderAsync(backupPath, instance.Directory);
 
-    private static void SyncFolderSet(string sourceRoot, string destRoot)
+    // sourceIsLive/destIsLive: when set, sourceRoot/destRoot is only a fallback — each
+    // managed folder resolves its own live account folder via CurseForgeService.LiveRootFor,
+    // since worlds/packs can live under different account folders on the same machine.
+    private static void SyncFolderSet(string sourceRoot, string destRoot, bool sourceIsLive = false, bool destIsLive = false)
     {
         Directory.CreateDirectory(destRoot);
         foreach (var folder in BedrockBackupService.ManagedFolders)
         {
-            var src = Path.Combine(sourceRoot, folder);
-            var dst = Path.Combine(destRoot, folder);
+            var srcRoot = sourceIsLive ? CurseForgeService.LiveRootFor(folder) : sourceRoot;
+            var dstRoot = destIsLive ? CurseForgeService.LiveRootFor(folder) : destRoot;
+            var src = Path.Combine(srcRoot, folder);
+            var dst = Path.Combine(dstRoot, folder);
 
             if (Directory.Exists(dst))
             {
@@ -281,7 +285,7 @@ public sealed class BedrockInstanceService
         {
             var instance = Create("Default");
             var root = BedrockBackupService.ComMojangRoot;
-            try { SyncFolderSet(root, instance.Directory); } catch { /* best effort seed */ }
+            try { SyncFolderSet(root, instance.Directory, sourceIsLive: true); } catch { /* best effort seed */ }
             _settings.Settings.BedrockActiveInstanceId = instance.Id;
             _settings.Save();
         }
