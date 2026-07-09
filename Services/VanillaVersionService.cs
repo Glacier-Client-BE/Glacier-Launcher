@@ -197,7 +197,7 @@ public class VanillaVersionService
     public async Task DownloadVersionAsync(
         VanillaVersion version, IProgress<double>? progress = null, CancellationToken cancel = default)
     {
-        var downloadUrl = await GetDownloadUrlAsync(version.UpdateId);
+        var downloadUrl = await GetDownloadUrlAsync(version.UpdateId, cancel);
         if (string.IsNullOrEmpty(downloadUrl))
             throw new InvalidOperationException("Could not resolve download URL for this version.");
 
@@ -456,7 +456,7 @@ public class VanillaVersionService
         return results;
     }
 
-    private async Task<string?> GetDownloadUrlAsync(string updateId)
+    private async Task<string?> GetDownloadUrlAsync(string updateId, CancellationToken cancel = default)
     {
         var body = $@"<s:Envelope xmlns:s=""http://www.w3.org/2003/05/soap-envelope""
             xmlns:a=""http://www.w3.org/2005/08/addressing"">
@@ -482,7 +482,7 @@ public class VanillaVersionService
             </s:Body>
         </s:Envelope>";
 
-        var xml = await PostSoapAsync(body, secured: true);
+        var xml = await PostSoapAsync(body, secured: true, cancel: cancel);
 
         var url = xml.Descendants(Wuws + "Url")
             .Select(e => e.Value)
@@ -492,16 +492,16 @@ public class VanillaVersionService
         return url;
     }
 
-    private async Task<XDocument> PostSoapAsync(string body, bool secured = false)
+    private async Task<XDocument> PostSoapAsync(string body, bool secured = false, CancellationToken cancel = default)
     {
         var endpoint = secured
             ? "https://fe3.delivery.mp.microsoft.com/ClientWebService/client.asmx/secured"
             : "https://fe3.delivery.mp.microsoft.com/ClientWebService/client.asmx";
 
         using var content = new StringContent(body, Encoding.UTF8, "application/soap+xml");
-        using var resp = await _httpClient.PostAsync(endpoint, content);
+        using var resp = await _httpClient.PostAsync(endpoint, content, cancel);
         resp.EnsureSuccessStatusCode();
-        var text = await resp.Content.ReadAsStringAsync();
+        var text = await resp.Content.ReadAsStringAsync(cancel);
         return XDocument.Parse(text);
     }
 

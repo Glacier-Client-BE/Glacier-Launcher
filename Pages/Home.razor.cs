@@ -879,8 +879,7 @@ public partial class Home : IDisposable
 
     private void ToggleDiscordRpc()
     {
-        SettingsService.Settings.DiscordRichPresence = !SettingsService.Settings.DiscordRichPresence;
-        SettingsService.Save();
+        Discord.Toggle();
         _ = ShowToast(SettingsService.Settings.DiscordRichPresence ? "Discord RPC enabled" : "Discord RPC disabled", "success");
         StateHasChanged();
     }

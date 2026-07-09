@@ -1635,11 +1635,11 @@
                 }
 
                 <div class="setting-row clickable @(SH("Discord Rich Presence","discord rpc social"))"
-                     @onclick='() => ToggleProp(() => SettingsService.Settings.DiscordRichPresence = !SettingsService.Settings.DiscordRichPresence, true)'>
+                     @onclick="ToggleDiscordRpc">
                     <span class="setting-label">Discord Rich Presence</span>
                     <div class="toggle @(SettingsService.Settings.DiscordRichPresence ? "on" : "")"
                          @onclick:stopPropagation
-                         @onclick='() => ToggleProp(() => SettingsService.Settings.DiscordRichPresence = !SettingsService.Settings.DiscordRichPresence, true)'></div>
+                         @onclick="ToggleDiscordRpc"></div>
                 </div>
 
                 <div class="setting-row clickable @(SH("Discord account","discord login account"))"

@@ -1892,7 +1892,7 @@ html.vt-active .panel-overlay,
     margin-bottom: 8px;
 }
 
-.panel-search-wrap i {
+.panel-search-wrap > i {
     position: absolute;
     left: 10px;
     top: 50%;
@@ -3235,7 +3235,8 @@ input[type=range]:active::-webkit-slider-thumb {
 
 .vcs-btn {
     flex: 1;
-    height: 30px;
+    height: 38px;
+    padding: 0 14px;
     border: none;
     border-radius: var(--r-sm);
     background: var(--bg-item);

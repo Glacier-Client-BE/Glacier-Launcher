@@ -117,8 +117,11 @@ public class AutoUpdateService
                         break;
                     }
 
-                    downloadUrl ??= url;
-                    assetSize     = size;
+                    if (downloadUrl == null)
+                    {
+                        downloadUrl = url;
+                        assetSize   = size;
+                    }
                 }
             }
 
