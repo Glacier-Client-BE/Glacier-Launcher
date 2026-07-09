@@ -24,6 +24,16 @@
 @inject StatsService Stats
 @inject LogService Logs
 @inject SkinLibraryService SkinLibrary
+@inject NotificationService Notify
+@inject BedrockWorldService Worlds
+@inject BedrockPackService Packs
+@inject BedrockBackupService Backups
+@inject BedrockInstanceService BedrockInstances
+@inject LevelDatEditorService LevelDat
+@inject BedrockScreenshotService BedrockShots
+@inject LeviLaminaService LeviLamina
+@inject LeviLaminaModsService LeviLaminaMods
+@inject LocalizationService L
 @inject IJSRuntime JS
 @implements IDisposable
 
@@ -34,9 +44,94 @@
     <!-- Drop overlay -->
     <div class="drop-zone-overlay">
         <i class="fa-solid fa-file-arrow-down"></i>
-        <span>Drop your DLL</span>
-        <small>Saved to clients folder and selected automatically</small>
+        <span>Drop a file to import</span>
+        <small>DLL clients, .mrpack/.zip/.jar modpacks &amp; mods, or .mcpack/.mcworld/.mctemplate/.mcaddon Bedrock packs</small>
     </div>
+
+    <!-- ── FIRST-RUN ONBOARDING ── -->
+    @if (onboardingOpen)
+    {
+        <div class="search-overlay">
+            <div class="modal-box" @onclick:stopPropagation style="width:340px;">
+                <div class="modal-header">
+                    <span class="modal-title">
+                        <i class="fa-solid fa-snowflake" style="color:var(--accent);margin-right:8px;"></i>
+                        Welcome to Glacier
+                    </span>
+                    <button class="modal-close-btn" @onclick="SkipOnboarding" data-tooltip="Skip setup">
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    @if (onboardingStep == 0)
+                    {
+                        <p style="color:var(--text-dim); font-size:12px; margin:0 0 10px;">Which edition of Minecraft do you play?</p>
+                        <div style="display:flex; gap:8px;">
+                            <button class="btn-sm @(onboardingEdition == "bedrock" ? "btn-accent" : "")" style="flex:1;"
+                                    @onclick='() => OnboardingPickEdition("bedrock")'>
+                                <i class="fa-solid fa-cube"></i> Bedrock
+                            </button>
+                            <button class="btn-sm @(onboardingEdition == "java" ? "btn-accent" : "")" style="flex:1;"
+                                    @onclick='() => OnboardingPickEdition("java")'>
+                                <i class="fa-solid fa-mug-hot"></i> Java
+                            </button>
+                            <button class="btn-sm @(onboardingEdition == "both" ? "btn-accent" : "")" style="flex:1;"
+                                    @onclick='() => OnboardingPickEdition("both")'>
+                                <i class="fa-solid fa-layer-group"></i> Both
+                            </button>
+                        </div>
+                        <small style="color:var(--text-dim); display:block; margin-top:8px;">You can switch editions anytime from the home screen.</small>
+                    }
+                    else if (onboardingStep == 1)
+                    {
+                        <label class="modal-input-label">Display name</label>
+                        <input class="modal-input" placeholder="@Environment.UserName"
+                               value="@onboardingUsername" @oninput="OnboardingUsernameInput"
+                               @onkeydown:stopPropagation />
+                        <small style="color:var(--text-dim); display:block; margin-top:8px;">Shown in the launcher's footer and recent-launches list. Optional.</small>
+                    }
+                    else if (onboardingStep == 2)
+                    {
+                        <p style="color:var(--text-dim); font-size:12px; margin:0 0 10px;">
+                            Already have mods, worlds, or a resource pack set up in the official launcher? Import it into a new Glacier instance now, or skip and do it later from Settings.
+                        </p>
+                        @if (onboardingImportDone)
+                        {
+                            <div class="cache-notice"><i class="fa-solid fa-circle-check" style="color:var(--green);"></i><span>Imported!</span></div>
+                        }
+                        else
+                        {
+                            <button class="btn-sm" disabled="@onboardingImporting" @onclick="OnboardingImportMinecraft">
+                                @if (onboardingImporting) { <span class="spinner"></span> } else { <i class="fa-solid fa-file-import"></i> }
+                                Import existing .minecraft
+                            </button>
+                        }
+                    }
+                </div>
+                <div class="modal-actions">
+                    @if (onboardingStep > 0)
+                    {
+                        <button class="modal-btn modal-btn-cancel" @onclick="OnboardingBack">Back</button>
+                    }
+                    else
+                    {
+                        <button class="modal-btn modal-btn-cancel" @onclick="SkipOnboarding">Skip</button>
+                    }
+                    @{ var lastStep = onboardingEdition == "java" ? 2 : 1; }
+                    @if (onboardingStep < lastStep)
+                    {
+                        <button class="modal-btn modal-btn-confirm" @onclick="OnboardingNext">Next</button>
+                    }
+                    else
+                    {
+                        <button class="modal-btn modal-btn-confirm" @onclick="FinishOnboarding">
+                            <i class="fa-solid fa-check"></i> Finish
+                        </button>
+                    }
+                </div>
+            </div>
+        </div>
+    }
 
     <!-- ── GLOBAL SEARCH OVERLAY ── -->
     @if (searchOpen)
@@ -421,8 +516,101 @@
         <!-- Quick search trigger (inline, left of controls) -->
         <button class="search-trigger" @onclick="OpenSearch" @onmousedown:stopPropagation data-tooltip="Search (Ctrl+K)">
             <i class="fa-solid fa-magnifying-glass"></i>
-            <kbd>Ctrl K</kbd>
         </button>
+
+        @if (notifPanelOpen)
+        {
+            <div class="notif-backdrop" @onclick="() => notifPanelOpen = false"></div>
+        }
+        @{
+            var activeDownloadCount = DownloadsList.Count(d => d.Status == DownloadStatus.Downloading);
+            var bellBadgeCount = Notify.UnreadCount + activeDownloadCount;
+        }
+        <div class="notif-bell-wrap" @onmousedown:stopPropagation>
+            <button class="notif-bell-btn" @onclick="ToggleNotifPanel" data-tooltip="Notifications & downloads">
+                <i class="fa-solid fa-bell"></i>
+                @if (bellBadgeCount > 0)
+                {
+                    <span class="notif-bell-badge">@(bellBadgeCount > 9 ? "9+" : bellBadgeCount.ToString())</span>
+                }
+            </button>
+            @if (notifPanelOpen)
+            {
+                <div class="notif-panel">
+                    @if (DownloadsList.Count > 0)
+                    {
+                        <div class="notif-panel-header">
+                            <span>Downloads</span>
+                            <button class="notif-clear-btn" @onclick="OpenDownloadManager">View all</button>
+                        </div>
+                        <div class="notif-panel-list" style="max-height:160px;">
+                            @foreach (var d in DownloadsList.Take(5))
+                            {
+                                var entry = d;
+                                <div class="notif-item info">
+                                    <i class="@(DownloadStatusIcon(entry.Status))"></i>
+                                    <div class="notif-item-body">
+                                        <div class="notif-item-title" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">@entry.Label</div>
+                                        <div class="notif-item-msg">
+                                            @DownloadStatusLabel(entry.Status)
+                                            @if (entry.Status == DownloadStatus.Downloading)
+                                            {
+                                                <text> · @((entry.Progress * 100).ToString("F0"))%</text>
+                                            }
+                                        </div>
+                                        @if (entry.Status == DownloadStatus.Downloading)
+                                        {
+                                            <div class="progress-bar-wrap" style="margin-top:4px;">
+                                                <div class="progress-bar-fill" style="width:@($"{entry.Progress * 100:F0}%")"></div>
+                                            </div>
+                                        }
+                                    </div>
+                                    @if (entry.Status == DownloadStatus.Downloading)
+                                    {
+                                        <button class="notif-item-remove" @onclick="() => CancelDownload(entry)" @onclick:stopPropagation>
+                                            <i class="fa-solid fa-xmark"></i>
+                                        </button>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    }
+                    <div class="notif-panel-header">
+                        <span>Notifications</span>
+                        @if (Notify.Items.Count > 0)
+                        {
+                            <button class="notif-clear-btn" @onclick="() => Notify.Clear()">Clear all</button>
+                        }
+                    </div>
+                    <div class="notif-panel-list">
+                        @if (Notify.Items.Count == 0)
+                        {
+                            <div class="notif-empty">
+                                <i class="fa-regular fa-bell-slash"></i>
+                                <span>No notifications</span>
+                            </div>
+                        }
+                        else
+                        {
+                            @foreach (var n in Notify.Items)
+                            {
+                                <div class="notif-item @(n.Kind)">
+                                    <i class="@(n.Icon)"></i>
+                                    <div class="notif-item-body">
+                                        <div class="notif-item-title">@n.Title</div>
+                                        <div class="notif-item-msg">@n.Message</div>
+                                        <div class="notif-item-time">@FormatRelativeTime(n.TimeIso)</div>
+                                    </div>
+                                    <button class="notif-item-remove" @onclick="() => Notify.Remove(n.Id)" @onclick:stopPropagation>
+                                        <i class="fa-solid fa-xmark"></i>
+                                    </button>
+                                </div>
+                            }
+                        }
+                    </div>
+                </div>
+            }
+        </div>
 
         <div class="window-controls">
             <button class="wnd-btn minimize-btn" @onclick="MinimizeWindow" @onmousedown:stopPropagation data-tooltip="Minimize">
@@ -440,6 +628,28 @@
         </div>
     </div>
 
+    <!-- ── ANNOUNCEMENT / MAINTENANCE BANNER ── -->
+    @if (ShowAnnouncementBanner && _announcement != null)
+    {
+        <div class="announcement-banner @(_announcement.Kind)">
+            <i class="@(_announcement.Kind == "maintenance" ? "fa-solid fa-triangle-exclamation" : "fa-solid fa-bullhorn")"></i>
+            <div class="announcement-banner-text">
+                <span class="announcement-banner-title">@_announcement.Title</span>
+                <span class="announcement-banner-msg">@_announcement.Message</span>
+            </div>
+            @if (!string.IsNullOrEmpty(_announcement.Url))
+            {
+                <button class="btn-sm" @onclick="() => OpenUrl(_announcement.Url)" @onmousedown:stopPropagation>Learn more</button>
+            }
+            @if (_announcement.Kind != "maintenance")
+            {
+                <button class="announcement-banner-close" @onclick="DismissAnnouncement" @onmousedown:stopPropagation data-tooltip="Dismiss">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            }
+        </div>
+    }
+
     <!-- ── MAIN CONTENT ── -->
     <div class="main-content @(currentView != "home" ? "panel-open" : "")">
         <div class="btn-row">
@@ -450,7 +660,7 @@
                     @onclick="HandleLaunch" @onmousedown:stopPropagation disabled="@isLaunching"
                     data-tooltip="Launch (Ctrl+L)">
                 @if (isLaunching) { <span class="spinner"></span><span>Launching...</span> }
-                else { <i class="fa-solid fa-play"></i><span class="btn-label">Launch</span> }
+                else { <i class="fa-solid fa-play"></i><span class="btn-label">@L.T("nav.launch")</span> }
             </button>
 
             @if (isLaunching)
@@ -465,7 +675,7 @@
                 <button class="action-btn btn-sq hover-grow"
                         @onclick="OpenSettings" @onmousedown:stopPropagation
                         data-tooltip="Settings (Ctrl+,)">
-                    <i class="fa-solid fa-gear"></i><span class="btn-label">Settings</span>
+                    <i class="fa-solid fa-gear"></i><span class="btn-label">@L.T("nav.settings")</span>
                 </button>
             </div>
 
@@ -475,7 +685,7 @@
                     <button class="action-btn btn-sq hover-grow"
                             @onclick="OpenClients" @onmousedown:stopPropagation
                             data-tooltip="Clients (Ctrl+1)">
-                        <i class="fa-solid fa-puzzle-piece"></i><span class="btn-label">Clients</span>
+                        <i class="fa-solid fa-puzzle-piece"></i><span class="btn-label">@L.T("nav.clients")</span>
                     </button>
                     @if (clientsHasBadge) { <span class="notification-badge"></span> }
                 </div>
@@ -484,7 +694,7 @@
                     <button class="action-btn btn-sq hover-grow"
                             @onclick="OpenAddons" @onmousedown:stopPropagation
                             data-tooltip="Addons (Ctrl+2)">
-                        <i class="fa-solid fa-cube"></i><span class="btn-label">Addons</span>
+                        <i class="fa-solid fa-cube"></i><span class="btn-label">@L.T("nav.addons")</span>
                     </button>
                 </div>
 
@@ -492,7 +702,7 @@
                     <button class="action-btn btn-sq hover-grow"
                             @onclick="OpenServers" @onmousedown:stopPropagation
                             data-tooltip="Servers (Ctrl+3)">
-                        <i class="fa-solid fa-server"></i><span class="btn-label">Servers</span>
+                        <i class="fa-solid fa-server"></i><span class="btn-label">@L.T("nav.servers")</span>
                     </button>
                 </div>
 
@@ -500,7 +710,7 @@
                     <button class="action-btn btn-sq hover-grow"
                             @onclick="OpenMcVersions" @onmousedown:stopPropagation
                             data-tooltip="MC Versions (Ctrl+4)">
-                        <i class="fa-solid fa-box-archive"></i><span class="btn-label">MC Versions</span>
+                        <i class="fa-solid fa-box-archive"></i><span class="btn-label">@L.T("nav.mcversions")</span>
                     </button>
                 </div>
             }
@@ -510,7 +720,7 @@
                     <button class="action-btn btn-sq hover-grow"
                             @onclick="OpenJavaClients" @onmousedown:stopPropagation
                             data-tooltip="Launchers (Ctrl+1)">
-                        <i class="fa-solid fa-rocket"></i><span class="btn-label">Launchers</span>
+                        <i class="fa-solid fa-rocket"></i><span class="btn-label">@L.T("nav.launchers")</span>
                     </button>
                 </div>
 
@@ -518,7 +728,7 @@
                     <button class="action-btn btn-sq hover-grow"
                             @onclick="OpenAddons" @onmousedown:stopPropagation
                             data-tooltip="Mods (Ctrl+2)">
-                        <i class="fa-solid fa-puzzle-piece"></i><span class="btn-label">Mods</span>
+                        <i class="fa-solid fa-puzzle-piece"></i><span class="btn-label">@L.T("nav.mods")</span>
                     </button>
                 </div>
 
@@ -526,7 +736,7 @@
                     <button class="action-btn btn-sq hover-grow"
                             @onclick="OpenJavaVersions" @onmousedown:stopPropagation
                             data-tooltip="Versions (Ctrl+3)">
-                        <i class="fa-solid fa-box-archive"></i><span class="btn-label">Versions</span>
+                        <i class="fa-solid fa-box-archive"></i><span class="btn-label">@L.T("nav.versions")</span>
                     </button>
                 </div>
 
@@ -534,7 +744,7 @@
                     <button class="action-btn btn-sq hover-grow"
                             @onclick="OpenJavaProfile" @onmousedown:stopPropagation
                             data-tooltip="Profile">
-                        <i class="fa-solid fa-user"></i><span class="btn-label">Profile</span>
+                        <i class="fa-solid fa-user"></i><span class="btn-label">@L.T("nav.profile")</span>
                     </button>
                 </div>
 
@@ -542,7 +752,7 @@
                     <button class="action-btn btn-sq hover-grow"
                             @onclick="OpenJavaScreenshots" @onmousedown:stopPropagation
                             data-tooltip="Screenshots">
-                        <i class="fa-solid fa-images"></i><span class="btn-label">Photos</span>
+                        <i class="fa-solid fa-images"></i><span class="btn-label">@L.T("nav.photos")</span>
                     </button>
                 </div>
             }
@@ -819,7 +1029,7 @@
                     <div class="panel-title-underline"></div>
                 </div>
                 <div class="panel-header-actions">
-                    <button class="panel-back-btn" @onclick="GoHome" @onmousedown:stopPropagation>
+                    <button class="panel-back-btn" @onclick="GoHome" @onmousedown:stopPropagation data-tooltip="Back">
                         <i class="fa-solid fa-chevron-down"></i>
                     </button>
                 </div>
@@ -912,6 +1122,7 @@
                         <option value="Latite Client">Latite Client</option>
                         <option value="Flarial Client">Flarial Client</option>
                         <option value="OderSo Client">OderSo Client</option>
+                        <option value="LeviLamina Client">LeviLamina Client</option>
                         @if (!string.IsNullOrEmpty(customDllPath))
                         {
                             <option value="Custom DLL">Custom DLL</option>
@@ -1405,6 +1616,17 @@
                     </select>
                 </div>
 
+                <div class="setting-row @(SH("Language","language locale translation"))">
+                    <span class="setting-label">@L.T("settings.language")</span>
+                    <select class="setting-select" value="@SettingsService.Settings.Language"
+                            @onchange="OnLanguageChanged" @onclick:stopPropagation>
+                        @foreach (var lang in LocalizationService.Languages)
+                        {
+                            <option value="@lang.Code">@lang.Label</option>
+                        }
+                    </select>
+                </div>
+
                 </div>
                 <div class="settings-section">
                 @if (SectionMatch(("Discord Rich Presence","discord rpc social"), ("Discord account","discord login account")))
@@ -1668,6 +1890,11 @@
                     <button class="panel-tab" @onclick="OpenAddons" @onmousedown:stopPropagation><i class="fa-solid fa-cube"></i>Addons</button>
                     <button class="panel-tab" @onclick="OpenServers" @onmousedown:stopPropagation><i class="fa-solid fa-server"></i>Servers</button>
                     <button class="panel-tab" @onclick="OpenMcVersions" @onmousedown:stopPropagation><i class="fa-solid fa-box-archive"></i>MC Versions</button>
+                    <button class="panel-tab" @onclick="OpenBedrockWorlds" @onmousedown:stopPropagation><i class="fa-solid fa-globe"></i>Worlds</button>
+                    <button class="panel-tab" @onclick="() => OpenBedrockPacks()" @onmousedown:stopPropagation><i class="fa-solid fa-boxes-stacked"></i>Packs</button>
+                <button class="panel-tab" @onclick="OpenBedrockBackups" @onmousedown:stopPropagation><i class="fa-solid fa-clock-rotate-left"></i>Backups</button>
+                <button class="panel-tab" @onclick="OpenBedrockInstances" @onmousedown:stopPropagation><i class="fa-solid fa-layer-group"></i>Instances</button>
+                <button class="panel-tab" @onclick="OpenBedrockScreenshots" @onmousedown:stopPropagation><i class="fa-solid fa-images"></i>Photos</button>
                     <button class="panel-tab" @onclick="OpenCredits" @onmousedown:stopPropagation><i class="fa-solid fa-heart"></i>Credits</button>
                 }
                 else
@@ -1695,7 +1922,7 @@
                         <span>Versions</span>
                         @if (versionsHasBadge) { <span class="notification-badge"></span> }
                     </button>
-                    <button class="panel-back-btn" @onclick="GoHome" @onmousedown:stopPropagation>
+                    <button class="panel-back-btn" @onclick="GoHome" @onmousedown:stopPropagation data-tooltip="Back">
                         <i class="fa-solid fa-chevron-down"></i>
                     </button>
                 </div>
@@ -1819,6 +2046,58 @@
                     <p class="client-card-desc">OderSo Client — curated Minecraft Bedrock experience by MasonOderSo.</p>
                 </div>
 
+                <div class="client-card @(SettingsService.Settings.SelectedClient == "LeviLamina Client" ? "client-active" : "")">
+                    <div class="client-card-header">
+                        <div class="client-card-icon"><i class="fa-solid fa-layer-group"></i></div>
+                        <div class="client-card-meta">
+                            <span class="client-card-name">LeviLamina Client</span>
+                            <span class="client-card-sub">
+                                @if (_levilamina.Downloaded)
+                                {
+                                    @if (_levilamina.UpToDate) { <span class="tag-uptodate"><i class="fa-solid fa-circle-check"></i> Up to date</span> }
+                                    else                        { <span class="tag-outdated"><i class="fa-solid fa-triangle-exclamation"></i> Update available</span> }
+                                }
+                                else { <span class="client-card-note">Not downloaded</span> }
+                            </span>
+                        </div>
+                        <div class="client-card-actions">
+                            @if (_levilamina.Downloaded)
+                            {
+                                <button class="icon-btn" data-tooltip="Browse LeviLamina mods" @onclick="OpenLeviLaminaMods" @onmousedown:stopPropagation>
+                                    <i class="fa-solid fa-puzzle-piece"></i>
+                                </button>
+                            }
+                            @if (SettingsService.Settings.SelectedClient != "LeviLamina Client" && _levilamina.Downloaded)
+                            {
+                                <button class="icon-btn" data-tooltip="Select" @onclick='() => SelectClient("LeviLamina Client")' @onmousedown:stopPropagation>
+                                    <i class="fa-solid fa-check"></i>
+                                </button>
+                            }
+                            @if (_levilamina.Downloading)
+                            {
+                                <InlineProgress Progress="_levilamina.Progress" OnCancel="() => _levilamina.Cancel()" />
+                            }
+                            else
+                            {
+                                @if (!_levilamina.Downloaded || !_levilamina.UpToDate)
+                                {
+                                    <button class="icon-btn" data-tooltip="@(_levilamina.Downloaded ? "Update" : "Download")" @onclick="HandleLeviLaminaDownload" @onmousedown:stopPropagation>
+                                        <i class="fa-solid @(_levilamina.Downloaded ? "fa-arrow-up" : "fa-download")"></i>
+                                    </button>
+                                }
+                                @if (_levilamina.Downloaded)
+                                {
+                                    <button class="icon-btn icon-btn-ghost" data-tooltip="Delete" @onclick="HandleLeviLaminaDelete" @onmousedown:stopPropagation>
+                                        <i class="fa-solid fa-trash"></i>
+                                    </button>
+                                }
+                            }
+                        </div>
+                    </div>
+                    @if (_levilamina.HasError) { <span class="error-text">@_levilamina.Error</span> }
+                    <p class="client-card-desc">LeviLamina — open-source native Bedrock mod loader by LiteLDev, injected the same way as the other clients here.</p>
+                </div>
+
                 <!-- Vanilla — no client -->
                 <div class="client-card @(SettingsService.Settings.SelectedClient == "Vanilla" ? "client-active" : "")">
                     <div class="client-card-header">
@@ -1886,6 +2165,11 @@
                 <button class="panel-tab" @onclick="OpenAddons" @onmousedown:stopPropagation><i class="fa-solid fa-cube"></i>Addons</button>
                 <button class="panel-tab" @onclick="OpenServers" @onmousedown:stopPropagation><i class="fa-solid fa-server"></i>Servers</button>
                 <button class="panel-tab" @onclick="OpenMcVersions" @onmousedown:stopPropagation><i class="fa-solid fa-box-archive"></i>MC Versions</button>
+                <button class="panel-tab" @onclick="OpenBedrockWorlds" @onmousedown:stopPropagation><i class="fa-solid fa-globe"></i>Worlds</button>
+                <button class="panel-tab" @onclick="() => OpenBedrockPacks()" @onmousedown:stopPropagation><i class="fa-solid fa-boxes-stacked"></i>Packs</button>
+                <button class="panel-tab" @onclick="OpenBedrockBackups" @onmousedown:stopPropagation><i class="fa-solid fa-clock-rotate-left"></i>Backups</button>
+                <button class="panel-tab" @onclick="OpenBedrockInstances" @onmousedown:stopPropagation><i class="fa-solid fa-layer-group"></i>Instances</button>
+                <button class="panel-tab" @onclick="OpenBedrockScreenshots" @onmousedown:stopPropagation><i class="fa-solid fa-images"></i>Photos</button>
                 <button class="panel-tab" @onclick="OpenCredits" @onmousedown:stopPropagation><i class="fa-solid fa-heart"></i>Credits</button>
             </div>
         </div>
@@ -2085,7 +2369,7 @@
                             <i class="fa-solid fa-cubes"></i> Modpacks
                         </button>
                     }
-                    <button class="panel-back-btn" @onclick="GoHome" @onmousedown:stopPropagation>
+                    <button class="panel-back-btn" @onclick="GoHome" @onmousedown:stopPropagation data-tooltip="Back">
                         <i class="fa-solid fa-chevron-down"></i>
                     </button>
                 </div>
@@ -2105,6 +2389,10 @@
                     <button class="vcs-btn @(javaModsTab == "assets" ? "active" : "")"
                             @onclick='() => javaModsTab = "assets"' @onmousedown:stopPropagation>
                         <i class="fa-solid fa-image"></i> Assets
+                    </button>
+                    <button class="vcs-btn @(javaModsTab == "datapacks" ? "active" : "")"
+                            @onclick='() => OnOpenDatapacksTab()' @onmousedown:stopPropagation>
+                        <i class="fa-solid fa-cubes-stacked"></i> Datapacks
                     </button>
                     <button class="vcs-btn @(javaModsTab == "tools" ? "active" : "")"
                             @onclick='() => javaModsTab = "tools"' @onmousedown:stopPropagation>
@@ -2329,6 +2617,60 @@
                                 </div>
                             </div>
                         </div>
+                    }
+                    else if (javaModsTab == "datapacks")
+                    {
+                        <label class="modal-input-label">World</label>
+                        <select class="setting-select" value="@datapacksWorldName" @onchange="OnDatapacksWorldChanged" @onclick:stopPropagation style="width:100%; margin-bottom:8px;">
+                            <option value="">Select a world…</option>
+                            @foreach (var w in javaWorldsList)
+                            {
+                                <option value="@w.Name">@w.Name</option>
+                            }
+                        </select>
+
+                        @if (string.IsNullOrEmpty(datapacksWorldName))
+                        {
+                            <div class="empty-state" style="padding:14px;">
+                                <i class="fa-solid fa-cubes-stacked"></i>
+                                <span>Pick a world above</span>
+                                <small>Datapacks are installed per-world, not shared across all your saves.</small>
+                            </div>
+                        }
+                        else if (javaDatapacks.Count == 0)
+                        {
+                            <div class="empty-state" style="padding:14px;">
+                                <i class="fa-solid fa-cubes-stacked"></i>
+                                <span>No datapacks in "@datapacksWorldName"</span>
+                                <button class="btn-sm" style="margin-top:6px;" @onclick="AddDatapackFile" @onmousedown:stopPropagation>
+                                    <i class="fa-solid fa-upload"></i> Add datapack (.zip)
+                                </button>
+                            </div>
+                        }
+                        else
+                        {
+                            @foreach (var dp in javaDatapacks)
+                            {
+                                var pack = dp;
+                                <div class="version-row">
+                                    <div class="version-meta">
+                                        <span class="version-name">@pack.Name</span>
+                                        <span class="version-sub">@FormatSize(pack.SizeBytes) · @FormatRelativeTime(pack.ModifiedAt)</span>
+                                    </div>
+                                    <button class="vcs-btn vcs-btn-ghost" @onclick='() => DeleteDatapack(pack)' @onmousedown:stopPropagation>
+                                        <i class="fa-solid fa-trash"></i>
+                                    </button>
+                                </div>
+                            }
+                            <div style="text-align:center; padding:8px;">
+                                <button class="btn-sm" @onclick="AddDatapackFile" @onmousedown:stopPropagation>
+                                    <i class="fa-solid fa-upload"></i> Add datapack (.zip)
+                                </button>
+                                <button class="btn-sm" @onclick="OpenDatapacksFolder" @onmousedown:stopPropagation>
+                                    <i class="fa-solid fa-folder-open"></i> Open folder
+                                </button>
+                            </div>
+                        }
                     }
                     else if (javaModsTab == "tools")
                     {
@@ -2627,11 +2969,131 @@
                     <button class="panel-tab active" @onmousedown:stopPropagation><i class="fa-solid fa-cube"></i>Addons</button>
                     <button class="panel-tab" @onclick="OpenServers" @onmousedown:stopPropagation><i class="fa-solid fa-server"></i>Servers</button>
                     <button class="panel-tab" @onclick="OpenMcVersions" @onmousedown:stopPropagation><i class="fa-solid fa-box-archive"></i>MC Versions</button>
+                    <button class="panel-tab" @onclick="OpenBedrockWorlds" @onmousedown:stopPropagation><i class="fa-solid fa-globe"></i>Worlds</button>
+                    <button class="panel-tab" @onclick="() => OpenBedrockPacks()" @onmousedown:stopPropagation><i class="fa-solid fa-boxes-stacked"></i>Packs</button>
+                <button class="panel-tab" @onclick="OpenBedrockBackups" @onmousedown:stopPropagation><i class="fa-solid fa-clock-rotate-left"></i>Backups</button>
+                <button class="panel-tab" @onclick="OpenBedrockInstances" @onmousedown:stopPropagation><i class="fa-solid fa-layer-group"></i>Instances</button>
+                <button class="panel-tab" @onclick="OpenBedrockScreenshots" @onmousedown:stopPropagation><i class="fa-solid fa-images"></i>Photos</button>
                     <button class="panel-tab" @onclick="OpenCredits" @onmousedown:stopPropagation><i class="fa-solid fa-heart"></i>Credits</button>
                 }
                 else
                 {
                     @JavaTabs("mods")
+                }
+            </div>
+        </div>
+    }
+
+    <!-- ── LEVILAMINA MODS PANEL ── -->
+    @if (currentView == "levimods")
+    {
+        <div class="panel-overlay">
+            <div class="panel-handle"></div>
+            <div class="panel-header">
+                <div class="panel-title-wrap">
+                    <span class="panel-title">LeviLamina Mods</span>
+                    <div class="panel-title-underline"></div>
+                </div>
+                <div class="panel-header-actions">
+                    <button class="panel-icon-btn @(levModsSearching ? "spinning" : "")"
+                            disabled="@levModsSearching"
+                            @onclick="LevModsSearchAsync" @onmousedown:stopPropagation data-tooltip="Refresh">
+                        <i class="fa-solid fa-rotate"></i>
+                    </button>
+                    <button class="panel-back-btn" @onclick="CloseLeviLaminaMods" @onmousedown:stopPropagation data-tooltip="Back">
+                        <i class="fa-solid fa-chevron-left"></i>
+                    </button>
+                </div>
+            </div>
+
+            <div class="panel-search-wrap">
+                <i class="fa-solid fa-magnifying-glass"></i>
+                <input class="panel-search-input" placeholder="Search LeviLamina mods..."
+                       value="@levModsQuery"
+                       @oninput="OnLevModsSearchInput"
+                       @onkeydown:stopPropagation />
+            </div>
+
+            <div class="panel-body">
+                @if (levModsSearching)
+                {
+                    <div style="display:flex; align-items:center; justify-content:center; padding:30px;">
+                        <span class="spinner" style="width:18px;height:18px;border-width:2px;"></span>
+                        <span style="margin-left:10px; font-size:12px; color:var(--text-dim);">Loading mods...</span>
+                    </div>
+                }
+                else if (!string.IsNullOrEmpty(levModsError) && levModsResults.Count == 0)
+                {
+                    <div style="padding:20px; text-align:center;">
+                        <span class="error-text">@levModsError</span>
+                        <br/>
+                        <button class="btn-sm" style="margin-top:10px;" @onclick="LevModsSearchAsync" @onmousedown:stopPropagation>
+                            <i class="fa-solid fa-rotate"></i> Retry
+                        </button>
+                    </div>
+                }
+                else if (levModsResults.Count == 0)
+                {
+                    <div class="empty-state">
+                        <i class="fa-solid fa-box-open"></i>
+                        <span>No mods found</span>
+                        <small>Try a different search term.</small>
+                    </div>
+                }
+                else
+                {
+                    @if (!string.IsNullOrEmpty(levModsError))
+                    {
+                        <span class="error-text" style="display:block; margin-bottom:6px;">@levModsError</span>
+                    }
+                    @foreach (var mod in levModsResults)
+                    {
+                        var m = mod;
+                        var installed = LeviLaminaMods.IsInstalled(m);
+                        <div class="client-card" style="margin-bottom:6px;">
+                            <div class="client-card-header">
+                                <div class="client-card-icon" style="padding:3px; border-radius:6px; overflow:hidden;">
+                                    @if (!string.IsNullOrEmpty(m.AvatarUrl))
+                                    {
+                                        <img src="@m.AvatarUrl" style="width:100%;height:100%;object-fit:cover;border-radius:4px;" alt="" />
+                                    }
+                                    else
+                                    {
+                                        <i class="fa-solid fa-puzzle-piece" style="font-size:18px; color:var(--accent);"></i>
+                                    }
+                                </div>
+                                <div class="client-card-meta" style="min-width:0;">
+                                    <span class="client-card-name" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">@m.Name</span>
+                                    <span class="client-card-sub" style="display:flex; gap:8px; align-items:center;">
+                                        <span style="opacity:0.6;">v@(m.LatestVersion)</span>
+                                        <span style="opacity:0.4;"><i class="fa-solid fa-star"></i> @m.Stars</span>
+                                    </span>
+                                </div>
+                                <div class="client-card-actions">
+                                    @if (levModsInstallingRepo == m.RepoName)
+                                    {
+                                        <InlineProgress Progress="levModsInstallProgress" />
+                                    }
+                                    else if (installed)
+                                    {
+                                        <button class="icon-btn icon-btn-ghost" data-tooltip="Remove" @onclick="() => HandleLevModDelete(m)" @onmousedown:stopPropagation>
+                                            <i class="fa-solid fa-trash"></i>
+                                        </button>
+                                    }
+                                    else
+                                    {
+                                        <button class="icon-btn" data-tooltip="Install" @onclick="() => HandleLevModInstall(m)" @onmousedown:stopPropagation>
+                                            <i class="fa-solid fa-download"></i>
+                                        </button>
+                                    }
+                                </div>
+                            </div>
+                            @if (!string.IsNullOrEmpty(m.Description))
+                            {
+                                <p class="client-card-desc">@m.Description</p>
+                            }
+                        </div>
+                    }
                 }
             </div>
         </div>
@@ -2653,7 +3115,7 @@
                         <i class="fa-solid fa-plus"></i>
                         <span>Add</span>
                     </button>
-                    <button class="panel-back-btn" @onclick="GoHome" @onmousedown:stopPropagation>
+                    <button class="panel-back-btn" @onclick="GoHome" @onmousedown:stopPropagation data-tooltip="Back">
                         <i class="fa-solid fa-chevron-down"></i>
                     </button>
                 </div>
@@ -2750,6 +3212,479 @@
                 <button class="panel-tab" @onclick="OpenAddons" @onmousedown:stopPropagation><i class="fa-solid fa-cube"></i>Addons</button>
                 <button class="panel-tab active" @onmousedown:stopPropagation><i class="fa-solid fa-server"></i>Servers</button>
                 <button class="panel-tab" @onclick="OpenMcVersions" @onmousedown:stopPropagation><i class="fa-solid fa-box-archive"></i>MC Versions</button>
+                <button class="panel-tab" @onclick="OpenBedrockWorlds" @onmousedown:stopPropagation><i class="fa-solid fa-globe"></i>Worlds</button>
+                <button class="panel-tab" @onclick="() => OpenBedrockPacks()" @onmousedown:stopPropagation><i class="fa-solid fa-boxes-stacked"></i>Packs</button>
+                <button class="panel-tab" @onclick="OpenBedrockBackups" @onmousedown:stopPropagation><i class="fa-solid fa-clock-rotate-left"></i>Backups</button>
+                <button class="panel-tab" @onclick="OpenBedrockInstances" @onmousedown:stopPropagation><i class="fa-solid fa-layer-group"></i>Instances</button>
+                <button class="panel-tab" @onclick="OpenBedrockScreenshots" @onmousedown:stopPropagation><i class="fa-solid fa-images"></i>Photos</button>
+                <button class="panel-tab" @onclick="OpenCredits" @onmousedown:stopPropagation><i class="fa-solid fa-heart"></i>Credits</button>
+            </div>
+        </div>
+    }
+
+    <!-- ── BEDROCK WORLDS PANEL ── -->
+    @if (currentView == "bedrockworlds")
+    {
+        <div class="panel-overlay">
+            <div class="panel-handle"></div>
+            <div class="panel-header">
+                <div class="panel-title-wrap">
+                    <span class="panel-title">Worlds</span>
+                    <div class="panel-title-underline"></div>
+                </div>
+                <div class="panel-header-actions">
+                    <button class="panel-icon-btn" @onclick="OpenBedrockWorldsFolder" @onmousedown:stopPropagation data-tooltip="Open folder">
+                        <i class="fa-solid fa-folder-open"></i>
+                    </button>
+                    <button class="panel-icon-btn @(isLoadingBedrockWorlds ? "spinning" : "")" disabled="@isLoadingBedrockWorlds"
+                            @onclick="RefreshBedrockWorldsAsync" @onmousedown:stopPropagation data-tooltip="Refresh">
+                        <i class="fa-solid fa-rotate"></i>
+                    </button>
+                    <button class="panel-back-btn" @onclick="GoHome" @onmousedown:stopPropagation data-tooltip="Back">
+                        <i class="fa-solid fa-chevron-down"></i>
+                    </button>
+                </div>
+            </div>
+
+            <div class="panel-body">
+                @if (isLoadingBedrockWorlds)
+                {
+                    <div class="versions-loading"><span class="spinner"></span><span>Loading worlds…</span></div>
+                }
+                else if (bedrockWorlds.Count == 0)
+                {
+                    <div class="empty-state" style="padding:20px 20px 8px;">
+                        <i class="fa-solid fa-globe"></i>
+                        <span>No worlds yet</span>
+                        <small>Worlds you create in Minecraft, or import as .mcworld, show up here.</small>
+                    </div>
+                }
+                else
+                {
+                    @foreach (var w in bedrockWorlds)
+                    {
+                        var world = w;
+                        <div class="version-row">
+                            <div class="version-meta">
+                                <span class="version-name">@world.Name</span>
+                                <span class="version-sub">@FormatSize(world.SizeBytes) · @FormatRelativeTime(world.ModifiedAt)</span>
+                            </div>
+                            <div class="version-actions">
+                                <button class="icon-btn icon-btn-ghost" data-tooltip="Open folder"
+                                        @onclick="() => OpenBedrockWorldFolder(world)" @onmousedown:stopPropagation>
+                                    <i class="fa-solid fa-folder-open"></i>
+                                </button>
+                                <button class="icon-btn icon-btn-ghost" data-tooltip="Export as .mcworld"
+                                        @onclick="() => ExportBedrockWorld(world)" @onmousedown:stopPropagation>
+                                    <i class="fa-solid fa-file-export"></i>
+                                </button>
+                                <button class="icon-btn icon-btn-ghost" data-tooltip="Edit level.dat"
+                                        @onclick="() => OpenLevelDatEditor(world)" @onmousedown:stopPropagation>
+                                    <i class="fa-solid fa-sliders"></i>
+                                </button>
+                                @if (_confirmDeleteWorldPath == world.FolderPath)
+                                {
+                                    <button class="icon-btn icon-btn-ghost" data-tooltip="Confirm delete"
+                                            @onclick="() => DeleteBedrockWorld(world)" @onmousedown:stopPropagation>
+                                        <i class="fa-solid fa-check"></i>
+                                    </button>
+                                    <button class="icon-btn icon-btn-ghost" data-tooltip="Cancel"
+                                            @onclick="CancelDeleteWorld" @onmousedown:stopPropagation>
+                                        <i class="fa-solid fa-xmark"></i>
+                                    </button>
+                                }
+                                else
+                                {
+                                    <button class="icon-btn icon-btn-ghost" data-tooltip="Delete"
+                                            @onclick="() => ConfirmDeleteWorld(world.FolderPath)" @onmousedown:stopPropagation>
+                                        <i class="fa-solid fa-trash"></i>
+                                    </button>
+                                }
+                            </div>
+                        </div>
+                    }
+                }
+            </div>
+
+            <div class="panel-tabs">
+                <button class="panel-tab" @onclick="OpenSettings" @onmousedown:stopPropagation><i class="fa-solid fa-gear"></i>Settings</button>
+                <button class="panel-tab" @onclick="OpenClients" @onmousedown:stopPropagation><i class="fa-solid fa-puzzle-piece"></i>Clients</button>
+                <button class="panel-tab" @onclick="OpenAddons" @onmousedown:stopPropagation><i class="fa-solid fa-cube"></i>Addons</button>
+                <button class="panel-tab" @onclick="OpenServers" @onmousedown:stopPropagation><i class="fa-solid fa-server"></i>Servers</button>
+                <button class="panel-tab" @onclick="OpenMcVersions" @onmousedown:stopPropagation><i class="fa-solid fa-box-archive"></i>MC Versions</button>
+                <button class="panel-tab active" @onmousedown:stopPropagation><i class="fa-solid fa-globe"></i>Worlds</button>
+                <button class="panel-tab" @onclick="() => OpenBedrockPacks()" @onmousedown:stopPropagation><i class="fa-solid fa-boxes-stacked"></i>Packs</button>
+                <button class="panel-tab" @onclick="OpenBedrockBackups" @onmousedown:stopPropagation><i class="fa-solid fa-clock-rotate-left"></i>Backups</button>
+                <button class="panel-tab" @onclick="OpenBedrockInstances" @onmousedown:stopPropagation><i class="fa-solid fa-layer-group"></i>Instances</button>
+                <button class="panel-tab" @onclick="OpenBedrockScreenshots" @onmousedown:stopPropagation><i class="fa-solid fa-images"></i>Photos</button>
+                <button class="panel-tab" @onclick="OpenCredits" @onmousedown:stopPropagation><i class="fa-solid fa-heart"></i>Credits</button>
+            </div>
+        </div>
+    }
+
+    <!-- ── BEDROCK PACKS PANEL ── -->
+    @if (currentView == "bedrockpacks")
+    {
+        <div class="panel-overlay">
+            <div class="panel-handle"></div>
+            <div class="panel-header">
+                <div class="panel-title-wrap">
+                    <span class="panel-title">Packs</span>
+                    <div class="panel-title-underline"></div>
+                </div>
+                <div class="panel-header-actions">
+                    <button class="panel-icon-btn" @onclick="OpenBedrockPacksFolder" @onmousedown:stopPropagation data-tooltip="Open folder">
+                        <i class="fa-solid fa-folder-open"></i>
+                    </button>
+                    <button class="panel-icon-btn @(isLoadingBedrockPacks ? "spinning" : "")" disabled="@isLoadingBedrockPacks"
+                            @onclick="RefreshBedrockPacksAsync" @onmousedown:stopPropagation data-tooltip="Refresh">
+                        <i class="fa-solid fa-rotate"></i>
+                    </button>
+                    <button class="panel-back-btn" @onclick="GoHome" @onmousedown:stopPropagation data-tooltip="Back">
+                        <i class="fa-solid fa-chevron-down"></i>
+                    </button>
+                </div>
+            </div>
+
+            <div class="panel-body">
+                <div class="ts-chip-row" style="padding:10px 14px 0;">
+                    <button class="ts-chip @(bedrockPacksKind == "resource" ? "selected" : "")" @onclick='() => SwitchBedrockPacksKind("resource")' @onmousedown:stopPropagation>
+                        <i class="fa-solid fa-palette"></i> Resource
+                    </button>
+                    <button class="ts-chip @(bedrockPacksKind == "behavior" ? "selected" : "")" @onclick='() => SwitchBedrockPacksKind("behavior")' @onmousedown:stopPropagation>
+                        <i class="fa-solid fa-gears"></i> Behavior
+                    </button>
+                    <button class="ts-chip @(bedrockPacksKind == "skin" ? "selected" : "")" @onclick='() => SwitchBedrockPacksKind("skin")' @onmousedown:stopPropagation>
+                        <i class="fa-solid fa-shirt"></i> Skin
+                    </button>
+                </div>
+
+                @if (isLoadingBedrockPacks)
+                {
+                    <div class="versions-loading"><span class="spinner"></span><span>Loading packs…</span></div>
+                }
+                else if (bedrockPacks.Count == 0)
+                {
+                    <div class="empty-state" style="padding:20px 20px 8px;">
+                        <i class="fa-solid fa-boxes-stacked"></i>
+                        <span>No @(bedrockPacksKind) packs yet</span>
+                        <small>Import a .mcpack by dragging it onto the launcher, or install one from CurseForge/Modrinth in Addons.</small>
+                    </div>
+                }
+                else
+                {
+                    @foreach (var p in bedrockPacks)
+                    {
+                        var pack = p;
+                        <div class="version-row">
+                            <div class="version-meta">
+                                <span class="version-name">@pack.Name</span>
+                                <span class="version-sub">@FormatSize(pack.SizeBytes) · @FormatRelativeTime(pack.ModifiedAt)</span>
+                            </div>
+                            <div class="version-actions">
+                                <button class="icon-btn icon-btn-ghost" data-tooltip="Open folder"
+                                        @onclick="() => OpenBedrockPackFolder(pack)" @onmousedown:stopPropagation>
+                                    <i class="fa-solid fa-folder-open"></i>
+                                </button>
+                                @if (_confirmDeletePackPath == pack.FolderPath)
+                                {
+                                    <button class="icon-btn icon-btn-ghost" data-tooltip="Confirm delete"
+                                            @onclick="() => DeleteBedrockPack(pack)" @onmousedown:stopPropagation>
+                                        <i class="fa-solid fa-check"></i>
+                                    </button>
+                                    <button class="icon-btn icon-btn-ghost" data-tooltip="Cancel"
+                                            @onclick="CancelDeletePack" @onmousedown:stopPropagation>
+                                        <i class="fa-solid fa-xmark"></i>
+                                    </button>
+                                }
+                                else
+                                {
+                                    <button class="icon-btn icon-btn-ghost" data-tooltip="Delete"
+                                            @onclick="() => ConfirmDeletePack(pack.FolderPath)" @onmousedown:stopPropagation>
+                                        <i class="fa-solid fa-trash"></i>
+                                    </button>
+                                }
+                            </div>
+                        </div>
+                    }
+                }
+            </div>
+
+            <div class="panel-tabs">
+                <button class="panel-tab" @onclick="OpenSettings" @onmousedown:stopPropagation><i class="fa-solid fa-gear"></i>Settings</button>
+                <button class="panel-tab" @onclick="OpenClients" @onmousedown:stopPropagation><i class="fa-solid fa-puzzle-piece"></i>Clients</button>
+                <button class="panel-tab" @onclick="OpenAddons" @onmousedown:stopPropagation><i class="fa-solid fa-cube"></i>Addons</button>
+                <button class="panel-tab" @onclick="OpenServers" @onmousedown:stopPropagation><i class="fa-solid fa-server"></i>Servers</button>
+                <button class="panel-tab" @onclick="OpenMcVersions" @onmousedown:stopPropagation><i class="fa-solid fa-box-archive"></i>MC Versions</button>
+                <button class="panel-tab" @onclick="OpenBedrockWorlds" @onmousedown:stopPropagation><i class="fa-solid fa-globe"></i>Worlds</button>
+                <button class="panel-tab active" @onmousedown:stopPropagation><i class="fa-solid fa-boxes-stacked"></i>Packs</button>
+                <button class="panel-tab" @onclick="OpenBedrockBackups" @onmousedown:stopPropagation><i class="fa-solid fa-clock-rotate-left"></i>Backups</button>
+                <button class="panel-tab" @onclick="OpenBedrockInstances" @onmousedown:stopPropagation><i class="fa-solid fa-layer-group"></i>Instances</button>
+                <button class="panel-tab" @onclick="OpenBedrockScreenshots" @onmousedown:stopPropagation><i class="fa-solid fa-images"></i>Photos</button>
+                <button class="panel-tab" @onclick="OpenCredits" @onmousedown:stopPropagation><i class="fa-solid fa-heart"></i>Credits</button>
+            </div>
+        </div>
+    }
+
+    <!-- ── BEDROCK BACKUPS PANEL ── -->
+    @if (currentView == "bedrockbackups")
+    {
+        <div class="panel-overlay">
+            <div class="panel-handle"></div>
+            <div class="panel-header">
+                <div class="panel-title-wrap">
+                    <span class="panel-title">Backups</span>
+                    <div class="panel-title-underline"></div>
+                </div>
+                <div class="panel-header-actions">
+                    <button class="panel-icon-btn" @onclick="OpenBedrockBackupsFolder" @onmousedown:stopPropagation data-tooltip="Open folder">
+                        <i class="fa-solid fa-folder-open"></i>
+                    </button>
+                    <button class="panel-icon-btn @(isLoadingBackups ? "spinning" : "")" disabled="@isLoadingBackups"
+                            @onclick="RefreshBedrockBackupsAsync" @onmousedown:stopPropagation data-tooltip="Refresh">
+                        <i class="fa-solid fa-rotate"></i>
+                    </button>
+                    <button class="panel-back-btn" @onclick="GoHome" @onmousedown:stopPropagation data-tooltip="Back">
+                        <i class="fa-solid fa-chevron-down"></i>
+                    </button>
+                </div>
+            </div>
+
+            <div class="panel-body">
+                <div style="display:flex; gap:8px; padding:12px 14px 4px;">
+                    <input class="modal-input" placeholder="Optional label (e.g. before-1.21-update)"
+                           value="@backupLabelInput" @oninput="OnBackupLabelInput"
+                           @onkeydown:stopPropagation style="flex:1;" />
+                    <button class="btn-sm btn-blue" disabled="@isCreatingBackup" @onclick="CreateBedrockBackup" @onmousedown:stopPropagation>
+                        @if (isCreatingBackup)
+                        {
+                            <span class="spinner"></span>
+                        }
+                        else
+                        {
+                            <i class="fa-solid fa-camera"></i>
+                        }
+                        Back up now
+                    </button>
+                </div>
+
+                @if (isLoadingBackups)
+                {
+                    <div class="versions-loading"><span class="spinner"></span><span>Loading backups…</span></div>
+                }
+                else if (bedrockBackups.Count == 0)
+                {
+                    <div class="empty-state" style="padding:20px 20px 8px;">
+                        <i class="fa-solid fa-clock-rotate-left"></i>
+                        <span>No backups yet</span>
+                        <small>Snapshot your worlds and packs before a risky install or a Windows reset.</small>
+                    </div>
+                }
+                else
+                {
+                    @foreach (var b in bedrockBackups)
+                    {
+                        var backup = b;
+                        <div class="version-row">
+                            <div class="version-meta">
+                                <span class="version-name">@backup.Name</span>
+                                <span class="version-sub">@FormatSize(backup.SizeBytes) · @FormatRelativeTime(backup.CreatedAt)</span>
+                            </div>
+                            <div class="version-actions">
+                                @if (_confirmRestoreBackupPath == backup.FilePath)
+                                {
+                                    <button class="icon-btn icon-btn-ghost" data-tooltip="Confirm restore (overwrites current worlds/packs)"
+                                            @onclick="() => RestoreBedrockBackup(backup)" @onmousedown:stopPropagation>
+                                        <i class="fa-solid fa-check"></i>
+                                    </button>
+                                    <button class="icon-btn icon-btn-ghost" data-tooltip="Cancel"
+                                            @onclick="CancelRestoreBackup" @onmousedown:stopPropagation>
+                                        <i class="fa-solid fa-xmark"></i>
+                                    </button>
+                                }
+                                else
+                                {
+                                    <button class="icon-btn icon-btn-ghost" data-tooltip="Restore"
+                                            @onclick="() => ConfirmRestoreBackup(backup.FilePath)" @onmousedown:stopPropagation>
+                                        <i class="fa-solid fa-clock-rotate-left"></i>
+                                    </button>
+                                }
+                                @if (_confirmDeleteBackupPath == backup.FilePath)
+                                {
+                                    <button class="icon-btn icon-btn-ghost" data-tooltip="Confirm delete"
+                                            @onclick="() => DeleteBedrockBackup(backup)" @onmousedown:stopPropagation>
+                                        <i class="fa-solid fa-check"></i>
+                                    </button>
+                                    <button class="icon-btn icon-btn-ghost" data-tooltip="Cancel"
+                                            @onclick="CancelDeleteBackup" @onmousedown:stopPropagation>
+                                        <i class="fa-solid fa-xmark"></i>
+                                    </button>
+                                }
+                                else
+                                {
+                                    <button class="icon-btn icon-btn-ghost" data-tooltip="Delete"
+                                            @onclick="() => ConfirmDeleteBackup(backup.FilePath)" @onmousedown:stopPropagation>
+                                        <i class="fa-solid fa-trash"></i>
+                                    </button>
+                                }
+                            </div>
+                        </div>
+                    }
+                }
+            </div>
+
+            <div class="panel-tabs">
+                <button class="panel-tab" @onclick="OpenSettings" @onmousedown:stopPropagation><i class="fa-solid fa-gear"></i>Settings</button>
+                <button class="panel-tab" @onclick="OpenClients" @onmousedown:stopPropagation><i class="fa-solid fa-puzzle-piece"></i>Clients</button>
+                <button class="panel-tab" @onclick="OpenAddons" @onmousedown:stopPropagation><i class="fa-solid fa-cube"></i>Addons</button>
+                <button class="panel-tab" @onclick="OpenServers" @onmousedown:stopPropagation><i class="fa-solid fa-server"></i>Servers</button>
+                <button class="panel-tab" @onclick="OpenMcVersions" @onmousedown:stopPropagation><i class="fa-solid fa-box-archive"></i>MC Versions</button>
+                <button class="panel-tab" @onclick="OpenBedrockWorlds" @onmousedown:stopPropagation><i class="fa-solid fa-globe"></i>Worlds</button>
+                <button class="panel-tab" @onclick="() => OpenBedrockPacks()" @onmousedown:stopPropagation><i class="fa-solid fa-boxes-stacked"></i>Packs</button>
+                <button class="panel-tab active" @onmousedown:stopPropagation><i class="fa-solid fa-clock-rotate-left"></i>Backups</button>
+                <button class="panel-tab" @onclick="OpenBedrockInstances" @onmousedown:stopPropagation><i class="fa-solid fa-layer-group"></i>Instances</button>
+                <button class="panel-tab" @onclick="OpenBedrockScreenshots" @onmousedown:stopPropagation><i class="fa-solid fa-images"></i>Photos</button>
+                <button class="panel-tab" @onclick="OpenCredits" @onmousedown:stopPropagation><i class="fa-solid fa-heart"></i>Credits</button>
+            </div>
+        </div>
+    }
+
+    <!-- ── BEDROCK INSTANCES PANEL ── -->
+    @if (currentView == "bedrockinstances")
+    {
+        <div class="panel-overlay">
+            <div class="panel-handle"></div>
+            <div class="panel-header">
+                <div class="panel-title-wrap">
+                    <span class="panel-title">Instances</span>
+                    <div class="panel-title-underline"></div>
+                </div>
+                <div class="panel-header-actions">
+                    <button class="panel-icon-btn" @onclick="NewBedrockInstance" @onmousedown:stopPropagation data-tooltip="New instance">
+                        <i class="fa-solid fa-plus"></i>
+                    </button>
+                    <button class="panel-back-btn" @onclick="GoHome" @onmousedown:stopPropagation data-tooltip="Back">
+                        <i class="fa-solid fa-chevron-down"></i>
+                    </button>
+                </div>
+            </div>
+
+            <div class="panel-body">
+                <div class="empty-state" style="padding:14px 16px 4px; text-align:left; align-items:flex-start;">
+                    <small>Each instance keeps its own worlds, packs, and local settings. Switching copies the active instance's
+                    data out and the new one's data in — give it a moment on large worlds.</small>
+                </div>
+                @foreach (var inst in BedrockInstances.Instances)
+                {
+                    var isActive = inst.Id == BedrockInstances.ActiveInstance.Id;
+                    <div class="instance-row @(isActive ? "active" : "")">
+                        @if (_renamingBedrockInstanceId == inst.Id)
+                        {
+                            <input class="setting-input instance-rename" value="@_renameBedrockInstanceValue"
+                                   @oninput="OnRenameBedrockInstanceInput"
+                                   @onkeydown:stopPropagation />
+                            <button class="vcs-btn" @onclick="CommitRenameBedrockInstance" @onmousedown:stopPropagation><i class="fa-solid fa-check"></i></button>
+                        }
+                        else
+                        {
+                            <button class="instance-name-btn" @onclick="() => SwitchBedrockInstance(inst.Id)" disabled="@isSwitchingBedrockInstance" @onmousedown:stopPropagation>
+                                @if (isActive) { <i class="fa-solid fa-circle-check"></i> } else { <i class="fa-regular fa-circle"></i> }
+                                <span>@inst.Name</span>
+                            </button>
+                            <button class="instance-icon-btn" @onclick="() => BeginRenameBedrockInstance(inst.Id, inst.Name)" @onmousedown:stopPropagation data-tooltip="Rename"><i class="fa-solid fa-pen"></i></button>
+                            <button class="instance-icon-btn" @onclick="() => BackupBedrockInstance(inst)" @onmousedown:stopPropagation data-tooltip="Back up"><i class="fa-solid fa-camera"></i></button>
+                            @if (_confirmDeleteBedrockInstanceId == inst.Id)
+                            {
+                                <button class="instance-icon-btn instance-del" @onclick="() => DeleteBedrockInstance(inst.Id)" @onmousedown:stopPropagation data-tooltip="Confirm delete"><i class="fa-solid fa-check"></i></button>
+                                <button class="instance-icon-btn" @onclick="CancelDeleteBedrockInstance" @onmousedown:stopPropagation><i class="fa-solid fa-xmark"></i></button>
+                            }
+                            else if (!isActive)
+                            {
+                                <button class="instance-icon-btn" @onclick="() => ConfirmDeleteBedrockInstance(inst.Id)" @onmousedown:stopPropagation data-tooltip="Delete"><i class="fa-solid fa-trash"></i></button>
+                            }
+                        }
+                    </div>
+                }
+            </div>
+
+            <div class="panel-tabs">
+                <button class="panel-tab" @onclick="OpenSettings" @onmousedown:stopPropagation><i class="fa-solid fa-gear"></i>Settings</button>
+                <button class="panel-tab" @onclick="OpenClients" @onmousedown:stopPropagation><i class="fa-solid fa-puzzle-piece"></i>Clients</button>
+                <button class="panel-tab" @onclick="OpenAddons" @onmousedown:stopPropagation><i class="fa-solid fa-cube"></i>Addons</button>
+                <button class="panel-tab" @onclick="OpenServers" @onmousedown:stopPropagation><i class="fa-solid fa-server"></i>Servers</button>
+                <button class="panel-tab" @onclick="OpenMcVersions" @onmousedown:stopPropagation><i class="fa-solid fa-box-archive"></i>MC Versions</button>
+                <button class="panel-tab" @onclick="OpenBedrockWorlds" @onmousedown:stopPropagation><i class="fa-solid fa-globe"></i>Worlds</button>
+                <button class="panel-tab" @onclick="() => OpenBedrockPacks()" @onmousedown:stopPropagation><i class="fa-solid fa-boxes-stacked"></i>Packs</button>
+                <button class="panel-tab" @onclick="OpenBedrockBackups" @onmousedown:stopPropagation><i class="fa-solid fa-clock-rotate-left"></i>Backups</button>
+                <button class="panel-tab active" @onmousedown:stopPropagation><i class="fa-solid fa-layer-group"></i>Instances</button>
+                <button class="panel-tab" @onclick="OpenBedrockScreenshots" @onmousedown:stopPropagation><i class="fa-solid fa-images"></i>Photos</button>
+                <button class="panel-tab" @onclick="OpenCredits" @onmousedown:stopPropagation><i class="fa-solid fa-heart"></i>Credits</button>
+            </div>
+        </div>
+    }
+
+    <!-- ── BEDROCK SCREENSHOTS PANEL ── -->
+    @if (currentView == "bedrockscreenshots")
+    {
+        <div class="panel-overlay">
+            <div class="panel-handle"></div>
+            <div class="panel-header">
+                <div class="panel-title-wrap">
+                    <span class="panel-title">Screenshots</span>
+                    <div class="panel-title-underline"></div>
+                </div>
+                <div class="panel-header-actions">
+                    <button class="panel-icon-btn" @onclick="OpenBedrockScreenshotsFolder" @onmousedown:stopPropagation data-tooltip="Open folder">
+                        <i class="fa-solid fa-folder-open"></i>
+                    </button>
+                    <button class="panel-icon-btn @(isLoadingBedrockScreenshots ? "spinning" : "")" disabled="@isLoadingBedrockScreenshots"
+                            @onclick="RefreshBedrockScreenshotsAsync" @onmousedown:stopPropagation data-tooltip="Refresh">
+                        <i class="fa-solid fa-rotate"></i>
+                    </button>
+                    <button class="panel-back-btn" @onclick="GoHome" @onmousedown:stopPropagation data-tooltip="Back">
+                        <i class="fa-solid fa-chevron-down"></i>
+                    </button>
+                </div>
+            </div>
+
+            <div class="panel-body">
+                @if (isLoadingBedrockScreenshots)
+                {
+                    <div class="versions-loading"><span class="spinner"></span><span>Loading screenshots…</span></div>
+                }
+                else if (bedrockScreenshots.Count == 0)
+                {
+                    <div class="empty-state" style="padding:28px 20px;">
+                        <i class="fa-solid fa-image"></i>
+                        <span>No screenshots yet</span>
+                        <small>Press Win+Alt+PrtScn in-game to capture one with Xbox Game Bar — they'll show up here.</small>
+                    </div>
+                }
+                else
+                {
+                    <div class="screenshot-grid">
+                        @foreach (var shot in bedrockScreenshots)
+                        {
+                            var sh = shot;
+                            <button class="screenshot-tile" @onclick="() => OpenScreenshot(sh)" @onmousedown:stopPropagation title="@sh.Name">
+                                <img src="@FileToCapturesUrl(sh.Path)" loading="lazy" alt="@sh.Name" />
+                            </button>
+                        }
+                    </div>
+                }
+            </div>
+
+            <div class="panel-tabs">
+                <button class="panel-tab" @onclick="OpenSettings" @onmousedown:stopPropagation><i class="fa-solid fa-gear"></i>Settings</button>
+                <button class="panel-tab" @onclick="OpenClients" @onmousedown:stopPropagation><i class="fa-solid fa-puzzle-piece"></i>Clients</button>
+                <button class="panel-tab" @onclick="OpenAddons" @onmousedown:stopPropagation><i class="fa-solid fa-cube"></i>Addons</button>
+                <button class="panel-tab" @onclick="OpenServers" @onmousedown:stopPropagation><i class="fa-solid fa-server"></i>Servers</button>
+                <button class="panel-tab" @onclick="OpenMcVersions" @onmousedown:stopPropagation><i class="fa-solid fa-box-archive"></i>MC Versions</button>
+                <button class="panel-tab" @onclick="OpenBedrockWorlds" @onmousedown:stopPropagation><i class="fa-solid fa-globe"></i>Worlds</button>
+                <button class="panel-tab" @onclick="() => OpenBedrockPacks()" @onmousedown:stopPropagation><i class="fa-solid fa-boxes-stacked"></i>Packs</button>
+                <button class="panel-tab" @onclick="OpenBedrockBackups" @onmousedown:stopPropagation><i class="fa-solid fa-clock-rotate-left"></i>Backups</button>
+                <button class="panel-tab" @onclick="OpenBedrockInstances" @onmousedown:stopPropagation><i class="fa-solid fa-layer-group"></i>Instances</button>
+                <button class="panel-tab active" @onmousedown:stopPropagation><i class="fa-solid fa-images"></i>Photos</button>
                 <button class="panel-tab" @onclick="OpenCredits" @onmousedown:stopPropagation><i class="fa-solid fa-heart"></i>Credits</button>
             </div>
         </div>
@@ -2797,6 +3732,189 @@
                         </button>
                     </div>
                 </div>
+            </div>
+        </div>
+    }
+
+    <!-- ── LEVEL.DAT EDITOR MODAL ── -->
+    @if (levelDatModalOpen && levelDatEditing != null)
+    {
+        <div class="modal-overlay" @onclick="CloseLevelDatEditor">
+            <div class="modal-box" @onclick:stopPropagation>
+                <div class="modal-header">
+                    <span class="modal-title">
+                        <i class="fa-solid fa-sliders" style="color:var(--accent);margin-right:8px;"></i>
+                        Edit level.dat — @levelDatWorldName
+                    </span>
+                    <button class="modal-close-btn" @onclick="CloseLevelDatEditor">
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <label class="modal-input-label">Game mode</label>
+                    <select class="modal-input" value="@levelDatEditing.GameType" @onchange="OnLevelDatGameTypeChanged">
+                        @foreach (var opt in GameTypeOptions)
+                        {
+                            <option value="@opt.Value">@opt.Label</option>
+                        }
+                    </select>
+
+                    <label class="modal-input-label" style="margin-top:8px;">Difficulty</label>
+                    <select class="modal-input" value="@levelDatEditing.Difficulty" @onchange="OnLevelDatDifficultyChanged">
+                        @foreach (var opt in DifficultyOptions)
+                        {
+                            <option value="@opt.Value">@opt.Label</option>
+                        }
+                    </select>
+
+                    <label class="modal-input-label" style="margin-top:8px;">World type</label>
+                    <select class="modal-input" value="@levelDatEditing.Generator" @onchange="OnLevelDatGeneratorChanged">
+                        @foreach (var opt in GeneratorOptions)
+                        {
+                            <option value="@opt.Value">@opt.Label</option>
+                        }
+                    </select>
+
+                    @if (levelDatEditing.HasRandomSeed)
+                    {
+                        <label class="modal-input-label" style="margin-top:8px;">Seed (read-only)</label>
+                        <input class="modal-input" value="@levelDatEditing.RandomSeed" disabled />
+                    }
+
+                    <div class="setting-row clickable" @onclick="ToggleLevelDatCheats" style="margin-top:10px;">
+                        <div class="setting-meta">
+                            <span class="setting-label">Cheats / commands</span>
+                        </div>
+                        <div class="toggle @(levelDatEditing.CheatsEnabled ? "on" : "")" @onclick:stopPropagation @onclick="ToggleLevelDatCheats"></div>
+                    </div>
+
+                    @if (levelDatEditing.Experiments.Count > 0)
+                    {
+                        <span class="panel-section-label" style="margin-top:10px;">Experiments</span>
+                        @foreach (var exp in levelDatEditing.Experiments.Keys.ToList())
+                        {
+                            var key = exp;
+                            <div class="setting-row clickable" @onclick="() => ToggleLevelDatExperiment(key)">
+                                <div class="setting-meta">
+                                    <span class="setting-label">@key</span>
+                                </div>
+                                <div class="toggle @(levelDatEditing.Experiments[key] ? "on" : "")" @onclick:stopPropagation @onclick="() => ToggleLevelDatExperiment(key)"></div>
+                            </div>
+                        }
+                    }
+
+                    <div class="cache-notice" style="margin-top:10px;">
+                        <i class="fa-solid fa-triangle-exclamation"></i>
+                        <span>Close the world in Minecraft before editing — changes made here can be overwritten if the game re-saves afterward.</span>
+                    </div>
+                </div>
+                <div class="modal-actions">
+                    <button class="modal-btn modal-btn-cancel" @onclick="CloseLevelDatEditor">Cancel</button>
+                    <button class="modal-btn modal-btn-confirm" disabled="@levelDatSaving" @onclick="SaveLevelDat">
+                        @if (levelDatSaving)
+                        {
+                            <span class="spinner"></span>
+                        }
+                        else
+                        {
+                            <i class="fa-solid fa-floppy-disk"></i>
+                        }
+                        Save
+                    </button>
+                </div>
+            </div>
+        </div>
+    }
+
+    <!-- ── DOWNLOAD MANAGER PANEL ── -->
+    @if (currentView == "downloads")
+    {
+        <div class="panel-overlay">
+            <div class="panel-handle"></div>
+            <div class="panel-header">
+                <div class="panel-title-wrap">
+                    <span class="panel-title">Downloads</span>
+                    <div class="panel-title-underline"></div>
+                </div>
+                <div class="panel-header-actions">
+                    @if (DownloadsList.Any(d => d.Status != DownloadStatus.Downloading))
+                    {
+                        <button class="panel-icon-btn" @onclick="ClearFinishedDownloads" @onmousedown:stopPropagation data-tooltip="Clear finished">
+                            <i class="fa-solid fa-broom"></i>
+                        </button>
+                    }
+                    <button class="panel-back-btn" @onclick="GoHome" @onmousedown:stopPropagation data-tooltip="Back">
+                        <i class="fa-solid fa-chevron-down"></i>
+                    </button>
+                </div>
+            </div>
+
+            <div class="panel-body">
+                @if (DownloadsList.Count == 0)
+                {
+                    <div class="empty-state" style="padding:28px 20px;">
+                        <i class="fa-solid fa-download"></i>
+                        <span>No downloads yet</span>
+                        <small>Versions, mods, and packs you download this session show up here.</small>
+                    </div>
+                }
+                else
+                {
+                    @foreach (var d in DownloadsList)
+                    {
+                        var entry = d;
+                        <div class="version-row">
+                            <div class="version-meta" style="flex:1; min-width:0;">
+                                <span class="version-name" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">@entry.Label</span>
+                                <span class="version-sub">
+                                    <i class="@(DownloadStatusIcon(entry.Status))"></i>
+                                    @DownloadStatusLabel(entry.Status)
+                                    @if (entry.Status == DownloadStatus.Downloading)
+                                    {
+                                        <text> · @((entry.Progress * 100).ToString("F0"))%</text>
+                                        @if (entry.TotalBytes > 0)
+                                        {
+                                            <text> · @FormatSize(entry.DownloadedBytes) / @FormatSize(entry.TotalBytes)</text>
+                                        }
+                                    }
+                                    else if (entry.Status == DownloadStatus.Failed && !string.IsNullOrEmpty(entry.Error))
+                                    {
+                                        <text> · @entry.Error</text>
+                                    }
+                                </span>
+                                @if (entry.Status == DownloadStatus.Downloading)
+                                {
+                                    <div class="progress-bar-wrap" style="margin-top:4px;">
+                                        <div class="progress-bar-fill" style="width:@($"{entry.Progress * 100:F0}%")"></div>
+                                    </div>
+                                }
+                            </div>
+                            <div class="version-actions">
+                                @if (entry.Status == DownloadStatus.Downloading)
+                                {
+                                    <button class="icon-btn icon-btn-ghost" data-tooltip="Cancel"
+                                            @onclick="() => CancelDownload(entry)" @onmousedown:stopPropagation>
+                                        <i class="fa-solid fa-xmark"></i>
+                                    </button>
+                                }
+                                else
+                                {
+                                    <button class="icon-btn icon-btn-ghost" data-tooltip="Remove"
+                                            @onclick="() => DownloadService.Remove(entry.Id)" @onmousedown:stopPropagation>
+                                        <i class="fa-solid fa-trash"></i>
+                                    </button>
+                                }
+                            </div>
+                        </div>
+                    }
+                }
+            </div>
+
+            <div class="panel-tabs">
+                <button class="panel-tab" @onclick="OpenSettings" @onmousedown:stopPropagation><i class="fa-solid fa-gear"></i>Settings</button>
+                <button class="panel-tab" @onclick="GoHome" @onmousedown:stopPropagation><i class="fa-solid fa-house"></i>Home</button>
+                <button class="panel-tab active" @onmousedown:stopPropagation><i class="fa-solid fa-download"></i>Downloads</button>
+                <button class="panel-tab" @onclick="OpenCredits" @onmousedown:stopPropagation><i class="fa-solid fa-heart"></i>Credits</button>
             </div>
         </div>
     }
@@ -2949,6 +4067,11 @@
                 <button class="panel-tab" @onclick="OpenAddons" @onmousedown:stopPropagation><i class="fa-solid fa-cube"></i>Addons</button>
                 <button class="panel-tab" @onclick="OpenServers" @onmousedown:stopPropagation><i class="fa-solid fa-server"></i>Servers</button>
                 <button class="panel-tab active" @onmousedown:stopPropagation><i class="fa-solid fa-box-archive"></i>MC Versions</button>
+                <button class="panel-tab" @onclick="OpenBedrockWorlds" @onmousedown:stopPropagation><i class="fa-solid fa-globe"></i>Worlds</button>
+                <button class="panel-tab" @onclick="() => OpenBedrockPacks()" @onmousedown:stopPropagation><i class="fa-solid fa-boxes-stacked"></i>Packs</button>
+                <button class="panel-tab" @onclick="OpenBedrockBackups" @onmousedown:stopPropagation><i class="fa-solid fa-clock-rotate-left"></i>Backups</button>
+                <button class="panel-tab" @onclick="OpenBedrockInstances" @onmousedown:stopPropagation><i class="fa-solid fa-layer-group"></i>Instances</button>
+                <button class="panel-tab" @onclick="OpenBedrockScreenshots" @onmousedown:stopPropagation><i class="fa-solid fa-images"></i>Photos</button>
                 <button class="panel-tab" @onclick="OpenCredits" @onmousedown:stopPropagation><i class="fa-solid fa-heart"></i>Credits</button>
             </div>
         </div>
@@ -3616,7 +4739,7 @@
                     <div class="panel-title-underline"></div>
                 </div>
                 <div class="panel-header-actions">
-                    <button class="panel-back-btn" @onclick="GoHome" @onmousedown:stopPropagation>
+                    <button class="panel-back-btn" @onclick="GoHome" @onmousedown:stopPropagation data-tooltip="Back">
                         <i class="fa-solid fa-chevron-down"></i>
                     </button>
                 </div>
@@ -3718,6 +4841,11 @@
                     <button class="panel-tab" @onclick="OpenAddons" @onmousedown:stopPropagation><i class="fa-solid fa-cube"></i>Addons</button>
                     <button class="panel-tab" @onclick="OpenServers" @onmousedown:stopPropagation><i class="fa-solid fa-server"></i>Servers</button>
                     <button class="panel-tab" @onclick="OpenMcVersions" @onmousedown:stopPropagation><i class="fa-solid fa-box-archive"></i>MC Versions</button>
+                    <button class="panel-tab" @onclick="OpenBedrockWorlds" @onmousedown:stopPropagation><i class="fa-solid fa-globe"></i>Worlds</button>
+                    <button class="panel-tab" @onclick="() => OpenBedrockPacks()" @onmousedown:stopPropagation><i class="fa-solid fa-boxes-stacked"></i>Packs</button>
+                <button class="panel-tab" @onclick="OpenBedrockBackups" @onmousedown:stopPropagation><i class="fa-solid fa-clock-rotate-left"></i>Backups</button>
+                <button class="panel-tab" @onclick="OpenBedrockInstances" @onmousedown:stopPropagation><i class="fa-solid fa-layer-group"></i>Instances</button>
+                <button class="panel-tab" @onclick="OpenBedrockScreenshots" @onmousedown:stopPropagation><i class="fa-solid fa-images"></i>Photos</button>
                     <button class="panel-tab active" @onmousedown:stopPropagation><i class="fa-solid fa-heart"></i>Credits</button>
                 }
                 else

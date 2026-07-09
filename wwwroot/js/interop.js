@@ -128,6 +128,25 @@ window.pickSkinFile = async (dotNetRef) => {
     });
 };
 
+// ── File picker (Datapack .zip) ────────────────────────────────
+window.pickDatapackFile = async (dotNetRef) => {
+    return new Promise(resolve => {
+        const input = document.createElement('input');
+        input.type   = 'file';
+        input.accept = '.zip';
+        input.style.display = 'none';
+        document.body.appendChild(input);
+        input.onchange = () => {
+            const file = input.files[0];
+            if (file) dotNetRef.invokeMethodAsync('OnDatapackPicked', file.path || file.name);
+            document.body.removeChild(input);
+            resolve();
+        };
+        input.oncancel = () => { document.body.removeChild(input); resolve(); };
+        input.click();
+    });
+};
+
 // ── Drag-and-drop DLL ─────────────────────────────────────────
 document.addEventListener('dragover', e => {
     e.preventDefault();
@@ -142,7 +161,8 @@ document.addEventListener('drop', e => {
     e.preventDefault();
     document.body.classList.remove('drop-active');
     const files = Array.from(e.dataTransfer.files || [])
-        .filter(f => ['.dll', '.zip', '.jar', '.mrpack'].some(ext => f.name.toLowerCase().endsWith(ext)));
+        .filter(f => ['.dll', '.zip', '.jar', '.mrpack', '.mcpack', '.mcworld', '.mctemplate', '.mcaddon']
+            .some(ext => f.name.toLowerCase().endsWith(ext)));
     if (!files.length) return;
     if (files[0].path && window._glacierDotNet)
         window._glacierDotNet.invokeMethodAsync('OnFileDropped', files[0].path);
@@ -597,4 +617,97 @@ window.glacierSkin = (function () {
 
     document.addEventListener('pointerup', endDrag);
     document.addEventListener('pointercancel', endDrag);
+})();
+
+// ── Panel tab bar cyclers ───────────────────────────────────────
+// Bedrock/Java panel footers can carry anywhere from 4 to 11 tabs. Rather
+// than a partial-scroll strip, the bar shows one page of up to 4 tabs at a
+// time; prev/next paginate to the previous/next group of 4, hiding the rest.
+(function () {
+    const PAGE_SIZE = 4;
+
+    function tabsOf(bar) {
+        return Array.from(bar.querySelectorAll(':scope > .panel-tab'));
+    }
+
+    function refreshCyclerButtons(bar) {
+        const prev = bar.querySelector(':scope > .panel-tabs-arrow.prev');
+        const next = bar.querySelector(':scope > .panel-tabs-arrow.next');
+        if (!prev || !next) return;
+
+        const tabs = tabsOf(bar);
+        const totalPages = Math.max(1, Math.ceil(tabs.length / PAGE_SIZE));
+        let page = parseInt(bar.dataset.page || '0', 10);
+
+        // Keep the active tab visible: if Blazor switched it via some other
+        // path (not the arrows), jump the page to wherever it now lives.
+        const activeIdx = tabs.findIndex(t => t.classList.contains('active'));
+        if (activeIdx >= 0) {
+            const activePage = Math.floor(activeIdx / PAGE_SIZE);
+            if (Math.floor(activeIdx / PAGE_SIZE) !== page && bar.dataset.userPaged !== String(page)) {
+                page = activePage;
+            }
+        }
+        page = Math.min(Math.max(page, 0), totalPages - 1);
+        bar.dataset.page = String(page);
+
+        tabs.forEach((tab, i) => {
+            tab.style.display = Math.floor(i / PAGE_SIZE) === page ? '' : 'none';
+        });
+
+        const overflowing = totalPages > 1;
+        prev.style.display = overflowing && page > 0 ? 'flex' : 'none';
+        next.style.display = overflowing && page < totalPages - 1 ? 'flex' : 'none';
+    }
+
+    function ensureTabCyclers() {
+        document.querySelectorAll('.panel-tabs:not(.cycler-ready)').forEach(bar => {
+            bar.classList.add('cycler-ready');
+            bar.dataset.page = '0';
+
+            // Native title (not the custom [data-tooltip] system) deliberately —
+            // a positioned ::after tooltip can get clipped inside this bar's
+            // layout context, while a native title tooltip never is.
+            const prev = document.createElement('button');
+            prev.type = 'button';
+            prev.className = 'panel-tabs-arrow prev';
+            prev.title = 'Previous tabs';
+            prev.innerHTML = '<i class="fa-solid fa-chevron-left"></i>';
+            prev.addEventListener('click', e => {
+                e.stopPropagation();
+                const p = Math.max(0, parseInt(bar.dataset.page || '0', 10) - 1);
+                bar.dataset.page = String(p);
+                bar.dataset.userPaged = String(p);
+                refreshCyclerButtons(bar);
+            });
+
+            const next = document.createElement('button');
+            next.type = 'button';
+            next.className = 'panel-tabs-arrow next';
+            next.title = 'Next tabs';
+            next.innerHTML = '<i class="fa-solid fa-chevron-right"></i>';
+            next.addEventListener('click', e => {
+                e.stopPropagation();
+                const totalPages = Math.max(1, Math.ceil(tabsOf(bar).length / PAGE_SIZE));
+                const p = Math.min(totalPages - 1, parseInt(bar.dataset.page || '0', 10) + 1);
+                bar.dataset.page = String(p);
+                bar.dataset.userPaged = String(p);
+                refreshCyclerButtons(bar);
+            });
+
+            bar.insertBefore(prev, bar.firstChild);
+            bar.appendChild(next);
+            refreshCyclerButtons(bar);
+        });
+
+        // Existing bars can change content (Blazor re-renders active tab class,
+        // window resizes) without a new .panel-tabs element appearing — re-check
+        // paging state each pass rather than only at creation time.
+        document.querySelectorAll('.panel-tabs.cycler-ready').forEach(refreshCyclerButtons);
+    }
+
+    const tabsObserver = new MutationObserver(() => ensureTabCyclers());
+    tabsObserver.observe(document.body, { childList: true, subtree: true });
+    window.addEventListener('resize', ensureTabCyclers);
+    ensureTabCyclers();
 })();

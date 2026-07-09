@@ -187,8 +187,9 @@ public partial class Home : IDisposable
     private double mrDownloadProgress = 0;
     private List<ModrinthService.MrProject> mrResults = new();
 
-    private readonly ClientDownloadState _flarial = new();
-    private readonly ClientDownloadState _oderso  = new();
+    private readonly ClientDownloadState _flarial    = new();
+    private readonly ClientDownloadState _oderso     = new();
+    private readonly ClientDownloadState _levilamina = new();
 
     private string customDllPath { get => SettingsService.Settings.CustomDllPath; set { SettingsService.Settings.CustomDllPath = value; SettingsService.Save(); } }
     private bool   copiedDllPath = false;
@@ -203,6 +204,14 @@ public partial class Home : IDisposable
 
     private string settingsFilter = "";
     private string settingsCategory = "all";
+
+    private bool notifPanelOpen = false;
+
+    private void ToggleNotifPanel()
+    {
+        notifPanelOpen = !notifPanelOpen;
+        if (notifPanelOpen) Notify.MarkAllRead();
+    }
 
     private bool   discordModalOpen     = false;
     private string discordUsernameInput = "";
@@ -318,7 +327,12 @@ public partial class Home : IDisposable
         if (!string.IsNullOrEmpty(SettingsService.Settings.UserHandle))
             displayHandle = SettingsService.Settings.UserHandle;
         BuildDefaultSearchResults();
+        Notify.Changed += OnNotificationsChanged;
+        DownloadService.Changed += OnDownloadsChanged;
+        InitOnboarding();
     }
+
+    private void OnNotificationsChanged() => InvokeAsync(StateHasChanged);
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -359,6 +373,7 @@ public partial class Home : IDisposable
 
         _ = RunStartupChecksAsync();
         _ = StartMcPollAsync();
+        _ = LoadAnnouncementAsync();
     }
 
     private async Task StartMcPollAsync()
@@ -413,6 +428,19 @@ public partial class Home : IDisposable
         if (ext == ".dll")
         {
             OnDllDropped(path);
+            return;
+        }
+        if (IsBedrock && ext is ".mcpack" or ".mcworld" or ".mctemplate" or ".mcaddon")
+        {
+            _ = ShowToast("Importing…", "info");
+            try
+            {
+                var kind = await CurseForge.ImportBedrockPackFileAsync(path);
+                Notify.Add($"{kind} imported", $"'{System.IO.Path.GetFileName(path)}' was added to Minecraft.", "success");
+                _ = ShowToast($"{kind} imported.", "success");
+            }
+            catch (Exception ex) { _ = ShowToast("Import failed: " + ex.Message, "error"); }
+            await InvokeAsync(StateHasChanged);
             return;
         }
         if (ext == ".mrpack")
@@ -521,6 +549,8 @@ public partial class Home : IDisposable
 
     public void Dispose()
     {
+        Notify.Changed -= OnNotificationsChanged;
+        DownloadService.Changed -= OnDownloadsChanged;
         _selfRef?.Dispose();
         _statusCts?.Cancel();
         _statusCts?.Dispose();
@@ -674,8 +704,9 @@ public partial class Home : IDisposable
 
     private static string GetClientIcon(string client) => client switch
     {
-        "Custom DLL"     => "fa-solid fa-file-code",
-        "Vanilla"        => "fa-solid fa-cube",
+        "Custom DLL"        => "fa-solid fa-file-code",
+        "Vanilla"           => "fa-solid fa-cube",
+        "LeviLamina Client" => "fa-solid fa-layer-group",
         _                => "",
     };
 
@@ -710,9 +741,10 @@ public partial class Home : IDisposable
         var client = SettingsService.Settings.SelectedClient;
         return client switch
         {
-            "Flarial Client" => "Flarial Client",
-            "OderSo Client"  => "OderSo Client",
-            "Vanilla"        => "Vanilla",
+            "Flarial Client"    => "Flarial Client",
+            "OderSo Client"     => "OderSo Client",
+            "LeviLamina Client" => "LeviLamina Client",
+            "Vanilla"           => "Vanilla",
             "Custom DLL"     => !string.IsNullOrEmpty(customDllPath)
                                 ? System.IO.Path.GetFileNameWithoutExtension(customDllPath)
                                 : "Custom DLL",

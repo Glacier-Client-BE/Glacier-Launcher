@@ -73,6 +73,16 @@ public partial class MainWindow : Window
         sc.AddSingleton<StatsService>();
         sc.AddSingleton<LogService>();
         sc.AddSingleton<SkinLibraryService>();
+        sc.AddSingleton<NotificationService>();
+        sc.AddSingleton<BedrockWorldService>();
+        sc.AddSingleton<BedrockPackService>();
+        sc.AddSingleton<BedrockBackupService>();
+        sc.AddSingleton<BedrockInstanceService>();
+        sc.AddSingleton<LevelDatEditorService>();
+        sc.AddSingleton<BedrockScreenshotService>();
+        sc.AddSingleton<LeviLaminaService>();
+        sc.AddSingleton<LeviLaminaModsService>();
+        sc.AddSingleton<LocalizationService>();
 
 #if DEBUG
         sc.AddBlazorWebViewDeveloperTools();
@@ -142,6 +152,21 @@ public partial class MainWindow : Window
                     Microsoft.Web.WebView2.Core.CoreWebView2HostResourceAccessKind.Allow);
             }
             catch { /* best effort — feature is available since WebView2 1.0.864.35 */ }
+
+            // Bedrock (UWP) has no in-game screenshot key of its own — players use Xbox
+            // Game Bar, which saves to Videos\Captures, outside the Glacier Launcher
+            // folder above. Map it separately so the screenshot gallery can render thumbnails.
+            try
+            {
+                var capturesFolder = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.MyVideos), "Captures");
+                Directory.CreateDirectory(capturesFolder);
+                blazorWebView.WebView.CoreWebView2.SetVirtualHostNameToFolderMapping(
+                    "glacier-captures.local",
+                    capturesFolder,
+                    Microsoft.Web.WebView2.Core.CoreWebView2HostResourceAccessKind.Allow);
+            }
+            catch { /* best effort */ }
 
             blazorWebView.WebView.CoreWebView2.WebMessageReceived += (_, args) =>
             {

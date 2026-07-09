@@ -23,7 +23,6 @@ public partial class Home
 
     private static readonly SavedServer[] _serverSuggestions =
     {
-        new() { Name = "NetherGames",   Address = "play.nethergames.org",    Port = 19132, Icon = "fa-solid fa-fire",       IconColor = "#ff6b35" },
         new() { Name = "Hive",          Address = "geo.hivebedrock.network", Port = 19132, Icon = "fa-solid fa-hexagon-nodes", IconColor = "#f5a623" },
         new() { Name = "CubeCraft",     Address = "play.cubecraft.net",      Port = 19132, Icon = "fa-solid fa-cube",       IconColor = "#4a90e2" },
         new() { Name = "Mineplex",      Address = "mco.mineplex.com",        Port = 19132, Icon = "fa-solid fa-tower-cell", IconColor = "#e94e4e" },
@@ -755,10 +754,15 @@ public partial class Home
                 {
                     launcherUpdateInfo      = info;
                     launcherUpdateAvailable = true;
+                    Notify.Add("Launcher update available", $"Glacier Launcher {info.Tag} is ready to install.", "info");
                 }
 
                 if (flarialUpdate || odersoUpdate)
+                {
                     clientsHasBadge = true;
+                    var names = string.Join(" and ", new[] { flarialUpdate ? "Flarial" : null, odersoUpdate ? "OderSo" : null }.Where(n => n != null));
+                    Notify.Add("Client update available", $"{names} client has a new version ready to download.", "info");
+                }
 
                 StateHasChanged();
             });

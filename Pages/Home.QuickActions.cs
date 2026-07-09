@@ -110,6 +110,12 @@ public partial class Home
         // ── Navigation ───────────────────────────────────────────────────────
         yield return new("fa-solid fa-user", "View Java Skin / Profile", "Navigation", "3D skin viewer (NameMC-style)", "", () => { CloseSearch(); OpenJavaProfile(); });
         yield return new("fa-solid fa-images", "Screenshot Gallery (Java)", "Navigation", "Browse your in-game screenshots", "", () => { CloseSearch(); OpenJavaScreenshots(); });
+        yield return new("fa-solid fa-globe", "Bedrock Worlds", "Navigation", "Browse, export, or delete your Bedrock worlds", "", () => { CloseSearch(); _ = OpenBedrockWorlds(); });
+        yield return new("fa-solid fa-boxes-stacked", "Bedrock Packs", "Navigation", "Manage resource, behavior, and skin packs", "", () => { CloseSearch(); _ = OpenBedrockPacks(); });
+        yield return new("fa-solid fa-clock-rotate-left", "Bedrock Backups", "Navigation", "Snapshot or restore your worlds and packs", "", () => { CloseSearch(); _ = OpenBedrockBackups(); });
+        yield return new("fa-solid fa-layer-group", "Bedrock Instances", "Navigation", "Isolated worlds/packs profiles you can switch between", "", () => { CloseSearch(); _ = OpenBedrockInstances(); });
+        yield return new("fa-solid fa-images", "Screenshot Gallery (Bedrock)", "Navigation", "Browse Xbox Game Bar Minecraft screenshots", "", () => { CloseSearch(); _ = OpenBedrockScreenshots(); });
+        yield return new("fa-solid fa-download", "Download Manager", "Navigation", "See active and past downloads", "", () => { CloseSearch(); OpenDownloadManager(); });
         yield return new("fa-solid fa-newspaper", "What's New / Changelog", "Navigation", "Launcher news and release notes", "", () => { CloseSearch(); _ = OpenNews(); });
         yield return new("fa-solid fa-shirt", "Change Minecraft Skin", "Account", "Upload a new skin (signed-in)", "", () => { CloseSearch(); _ = ChangeSkinAsync(); });
         yield return new("fa-solid fa-triangle-exclamation", "Check Mod Conflicts (Java)", "Java", "Scan installed mods for missing deps & duplicates", "", () => { CloseSearch(); OpenAddons("mods"); });
@@ -284,6 +290,22 @@ public partial class Home
     }
 
     private void OpenScreenshot(JavaInstanceFile shot) => OpenUrl(shot.Path);
+
+    // Same idea as FileToLocalUrl but for Videos\Captures, mapped separately
+    // since it lives outside the Glacier Launcher folder.
+    private static string FileToCapturesUrl(string absolutePath)
+    {
+        try
+        {
+            var root = Services.BedrockScreenshotService.CapturesDir;
+            var full = Path.GetFullPath(absolutePath);
+            if (!full.StartsWith(root, StringComparison.OrdinalIgnoreCase)) return "";
+            var rel = full[root.Length..].TrimStart('\\', '/').Replace('\\', '/');
+            var encoded = string.Join('/', rel.Split('/').Select(Uri.EscapeDataString));
+            return $"https://glacier-captures.local/{encoded}";
+        }
+        catch { return ""; }
+    }
 
     // Convert an absolute path under the Glacier Launcher folder into a URL the
     // WebView can load, via the glacier-files.local virtual host mapped by the host.

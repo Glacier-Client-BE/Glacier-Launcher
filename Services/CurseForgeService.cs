@@ -37,10 +37,11 @@ public class CurseForgeService
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
         "Minecraft Bedrock", "Users", "Shared", "games", "com.mojang");
 
-    public static string ResourcePacksDir => Path.Combine(ComMojangRoot, "resource_packs");
-    public static string BehaviorPacksDir => Path.Combine(ComMojangRoot, "behaviour_packs");
-    public static string SkinPacksDir     => Path.Combine(ComMojangRoot, "skin_packs");
-    public static string WorldsDir        => Path.Combine(ComMojangRoot, "minecraftWorlds");
+    public static string ResourcePacksDir  => Path.Combine(ComMojangRoot, "resource_packs");
+    public static string BehaviorPacksDir  => Path.Combine(ComMojangRoot, "behaviour_packs");
+    public static string SkinPacksDir      => Path.Combine(ComMojangRoot, "skin_packs");
+    public static string WorldsDir         => Path.Combine(ComMojangRoot, "minecraftWorlds");
+    public static string WorldTemplatesDir => Path.Combine(ComMojangRoot, "world_templates");
 
     // Java paths resolve against the JavaVersionService's MinecraftDir at
     // install time — we don't capture them statically because the user can
@@ -284,6 +285,37 @@ public class CurseForgeService
     }
 
     // ── Installation logic ────────────────────────────────────
+
+    /// <summary>
+    /// Installs a locally-supplied Bedrock pack/world file — used by drag-and-drop
+    /// import. Detects type from extension (falling back to manifest sniffing for
+    /// .mcpack) rather than requiring a CurseForge class id.
+    /// </summary>
+    public async Task<string> ImportBedrockPackFileAsync(string filePath)
+    {
+        var ext = Path.GetExtension(filePath).ToLowerInvariant();
+        switch (ext)
+        {
+            case ".mcworld":
+                await ExtractZipAsync(filePath, WorldsDir, Path.GetFileNameWithoutExtension(filePath));
+                return "World";
+
+            case ".mctemplate":
+                await ExtractZipAsync(filePath, WorldTemplatesDir, Path.GetFileNameWithoutExtension(filePath));
+                return "World template";
+
+            case ".mcpack":
+                await InstallMcPackAsync(filePath);
+                return "Pack";
+
+            case ".mcaddon":
+                await InstallMcAddonAsync(filePath);
+                return "Add-on";
+
+            default:
+                throw new NotSupportedException($"'{ext}' isn't a recognized Bedrock pack format.");
+        }
+    }
 
     private async Task InstallAddonFileAsync(string filePath, int classId)
     {

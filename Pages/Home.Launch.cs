@@ -20,11 +20,38 @@ public partial class Home
             return;
         }
 
-        var sel        = SettingsService.Settings.SelectedClient;
-        bool isFlarial = sel == "Flarial Client";
-        bool isOderSo  = sel == "OderSo Client";
-        bool isCustom  = sel == "Custom DLL";
-        bool isVanilla = sel == "Vanilla";
+        var sel            = SettingsService.Settings.SelectedClient;
+        bool isFlarial     = sel == "Flarial Client";
+        bool isOderSo      = sel == "OderSo Client";
+        bool isLeviLamina  = sel == "LeviLamina Client";
+        bool isCustom      = sel == "Custom DLL";
+        bool isVanilla     = sel == "Vanilla";
+
+        if (isLeviLamina && string.IsNullOrEmpty(LeviLamina.FilePath))
+        {
+            await ShowStatus("LeviLamina isn't downloaded yet. Download it from the Clients tab first.", error: true, clearAfterMs: 8000);
+            return;
+        }
+
+        var prereq = LaunchDiagnosticsService.CheckPrerequisites();
+        if (prereq.Reason != LaunchDiagnosticsService.Reason.Ok)
+        {
+            await ShowStatus(prereq.Message, error: true, clearAfterMs: 8000);
+            _ = ShowToast(prereq.Title + ": " + prereq.Message, "error");
+            return;
+        }
+
+        if (isCustom && !string.IsNullOrEmpty(customDllPath))
+        {
+            var dllCheck = LaunchDiagnosticsService.ValidateDll(customDllPath);
+            if (dllCheck.Reason != LaunchDiagnosticsService.Reason.Ok)
+            {
+                await ShowStatus(dllCheck.Message, error: true, clearAfterMs: 8000);
+                _ = ShowToast(dllCheck.Title + ": " + dllCheck.Message, "error");
+                return;
+            }
+        }
+
         isLaunching = true;
         _launchForceCancelled = false;
         _launchCts?.Cancel();
@@ -36,6 +63,7 @@ public partial class Home
             Task launchTask = isVanilla ? Launcher.LaunchVanillaAsync()
                             : (isCustom && !string.IsNullOrEmpty(customDllPath)) ? Launcher.LaunchWithDllAsync(customDllPath)
                             : isOderSo ? Launcher.LaunchWithDllAsync(OderSo.FilePath)
+                            : isLeviLamina ? Launcher.LaunchWithDllAsync(LeviLamina.FilePath!)
                             : Launcher.LaunchAsync(useFlarial: isFlarial);
 
             var done = await Task.WhenAny(launchTask, Task.Delay(System.Threading.Timeout.Infinite, token));
@@ -45,10 +73,11 @@ public partial class Home
             await launchTask;
 
             isLaunching = false;
-            var label = isVanilla ? "Vanilla"
-                      : isCustom  ? System.IO.Path.GetFileNameWithoutExtension(customDllPath)
-                      : isFlarial ? "Flarial"
-                      : isOderSo  ? "OderSo"
+            var label = isVanilla     ? "Vanilla"
+                      : isCustom      ? System.IO.Path.GetFileNameWithoutExtension(customDllPath)
+                      : isFlarial     ? "Flarial"
+                      : isOderSo      ? "OderSo"
+                      : isLeviLamina  ? "LeviLamina"
                       : SettingsService.Settings.LastUsedVersion;
             Discord.SetInGamePresence(label ?? "", sel);
             AddToRecentlyLaunched(label ?? "");
@@ -69,8 +98,9 @@ public partial class Home
             isLaunching = false;
             if (!_launchForceCancelled)
             {
-                await ShowStatus(ex.Message, error: true, clearAfterMs: 8000);
-                _ = ShowToast(ex.Message, "error");
+                var diag = LaunchDiagnosticsService.Classify(ex);
+                await ShowStatus(diag.Message, error: true, clearAfterMs: 8000);
+                _ = ShowToast(diag.Title + ": " + diag.Message, "error");
             }
         }
     }
@@ -218,11 +248,12 @@ public partial class Home
     {
         if (isLaunching) return;
 
-        var sel        = SettingsService.Settings.SelectedClient;
-        bool isFlarial = sel == "Flarial Client";
-        bool isOderSo  = sel == "OderSo Client";
-        bool isCustom  = sel == "Custom DLL";
-        bool isVanilla = sel == "Vanilla";
+        var sel           = SettingsService.Settings.SelectedClient;
+        bool isFlarial    = sel == "Flarial Client";
+        bool isOderSo     = sel == "OderSo Client";
+        bool isLeviLamina = sel == "LeviLamina Client";
+        bool isCustom     = sel == "Custom DLL";
+        bool isVanilla    = sel == "Vanilla";
 
         string? dllPath = null;
         try
@@ -230,6 +261,7 @@ public partial class Home
             if (isCustom && !string.IsNullOrEmpty(customDllPath)) dllPath = customDllPath;
             else if (isOderSo)                                    dllPath = OderSo.FilePath;
             else if (isFlarial)                                   dllPath = FlarialService.FilePath;
+            else if (isLeviLamina)                                dllPath = LeviLamina.FilePath;
             else if (!isVanilla)
             {
                 var tag = SettingsService.Settings.LastUsedVersion;
@@ -277,8 +309,9 @@ public partial class Home
             isLaunching = false;
             if (!_launchForceCancelled)
             {
-                await ShowStatus(ex.Message, error: true, clearAfterMs: 8000);
-                _ = ShowToast(ex.Message, "error");
+                var diag = LaunchDiagnosticsService.Classify(ex);
+                await ShowStatus(diag.Message, error: true, clearAfterMs: 8000);
+                _ = ShowToast(diag.Title + ": " + diag.Message, "error");
             }
         }
     }

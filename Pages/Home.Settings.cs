@@ -167,6 +167,14 @@ public partial class Home
         StateHasChanged();
     }
 
+    private void OnLanguageChanged(ChangeEventArgs e)
+    {
+        var code = e.Value?.ToString() ?? "en";
+        SettingsService.Settings.Language = Array.Exists(LocalizationService.Languages, l => l.Code == code) ? code : "en";
+        SettingsService.Save();
+        StateHasChanged();
+    }
+
     private async Task SetAccent(string color)
     {
         SettingsService.Settings.AccentColor = color;

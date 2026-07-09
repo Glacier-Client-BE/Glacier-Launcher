@@ -167,6 +167,11 @@
     border-top-color: rgba(0, 0, 0, 0.06);
 }
 
+[data-theme="light"] .panel-tabs-arrow {
+    background: rgba(255, 255, 255, 0.92);
+    color: rgba(0, 0, 0, 0.55);
+}
+
 [data-theme="light"] .modal-box {
     background: #ffffff;
     border-color: rgba(0, 0, 0, 0.10);
@@ -223,11 +228,6 @@
 [data-theme="light"] .search-trigger {
     background: rgba(0, 0, 0, 0.04);
     border-color: rgba(0, 0, 0, 0.08);
-}
-
-[data-theme="light"] .search-trigger kbd {
-    background: rgba(0, 0, 0, 0.06);
-    border-color: rgba(0, 0, 0, 0.10);
 }
 
 [data-theme="light"] .panel-tab.active {
@@ -626,11 +626,13 @@ body {
 .search-trigger {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
     background: rgba(255, 255, 255, 0.06);
     border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 16px;
-    padding: 4px 10px 4px 9px;
+    border-radius: 50%;
+    padding: 0;
     color: var(--text-dim);
     font-family: inherit;
     font-size: 11px;
@@ -649,17 +651,7 @@ body {
 }
 
 .search-trigger i {
-    font-size: 10px;
-}
-
-.search-trigger kbd {
-    font-size: 9px;
-    background: rgba(255, 255, 255, 0.10);
-    border-radius: 4px;
-    padding: 1px 5px;
-    font-family: inherit;
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    color: var(--text-dim);
+    font-size: 12px;
 }
 
 /* ── Window controls ── */
@@ -1951,7 +1943,12 @@ html.vt-active .panel-overlay,
     contain: layout paint style;
 }
 
-/* ── Panel tabs ── */
+/* ── Panel tabs ──
+   With 4-11 tabs per footer depending on the panel, flex:1 squeezed every tab
+   down to an unreadable sliver. Tabs now keep a fixed width and the bar
+   scrolls horizontally instead — interop.js injects sticky prev/next arrow
+   buttons into every .panel-tabs bar so there's always a click target, not
+   just scroll/drag, to cycle through the rest. */
 .panel-tabs {
     display: flex;
     gap: 2px;
@@ -1959,11 +1956,22 @@ html.vt-active .panel-overlay,
     padding: 8px 16px 12px;
     border-top: 1px solid rgba(255, 255, 255, 0.06);
     background: rgba(25, 28, 31, 0.60);
+    overflow-x: auto;
+    scroll-behavior: smooth;
+    scroll-snap-type: x proximity;
+    scrollbar-width: none;
 }
 
+.panel-tabs::-webkit-scrollbar { display: none; }
+
 .panel-tab {
-    flex: 1;
+    /* The cycler in interop.js pages tabs 4 at a time (others get display:none),
+       so the visible ones should fill the bar evenly at 25% each rather than
+       sizing to content and leaving dead space. */
+    flex: 1 1 0;
+    min-width: 0;
     height: 32px;
+    padding: 0 10px;
     border: none;
     border-radius: var(--r-sm);
     background: transparent;
@@ -1976,8 +1984,42 @@ html.vt-active .panel-overlay,
     align-items: center;
     justify-content: center;
     gap: 5px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    scroll-snap-align: start;
     transition: background var(--t), color var(--t);
 }
+
+/* Sticky prev/next arrows injected by ensurePanelTabCyclers() in interop.js —
+   pinned to the scroll viewport's edges so they stay clickable while the bar
+   scrolls, and only rendered by JS when the bar actually overflows. */
+.panel-tabs-arrow {
+    position: sticky;
+    flex: 0 0 auto;
+    z-index: 2;
+    width: 34px;
+    height: 32px;
+    border: none;
+    border-radius: var(--r-sm);
+    background: rgba(25, 28, 31, 0.92);
+    color: var(--text-dim);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    backdrop-filter: blur(4px);
+    transition: background var(--t), color var(--t);
+}
+
+.panel-tabs-arrow:hover {
+    background: var(--accent);
+    color: #fff;
+}
+
+.panel-tabs-arrow.prev { left: -2px; }
+.panel-tabs-arrow.next { right: -2px; }
 
 .panel-tab:hover {
     background: var(--bg-item-hover);
@@ -3061,7 +3103,8 @@ input[type=range]:active::-webkit-slider-thumb {
     color: var(--text-dim);
 }
 
-.modal-btn-row {
+.modal-btn-row,
+.modal-actions {
     display: flex;
     gap: 8px;
 }
@@ -5857,4 +5900,228 @@ html.vt-active .panel-overlay {
         transition-duration: 0.001ms;
         transform: none;
     }
+}
+
+/* ── Notification bell (top bar) ── */
+.notif-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 190;
+    pointer-events: all;
+    background: transparent;
+}
+
+.notif-bell-wrap {
+    position: relative;
+    flex-shrink: 0;
+    pointer-events: all;
+}
+
+.notif-bell-btn {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 50%;
+    color: var(--text-dim);
+    cursor: pointer;
+    font-size: 12px;
+    transition: background var(--t), border-color var(--t), color var(--t);
+}
+
+.notif-bell-btn:hover {
+    background: rgba(255, 255, 255, 0.10);
+    border-color: rgba(114, 137, 218, 0.35);
+    color: var(--text);
+}
+
+.notif-bell-badge {
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    min-width: 15px;
+    height: 15px;
+    padding: 0 3px;
+    border-radius: 8px;
+    background: var(--accent, #f04747);
+    color: #fff;
+    font-size: 9px;
+    font-weight: 700;
+    line-height: 15px;
+    text-align: center;
+}
+
+.notif-panel {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    width: 320px;
+    max-height: 420px;
+    display: flex;
+    flex-direction: column;
+    background: var(--panel-bg, #23272a);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+    z-index: 200;
+    overflow: hidden;
+}
+
+.notif-panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 12px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.notif-clear-btn {
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    font-size: 11px;
+    cursor: pointer;
+}
+
+.notif-clear-btn:hover { color: var(--text); }
+
+.notif-panel-list {
+    overflow-y: auto;
+    max-height: 380px;
+}
+
+.notif-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    padding: 28px 12px;
+    color: var(--text-dim);
+    font-size: 12px;
+}
+
+.notif-empty i { font-size: 18px; opacity: 0.5; }
+
+.notif-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 10px 12px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+    font-size: 11px;
+}
+
+.notif-item:last-child { border-bottom: none; }
+
+.notif-item i:first-child {
+    margin-top: 2px;
+    font-size: 12px;
+    flex-shrink: 0;
+}
+
+.notif-item.success i:first-child { color: #3ba55d; }
+.notif-item.error i:first-child   { color: #f04747; }
+.notif-item.info i:first-child    { color: var(--accent); }
+
+.notif-item-body { flex: 1; min-width: 0; }
+
+.notif-item-title {
+    color: var(--text);
+    font-weight: 600;
+    margin-bottom: 2px;
+}
+
+.notif-item-msg {
+    color: var(--text-dim);
+    line-height: 1.4;
+    word-break: break-word;
+}
+
+.notif-item-time {
+    color: var(--text-dim);
+    opacity: 0.6;
+    font-size: 10px;
+    margin-top: 4px;
+}
+
+.notif-item-remove {
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    opacity: 0.5;
+    cursor: pointer;
+    font-size: 10px;
+    padding: 2px;
+    flex-shrink: 0;
+}
+
+.notif-item-remove:hover { opacity: 1; color: var(--text); }
+
+/* ── Announcement / maintenance banner ── */
+.announcement-banner {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 14px;
+    font-size: 12px;
+    background: rgba(114, 137, 218, 0.12);
+    border-bottom: 1px solid rgba(114, 137, 218, 0.25);
+    color: var(--text);
+    flex-shrink: 0;
+}
+
+.announcement-banner.maintenance {
+    background: rgba(240, 71, 71, 0.14);
+    border-bottom-color: rgba(240, 71, 71, 0.3);
+}
+
+.announcement-banner > i {
+    font-size: 13px;
+    color: var(--accent);
+    flex-shrink: 0;
+}
+
+.announcement-banner.maintenance > i {
+    color: var(--red, #f04747);
+}
+
+.announcement-banner-text {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+}
+
+.announcement-banner-title {
+    font-weight: 700;
+    flex-shrink: 0;
+}
+
+.announcement-banner-msg {
+    color: var(--text-dim);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.announcement-banner-close {
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    cursor: pointer;
+    font-size: 12px;
+    flex-shrink: 0;
+    padding: 4px;
+}
+
+.announcement-banner-close:hover { color: var(--text); }
 }

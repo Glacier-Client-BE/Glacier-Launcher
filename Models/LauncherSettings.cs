@@ -153,6 +153,20 @@ public class LauncherSettings
 
     // ── Saved Servers ────────────────────────────────────────────
     public List<SavedServer> SavedServers { get; set; } = new();
+
+    // ── Bedrock instances (copy-sync isolation) ──────────────────
+    public string BedrockActiveInstanceId { get; set; } = "";
+
+    // ── First-run onboarding ──────────────────────────────────────
+    public bool   OnboardingCompleted { get; set; } = false;
+
+    // ── Localization ───────────────────────────────────────────────
+    public string Language { get; set; } = "en";
+
+    // ── Announcements ──────────────────────────────────────────────
+    // Id of the last announcement the user dismissed, so the same one
+    // doesn't reappear after being closed once.
+    public string LastDismissedAnnouncementId { get; set; } = "";
 }
 
 public class SavedServer

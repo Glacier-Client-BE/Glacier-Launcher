@@ -1,9 +1,32 @@
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Net.Http;
 using System.Security.Cryptography;
 
 namespace GlacierLauncher.Services;
+
+public enum DownloadStatus { Downloading, Completed, Failed, Cancelled }
+
+/// <summary>One tracked download, shown on the Download Manager panel. Mutated internally by DownloadService as the transfer progresses.</summary>
+public sealed class DownloadEntry
+{
+    public Guid    Id              { get; } = Guid.NewGuid();
+    public string  Label           { get; internal set; } = "";
+    public DownloadStatus Status   { get; internal set; } = DownloadStatus.Downloading;
+    public double  Progress        { get; internal set; }
+    public long    DownloadedBytes { get; internal set; }
+    public long    TotalBytes      { get; internal set; }
+    public string  StartedAt       { get; } = DateTime.UtcNow.ToString("o");
+    public string? FinishedAt      { get; internal set; }
+    public string? Error           { get; internal set; }
+
+    internal readonly CancellationTokenSource Cts = new();
+
+    /// <summary>Requests cancellation of this download. Safe to call after it has already finished.</summary>
+    public void Cancel() { try { Cts.Cancel(); } catch { } }
+}
 
 /// <summary>
 /// Streams a remote file to disk with progress reporting, optional SHA-256
@@ -37,6 +60,49 @@ public sealed class DownloadService
     public DownloadService(HttpClient http) =>
         _http = http ?? throw new ArgumentNullException(nameof(http));
 
+    // ── Download tracking (for the Download Manager panel) ───────────────────
+    // Static because DownloadService is created ad-hoc in several other services
+    // (not always resolved through DI), so a per-instance list would miss most
+    // downloads. Capped so a long session doesn't grow this unbounded.
+    private const int MaxHistory = 60;
+    private static readonly ConcurrentDictionary<Guid, DownloadEntry> _entries = new();
+
+    public static event Action? Changed;
+
+    public static IReadOnlyList<DownloadEntry> ActiveDownloads =>
+        _entries.Values.OrderByDescending(e => e.StartedAt).ToList();
+
+    private static void RaiseChanged() => Changed?.Invoke();
+
+    private static DownloadEntry TrackStart(string label)
+    {
+        var entry = new DownloadEntry { Label = label };
+        _entries[entry.Id] = entry;
+        TrimHistory();
+        RaiseChanged();
+        return entry;
+    }
+
+    private static void TrimHistory()
+    {
+        if (_entries.Count <= MaxHistory) return;
+        var finished = _entries.Values
+            .Where(e => e.Status != DownloadStatus.Downloading)
+            .OrderBy(e => e.FinishedAt)
+            .Take(_entries.Count - MaxHistory);
+        foreach (var e in finished) _entries.TryRemove(e.Id, out _);
+    }
+
+    /// <summary>Removes a single finished entry from the tracked list (never removes an in-flight download).</summary>
+    public static void Remove(Guid id)
+    {
+        if (_entries.TryGetValue(id, out var entry) && entry.Status != DownloadStatus.Downloading)
+        {
+            _entries.TryRemove(id, out _);
+            RaiseChanged();
+        }
+    }
+
     // ── Download ─────────────────────────────────────────────────────────────
 
     /// <summary>
@@ -59,7 +125,8 @@ public sealed class DownloadService
         long                        knownTotalBytes  = -1,
         Action<HttpRequestMessage>? configureRequest = null,
         int                         maxAttempts      = DefaultRetries,
-        CancellationToken           cancel           = default)
+        CancellationToken           cancel           = default,
+        string?                     label            = null)
     {
         if (string.IsNullOrWhiteSpace(url))
             throw new ArgumentException("Download URL is required.", nameof(url));
@@ -75,18 +142,64 @@ public sealed class DownloadService
                 $"Destination '{destinationPath}' has no parent directory.", nameof(destinationPath));
         Directory.CreateDirectory(dir);
 
+        var entry = TrackStart(label ?? Path.GetFileName(fullPath));
+        entry.TotalBytes = Math.Max(0, knownTotalBytes);
+
+        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancel, entry.Cts.Token);
+        var linkedToken = linkedCts.Token;
+
+        var lastRaise = DateTime.MinValue;
+        var trackedProgress = new DelegateProgress<double>(fraction =>
+        {
+            entry.Progress = fraction;
+            if (entry.TotalBytes > 0) entry.DownloadedBytes = (long)(entry.TotalBytes * fraction);
+            progress?.Report(fraction);
+
+            // Throttle UI notifications — progress fires per network buffer (as
+            // often as every 80KB), far more often than a panel needs to repaint.
+            var now = DateTime.UtcNow;
+            if (fraction >= 1.0 || (now - lastRaise).TotalMilliseconds >= 250)
+            {
+                lastRaise = now;
+                RaiseChanged();
+            }
+        });
+
         var gate = _fileLocks.GetOrAdd(fullPath, static _ => new SemaphoreSlim(1, 1));
-        await gate.WaitAsync(cancel).ConfigureAwait(false);
         try
         {
-            return await DownloadLockedAsync(
-                    url, fullPath, expectedSha256, progress,
-                    knownTotalBytes, configureRequest, maxAttempts, cancel)
-                .ConfigureAwait(false);
+            await gate.WaitAsync(linkedToken).ConfigureAwait(false);
+            try
+            {
+                var hash = await DownloadLockedAsync(
+                        url, fullPath, expectedSha256, trackedProgress,
+                        knownTotalBytes, configureRequest, maxAttempts, linkedToken)
+                    .ConfigureAwait(false);
+
+                entry.Status = DownloadStatus.Completed;
+                entry.Progress = 1.0;
+                return hash;
+            }
+            finally
+            {
+                gate.Release();
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            entry.Status = DownloadStatus.Cancelled;
+            throw;
+        }
+        catch (Exception ex)
+        {
+            entry.Status = DownloadStatus.Failed;
+            entry.Error = ex.Message;
+            throw;
         }
         finally
         {
-            gate.Release();
+            entry.FinishedAt = DateTime.UtcNow.ToString("o");
+            RaiseChanged();
         }
     }
 

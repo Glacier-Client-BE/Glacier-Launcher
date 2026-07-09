@@ -460,6 +460,52 @@ public sealed class JavaInstanceService
             .ToList();
     }
 
+    // ── Datapacks (per-world, unlike mods/resourcepacks which are instance-wide) ──
+    public string PathForDatapacks(string worldName) =>
+        Path.Combine(PathFor("saves"), worldName, "datapacks");
+
+    public IReadOnlyList<JavaInstanceFile> ListDatapacks(string worldName)
+    {
+        var dir = PathForDatapacks(worldName);
+        Directory.CreateDirectory(dir);
+        // Datapacks can be a .zip or an extracted folder — Minecraft loads either.
+        var files = Directory.EnumerateFiles(dir, "*.zip", SearchOption.TopDirectoryOnly)
+            .Select(p => ToEntry("datapacks", p));
+        var folders = Directory.EnumerateDirectories(dir, "*", SearchOption.TopDirectoryOnly)
+            .Select(d => new DirectoryInfo(d))
+            .Select(di => new JavaInstanceFile
+            {
+                Name = di.Name,
+                Path = di.FullName,
+                Kind = "datapacks",
+                SizeBytes = DirSize(di.FullName),
+                ModifiedAt = di.LastWriteTimeUtc.ToString("o")
+            });
+        return files.Concat(folders).OrderByDescending(x => x.ModifiedAt).ToList();
+    }
+
+    public void ImportDatapackFile(string worldName, string zipPath)
+    {
+        if (!File.Exists(zipPath)) throw new FileNotFoundException("Datapack file not found.", zipPath);
+        var dir = PathForDatapacks(worldName);
+        Directory.CreateDirectory(dir);
+        var dest = Path.Combine(dir, Path.GetFileName(zipPath));
+        File.Copy(zipPath, dest, overwrite: true);
+    }
+
+    public void DeleteDatapack(string path)
+    {
+        if (File.Exists(path)) File.Delete(path);
+        else if (Directory.Exists(path)) Directory.Delete(path, recursive: true);
+    }
+
+    public void OpenDatapacksFolder(string worldName)
+    {
+        var dir = PathForDatapacks(worldName);
+        Directory.CreateDirectory(dir);
+        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo { FileName = dir, UseShellExecute = true });
+    }
+
     public IReadOnlyList<JavaInstanceFile> ListBackups()
     {
         var backups = PathFor("backups");

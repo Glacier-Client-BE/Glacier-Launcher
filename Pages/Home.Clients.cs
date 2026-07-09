@@ -25,7 +25,7 @@ public partial class Home
 
     private void CycleClient()
     {
-        var clients = new List<string> { "Latite Client", "Flarial Client", "OderSo Client", "Vanilla" };
+        var clients = new List<string> { "Latite Client", "Flarial Client", "OderSo Client", "LeviLamina Client", "Vanilla" };
         if (!string.IsNullOrEmpty(customDllPath)) clients.Add("Custom DLL");
         var idx = clients.IndexOf(SettingsService.Settings.SelectedClient);
         if (idx < 0) idx = -1;
@@ -53,17 +53,20 @@ public partial class Home
         await NavigateAsync(() =>
         {
             currentView = "clients";
-            _flarial.Downloaded = Flarial.IsDownloaded;
-            _oderso.Downloaded  = OderSo.IsDownloaded;
-            clientsHasBadge     = false;
+            _flarial.Downloaded    = Flarial.IsDownloaded;
+            _oderso.Downloaded     = OderSo.IsDownloaded;
+            _levilamina.Downloaded = LeviLamina.IsDownloaded;
+            clientsHasBadge        = false;
         });
 
-        var flarialUpToDate = _flarial.Downloaded ? Flarial.IsUpToDateAsync() : Task.FromResult(false);
-        var odersoUpToDate  = _oderso.Downloaded  ? OderSo.IsUpToDateAsync()  : Task.FromResult(false);
-        await Task.WhenAll(flarialUpToDate, odersoUpToDate);
+        var flarialUpToDate    = _flarial.Downloaded    ? Flarial.IsUpToDateAsync()    : Task.FromResult(false);
+        var odersoUpToDate     = _oderso.Downloaded     ? OderSo.IsUpToDateAsync()     : Task.FromResult(false);
+        var levilaminaUpToDate = _levilamina.Downloaded ? LeviLamina.IsUpToDateAsync() : Task.FromResult(false);
+        await Task.WhenAll(flarialUpToDate, odersoUpToDate, levilaminaUpToDate);
 
-        _flarial.UpToDate = flarialUpToDate.Result;
-        _oderso.UpToDate  = odersoUpToDate.Result;
+        _flarial.UpToDate    = flarialUpToDate.Result;
+        _oderso.UpToDate     = odersoUpToDate.Result;
+        _levilamina.UpToDate = levilaminaUpToDate.Result;
         StateHasChanged();
     }
 
@@ -114,6 +117,17 @@ public partial class Home
         OderSo.Delete();
         _oderso.MarkRemoved();
         if (SettingsService.Settings.SelectedClient == "OderSo Client") SelectClient("Latite Client");
+        StateHasChanged();
+    }
+
+    private Task HandleLeviLaminaDownload() =>
+        RunClientDownload(_levilamina, LeviLamina.DownloadAsync, LeviLamina.IsUpToDateAsync, "LeviLamina");
+
+    private void HandleLeviLaminaDelete()
+    {
+        LeviLamina.Delete();
+        _levilamina.MarkRemoved();
+        if (SettingsService.Settings.SelectedClient == "LeviLamina Client") SelectClient("Latite Client");
         StateHasChanged();
     }
 
