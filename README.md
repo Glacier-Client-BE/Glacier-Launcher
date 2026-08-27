@@ -49,3 +49,13 @@
 ---
 
 ❄️ Glacier Launcher makes managing and launching MCBE DLL clients simple, fast, and clean.
+
+---
+
+## 📱 Android
+
+An Android recreation of the launcher's UI and client-management workflows
+lives in [`android/`](android/), built with Kotlin + Jetpack Compose and
+built by CI in `.github/workflows/android-release.yml`. DLL injection is a
+Windows-only mechanism with no direct Android equivalent — see
+[`android/README.md`](android/README.md) for what is and isn't ported.
