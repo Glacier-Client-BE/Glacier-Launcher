@@ -25,6 +25,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          submodules: recursive
 
       - name: Determine Next Version
         id: versioning
@@ -86,6 +87,19 @@ jobs:
           GLACIER_VERSION: ${{ steps.versioning.outputs.NEXT_VERSION }}
         run: gradle :app:assembleRelease --no-daemon
 
+      - name: Rebrand PojavLauncher submodule
+        if: steps.versioning.outputs.SKIP != 'true'
+        run: ./scripts/rebrand-pojav.sh
+
+      - name: Build Java Edition companion APK (rebranded PojavLauncher)
+        if: steps.versioning.outputs.SKIP != 'true'
+        working-directory: android/pojavlauncher
+        env:
+          CURSEFORGE_API_KEY: ${{ secrets.CURSEFORGE_API_KEY }}
+        run: |
+          chmod +x gradlew
+          ./gradlew :app_pojavlauncher:assembleRelease --no-daemon
+
       - name: Upload build artifacts
         if: steps.versioning.outputs.SKIP != 'true'
         uses: actions/upload-artifact@v4
@@ -94,6 +108,7 @@ jobs:
           path: |
             android/app/build/outputs/apk/debug/*.apk
             android/app/build/outputs/apk/release/*.apk
+            android/pojavlauncher/app_pojavlauncher/build/outputs/apk/**/*.apk
 
       - name: Create and Push Tag
         if: steps.versioning.outputs.SKIP != 'true' && steps.versioning.outputs.SKIP_RELEASE != 'true'
@@ -110,6 +125,8 @@ jobs:
         with:
           tag_name: ${{ steps.versioning.outputs.NEXT_TAG }}
           generate_release_notes: true
-          files: android/app/build/outputs/apk/**/*.apk
+          files: |
+            android/app/build/outputs/apk/**/*.apk
+            android/pojavlauncher/app_pojavlauncher/build/outputs/apk/**/*.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

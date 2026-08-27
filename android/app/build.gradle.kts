@@ -14,6 +14,14 @@ android {
         targetSdk = 34
         versionCode = 1
         versionName = System.getenv("GLACIER_VERSION") ?: "0.0.0-dev"
+
+        // Mirrors GlacierLauncher.csproj's CurseForgeApiKey AssemblyMetadataAttribute:
+        // baked in at build time from the same CI secret, empty for local dev builds.
+        buildConfigField(
+            "String",
+            "CURSEFORGE_API_KEY",
+            "\"${System.getenv("CURSEFORGE_API_KEY") ?: ""}\"",
+        )
     }
 
     buildTypes {
@@ -24,6 +32,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
     composeOptions {
         kotlinCompilerExtensionVersion = "1.5.14"

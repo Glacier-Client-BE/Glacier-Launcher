@@ -1,49 +1,97 @@
 # Glacier Launcher — Android
 
-A native Kotlin/Jetpack Compose recreation of the desktop Glacier Launcher's
-UI and workflows (client management, versions, worlds/packs/backups browsing,
-settings, theming), built as a standalone Android Studio Gradle project.
+Two coordinated apps, built from this one directory:
 
-## Why this isn't a literal 1:1 port
+1. **`app/`** — the Glacier shell: native Kotlin/Jetpack Compose UI recreating
+   the desktop launcher's panels (Home, Clients, Java, CurseForge, Worlds,
+   Packs, Screenshots, Backups, Settings), the Glacier Client manifest/download
+   pipeline, CurseForge mod browsing, Xbox Live sign-in, and settings/theming.
+2. **`pojavlauncher/`** — a **git submodule** pinned to the unmodified
+   upstream [PojavLauncherTeam/PojavLauncher](https://github.com/PojavLauncherTeam/PojavLauncher),
+   the open-source Android Java Edition runtime. This is what actually runs
+   Minecraft Java Edition — its own ARM JVM, LWJGL/GLFW bridge, and
+   mod-loader installers (Forge/Fabric) are a huge, mature codebase that
+   isn't worth reimplementing; using it (rather than rewriting it) is what
+   "make your own version of Pojav" means in practice here.
 
-The desktop launcher's headline feature is **DLL injection** into the Windows
-`Minecraft.Windows.exe` / UWP process (Latite, Flarial, OderSo clients), plus
-Windows-only integrations: a native system tray icon, `%APPDATA%` file layout,
-Discord native RPC, and Java Edition desktop launching.
+   `scripts/rebrand-pojav.sh` applies the "Glacier Launcher (Java Edition)"
+   rebrand (`applicationId xyz.glacierclient.launcher.java`, app name) as a
+   build-time patch rather than a commit inside the submodule — a commit
+   there would only exist in whichever clone made it and wouldn't be
+   fetchable from the upstream URL `.gitmodules` points at. Run it once
+   before building the companion APK, locally or in CI.
 
-None of these exist on Android in the same form:
+The shell app hands off to the Pojav companion app via an explicit intent
+(`JavaEditionBridge.kt`) rather than merging both into a single APK — Pojav
+is itself a multi-module Android app with its own native libraries and build
+quirks (see its own `pojavlauncher/build.gradle`), and a byte-level Gradle
+merge into one application risks bringing its own long tail of native/JNI
+issues without a real device to validate against. Both APKs ship together
+in the same release.
 
-- **No DLL injection equivalent.** Android sandboxes every app by UID; there
-  is no supported API to load a foreign native library into another app's
-  process. `service/ClientInjectionService.kt` implements the closest
-  best-effort analogue (root-only staging of a native lib into Minecraft's
-  private storage, à la community Bedrock-Android mod loaders) and is
-  explicit in the UI when root is unavailable rather than pretending to work.
-- **No system tray** — Android has no desktop shell concept; omitted.
-- **Java Edition desktop launching** doesn't apply on Android; Bedrock is
-  Mojang's only Android SKU, so the Android app targets Bedrock only.
-- File layout uses Android's per-app sandbox (`context.filesDir`) instead of
-  `%USERPROFILE%\.glacier`.
+Glacier Client jars (and CurseForge mods) installed from the shell app are
+copied into Pojav's own shared-storage mods directory
+(`.../games/PojavLauncher/.minecraft/mods`, see
+`pojavlauncher/app_pojavlauncher/.../Tools.java` `DIR_GAME_HOME`) so they're
+picked up the next time Java Edition launches — no cross-app IPC needed
+since both write to the same external storage path.
 
-Everything else — UI structure, panels (Home, Clients, Worlds, Packs,
-Backups, Settings), the Glacier Client manifest/download pipeline, settings
-persistence, theming — is recreated to match the desktop app as closely as
-the platform allows.
+## Why this isn't a literal 1:1 port of the Windows app
+
+The desktop launcher's headline feature is **DLL injection** into the
+Windows `Minecraft.Windows.exe` process (Latite, Flarial, OderSo clients).
+Android sandboxes every app by UID; there is no supported API to load a
+foreign native library into another app's process without root.
+`app/.../service/ClientInjectionService.kt` implements the closest
+best-effort analogue (root-only staging into Minecraft Bedrock's storage)
+and says so explicitly in the UI when root isn't available, rather than
+pretending to work.
+
+Also genuinely not portable:
+- **Native Discord Rich Presence** — that's an IPC pipe between a local
+  Discord *desktop* client and a local game process; there's no equivalent
+  channel on Android, and Discord's Game SDK doesn't run on mobile.
+  `service/DiscordPresenceService.kt` offers an honest, much smaller
+  substitute instead: an opt-in webhook post, clearly not the same feature.
+- **System tray** — no desktop shell concept on Android; omitted.
+
+Everything else in the request is real, working code here: Glacier Client
+jar install/versioning, CurseForge mod search (`CurseForgeScreen.kt` +
+`CurseForgeRepository.kt`, same game/class ids as the desktop
+`CurseForgeService.cs`), Java Edition mods (via the Pojav companion app),
+screenshots browsing, and Xbox Live sign-in
+(`XboxAuthService.kt`, same device-code → XBL → XSTS flow as
+`LiveAuthService.cs`/`XboxProfileService.cs` — pure HTTPS, so it ports
+1:1 unlike DLL injection).
 
 ## Building locally
 
 ```
+git submodule update --init --recursive   # first time only
+
 cd android
-./gradlew :app:assembleDebug
+gradle :app:assembleDebug                 # shell app
+
+./scripts/rebrand-pojav.sh
+cd pojavlauncher
+./gradlew :app_pojavlauncher:assembleDebug  # Java Edition companion app
 ```
 
-(No wrapper jar is committed; CI provisions Gradle via
-`gradle/actions/setup-gradle`. Locally, run `gradle wrapper` once, or install
-Gradle 8.9 and use the `gradle` command directly.)
+(No wrapper jar is committed for `app/`; CI provisions Gradle directly.
+`pojavlauncher/` brings its own `gradlew`.)
 
 ## CI
 
-`.github/workflows/android-release.yml` builds debug + release APKs on every
-push to `main` that touches `android/**`, uploads them as build artifacts,
-and — on commits prefixed `hotfix:`/`update:` — tags and publishes a GitHub
-Release, mirroring the desktop launcher's `release.yml` versioning scheme.
+`.github/workflows/android-release.yml`:
+- checks out submodules recursively,
+- builds the shell app (`:app:assembleDebug`/`assembleRelease`),
+- runs `scripts/rebrand-pojav.sh` then builds the rebranded Pojav companion
+  app (`:app_pojavlauncher:assembleRelease`),
+- uploads both APKs as build artifacts on every push to `main` touching
+  `android/**`,
+- and — on commits prefixed `hotfix:`/`update:` — tags and publishes a
+  GitHub Release with both APKs attached, mirroring the desktop launcher's
+  `release.yml` versioning scheme.
+
+A CurseForge API key is read from the `CURSEFORGE_API_KEY` repo secret at
+build time for both apps, same as the desktop build.

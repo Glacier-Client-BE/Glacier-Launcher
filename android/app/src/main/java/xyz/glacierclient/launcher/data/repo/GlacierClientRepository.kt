@@ -68,6 +68,11 @@ class GlacierClientRepository(context: Context) {
         }
         tmp.copyTo(dest, overwrite = true)
         tmp.delete()
+
+        // Also stage into the Java Edition companion app's shared mods folder so it
+        // loads on the next Pojav launch — see JavaEditionBridge for why that's a
+        // shared-storage copy rather than a cross-app IPC call.
+        xyz.glacierclient.launcher.service.JavaEditionBridge.installModJar(dest)
     }
 
     fun uninstall(versionId: String) {

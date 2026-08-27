@@ -54,8 +54,10 @@
 
 ## 📱 Android
 
-An Android recreation of the launcher's UI and client-management workflows
-lives in [`android/`](android/), built with Kotlin + Jetpack Compose and
-built by CI in `.github/workflows/android-release.yml`. DLL injection is a
-Windows-only mechanism with no direct Android equivalent — see
+An Android recreation of the launcher lives in [`android/`](android/): a
+native Kotlin/Compose shell (client manager, CurseForge, Xbox login,
+settings) plus a rebranded [PojavLauncher](https://github.com/PojavLauncherTeam/PojavLauncher)
+companion app for Java Edition, both built by CI in
+`.github/workflows/android-release.yml`. DLL injection and native Discord
+RPC are Windows-only mechanisms with no direct Android equivalent — see
 [`android/README.md`](android/README.md) for what is and isn't ported.

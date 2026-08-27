@@ -5,9 +5,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Photo
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.SportsEsports
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -23,19 +25,26 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import xyz.glacierclient.launcher.ui.screens.BackupsScreen
 import xyz.glacierclient.launcher.ui.screens.ClientsScreen
+import xyz.glacierclient.launcher.ui.screens.CurseForgeScreen
 import xyz.glacierclient.launcher.ui.screens.HomeScreen
+import xyz.glacierclient.launcher.ui.screens.JavaEditionScreen
 import xyz.glacierclient.launcher.ui.screens.PacksScreen
+import xyz.glacierclient.launcher.ui.screens.ScreenshotsScreen
 import xyz.glacierclient.launcher.ui.screens.SettingsScreen
 import xyz.glacierclient.launcher.ui.screens.WorldsScreen
 
-// Mirrors the desktop app's Pages/Home.Panels.cs tab set (Home, Clients, Worlds, Packs, Backups, Settings).
+// Mirrors the desktop app's Pages/Home.Panels.cs tab set, plus a Java Edition tab
+// (bridges to the rebranded Pojav companion app) and CurseForge/Screenshots browsers.
 private data class NavItem(val route: String, val label: String, val icon: androidx.compose.ui.graphics.vector.ImageVector)
 
 private val navItems = listOf(
     NavItem("home", "Home", Icons.Filled.Home),
     NavItem("clients", "Clients", Icons.Filled.Extension),
+    NavItem("java", "Java", Icons.Filled.SportsEsports),
+    NavItem("curseforge", "CurseForge", Icons.Filled.CloudDownload),
     NavItem("worlds", "Worlds", Icons.Filled.Public),
-    NavItem("packs", "Packs", Icons.Filled.CloudDownload),
+    NavItem("packs", "Packs", Icons.Filled.Save),
+    NavItem("screenshots", "Shots", Icons.Filled.Photo),
     NavItem("backups", "Backups", Icons.Filled.Save),
     NavItem("settings", "Settings", Icons.Filled.Settings),
 )
@@ -73,8 +82,11 @@ fun GlacierLauncherApp() {
         ) {
             composable("home") { HomeScreen() }
             composable("clients") { ClientsScreen() }
+            composable("java") { JavaEditionScreen() }
+            composable("curseforge") { CurseForgeScreen() }
             composable("worlds") { WorldsScreen() }
             composable("packs") { PacksScreen() }
+            composable("screenshots") { ScreenshotsScreen() }
             composable("backups") { BackupsScreen() }
             composable("settings") { SettingsScreen() }
         }
