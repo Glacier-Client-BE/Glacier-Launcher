@@ -28,10 +28,27 @@ class CurseForgeRepository(private val apiKey: String) {
         const val BEDROCK_CLASS_MAPS = 6913
         const val BEDROCK_CLASS_SKINS = 6925
         const val BEDROCK_CLASS_TEXTURE_PACKS = 6929
+        const val BEDROCK_CLASS_SCRIPTS = 6940
     }
 
+    /** Mirrors the desktop CurseForge.AvailableCategories chip row for the Bedrock game. */
+    data class Category(val label: String, val classId: Int)
+
+    val bedrockCategories = listOf(
+        Category("Addons", BEDROCK_CLASS_ADDONS),
+        Category("Maps", BEDROCK_CLASS_MAPS),
+        Category("Skins", BEDROCK_CLASS_SKINS),
+        Category("Texture Packs", BEDROCK_CLASS_TEXTURE_PACKS),
+        Category("Scripts", BEDROCK_CLASS_SCRIPTS),
+    )
+
+    val isAvailable: Boolean get() = apiKey.isNotBlank()
+
     @Serializable
-    data class SearchResponse(val data: List<CurseForgeMod> = emptyList())
+    data class Pagination(val index: Int = 0, val pageSize: Int = 0, val resultCount: Int = 0, val totalCount: Int = 0)
+
+    @Serializable
+    data class SearchResponse(val data: List<CurseForgeMod> = emptyList(), val pagination: Pagination = Pagination())
 
     @Serializable
     data class CurseForgeMod(
@@ -53,16 +70,15 @@ class CurseForgeRepository(private val apiKey: String) {
         val downloadUrl: String? = null,
     )
 
-    suspend fun search(gameId: Int, classId: Int, query: String, pageSize: Int = 30): List<CurseForgeMod> {
-        val response: SearchResponse = HttpClientFactory.shared.get("$BASE_URL/v1/mods/search") {
+    suspend fun search(gameId: Int, classId: Int, query: String, index: Int = 0, pageSize: Int = 20): SearchResponse =
+        HttpClientFactory.shared.get("$BASE_URL/v1/mods/search") {
             header("x-api-key", apiKey)
             parameter("gameId", gameId)
             parameter("classId", classId)
             parameter("searchFilter", query)
+            parameter("index", index)
             parameter("pageSize", pageSize)
             parameter("sortField", 2) // popularity, matches desktop default sort
             parameter("sortOrder", "desc")
         }.body()
-        return response.data
-    }
 }

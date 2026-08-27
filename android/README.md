@@ -112,7 +112,13 @@ versus still queued — kept honest on purpose rather than claiming "done":
 - `servers` — saved servers + "Popular" suggestions, same row actions
   (`ServersScreen.kt`)
 - `credits` — same launcher/client credit cards and links (`CreditsScreen.kt`)
-- `addons` (partial) — CurseForge search sub-tab only (`CurseForgeScreen.kt`)
+- `addons` (Bedrock branch) — same API-key-required empty state, category
+  chips (Addons/Maps/Skins/Texture Packs/Scripts), search, results with an
+  install action, and "Load more" pagination as the desktop panel
+  (`AddonsScreen.kt` + `CurseForgeRepository.kt`, same game/class ids as
+  `CurseForgeService.cs`). The Java branch of this panel additionally has
+  Loaders/Mods/Assets/Datapacks/Tools sub-tabs and a Modrinth results tab —
+  queued along with the other Java-edition views below.
 - `settings` — same category filter row (All/Inject/Looks/Account/System)
   and the same sections underneath (Injection, Appearance, Account, Social,
   Quality of Life, Updates, CurseForge, Backup, About), wired to real
@@ -130,8 +136,7 @@ needs Storage Access Framework wiring to read real on-device Bedrock/Java
 data before the cards can populate.
 
 **Not yet started:**
-`addons` non-CurseForge sources (Modrinth, skins, texture packs — 632 lines
-total), `mcversions` (Bedrock version manager — currently aliased to the
+`mcversions` (Bedrock version manager — currently aliased to the
 Clients screen as a placeholder route), `bedrockscreenshots` vs.
 `javascreenshots` split, `javaclients`/`javaversions`/`javaprofile` (the
 Java-edition variants, reached on desktop via an edition toggle — this

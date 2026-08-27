@@ -29,7 +29,7 @@ import androidx.navigation.compose.rememberNavController
 import xyz.glacierclient.launcher.ui.screens.BackupsScreen
 import xyz.glacierclient.launcher.ui.screens.ClientsScreen
 import xyz.glacierclient.launcher.ui.screens.CreditsScreen
-import xyz.glacierclient.launcher.ui.screens.CurseForgeScreen
+import xyz.glacierclient.launcher.ui.screens.AddonsScreen
 import xyz.glacierclient.launcher.ui.screens.HomeScreen
 import xyz.glacierclient.launcher.ui.screens.InstancesScreen
 import xyz.glacierclient.launcher.ui.screens.PacksScreen
@@ -112,7 +112,7 @@ fun GlacierLauncherApp() {
             composable("home") { HomeScreen() }
             composable("settings") { SettingsScreen() }
             composable("clients") { ClientsScreen() }
-            composable("addons") { CurseForgeScreen() }
+            composable("addons") { AddonsScreen() }
             composable("servers") { ServersScreen() }
             composable("mcversions") { ClientsScreen() } // TODO: dedicated Bedrock version manager, see README
             composable("worlds") { WorldsScreen() }
