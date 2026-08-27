@@ -15,12 +15,15 @@ data class LauncherSettings(
     val username: String = "",
     val autoInject: Boolean = false,
     val injectionDelayMs: Int = 2000,
+    val closeAfterLaunch: Boolean = false,
 
     val accentColor: String = "#7289da",
     val themePreset: String = "dark",
     val backgroundOpacity: Double = 0.80,
     val compactMode: Boolean = false,
     val animationsEnabled: Boolean = true,
+    val animationSpeed: Double = 1.0,
+    val uiScalePct: Int = 100,
 
     val showRecentlyLaunched: Boolean = true,
     val recentlyLaunched: List<String> = emptyList(),
@@ -39,8 +42,16 @@ data class LauncherSettings(
     val xboxXuid: String = "",
     val xboxGamerPictureUrl: String = "",
 
+    val discordLoggedIn: Boolean = false,
+    val discordUsername: String = "",
+    val discordWebhookUrl: String = "",
+
+    val profileDisplayMode: String = "auto", // auto | xbox | discord
+
     val savedServers: List<SavedServer> = emptyList(),
     val onboardingCompleted: Boolean = false,
     val language: String = "en",
     val lastDismissedAnnouncementId: String = "",
+
+    val curseForgeApiKeyOverride: String = "",
 )

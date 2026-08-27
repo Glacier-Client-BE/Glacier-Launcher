@@ -113,13 +113,23 @@ versus still queued — kept honest on purpose rather than claiming "done":
   (`ServersScreen.kt`)
 - `credits` — same launcher/client credit cards and links (`CreditsScreen.kt`)
 - `addons` (partial) — CurseForge search sub-tab only (`CurseForgeScreen.kt`)
+- `settings` — same category filter row (All/Inject/Looks/Account/System)
+  and the same sections underneath (Injection, Appearance, Account, Social,
+  Quality of Life, Updates, CurseForge, Backup, About), wired to real
+  settings storage (`SettingsScreen.kt`). The "Java Edition" section
+  deliberately does *not* duplicate RAM/JVM-args/resolution controls — the
+  Pojav companion app already has a real settings UI for those, so this
+  section links out to it instead of shipping dead sliders. "Folders" and
+  "Minimize to tray" are dropped (no filesystem browser / tray on Android).
+  Export/Import settings and "Check for updates now" are UI-complete but
+  not yet wired to actual file I/O or an update feed.
 
 **Empty-state placeholders (correct panel/labels, listing logic queued):**
 `bedrockworlds`, `bedrockpacks`, `bedrockbackups`, `bedrockinstances` — each
 needs Storage Access Framework wiring to read real on-device Bedrock/Java
 data before the cards can populate.
 
-**Not yet started:** `settings` (887 lines — the single largest panel),
+**Not yet started:**
 `addons` non-CurseForge sources (Modrinth, skins, texture packs — 632 lines
 total), `mcversions` (Bedrock version manager — currently aliased to the
 Clients screen as a placeholder route), `bedrockscreenshots` vs.
