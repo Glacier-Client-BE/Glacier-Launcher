@@ -6,12 +6,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 
-/** Mirrors Pages/Home.razor "bedrockpacks" panel (behavior/resource pack browser). Listing queued. */
+/** Mirrors Pages/Home.razor "bedrockinstances" panel (copy-sync world/save isolation). Listing queued. */
 @Composable
-fun PacksScreen() {
+fun InstancesScreen() {
     EmptyState(
-        "No packs installed",
-        "Behavior and resource packs will list here once wired to shared storage.",
+        "No instances yet",
+        "Isolated Bedrock instances will list here once wired to shared storage.",
         modifier = Modifier.fillMaxSize().padding(16.dp),
     )
 }

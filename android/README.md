@@ -95,3 +95,41 @@ cd pojavlauncher
 
 A CurseForge API key is read from the `CURSEFORGE_API_KEY` repo secret at
 build time for both apps, same as the desktop build.
+
+## UI parity status
+
+The desktop app (`Pages/Home.razor`, ~4,900 lines) has 26 distinct panel
+views sharing one bottom "panel-tabs" bar. This is a running tally of which
+ones are matched structurally (same cards, labels, and actions) in Compose
+versus still queued — kept honest on purpose rather than claiming "done":
+
+**Matched (real content, same structure/labels as the desktop panel):**
+- `home` — launch button, Java Edition handoff, recently-launched chips,
+  footer Xbox/Discord row (`HomeScreen.kt`)
+- `clients` — all six cards in the same order: Flarial, Latite, OderSo,
+  LeviLamina, Vanilla, Custom DLL, with the same select/download/update/
+  delete affordances (`ClientsScreen.kt`)
+- `servers` — saved servers + "Popular" suggestions, same row actions
+  (`ServersScreen.kt`)
+- `credits` — same launcher/client credit cards and links (`CreditsScreen.kt`)
+- `addons` (partial) — CurseForge search sub-tab only (`CurseForgeScreen.kt`)
+
+**Empty-state placeholders (correct panel/labels, listing logic queued):**
+`bedrockworlds`, `bedrockpacks`, `bedrockbackups`, `bedrockinstances` — each
+needs Storage Access Framework wiring to read real on-device Bedrock/Java
+data before the cards can populate.
+
+**Not yet started:** `settings` (887 lines — the single largest panel),
+`addons` non-CurseForge sources (Modrinth, skins, texture packs — 632 lines
+total), `mcversions` (Bedrock version manager — currently aliased to the
+Clients screen as a placeholder route), `bedrockscreenshots` vs.
+`javascreenshots` split, `javaclients`/`javaversions`/`javaprofile` (the
+Java-edition variants, reached on desktop via an edition toggle — this
+Android app doesn't have that toggle wired yet, see `JavaEditionScreen.kt`
+for the standalone Java entry point that exists instead), `downloads`,
+`news`, `themestudio`, `modpacks`, `stats`, `logs`, `skinlibrary`,
+`levimods`.
+
+Each of those is a real, separate chunk of work (Settings alone is bigger
+than everything matched so far combined) — they're being worked through in
+priority order across follow-up passes rather than stubbed out in bulk.
