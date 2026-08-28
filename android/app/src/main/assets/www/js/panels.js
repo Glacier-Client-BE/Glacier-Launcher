@@ -241,8 +241,11 @@ function creditsPanelBody() {
     </div>`;
 }
 
-// ── Addons (Bedrock: straight to CurseForge search, same as desktop) ─────
-function addonsPanelBody() {
+// ── Addons ─────────────────────────────────────────────────────────────
+// Bedrock: straight to CurseForge search, same as desktop. Java: the same
+// javaModsTab sub-tab bar (Loaders/Mods/Assets/Datapacks/Tools/CurseForge/
+// Modrinth) from Pages/Home.razor's "addons" panel Java branch.
+function curseForgeSearchBody() {
     if (!CurseForge.isAvailable()) {
         return emptyState("CurseForge API key required", "Get a free key from the CurseForge developer console, then paste it in Settings.", "fa-solid fa-key");
     }
@@ -256,6 +259,105 @@ function addonsPanelBody() {
         <input class="panel-search-input" id="cf-search-input" placeholder="Search CurseForge ${App.state.edition === "java" ? "for Java mods, modpacks, shaders..." : "addons..."}" />
     </div>
     <div id="cf-results"></div>`;
+}
+
+function modrinthSearchBody() {
+    return `
+    <div class="versions-client-switcher" id="mr-categories">
+        ${Modrinth.javaCategories.map((c, i) => `<button class="vcs-btn ${i === 0 ? "active" : ""}" data-mr-category="${c.facet}"><i class="${c.icon}"></i> ${c.label}</button>`).join("")}
+    </div>
+    <div class="panel-search-wrap">
+        <i class="fa-solid fa-magnifying-glass"></i>
+        <input class="panel-search-input" id="mr-search-input" placeholder="Search Modrinth..." />
+    </div>
+    <div id="mr-results"></div>`;
+}
+
+// Loaders: real cards from Pages/Home.razor (Fabric/Quilt/Forge/NeoForge),
+// gated the same way desktop gates them — behind an active Java version,
+// which this app doesn't track yet, so the honest "no version selected"
+// branch is also the true current state, not a shortcut around it.
+function javaLoadersBody() {
+    return emptyState("No version selected", "Pick a Minecraft version from the Versions panel first, then come back to install a mod loader.", "fa-solid fa-triangle-exclamation");
+}
+
+function javaModsBody() {
+    return emptyState("No local mods", "Drop jars into the active instance mods folder, or browse CurseForge/Modrinth.", "fa-solid fa-puzzle-piece");
+}
+
+function javaAssetsBody() {
+    const rows = [
+        { name: "Resource Packs", icon: "fa-solid fa-image", color: "rgba(67,181,129,0.15)", fg: "var(--green)" },
+        { name: "Shader Packs", icon: "fa-solid fa-wand-magic-sparkles", color: "rgba(255,200,50,0.15)", fg: "#ffc832" },
+        { name: "Saves / Worlds", icon: "fa-solid fa-map", color: "rgba(114,137,218,0.15)", fg: "var(--accent)" },
+        { name: "Screenshots", icon: "fa-solid fa-camera", color: "rgba(240,71,71,0.15)", fg: "var(--red)" },
+        { name: "Schematics", icon: "fa-solid fa-drafting-compass", color: "rgba(250,166,26,0.15)", fg: "var(--orange)" },
+    ];
+    return rows.map(r => `
+    <div class="client-card">
+        <div class="client-card-header">
+            <div class="client-card-icon" style="background:${r.color}; color:${r.fg}; padding:8px;"><i class="${r.icon}"></i></div>
+            <div class="client-card-meta">
+                <span class="client-card-name">${r.name}</span>
+                <span class="client-card-sub" style="opacity:0.5;">Needs the Java Edition companion app installed</span>
+            </div>
+            <div class="client-card-actions">
+                <button class="icon-btn" data-tooltip="Open folder" disabled><i class="fa-solid fa-folder-open"></i></button>
+            </div>
+        </div>
+    </div>`).join("");
+}
+
+function javaToolsBody() {
+    const rows = [
+        { name: "Backup Saves", sub: "Zip your worlds before a risky update", icon: "fa-solid fa-box-archive", color: "rgba(114,137,218,0.15)", fg: "var(--accent)", action: "fa-solid fa-download" },
+        { name: "Export Modpack", sub: "Bundle mods + config into a shareable zip", icon: "fa-solid fa-file-zipper", color: "rgba(67,181,129,0.15)", fg: "var(--green)", action: "fa-solid fa-file-export" },
+        { name: "Duplicate Instance", sub: "Clone your active instance with all mods & config", icon: "fa-solid fa-clone", color: "rgba(250,166,26,0.15)", fg: "var(--orange)", action: "fa-solid fa-copy" },
+    ];
+    return rows.map(r => `
+    <div class="client-card">
+        <div class="client-card-header">
+            <div class="client-card-icon" style="background:${r.color}; color:${r.fg}; padding:8px;"><i class="${r.icon}"></i></div>
+            <div class="client-card-meta">
+                <span class="client-card-name">${r.name}</span>
+                <span class="client-card-sub" style="opacity:0.5;">${r.sub}</span>
+            </div>
+            <div class="client-card-actions">
+                <button class="icon-btn" disabled><i class="${r.action}"></i></button>
+            </div>
+        </div>
+    </div>`).join("");
+}
+
+const JAVA_MODS_TABS = [
+    { id: "loaders", label: "Loaders", icon: "fa-solid fa-screwdriver-wrench" },
+    { id: "mods", label: "Mods", icon: "fa-solid fa-puzzle-piece" },
+    { id: "assets", label: "Assets", icon: "fa-solid fa-image" },
+    { id: "datapacks", label: "Datapacks", icon: "fa-solid fa-cubes-stacked" },
+    { id: "tools", label: "Tools", icon: "fa-solid fa-toolbox" },
+    { id: "curseforge", label: "CurseForge", icon: "fa-solid fa-fire" },
+    { id: "modrinth", label: "Modrinth", icon: "fa-solid fa-leaf" },
+];
+
+function javaAddonsBody(tab) {
+    const switcher = `<div class="versions-client-switcher">${JAVA_MODS_TABS.map(t =>
+        `<button class="vcs-btn ${t.id === tab ? "active" : ""}" data-java-mods-tab="${t.id}"><i class="${t.icon}"></i> ${t.label}</button>`).join("")}</div>`;
+
+    let body;
+    switch (tab) {
+        case "loaders": body = javaLoadersBody(); break;
+        case "assets": body = javaAssetsBody(); break;
+        case "tools": body = javaToolsBody(); break;
+        case "datapacks": body = emptyState("Datapacks", "Needs a world picker wired to the Java Edition companion app's shared storage — queued.", "fa-solid fa-cubes-stacked"); break;
+        case "curseforge": return `${switcher}${curseForgeSearchBody()}`;
+        case "modrinth": return `${switcher}${modrinthSearchBody()}`;
+        default: body = javaModsBody();
+    }
+    return `${switcher}${body}`;
+}
+
+function addonsPanelBody() {
+    return App.state.edition === "java" ? javaAddonsBody(App.state.javaModsTab) : curseForgeSearchBody();
 }
 
 // ── Settings ───────────────────────────────────────────────────────────

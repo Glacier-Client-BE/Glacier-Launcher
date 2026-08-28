@@ -155,10 +155,20 @@ version numbers).
 packs, backups) wired in; the empty-state markup itself is the real
 `.empty-state` class from app.css.
 
-**Not yet started:** `addons` Java branch (Loaders/Mods/Assets/Datapacks/
-Tools sub-tabs + Modrinth results), `javaclients`/`javaversions`/
-`javaprofile`/`javascreenshots` (Java-edition panel variants — the edition
-switcher toggles the quick-actions dock already, but these specific panels
-aren't built yet), `downloads`, `news` panel (the ticker exists, the
-dedicated panel doesn't), `themestudio`, `modpacks`, `stats`, `logs`,
-`skinlibrary`, `levimods`.
+`addons` Java branch is now matched too: the same javaModsTab sub-tab bar
+(Loaders/Mods/Assets/Datapacks/Tools/CurseForge/Modrinth) from the desktop
+panel. Loaders honestly shows the real "no version selected" empty-state
+(this app doesn't track an active Java version, so that's the true current
+state, not a shortcut); Assets/Tools render the real card sets
+(Resource/Shader Packs, Saves, Screenshots, Schematics / Backup, Export,
+Duplicate) with their actions disabled rather than faked, since there's no
+backing service for them yet; Datapacks is queued (needs a world picker);
+Modrinth search is real (`js/modrinth.js`, same base URL/facets as
+`ModrinthService.cs`, no API key needed).
+
+**Not yet started:** `javaclients`/`javaversions`/`javaprofile`/
+`javascreenshots` (Java-edition panel variants — the edition switcher
+toggles the quick-actions dock already, but these specific panels aren't
+built yet), `downloads`, `news` panel (the ticker exists, the dedicated
+panel doesn't), `themestudio`, `modpacks`, `stats`, `logs`, `skinlibrary`,
+`levimods`.

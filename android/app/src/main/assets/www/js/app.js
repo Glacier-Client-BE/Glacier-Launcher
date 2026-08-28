@@ -39,6 +39,10 @@ const App = {
         mcVersions: [], // no real data source yet — see android/README.md
         mcVersionsChannel: "all",
         mcVersionsFilter: "",
+        javaModsTab: "loaders",
+        mrCategory: null,
+        mrResults: [],
+        mrTotalCount: 0,
     },
 
     init() {
@@ -167,6 +171,7 @@ const App = {
             case "credits": html = panelShell({ id, title: "Credits", body: creditsPanelBody(), activeTabId: id }); break;
             case "addons": {
                 this.state.cfCategory = (this.state.edition === "java" ? CurseForge.javaCategories : CurseForge.bedrockCategories)[0].classId;
+                this.state.mrCategory = Modrinth.javaCategories[0].facet;
                 html = panelShell({ id, title: this.state.edition === "java" ? "Mods & Addons" : "Addons", body: addonsPanelBody(), activeTabId: id });
                 break;
             }
@@ -180,7 +185,11 @@ const App = {
         }
         root.innerHTML = html;
 
-        if (id === "addons") this.runCfSearch(true);
+        if (id === "addons") {
+            const activeTab = this.state.edition === "java" ? this.state.javaModsTab : "curseforge";
+            if (activeTab === "curseforge") this.runCfSearch(true);
+            if (activeTab === "modrinth") this.runMrSearch(true);
+        }
         if (id === "settings") this.bindSettingsEvents();
     },
 
@@ -270,6 +279,44 @@ const App = {
                 : "");
         const loadMore = document.getElementById("cf-load-more");
         if (loadMore) loadMore.addEventListener("click", () => this.runCfSearch(false));
+    },
+
+    async runMrSearch(reset) {
+        const resultsEl = document.getElementById("mr-results");
+        if (!resultsEl) return;
+        resultsEl.innerHTML = `<div style="padding:24px;text-align:center;"><span class="spinner"></span></div>`;
+        const query = document.getElementById("mr-search-input")?.value || "";
+        try {
+            const res = await Modrinth.search(this.state.mrCategory, query, reset ? 0 : this.state.mrResults.length);
+            this.state.mrResults = reset ? res.hits : this.state.mrResults.concat(res.hits);
+            this.state.mrTotalCount = res.total_hits ?? this.state.mrResults.length;
+        } catch (e) {
+            resultsEl.innerHTML = `<div style="padding:20px;text-align:center;"><span class="error-text">Failed to reach Modrinth: ${e.message}</span></div>`;
+            return;
+        }
+        this.renderMrResults();
+    },
+
+    renderMrResults() {
+        const resultsEl = document.getElementById("mr-results");
+        if (!resultsEl) return;
+        if (this.state.mrResults.length === 0) {
+            resultsEl.innerHTML = emptyState("No results", "Try a different search term or category.", "fa-solid fa-magnifying-glass");
+            return;
+        }
+        resultsEl.innerHTML = this.state.mrResults.map(project => `
+            <div class="server-row">
+                <div class="server-meta" style="flex:1;">
+                    <span class="server-name">${project.title}</span>
+                    <span class="server-sub">${(project.description || "").slice(0, 90)}</span>
+                </div>
+                <button class="icon-btn" data-tooltip="Download & Install"><i class="fa-solid fa-download"></i></button>
+            </div>`).join("") +
+            (this.state.mrResults.length < this.state.mrTotalCount
+                ? `<button class="btn-sm" id="mr-load-more" style="width:100%;margin-top:8px;"><i class="fa-solid fa-angles-down"></i> Load more (${this.state.mrResults.length} / ${this.state.mrTotalCount})</button>`
+                : "");
+        const loadMore = document.getElementById("mr-load-more");
+        if (loadMore) loadMore.addEventListener("click", () => this.runMrSearch(false));
     },
 
     closePanel() {
@@ -364,14 +411,35 @@ const App = {
                 this.openPanel("mcversions");
                 return;
             }
+
+            const javaModsTab = e.target.closest("[data-java-mods-tab]");
+            if (javaModsTab) {
+                this.state.javaModsTab = javaModsTab.dataset.javaModsTab;
+                this.openPanel("addons");
+                return;
+            }
+
+            const mrCat = e.target.closest("[data-mr-category]");
+            if (mrCat) {
+                document.querySelectorAll("#mr-categories .vcs-btn").forEach(b => b.classList.remove("active"));
+                mrCat.classList.add("active");
+                this.state.mrCategory = mrCat.dataset.mrCategory;
+                this.runMrSearch(true);
+                return;
+            }
         });
 
         let cfDebounce;
+        let mrDebounce;
         let mcvFilterDebounce;
         document.body.addEventListener("input", (e) => {
             if (e.target.id === "cf-search-input") {
                 clearTimeout(cfDebounce);
                 cfDebounce = setTimeout(() => this.runCfSearch(true), 350);
+            }
+            if (e.target.id === "mr-search-input") {
+                clearTimeout(mrDebounce);
+                mrDebounce = setTimeout(() => this.runMrSearch(true), 350);
             }
             if (e.target.id === "mcv-filter-input") {
                 clearTimeout(mcvFilterDebounce);
