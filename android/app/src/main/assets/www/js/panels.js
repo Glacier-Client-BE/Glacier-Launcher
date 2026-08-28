@@ -444,6 +444,7 @@ function settingsPanelBody(category) {
         <div class="settings-section"><span class="panel-section-label">Social</span>
         ${settingRow("Discord Rich Presence", "Posts a “now playing” webhook message (no native IPC on Android)", toggleHtml("discordRichPresence", s.discordRichPresence))}
         ${settingRow("Xbox profile", s.xboxGamertag || "Not signed in", `<button class="btn-sm" id="xbox-sign-in-settings">Sign in</button>`)}
+        ${settingRow("Skin Library", "Saved skins — apply to your account", `<button class="btn-sm" data-open-panel="skinlibrary">Open</button>`)}
         </div>`;
     }
 
@@ -1142,5 +1143,50 @@ function themeStudioPanelBody(themes, sel, activeThemeId) {
             <button class="btn-sm" data-theme-reset-css><i class="fa-solid fa-rotate-left"></i> Reset</button>
             <span class="setting-hint">Injected last, so it wins over everything.</span>
         </div>
+    </div>`;
+}
+
+// Skin Library — real markup from Components/SkinLibraryPanel.razor.
+function skinlibCardHtml(s) {
+    return `<div class="skinlib-card">
+        <div class="skinlib-preview"><img src="${escapeHtml(s.url)}" loading="lazy" style="image-rendering:pixelated;" /></div>
+        <span class="skinlib-name">${escapeHtml(s.name)}</span>
+        <div class="skinlib-actions">
+            <button class="btn-sm btn-accent" data-skinlib-apply="${s.id}" data-tooltip="Apply to your account as ${s.slim ? "slim (Alex)" : "classic (Steve)"}">
+                <i class="fa-solid fa-shirt"></i> Apply</button>
+            <button class="btn-sm" data-skinlib-apply-alt="${s.id}" data-tooltip="Apply as ${s.slim ? "classic (Steve)" : "slim (Alex)"} instead">${s.slim ? "Classic" : "Slim"}</button>
+            <button class="btn-sm ts-danger" data-skinlib-delete="${s.id}" data-tooltip="Remove from library"><i class="fa-solid fa-trash"></i></button>
+        </div>
+    </div>`;
+}
+
+function skinLibraryPanelBody(state) {
+    const grid = state.skins.length === 0
+        ? `<div class="stats-empty">No saved skins yet. Add a PNG or pull one in by username, then apply it to your signed-in account.</div>`
+        : `<div class="skinlib-grid">${state.skins.map(skinlibCardHtml).join("")}</div>`;
+    const errorHtml = state.error ? `<div class="stats-empty" style="color:var(--red);">${escapeHtml(state.error)}</div>` : "";
+
+    return `<div class="skinlib-add">
+        <input class="panel-search-input" id="skinlib-username-input" placeholder="Add by username (grabs their current skin)…" value="${escapeHtml(state.username)}" />
+        <button class="btn-sm" id="skinlib-add-btn" ${state.busy ? "disabled" : ""}><i class="fa-solid fa-user-plus"></i></button>
+    </div>
+    ${errorHtml}
+    ${grid}`;
+}
+
+function skinLibraryPanelHtml(state) {
+    return `<div class="panel-overlay">
+        <div class="panel-handle"></div>
+        <div class="panel-header">
+            <div class="panel-title-wrap"><span class="panel-title">Skin Library</span><div class="panel-title-underline"></div></div>
+            <div class="panel-header-actions">
+                <button class="btn-sm" disabled data-tooltip="Sign in with Microsoft (Java) first to save your current skin">
+                    <i class="fa-solid fa-floppy-disk"></i> Save current</button>
+                <button class="btn-sm" disabled data-tooltip="Needs a native file picker this app doesn't have yet">
+                    <i class="fa-solid fa-upload"></i> Add PNG</button>
+                <button class="panel-back-btn" data-close-panel data-tooltip="Back"><i class="fa-solid fa-chevron-down"></i></button>
+            </div>
+        </div>
+        <div class="panel-body" id="skinlib-body">${skinLibraryPanelBody(state)}</div>
     </div>`;
 }

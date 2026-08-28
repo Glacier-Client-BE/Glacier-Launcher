@@ -51,6 +51,10 @@ const App = {
         modpacks: { source: "mr", query: "", results: [], searching: false, searched: false, error: null },
         themes: [], // loaded from localStorage on init — see loadThemes()/saveThemes()
         selectedThemeId: null,
+        // No filesystem skin library on Android, so resolved Mojang texture
+        // URLs (stable, signed by Mojang's CDN) are kept in localStorage
+        // instead of downloaded PNG bytes. See loadSkins()/saveSkins().
+        skinLibrary: { skins: [], username: "", busy: false, error: null },
         news: {
             loading: false, posts: [], releases: [],
             fallbackItems: [
@@ -85,6 +89,36 @@ const App = {
     // since it's a list of documents rather than a single settings object.
     loadThemes() {
         try { this.state.themes = JSON.parse(localStorage.getItem("glacier_themes") || "[]"); } catch (e) { this.state.themes = []; }
+    },
+
+    loadSkins() {
+        try { this.state.skinLibrary.skins = JSON.parse(localStorage.getItem("glacier_skins") || "[]"); } catch (e) { this.state.skinLibrary.skins = []; }
+    },
+
+    saveSkins() {
+        localStorage.setItem("glacier_skins", JSON.stringify(this.state.skinLibrary.skins));
+    },
+
+    renderSkinLibraryBody() {
+        const body = document.getElementById("skinlib-body");
+        if (body) body.innerHTML = skinLibraryPanelBody(this.state.skinLibrary);
+    },
+
+    async addSkinFromUsername() {
+        const sl = this.state.skinLibrary;
+        if (!sl.username.trim() || sl.busy) return;
+        sl.busy = true; sl.error = null;
+        this.renderSkinLibraryBody();
+        try {
+            const skin = await SkinLibrary.addFromUsername(sl.username);
+            sl.skins.unshift(skin);
+            sl.username = "";
+            this.saveSkins();
+        } catch (e) {
+            sl.error = e.message;
+        }
+        sl.busy = false;
+        this.renderSkinLibraryBody();
     },
 
     saveThemes() {
@@ -253,6 +287,11 @@ const App = {
             case "levimods": {
                 html = levModsPanelHtml(this.state.levMods);
                 if (!this.state.levMods.hasSearched && !this.state.levMods.loading) this.loadLevMods();
+                break;
+            }
+            case "skinlibrary": {
+                if (this.state.skinLibrary.skins.length === 0) this.loadSkins();
+                html = skinLibraryPanelHtml(this.state.skinLibrary);
                 break;
             }
             case "modpacks": {
@@ -633,6 +672,23 @@ const App = {
             if (e.target.closest("[data-refresh-java-versions]")) { this.state.javaVersions.list = []; this.loadJavaVersions(); return; }
             if (e.target.closest("[data-refresh-news]")) { this.loadNews(); return; }
 
+            if (e.target.closest("#skinlib-add-btn")) { this.addSkinFromUsername(); return; }
+            const slApply = e.target.closest("[data-skinlib-apply]");
+            const slApplyAlt = e.target.closest("[data-skinlib-apply-alt]");
+            if (slApply || slApplyAlt) {
+                this.state.skinLibrary.error = "Sign in with Microsoft (Java) first to apply skins.";
+                this.renderSkinLibraryBody();
+                return;
+            }
+            const slDelete = e.target.closest("[data-skinlib-delete]");
+            if (slDelete) {
+                const id = slDelete.dataset.skinlibDelete;
+                this.state.skinLibrary.skins = this.state.skinLibrary.skins.filter(s => s.id !== id);
+                this.saveSkins();
+                this.renderSkinLibraryBody();
+                return;
+            }
+
             const removeDl = e.target.closest("[data-remove-download]");
             if (removeDl) {
                 this.state.downloads = this.state.downloads.filter(d => d.id !== removeDl.dataset.removeDownload);
@@ -765,9 +821,16 @@ const App = {
                 this.state.modpacks.query = e.target.value;
                 this.searchModpacks();
             }
+            if (e.target.id === "skinlib-username-input" && e.key === "Enter") {
+                this.state.skinLibrary.username = e.target.value;
+                this.addSkinFromUsername();
+            }
         });
 
         document.body.addEventListener("input", (e) => {
+            if (e.target.id === "skinlib-username-input") {
+                this.state.skinLibrary.username = e.target.value;
+            }
             if (e.target.id === "cf-search-input") {
                 clearTimeout(cfDebounce);
                 cfDebounce = setTimeout(() => this.runCfSearch(true), 350);

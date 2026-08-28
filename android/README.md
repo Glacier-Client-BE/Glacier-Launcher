@@ -245,7 +245,31 @@ object. Wallpaper picking is disabled (needs a file picker this app
 doesn't have a bridge for yet). Reachable the same way as desktop: the
 "Theme Studio" row in Settings → Appearance.
 
-**Not yet started:** `skinlibrary` — needs a 3D skin canvas via
-`skinview3d.js`, real Microsoft/Xbox sign-in to have a skin to show in the
-first place (same gate `javaprofile` hit), and skin upload/library
-management on top.
+`skinlibrary` is matched for the part that's genuinely portable: "Add by
+username" is a real port of `SkinLibraryService.AddFromUsernameAsync` —
+`js/skinlibrary.js` calls Mojang's own `api.mojang.com` (username → UUID)
+and `sessionserver.mojang.com` (UUID → signed texture URL + slim/classic
+model flag) exactly like the desktop app, with no third-party proxy. There
+is no filesystem skin library on Android, so the resolved Mojang texture
+URL (stable and signed, not a local file) is what's kept, in `localStorage`
+under `glacier_skins`, instead of downloaded PNG bytes. The grid, cards,
+and empty-state (`.skinlib-grid`/`.skinlib-card`/`.stats-empty`) are the
+real markup from `Components/SkinLibraryPanel.razor`. "Save current" and
+Apply are honestly disabled/blocked — both need a signed-in Microsoft/Java
+account to have a skin to save or somewhere to push one to, and no OAuth
+flow exists here (same gate `javaprofile` hit). "Add PNG" is disabled too
+(needs a native file picker this app doesn't have a bridge for yet). Since
+Mojang's endpoints are called with browser `fetch()` from the WebView
+rather than a native `HttpClient`, a CORS restriction there would surface
+as a real, visible fetch error rather than being silently worked around.
+Reachable via a "Skin Library" row in Settings → Account, since the real
+desktop entry points (a header button on the signed-in Java profile view,
+and a command-palette search result) are both gated behind sign-in or a
+feature that doesn't exist on Android.
+
+This closes out the full 26-panel UI-parity backlog: every panel is either
+a byte-for-byte-markup live match, an honest empty-state placeholder for
+functionality that needs infrastructure not yet built (Storage Access
+Framework file listing, instance management, native file/wallpaper
+pickers, real Xbox/Microsoft OAuth), or explicitly documented as not
+reachable/not applicable on Android.
