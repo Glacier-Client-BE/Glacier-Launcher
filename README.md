@@ -55,9 +55,11 @@
 ## 📱 Android
 
 An Android recreation of the launcher lives in [`android/`](android/): a
-native Kotlin/Compose shell (client manager, CurseForge, Xbox login,
-settings) plus a rebranded [PojavLauncher](https://github.com/PojavLauncherTeam/PojavLauncher)
-companion app for Java Edition, both built by CI in
+WebView shell reusing the desktop app's actual `wwwroot/css/app.css` and
+image assets for pixel-identical styling, with a thin Kotlin bridge for
+native-only pieces, plus a rebranded
+[PojavLauncher](https://github.com/PojavLauncherTeam/PojavLauncher)
+companion app for Java Edition — both built by CI in
 `.github/workflows/android-release.yml`. DLL injection and native Discord
 RPC are Windows-only mechanisms with no direct Android equivalent — see
 [`android/README.md`](android/README.md) for what is and isn't ported.

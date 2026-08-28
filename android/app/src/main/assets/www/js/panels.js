@@ -1,0 +1,354 @@
+// Panel markup below is copied from the real Pages/Home.razor blocks (minus
+// Razor's @if/@foreach directives, replaced with plain JS string building),
+// keeping the same CSS classes so app.css styles it identically to desktop.
+
+const PANEL_TABS = [
+    { id: "settings", label: "Settings", icon: "fa-solid fa-gear" },
+    { id: "clients", label: "Clients", icon: "fa-solid fa-puzzle-piece" },
+    { id: "addons", label: "Addons", icon: "fa-solid fa-cube" },
+    { id: "servers", label: "Servers", icon: "fa-solid fa-server" },
+    { id: "mcversions", label: "MC Versions", icon: "fa-solid fa-box-archive" },
+    { id: "bedrockworlds", label: "Worlds", icon: "fa-solid fa-globe" },
+    { id: "bedrockpacks", label: "Packs", icon: "fa-solid fa-boxes-stacked" },
+    { id: "bedrockbackups", label: "Backups", icon: "fa-solid fa-clock-rotate-left" },
+    { id: "bedrockinstances", label: "Instances", icon: "fa-solid fa-layer-group" },
+    { id: "bedrockscreenshots", label: "Photos", icon: "fa-solid fa-images" },
+    { id: "credits", label: "Credits", icon: "fa-solid fa-heart" },
+];
+
+function renderPanelTabs(activeId) {
+    return `<div class="panel-tabs">${PANEL_TABS.map(t => `
+        <button class="panel-tab ${t.id === activeId ? "active" : ""}" data-open-panel="${t.id}">
+            <i class="${t.icon}"></i>${t.label}
+        </button>`).join("")}</div>`;
+}
+
+function panelShell({ id, title, headerActions = "", body, activeTabId }) {
+    return `
+    <div class="panel-overlay" id="panel-${id}">
+        <div class="panel-handle"></div>
+        <div class="panel-header">
+            <div class="panel-title-wrap">
+                <span class="panel-title">${title}</span>
+                <div class="panel-title-underline"></div>
+            </div>
+            <div class="panel-header-actions">
+                ${headerActions}
+                <button class="panel-back-btn" data-close-panel data-tooltip="Back">
+                    <i class="fa-solid fa-chevron-down"></i>
+                </button>
+            </div>
+        </div>
+        <div class="panel-body">${body}</div>
+        ${renderPanelTabs(activeTabId)}
+    </div>`;
+}
+
+function emptyState(title, caption, icon = "fa-solid fa-circle-info") {
+    return `<div class="empty-state" style="padding:20px 20px 8px;">
+        <i class="${icon}"></i>
+        <span>${title}</span>
+        <small>${caption}</small>
+    </div>`;
+}
+
+// ── Clients ──────────────────────────────────────────────────────────────
+// Same six cards, same order, same copy as Pages/Home.razor's "clients" panel.
+function clientCardHtml({ id, name, iconHtml, statusHtml, desc, actionsHtml, error = "" }) {
+    const active = App.state.settings.selectedClient === name ? "client-active" : "";
+    return `
+    <div class="client-card ${active}" data-client-id="${id}">
+        <div class="client-card-header">
+            <div class="client-card-icon client-card-icon-img">${iconHtml}</div>
+            <div class="client-card-meta">
+                <span class="client-card-name">${name}</span>
+                <span class="client-card-sub">${statusHtml}</span>
+            </div>
+            <div class="client-card-actions">${actionsHtml}</div>
+        </div>
+        ${error ? `<span class="error-text">${error}</span>` : ""}
+        <p class="client-card-desc">${desc}</p>
+    </div>`;
+}
+
+function selectBtn(clientName) {
+    return `<button class="icon-btn" data-tooltip="Select" data-select-client="${clientName}"><i class="fa-solid fa-check"></i></button>`;
+}
+
+function clientsPanelBody() {
+    const s = App.state.settings;
+    const sel = (name) => s.selectedClient === name;
+
+    const flarial = App.state.clients.flarial;
+    const oderso = App.state.clients.oderso;
+    const levilamina = App.state.clients.levilamina;
+
+    const dlActions = (key, c, name) => {
+        if (c.downloading) return `<div class="dl-progress-row">
+            <div class="progress-bar-wrap" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(c.progress * 100)}">
+                <div class="progress-bar-fill" style="width:${Math.round(c.progress * 100)}%"></div>
+            </div>
+            <span class="dl-pct">${Math.round(c.progress * 100)}%</span>
+        </div>`;
+        let html = "";
+        if (!sel(name) && c.downloaded) html += selectBtn(name);
+        if (!c.downloaded || !c.upToDate) {
+            html += `<button class="icon-btn" data-tooltip="${c.downloaded ? "Update" : "Download"}" data-download-client="${key}"><i class="fa-solid ${c.downloaded ? "fa-arrow-up" : "fa-download"}"></i></button>`;
+        }
+        if (c.downloaded) html += `<button class="icon-btn icon-btn-ghost" data-tooltip="Delete" data-delete-client="${key}"><i class="fa-solid fa-trash"></i></button>`;
+        return html;
+    };
+
+    return `
+    ${clientCardHtml({
+        id: "flarial", name: "Flarial Client",
+        iconHtml: `<img src="images/clients/flarial.svg" alt="Flarial Client" />`,
+        statusHtml: flarial.downloaded
+            ? (flarial.upToDate ? `<span class="tag-uptodate"><i class="fa-solid fa-circle-check"></i> Up to date</span>` : `<span class="tag-outdated"><i class="fa-solid fa-triangle-exclamation"></i> Update available</span>`)
+            : `<span class="client-card-note">Not downloaded</span>`,
+        desc: "Feature-rich Bedrock client with modules, HUD customization, and active development.",
+        actionsHtml: dlActions("flarial", flarial, "Flarial Client"),
+        error: flarial.error || "",
+    })}
+    ${clientCardHtml({
+        id: "latite", name: "Latite Client",
+        iconHtml: `<img src="images/clients/latite.png" alt="Latite Client" />`,
+        statusHtml: `<span class="client-card-note">Versioned GitHub releases</span>`,
+        desc: "Classic Minecraft Bedrock client. Choose a specific release from the Versions panel.",
+        actionsHtml: `${!sel("Latite Client") ? selectBtn("Latite Client") : ""}
+            <button class="icon-btn icon-btn-ghost" style="background:var(--bg-item);" data-tooltip="View Versions" data-open-panel="mcversions"><i class="fa-solid fa-clock-rotate-left"></i></button>`,
+    })}
+    ${clientCardHtml({
+        id: "oderso", name: "OderSo Client",
+        iconHtml: `<img src="images/clients/oderso.png" alt="OderSo Client" />`,
+        statusHtml: oderso.downloaded
+            ? (oderso.upToDate ? `<span class="tag-uptodate"><i class="fa-solid fa-circle-check"></i> Up to date</span>` : `<span class="tag-outdated"><i class="fa-solid fa-triangle-exclamation"></i> Update available</span>`)
+            : `<span class="client-card-note">Not downloaded</span>`,
+        desc: "OderSo Client — curated Minecraft Bedrock experience by MasonOderSo.",
+        actionsHtml: dlActions("oderso", oderso, "OderSo Client"),
+        error: oderso.error || "",
+    })}
+    ${clientCardHtml({
+        id: "levilamina", name: "LeviLamina Client",
+        iconHtml: `<i class="fa-solid fa-layer-group"></i>`,
+        statusHtml: levilamina.downloaded
+            ? (levilamina.upToDate ? `<span class="tag-uptodate"><i class="fa-solid fa-circle-check"></i> Up to date</span>` : `<span class="tag-outdated"><i class="fa-solid fa-triangle-exclamation"></i> Update available</span>`)
+            : `<span class="client-card-note">Not downloaded</span>`,
+        desc: "LeviLamina — open-source native Bedrock mod loader by LiteLDev, injected the same way as the other clients here.",
+        actionsHtml: `${levilamina.downloaded ? `<button class="icon-btn" data-tooltip="Browse LeviLamina mods" data-open-panel="levimods"><i class="fa-solid fa-puzzle-piece"></i></button>` : ""}${dlActions("levilamina", levilamina, "LeviLamina Client")}`,
+        error: levilamina.error || "",
+    })}
+    ${clientCardHtml({
+        id: "vanilla", name: "Vanilla",
+        iconHtml: `<i class="fa-solid fa-cube" style="color:var(--green);"></i>`,
+        statusHtml: `<span class="client-card-note">Launches Minecraft with no DLL injection</span>`,
+        desc: "Pure stock Minecraft Bedrock — useful for diagnostics, multiplayer realms, or just playing un-modified.",
+        actionsHtml: !sel("Vanilla") ? selectBtn("Vanilla") : "",
+    })}
+    <div class="drop-hint-row">
+        <i class="fa-solid fa-file-arrow-down"></i>
+        <span>Client injection needs root on Android — see Settings</span>
+        <button class="btn-sm" id="browse-mod-file" style="margin-left:auto;"><i class="fa-solid fa-folder-open"></i> Browse...</button>
+    </div>`;
+}
+
+// ── Servers ──────────────────────────────────────────────────────────────
+const POPULAR_SERVERS = [
+    { name: "Hive", address: "geo.hivebedrock.network", port: 19132, icon: "fa-solid fa-hexagon-nodes", color: "#f5a623" },
+    { name: "CubeCraft", address: "play.cubecraft.net", port: 19132, icon: "fa-solid fa-cube", color: "#4a90e2" },
+    { name: "Mineplex", address: "mco.mineplex.com", port: 19132, icon: "fa-solid fa-tower-cell", color: "#e94e4e" },
+    { name: "Lifeboat", address: "play.lbsg.net", port: 19132, icon: "fa-solid fa-life-ring", color: "#00bcd4" },
+    { name: "Galaxite", address: "play.galaxite.net", port: 19132, icon: "fa-solid fa-star", color: "#9b51e0" },
+];
+
+function serverRowHtml(s, saved) {
+    return `
+    <div class="server-row">
+        <div class="server-icon" style="background:${s.color || "var(--accent)"};">
+            <i class="${s.icon || "fa-solid fa-server"}"></i>
+        </div>
+        <div class="server-meta">
+            <span class="server-name">${s.name}</span>
+            <span class="server-sub">${s.address}:${s.port}</span>
+        </div>
+        <div class="version-actions">
+            ${saved ? `<button class="icon-btn icon-btn-ghost" data-tooltip="Edit"><i class="fa-solid fa-pen"></i></button>
+                <button class="icon-btn icon-btn-ghost" data-tooltip="Delete" data-delete-server="${s.address}"><i class="fa-solid fa-trash"></i></button>`
+                : `<button class="icon-btn" data-tooltip="Save" data-save-server="${s.address}"><i class="fa-solid fa-bookmark"></i></button>`}
+            <button class="copy-btn" data-tooltip="Copy address" data-copy-address="${s.address}:${s.port}"><i class="fa-solid fa-copy"></i></button>
+            <button class="icon-btn" data-tooltip="Launch & connect"><i class="fa-solid fa-play"></i></button>
+        </div>
+    </div>`;
+}
+
+function serversPanelBody() {
+    const saved = App.state.settings.savedServers || [];
+    const suggestions = POPULAR_SERVERS.filter(p => !saved.some(s => s.address === p.address));
+    return `
+    ${saved.length === 0
+        ? emptyState("No saved servers yet", "Add a Minecraft Bedrock server to quick-launch into it. The current client will be injected before connecting.", "fa-solid fa-server")
+        : saved.map(s => serverRowHtml(s, true)).join("")}
+    ${suggestions.length > 0 ? `<span class="panel-section-label">Popular</span>${suggestions.map(s => serverRowHtml(s, false)).join("")}` : ""}`;
+}
+
+// ── Credits ──────────────────────────────────────────────────────────────
+function creditCardHtml(name, sub, iconHtml, links) {
+    return `
+    <div class="credits-card">
+        <div class="credits-card-icon" style="padding:6px;">${iconHtml}</div>
+        <div class="credits-card-meta">
+            <span class="credits-card-name">${name}</span>
+            <span class="credits-card-sub">${sub}</span>
+        </div>
+        <div class="credits-card-actions">
+            ${links.map(l => `<button class="credits-link-btn" data-tooltip="${l.label}" data-open-url="${l.url}"><i class="${l.icon}"></i></button>`).join("")}
+        </div>
+    </div>`;
+}
+
+function creditsPanelBody() {
+    return `
+    <span class="panel-section-label">Launcher</span>
+    <div class="credits-card credits-card-glacier">
+        <div class="credits-card-icon" style="padding:6px;"><img src="images/icon.png" style="width:100%;height:100%;object-fit:contain;"/></div>
+        <div class="credits-card-meta">
+            <span class="credits-card-name">Glacier Launcher</span>
+            <span class="credits-card-sub">Built by Pepe · Glacier Productions</span>
+        </div>
+        <div class="credits-card-actions">
+            <button class="credits-link-btn" data-tooltip="GitHub" data-open-url="https://github.com/Glacier-Client-BE"><i class="fa-brands fa-github"></i></button>
+            <button class="credits-link-btn" data-tooltip="Website" data-open-url="https://glacierclient.xyz"><i class="fa-solid fa-globe"></i></button>
+            <button class="credits-link-btn" data-tooltip="Discord" data-open-url="https://discord.glacierclient.xyz"><i class="fa-brands fa-discord"></i></button>
+        </div>
+    </div>
+    <span class="panel-section-label">Clients</span>
+    ${creditCardHtml("Latite Client", "by Imrglop & contributors", `<img src="images/clients/latite.png" style="width:100%;height:100%;object-fit:contain;"/>`, [
+        { label: "GitHub Releases", icon: "fa-brands fa-github", url: "https://github.com/Imrglop/Latite-Releases" },
+        { label: "Discord", icon: "fa-brands fa-discord", url: "https://discord.gg/latite" },
+    ])}
+    ${creditCardHtml("Flarial Client", "by the Flarial team", `<img src="images/clients/flarial.svg" style="width:100%;height:100%;object-fit:contain;"/>`, [
+        { label: "Website", icon: "fa-solid fa-globe", url: "https://flarial.xyz" },
+        { label: "Discord", icon: "fa-brands fa-discord", url: "https://discord.gg/flarial" },
+    ])}
+    ${creditCardHtml("OderSo Client", "by MasonOderSo", `<img src="images/clients/oderso.png" style="width:100%;height:100%;object-fit:contain;"/>`, [
+        { label: "GitHub", icon: "fa-brands fa-github", url: "https://github.com/MasonOderSo/oderso-data" },
+    ])}
+    <span class="panel-section-label">Open Source</span>
+    <div class="credits-oss-row">
+        <i class="fa-solid fa-code-branch" style="color:var(--accent);"></i>
+        <span>Glacier Launcher is open source. Contributions and forks are welcome.</span>
+        <button class="btn-sm" data-open-url="https://github.com/Glacier-Client-BE/Glacier-Launcher"><i class="fa-brands fa-github"></i> View</button>
+    </div>`;
+}
+
+// ── Addons (Bedrock: straight to CurseForge search, same as desktop) ─────
+function addonsPanelBody() {
+    if (!CurseForge.isAvailable()) {
+        return emptyState("CurseForge API key required", "Get a free key from the CurseForge developer console, then paste it in Settings.", "fa-solid fa-key");
+    }
+    const cats = App.state.edition === "java" ? CurseForge.javaCategories : CurseForge.bedrockCategories;
+    return `
+    <div class="versions-client-switcher" id="cf-categories">
+        ${cats.map((c, i) => `<button class="vcs-btn ${i === 0 ? "active" : ""}" data-cf-category="${c.classId}"><i class="${c.icon}"></i> ${c.label}</button>`).join("")}
+    </div>
+    <div class="panel-search-wrap">
+        <i class="fa-solid fa-magnifying-glass"></i>
+        <input class="panel-search-input" id="cf-search-input" placeholder="Search CurseForge ${App.state.edition === "java" ? "for Java mods, modpacks, shaders..." : "addons..."}" />
+    </div>
+    <div id="cf-results"></div>`;
+}
+
+// ── Settings ───────────────────────────────────────────────────────────
+const SETTINGS_CATEGORIES = (edition) => ([
+    { id: "all", label: "All", icon: "fa-solid fa-layer-group" },
+    edition === "bedrock"
+        ? { id: "injection", label: "Inject", icon: "fa-solid fa-syringe" }
+        : { id: "java", label: "Java", icon: "fa-brands fa-java" },
+    { id: "appearance", label: "Looks", icon: "fa-solid fa-palette" },
+    { id: "account", label: "Account", icon: "fa-solid fa-user" },
+    { id: "system", label: "System", icon: "fa-solid fa-sliders" },
+]);
+
+function settingRow(label, hint, controlHtml) {
+    return `<div class="setting-row">
+        <div class="setting-meta"><span class="setting-label">${label}</span>${hint ? `<span class="setting-hint">${hint}</span>` : ""}</div>
+        ${controlHtml}
+    </div>`;
+}
+
+function toggleHtml(key, on) {
+    return `<div class="toggle ${on ? "on" : ""}" data-toggle-setting="${key}"></div>`;
+}
+
+function settingsPanelBody(category) {
+    const s = App.state.settings;
+    const cat = (id) => category === "all" || category === id;
+    let html = "";
+
+    if (cat("injection")) {
+        html += `<div class="settings-section"><span class="panel-section-label">Injection</span>
+        ${settingRow("Active client", "", `<select class="setting-select" id="setting-active-client">
+            ${["Latite Client", "Flarial Client", "OderSo Client", "LeviLamina Client", "Vanilla"].map(c => `<option value="${c}" ${s.selectedClient === c ? "selected" : ""}>${c}</option>`).join("")}
+        </select>`)}
+        ${settingRow("Injection delay", "How long to wait after game launches before injecting",
+            `<input type="range" min="500" max="15000" step="500" id="setting-injection-delay" value="${s.injectionDelayMs}" /><span style="font-size:11px;color:var(--text-dim);">${(s.injectionDelayMs / 1000).toFixed(1)}s</span>`)}
+        ${settingRow("Auto-inject", "Inject automatically once the game process is detected", toggleHtml("autoInject", s.autoInject))}
+        ${settingRow("Close after launch", "Minimise the launcher once injection succeeds", toggleHtml("closeAfterLaunch", s.closeAfterLaunch))}
+        </div>`;
+    }
+
+    if (cat("java")) {
+        html += `<div class="settings-section"><span class="panel-section-label">Java Edition</span>
+        <div style="padding:8px 0;">RAM, JVM args, resolution, offline mode, and version filters are configured in the Java Edition companion app itself.</div>
+        ${settingRow("Java Edition companion app", App.state.javaInstalled ? "Installed" : "Not installed",
+            `<button class="btn-sm" id="open-java-edition" ${App.state.javaInstalled ? "" : "disabled"}>Open</button>`)}
+        </div>`;
+    }
+
+    if (cat("appearance")) {
+        html += `<div class="settings-section"><span class="panel-section-label">Appearance</span>
+        ${settingRow("Accent colour", "Used for buttons, highlights and glows",
+            `<div class="color-swatches">${["#7289da", "#43b581", "#f04747", "#faa61a", "#9b59b6", "#00bcd4", "#e91e63", "#ffffff"].map(c =>
+                `<div class="color-swatch ${s.accentColor === c ? "active" : ""}" style="background:${c};" data-set-accent="${c}"></div>`).join("")}</div>`)}
+        ${settingRow("Theme preset", "Background tone — affects panels and overlays",
+            `<select class="setting-select" id="setting-theme-preset">${["dark", "darker", "midnight", "slate", "ocean", "forest", "sunset", "light"].map(t =>
+                `<option value="${t}" ${s.themePreset === t ? "selected" : ""}>${t[0].toUpperCase() + t.slice(1)}</option>`).join("")}</select>`)}
+        ${settingRow("Compact mode", "Tighter spacing throughout", toggleHtml("compactMode", s.compactMode))}
+        ${settingRow("Animations", "Disable for low-end devices", toggleHtml("animationsEnabled", s.animationsEnabled))}
+        </div>`;
+    }
+
+    if (cat("account")) {
+        html += `<div class="settings-section"><span class="panel-section-label">Account</span>
+        ${settingRow("Display name", "", `<input class="setting-input" id="setting-username" type="text" value="${s.username || ""}" />`)}
+        ${settingRow("Profile display", "Which account to show in the footer",
+            `<select class="setting-select" id="setting-profile-display">${["auto", "xbox", "discord"].map(m =>
+                `<option value="${m}" ${s.profileDisplayMode === m ? "selected" : ""}>${m}</option>`).join("")}</select>`)}
+        </div>
+        <div class="settings-section"><span class="panel-section-label">Social</span>
+        ${settingRow("Discord Rich Presence", "Posts a “now playing” webhook message (no native IPC on Android)", toggleHtml("discordRichPresence", s.discordRichPresence))}
+        ${settingRow("Xbox profile", s.xboxGamertag || "Not signed in", `<button class="btn-sm" id="xbox-sign-in-settings">Sign in</button>`)}
+        </div>`;
+    }
+
+    if (cat("system")) {
+        html += `<div class="settings-section"><span class="panel-section-label">Quality of Life</span>
+        ${settingRow("Show recently launched", "", toggleHtml("showRecentlyLaunched", s.showRecentlyLaunched))}
+        ${settingRow("Clear recent history", "", `<button class="btn-sm" id="clear-recent-history">Clear</button>`)}
+        </div>
+        <div class="settings-section"><span class="panel-section-label">Updates</span>
+        ${settingRow("Check for updates on startup", "", toggleHtml("checkUpdatesOnStartup", s.checkUpdatesOnStartup))}
+        </div>
+        <div class="settings-section"><span class="panel-section-label">CurseForge</span>
+        ${settingRow("CurseForge API key", "", `<input class="setting-input" id="setting-cf-key" type="text" value="${s.curseForgeApiKeyOverride || ""}" />`)}
+        </div>
+        <div class="settings-section"><span class="panel-section-label">Backup</span>
+        ${settingRow("Reset to defaults", "", `<button class="btn-sm" style="color:var(--red);" id="reset-settings">Reset</button>`)}
+        </div>
+        <div class="settings-section"><span class="panel-section-label">About</span>
+        <div style="padding:8px 0; font-size:12px; color:var(--text-dim);">Glacier Launcher for Android</div>
+        </div>`;
+    }
+
+    return html;
+}

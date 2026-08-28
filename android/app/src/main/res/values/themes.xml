@@ -1,7 +1,8 @@
 <resources>
+    <!-- #23272A matches wwwroot/css/app.css's --bg for the default "dark" theme preset. -->
     <style name="Theme.Glacier" parent="android:Theme.Material.NoActionBar">
-        <item name="android:statusBarColor">#0B0F14</item>
-        <item name="android:navigationBarColor">#0B0F14</item>
-        <item name="android:windowBackground">#0B0F14</item>
+        <item name="android:statusBarColor">#23272A</item>
+        <item name="android:navigationBarColor">#23272A</item>
+        <item name="android:windowBackground">#23272A</item>
     </style>
 </resources>
