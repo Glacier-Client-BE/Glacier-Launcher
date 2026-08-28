@@ -5,22 +5,33 @@ import java.io.DataOutputStream
 /**
  * Android analogue of GlacierLauncher.Services.InjectionService.
  *
- * IMPORTANT — this is NOT a 1:1 port of Windows DLL injection, because the
- * mechanism it relies on doesn't exist on Android:
+ * IMPORTANT — this is NOT a 1:1 port of Windows DLL injection:
  *   - Windows: CreateRemoteThread + LoadLibrary into minecraft.exe's address
  *     space, giving Latite/Flarial/OderSo full in-process hooking.
- *   - Android: apps are sandboxed per-UID; there is no supported (or even
- *     unsupported-but-reliable) API to load a foreign .so into another app's
- *     process without root, and Minecraft Bedrock for Android does not expose
- *     a mod-loader hook the way the Windows DLL clients target.
- *
- * What this service actually does, best-effort, only on rooted devices:
- * pushes a native library into Minecraft's app-specific storage and (on
- * devices where `su` is available) attempts a `run-as`/root restart of the
- * target so a wrapped native loader picks it up next launch. This mirrors
- * how community Bedrock-Android mod loaders (Bedrock Sandbox Mod-Loader
- * style tools) work today, and is inherently fragile across Minecraft
- * versions/devices. Non-rooted devices get a clear "not supported" result.
+ *   - Android: apps are sandboxed per-UID, so there's no cross-process
+ *     equivalent of CreateRemoteThread. But this does NOT mean injection
+ *     needs root — real, published, non-root Android Bedrock launchers
+ *     (Kitsuri-Studios/Minimal-Launcher, LiteLDev/LeviLaunchroid, LeviLamina's
+ *     own official Android launcher) all use the same non-root technique:
+ *       1. Get a Context for the already-installed, licensed
+ *          com.mojang.minecraftpe package via
+ *          createPackageContext(pkg, CONTEXT_IGNORE_SECURITY or
+ *          CONTEXT_INCLUDE_CODE) — this hands you that package's own
+ *          ClassLoader/AssetManager/native lib dir from inside YOUR process.
+ *       2. dlopen() libminecraftpe.so (+ its dependency libs) from a small
+ *          JNI shim and forward ANativeActivity_onCreate/android_main to the
+ *          real symbols — your launcher's activity becomes Minecraft's own
+ *          compiled native code, instead of reaching into another process.
+ *       3. A launcher-owned native module loads alongside and hooks the real
+ *          library the same way a Windows DLL hooks Minecraft.Windows.exe —
+ *          that hook code (the actual "client") is inherently
+ *          version-specific reverse-engineering work no generic launcher can
+ *          produce generically.
+ *     Building and on-device-verifying that dlopen/JNI shim is real native
+ *     engineering work outside what this pass could safely ship untested
+ *     (see android/README.md's "Deep gap analysis" section) — this service
+ *     currently still only offers the root-based file-staging fallback
+ *     below, which is real but far more limited than the technique above.
  */
 object ClientInjectionService {
 
@@ -42,8 +53,10 @@ object ClientInjectionService {
         if (!isRootAvailable()) {
             return InjectionResult(
                 success = false,
-                message = "Client injection requires root on Android — Windows-style DLL " +
-                    "injection has no non-root equivalent here. Install Magisk/root and retry.",
+                message = "This build only supports the root-based staging fallback. The real " +
+                    "non-root technique (package-context + dlopen, same as other Android Bedrock " +
+                    "launchers) isn't implemented yet — see android/README.md. Install Magisk/root " +
+                    "to use this fallback instead.",
             )
         }
         return try {

@@ -396,3 +396,119 @@ functionality that needs infrastructure not yet built (Storage Access
 Framework file listing, instance management, native file/wallpaper
 pickers, real Xbox/Microsoft OAuth), or explicitly documented as not
 reachable/not applicable on Android.
+
+## Deep gap analysis vs. the desktop app (2026-08-28)
+
+A systematic pass, not a spot-check: every `@onclick="Method"` handler in
+`Pages/Home.razor` was extracted (135 distinct methods) and checked against
+what's actually wired on Android. Grouped by theme, with the real technical
+approach for each gap rather than just "todo":
+
+### Bedrock client injection — corrected after researching prior art
+
+Earlier in this port, `ClientInjectionService.kt` and the Clients panel
+claimed DLL-style client injection (Flarial/Latite/OderSo/LeviLamina) has
+**no non-root equivalent on Android**. That was wrong, and researching two
+real Android Bedrock launchers proved it: **Kitsuri-Studios/Minimal-Launcher**
+and **LiteLDev/LeviLaunchroid** (LeviLamina's own official Android
+launcher) both ship real, working, non-root injection using the same
+pattern (ideas studied, no code copied):
+
+1. Require the official, licensed `com.mojang.minecraftpe` already
+   installed via Google Play (this is a legal requirement, not a technical
+   one — the launcher never redistributes Mojang's code).
+2. Get a `Context` for that installed package via
+   `createPackageContext(pkg, CONTEXT_IGNORE_SECURITY or CONTEXT_INCLUDE_CODE)`
+   — this hands you that package's own `ClassLoader`, `AssetManager`, and
+   native library directory from *inside your own app's process*, no root
+   or cross-process injection needed.
+3. Extract/locate `libminecraftpe.so` (and its dependencies —
+   `libc++_shared.so`, `libfmod.so`, `libMediaDecoders_Android.so`,
+   `libHttpClient.Android.so`) from that package's native lib dir or its
+   split APKs, `dlopen()` them from a small JNI shim, and forward
+   `ANativeActivity_onCreate`/`android_main` to the real symbols — your
+   launcher's activity *becomes* Minecraft's own compiled native code
+   instead of trying to reach into someone else's process.
+4. A launcher-owned native module (their `libshin.so`) loads alongside and
+   hooks the real library the same way a Windows DLL client hooks
+   `Minecraft.Windows.exe` — that hook code is the actual "client" (Flarial/
+   Latite-equivalent) and is inherently version-specific, hand-written,
+   reverse-engineering work no generic launcher can produce.
+
+This is a real, buildable architecture — not something this pass could
+finish and verify without a physical device (JNI + `dlopen` against a real
+Minecraft binary can't be meaningfully tested in this environment), but
+`ClientInjectionService.kt`'s doc comment and the Settings → Clients
+explanation should stop asserting "needs root," and the concrete
+next-build-step is a `BedrockGamePackageManager.kt` (package-context
+resolution + native lib extraction) and a `NativeLoader` JNI shim mirroring
+the steps above. What genuinely is in scope without device testing: a
+**custom `.so` picker** (Storage Access Framework `ACTION_OPEN_DOCUMENT`)
+mirroring desktop's generic `PickDllFile`/`CopyDllPath`/`ClearCustomDll`
+"bring your own client" slot — the desktop app doesn't limit clients to
+its three built-in ones either.
+
+### World/instance/backup management — genuinely implementable, not just "needs SAF"
+
+LeviLaunchroid's source shows exactly how: `LevelDBReader`/`LevelDBManager`/
+`LevelDBKey`/`LevelDBEntry` (Bedrock world saves are LevelDB databases —
+there are pure Kotlin/Java LevelDB implementations), `BedrockNbtReader`/
+`BedrockNbtWriter` (Bedrock's `level.dat` is NBT, the same format Java
+Edition uses, just little-endian), `WorldEditor`, `StructureExtractor`,
+`FlatWorldGenerator`, `OptionsEditor`, `ScreenshotManager`, `ServerManager`.
+None of that needs root — it's file I/O against
+`/storage/emulated/0/games/com.mojang/minecraftWorlds/` (or the SAF-scoped
+equivalent on Android 11+) plus format parsers. This reframes
+`bedrockworlds`/`bedrockpacks`/`bedrockbackups`/`bedrockinstances`/
+`bedrockscreenshots` from "needs infrastructure that doesn't exist" to "needs
+a LevelDB/NBT reader + SAF wiring" — a real, scoped follow-up, just not
+something this pass had room to implement and verify.
+
+### Desktop-only, correctly not ported (Windows window chrome / self-update)
+
+`MinimizeWindow`/`MaximizeWindow`/`CloseWindow`/`ToggleFullscreen`/`F11`,
+`OpenUpdateModal`/`ApplyLauncherUpdate`/`SkipLauncherUpdate`/
+`ManualUpdateCheck`/`DismissAnnouncement` (Windows self-update flow — Android
+updates ship through the Play Store or a new APK, not an in-app updater),
+`PickWallpaper`/`ResetWallpaper` (no file picker bridge yet — tracked
+separately), `OpenLauncherFolder`/`OpenMinecraftFolder`/`Open*Folder`
+(Windows Explorer shortcuts — Android has no equivalent "reveal in Explorer"
+concept; a SAF folder-open intent is the closest analogue once storage
+wiring lands).
+
+### Real gaps worth closing next, roughly by effort
+
+1. **Onboarding flow** (`FinishOnboarding`/`OnboardingNext`/`OnboardingBack`/
+   `SkipOnboarding`/`OnboardingImportMinecraft`/`ImportOfficialMinecraft`) —
+   desktop's first-run wizard, including importing an existing Minecraft
+   install. Android's analogue is exactly the Bedrock package-context flow
+   above.
+2. **LevelDat editor** (`SaveLevelDat`/`ToggleLevelDatCheats`/
+   `CloseLevelDatEditor`) — small NBT read/write once a world is reachable.
+3. **Real Discord OAuth** (`OpenDiscordOAuth`/`SaveDiscordManual`/
+   `DisconnectDiscord`) — currently `openUrl()`-only on Android; Discord's
+   OAuth2 is a public-client flow, the same redirect-interception technique
+   already built for Microsoft sign-in would work here too.
+4. **Java multi-instance management** (`NewJavaInstance`/`NewBedrockInstance`/
+   `CommitRenameInstance`/instance folders) — this is what actually blocks
+   Modpack "Install" and several Java Addons actions from being real instead
+   of disabled; needs a instance-directory model on top of the Java Edition
+   companion app's shared storage.
+5. **Custom DLL/.so picker** for Bedrock (`PickDllFile`/`CopyDllPath`/
+   `ClearCustomDll`) — see injection section above, buildable now via SAF
+   independent of the fuller package-context work.
+
+### The Java Edition runtime itself
+
+To be direct about scope: "build your own version to play Java Edition on
+mobile" (rather than bundling the rebranded PojavLauncher APK) means
+reimplementing what PojavLauncher/Zalith Launcher actually are — a portable
+JRE built for Android, plus a translation layer so LWJGL's desktop
+OpenGL calls run against Android's OpenGL ES (or a Vulkan-via-ANGLE path),
+plus touch-control input mapping, plus a full mod-loader-compatible class
+path. That's a multi-year effort by dedicated native-toolchain teams, not
+something buildable or verifiable inside a single coding session — there's
+no physical device here to even compile-test a JNI/native change against,
+let alone a custom JVM port. The bundled-companion-APK approach (see
+"Single-APK distribution" above) stays the pragmatic path until there's an
+explicit decision to invest in that from scratch.

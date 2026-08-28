@@ -482,81 +482,70 @@ const App = {
         }));
     },
 
-    async runCfSearch(reset) {
-        const resultsEl = document.getElementById("cf-results");
+    // ── Generic paginated content search ─────────────────────────────────
+    // CurseForge and Modrinth search were two near-identical copies of the
+    // same fetch/render/load-more/error-handling logic, differing only in
+    // which API to call and how to read a result item's title/summary. One
+    // reusable engine, driven by a small per-source config object, replaces
+    // both — search sources beyond these two only need a config, not a
+    // fresh copy of this logic.
+    async runPagedSearch(cfg) {
+        const resultsEl = document.getElementById(cfg.resultsId);
         if (!resultsEl) return;
         resultsEl.innerHTML = `<div style="padding:24px;text-align:center;"><span class="spinner"></span></div>`;
-        const query = document.getElementById("cf-search-input")?.value || "";
+        const query = document.getElementById(cfg.inputId)?.value || "";
+        const offset = cfg.reset ? 0 : this.state[cfg.resultsKey].length;
         try {
-            const gameId = this.state.edition === "java" ? CurseForge.GAME_ID_JAVA : CurseForge.GAME_ID_BEDROCK;
-            const res = await CurseForge.search(gameId, this.state.cfCategory, query, reset ? 0 : this.state.cfResults.length);
-            this.state.cfResults = reset ? res.data : this.state.cfResults.concat(res.data);
-            this.state.cfTotalCount = res.pagination ? res.pagination.totalCount : this.state.cfResults.length;
+            const page = await cfg.fetchPage(query, offset);
+            this.state[cfg.resultsKey] = cfg.reset ? page.items : this.state[cfg.resultsKey].concat(page.items);
+            this.state[cfg.totalKey] = page.total ?? this.state[cfg.resultsKey].length;
         } catch (e) {
-            resultsEl.innerHTML = `<div style="padding:20px;text-align:center;"><span class="error-text">Failed to reach CurseForge: ${e.message}</span></div>`;
+            resultsEl.innerHTML = `<div style="padding:20px;text-align:center;"><span class="error-text">Failed to reach ${cfg.sourceName}: ${e.message}</span></div>`;
             return;
         }
-        this.renderCfResults();
+        this.renderPagedResults(cfg);
     },
 
-    renderCfResults() {
-        const resultsEl = document.getElementById("cf-results");
+    renderPagedResults(cfg) {
+        const resultsEl = document.getElementById(cfg.resultsId);
         if (!resultsEl) return;
-        if (this.state.cfResults.length === 0) {
+        const results = this.state[cfg.resultsKey];
+        const total = this.state[cfg.totalKey];
+        if (results.length === 0) {
             resultsEl.innerHTML = emptyState("No results", "Try a different search term or category.", "fa-solid fa-magnifying-glass");
             return;
         }
-        resultsEl.innerHTML = this.state.cfResults.map(mod => `
-            <div class="server-row">
-                <div class="server-meta" style="flex:1;">
-                    <span class="server-name">${mod.name}</span>
-                    <span class="server-sub">${(mod.summary || "").slice(0, 90)}</span>
-                </div>
-                <button class="icon-btn" data-tooltip="Download & Install"><i class="fa-solid fa-download"></i></button>
-            </div>`).join("") +
-            (this.state.cfResults.length < this.state.cfTotalCount
-                ? `<button class="btn-sm" id="cf-load-more" style="width:100%;margin-top:8px;"><i class="fa-solid fa-angles-down"></i> Load more (${this.state.cfResults.length} / ${this.state.cfTotalCount})</button>`
+        const loadMoreId = `${cfg.resultsId}-load-more`;
+        resultsEl.innerHTML = results.map(item => contentResultRowHtml(cfg.mapResult(item))).join("") +
+            (results.length < total
+                ? `<button class="btn-sm" id="${loadMoreId}" style="width:100%;margin-top:8px;"><i class="fa-solid fa-angles-down"></i> Load more (${results.length} / ${total})</button>`
                 : "");
-        const loadMore = document.getElementById("cf-load-more");
-        if (loadMore) loadMore.addEventListener("click", () => this.runCfSearch(false));
+        document.getElementById(loadMoreId)?.addEventListener("click", () => this.runPagedSearch({ ...cfg, reset: false }));
     },
 
-    async runMrSearch(reset) {
-        const resultsEl = document.getElementById("mr-results");
-        if (!resultsEl) return;
-        resultsEl.innerHTML = `<div style="padding:24px;text-align:center;"><span class="spinner"></span></div>`;
-        const query = document.getElementById("mr-search-input")?.value || "";
-        try {
-            const res = await Modrinth.search(this.state.mrCategory, query, reset ? 0 : this.state.mrResults.length);
-            this.state.mrResults = reset ? res.hits : this.state.mrResults.concat(res.hits);
-            this.state.mrTotalCount = res.total_hits ?? this.state.mrResults.length;
-        } catch (e) {
-            resultsEl.innerHTML = `<div style="padding:20px;text-align:center;"><span class="error-text">Failed to reach Modrinth: ${e.message}</span></div>`;
-            return;
-        }
-        this.renderMrResults();
+    runCfSearch(reset) {
+        const gameId = this.state.edition === "java" ? CurseForge.GAME_ID_JAVA : CurseForge.GAME_ID_BEDROCK;
+        this.runPagedSearch({
+            reset, resultsId: "cf-results", inputId: "cf-search-input",
+            resultsKey: "cfResults", totalKey: "cfTotalCount", sourceName: "CurseForge",
+            fetchPage: async (query, offset) => {
+                const res = await CurseForge.search(gameId, this.state.cfCategory, query, offset);
+                return { items: res.data, total: res.pagination ? res.pagination.totalCount : res.data.length };
+            },
+            mapResult: mod => ({ name: mod.name, summary: mod.summary }),
+        });
     },
 
-    renderMrResults() {
-        const resultsEl = document.getElementById("mr-results");
-        if (!resultsEl) return;
-        if (this.state.mrResults.length === 0) {
-            resultsEl.innerHTML = emptyState("No results", "Try a different search term or category.", "fa-solid fa-magnifying-glass");
-            return;
-        }
-        resultsEl.innerHTML = this.state.mrResults.map(project => `
-            <div class="server-row">
-                <div class="server-meta" style="flex:1;">
-                    <span class="server-name">${project.title}</span>
-                    <span class="server-sub">${(project.description || "").slice(0, 90)}</span>
-                </div>
-                <button class="icon-btn" data-tooltip="Download & Install"><i class="fa-solid fa-download"></i></button>
-            </div>`).join("") +
-            (this.state.mrResults.length < this.state.mrTotalCount
-                ? `<button class="btn-sm" id="mr-load-more" style="width:100%;margin-top:8px;"><i class="fa-solid fa-angles-down"></i> Load more (${this.state.mrResults.length} / ${this.state.mrTotalCount})</button>`
-                : "");
-        const loadMore = document.getElementById("mr-load-more");
-        if (loadMore) loadMore.addEventListener("click", () => this.runMrSearch(false));
+    runMrSearch(reset) {
+        this.runPagedSearch({
+            reset, resultsId: "mr-results", inputId: "mr-search-input",
+            resultsKey: "mrResults", totalKey: "mrTotalCount", sourceName: "Modrinth",
+            fetchPage: async (query, offset) => {
+                const res = await Modrinth.search(this.state.mrCategory, query, offset);
+                return { items: res.hits, total: res.total_hits };
+            },
+            mapResult: project => ({ name: project.title, summary: project.description }),
+        });
     },
 
     async loadGlacierManifest() {

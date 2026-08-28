@@ -86,10 +86,12 @@ function clientCardHtml({ id, name, iconHtml, statusHtml, desc, actionsHtml, err
 
 function clientsPanelBody() {
     // Flarial/Latite/OderSo/LeviLamina are Windows DLL-injected clients (or,
-    // for LeviLamina, a native mod loader injected the same way) — none of
-    // that has a working equivalent on stock, non-rooted Android (see
-    // ClientInjectionService.kt), so this panel only offers the one client
-    // that's actually real here: unmodified Minecraft Bedrock.
+    // for LeviLamina, a native mod loader injected the same way). A real
+    // non-root Android equivalent exists (package-context + dlopen, same as
+    // other Android Bedrock launchers — see ClientInjectionService.kt's doc
+    // comment and android/README.md's gap analysis) but hasn't been built
+    // and verified on a device in this pass, so this panel only offers the
+    // one client that's actually wired up: unmodified Minecraft Bedrock.
     return `
     ${clientCardHtml({
         id: "vanilla", name: "Vanilla",
@@ -100,7 +102,7 @@ function clientsPanelBody() {
     })}
     <div class="mcv-info-bar">
         <i class="fa-solid fa-circle-info"></i>
-        <span>Flarial, Latite, OderSo and LeviLamina all rely on Windows-style DLL injection into Minecraft's process, which Android's app sandboxing has no non-root equivalent for — see Settings for details.</span>
+        <span>Flarial, Latite, OderSo and LeviLamina aren't wired up yet — not because Android can't do it without root, but because the real technique (re-hosting the installed Minecraft app's own code) is real engineering work this build hasn't shipped. See Settings for details.</span>
     </div>`;
 }
 
@@ -193,6 +195,35 @@ function creditsPanelBody() {
     </div>`;
 }
 
+// Shared row template for any paginated content search result (CurseForge,
+// Modrinth, ...) — reused by App.renderPagedResults() in app.js so adding a
+// new search source only means a config object, not a new markup copy.
+function contentResultRowHtml({ name, summary }) {
+    return `
+    <div class="server-row">
+        <div class="server-meta" style="flex:1;">
+            <span class="server-name">${escapeHtml(name)}</span>
+            <span class="server-sub">${escapeHtml((summary || "").slice(0, 90))}</span>
+        </div>
+        <button class="icon-btn" data-tooltip="Download & Install"><i class="fa-solid fa-download"></i></button>
+    </div>`;
+}
+
+// Shared shell for a category-switcher + search-input + results-list panel
+// body — CurseForge and Modrinth search are the same layout with different
+// category lists/attributes/placeholders/result containers.
+function categorySearchShell({ categories, categoryAttr, categoriesId, inputId, placeholder, resultsId }) {
+    return `
+    <div class="versions-client-switcher" id="${categoriesId}">
+        ${categories.map((c, i) => `<button class="vcs-btn ${i === 0 ? "active" : ""}" data-${categoryAttr}="${c.value}"><i class="${c.icon}"></i> ${c.label}</button>`).join("")}
+    </div>
+    <div class="panel-search-wrap">
+        <i class="fa-solid fa-magnifying-glass"></i>
+        <input class="panel-search-input" id="${inputId}" placeholder="${placeholder}" />
+    </div>
+    <div id="${resultsId}"></div>`;
+}
+
 // ── Addons ─────────────────────────────────────────────────────────────
 // Bedrock: straight to CurseForge search, same as desktop. Java: the same
 // javaModsTab sub-tab bar (Loaders/Mods/Assets/Datapacks/Tools/CurseForge/
@@ -202,27 +233,20 @@ function curseForgeSearchBody() {
         return emptyState("CurseForge API key required", "Get a free key from the CurseForge developer console, then paste it in Settings.", "fa-solid fa-key");
     }
     const cats = App.state.edition === "java" ? CurseForge.javaCategories : CurseForge.bedrockCategories;
-    return `
-    <div class="versions-client-switcher" id="cf-categories">
-        ${cats.map((c, i) => `<button class="vcs-btn ${i === 0 ? "active" : ""}" data-cf-category="${c.classId}"><i class="${c.icon}"></i> ${c.label}</button>`).join("")}
-    </div>
-    <div class="panel-search-wrap">
-        <i class="fa-solid fa-magnifying-glass"></i>
-        <input class="panel-search-input" id="cf-search-input" placeholder="Search CurseForge ${App.state.edition === "java" ? "for Java mods, modpacks, shaders..." : "addons..."}" />
-    </div>
-    <div id="cf-results"></div>`;
+    return categorySearchShell({
+        categories: cats.map(c => ({ value: c.classId, icon: c.icon, label: c.label })),
+        categoryAttr: "cf-category", categoriesId: "cf-categories", inputId: "cf-search-input",
+        placeholder: `Search CurseForge ${App.state.edition === "java" ? "for Java mods, modpacks, shaders..." : "addons..."}`,
+        resultsId: "cf-results",
+    });
 }
 
 function modrinthSearchBody() {
-    return `
-    <div class="versions-client-switcher" id="mr-categories">
-        ${Modrinth.javaCategories.map((c, i) => `<button class="vcs-btn ${i === 0 ? "active" : ""}" data-mr-category="${c.facet}"><i class="${c.icon}"></i> ${c.label}</button>`).join("")}
-    </div>
-    <div class="panel-search-wrap">
-        <i class="fa-solid fa-magnifying-glass"></i>
-        <input class="panel-search-input" id="mr-search-input" placeholder="Search Modrinth..." />
-    </div>
-    <div id="mr-results"></div>`;
+    return categorySearchShell({
+        categories: Modrinth.javaCategories.map(c => ({ value: c.facet, icon: c.icon, label: c.label })),
+        categoryAttr: "mr-category", categoriesId: "mr-categories", inputId: "mr-search-input",
+        placeholder: "Search Modrinth...", resultsId: "mr-results",
+    });
 }
 
 // Loaders: real cards from Pages/Home.razor (Fabric/Quilt/Forge/NeoForge),
@@ -348,10 +372,13 @@ function settingsPanelBody(category) {
         <div style="padding:4px 0; font-size:12px; color:var(--text-dim); line-height:1.5;">
             All four work by loading a native DLL into Minecraft's own process on Windows
             (<code>CreateRemoteThread</code> + <code>LoadLibrary</code>). Android sandboxes every
-            app by UID with no supported way to load code into another app's process without
-            root, and Minecraft Bedrock for Android exposes no mod-loader hook the way the
-            Windows clients target — so there's nothing honest to wire a "select client" button
-            to here.
+            app by UID, so there's no cross-process equivalent — but that doesn't mean this needs
+            root: real non-root Android Bedrock launchers re-host the installed, licensed
+            Minecraft app's own code inside their own process (a package-context + <code>dlopen</code>
+            technique) and hook it the same way a Windows DLL hooks Minecraft.Windows.exe. That's
+            real engineering work this build hasn't shipped and verified on a device yet — see
+            android/README.md's gap analysis — so there's nothing honest to wire a "select client"
+            button to here yet, rather than nothing possible in principle.
         </div>
         </div>`;
     }
