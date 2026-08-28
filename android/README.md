@@ -166,9 +166,20 @@ backing service for them yet; Datapacks is queued (needs a world picker);
 Modrinth search is real (`js/modrinth.js`, same base URL/facets as
 `ModrinthService.cs`, no API key needed).
 
-**Not yet started:** `javaclients`/`javaversions`/`javaprofile`/
-`javascreenshots` (Java-edition panel variants — the edition switcher
-toggles the quick-actions dock already, but these specific panels aren't
-built yet), `downloads`, `news` panel (the ticker exists, the dedicated
-panel doesn't), `themestudio`, `modpacks`, `stats`, `logs`, `skinlibrary`,
-`levimods`.
+`javaclients` ("Launchers") and `javaversions` are matched now too: Vanilla
+built-in + Glacier Client (real manifest fetch, same CDN as
+`GlacierClientService.cs`) + Lunar Client/Badlion (honestly marked "not
+available on Android" — neither ships an Android build to detect or
+launch, unlike the desktop panel's local .exe detection); Java Versions
+pulls the real Mojang `version_manifest_v2.json` (same as
+`JavaVersionService.cs`) with working release/snapshot/historical filters
+and search, though Install/Launch hand off to the Java Edition companion
+app rather than duplicating its own per-version install management.
+The Java-edition panel-tabs bar (`JAVA_PANEL_TABS` in `panels.js`, mirrors
+`JavaTabs()` in `Home.BigFeatures.cs`) is also now used for every Java
+panel instead of the Bedrock tab set.
+
+**Not yet started:** `javaprofile` (skin management, Microsoft account
+sign-in), `javascreenshots`, `downloads`, `news` panel (the ticker exists,
+the dedicated panel doesn't), `themestudio`, `modpacks`, `stats`, `logs`,
+`skinlibrary`, `levimods`.

@@ -16,8 +16,21 @@ const PANEL_TABS = [
     { id: "credits", label: "Credits", icon: "fa-solid fa-heart" },
 ];
 
+// Mirrors JavaTabs() in Home.BigFeatures.cs — the Java-edition equivalent of
+// the Bedrock panel-tabs bar above (fewer, edition-specific destinations).
+const JAVA_PANEL_TABS = [
+    { id: "settings", label: "Settings", icon: "fa-solid fa-gear" },
+    { id: "javaclients", label: "Launchers", icon: "fa-solid fa-rocket" },
+    { id: "addons", label: "Mods", icon: "fa-solid fa-puzzle-piece" },
+    { id: "javaversions", label: "Versions", icon: "fa-solid fa-box-archive" },
+    { id: "javaprofile", label: "Profile", icon: "fa-solid fa-user" },
+    { id: "javascreenshots", label: "Photos", icon: "fa-solid fa-images" },
+    { id: "credits", label: "Credits", icon: "fa-solid fa-heart" },
+];
+
 function renderPanelTabs(activeId) {
-    return `<div class="panel-tabs">${PANEL_TABS.map(t => `
+    const tabs = App.state.edition === "java" ? JAVA_PANEL_TABS : PANEL_TABS;
+    return `<div class="panel-tabs">${tabs.map(t => `
         <button class="panel-tab ${t.id === activeId ? "active" : ""}" data-open-panel="${t.id}">
             <i class="${t.icon}"></i>${t.label}
         </button>`).join("")}</div>`;
@@ -528,5 +541,131 @@ function mcVersionsPanelHtml(channel, filter, versions) {
         </div>
         <div class="panel-body">${listHtml}</div>
         ${renderPanelTabs("mcversions")}
+    </div>`;
+}
+
+// ── Java Launchers ("javaclients") ───────────────────────────────────────
+// Mirrors Pages/Home.razor's "javaclients" panel: Vanilla (built-in, links
+// to Versions), Glacier Client (real manifest fetch — same CDN as
+// GlacierClientService.cs), Lunar Client/Badlion. The desktop panel detects
+// locally-installed Lunar/Badlion .exe and can direct-launch them; neither
+// client ships an Android build at all, so that row is an honest "not
+// available on Android" rather than fake detection.
+function javaClientsPanelBody(glacierState) {
+    const glacierActions = (() => {
+        if (glacierState.loading) return `<span style="opacity:0.6;">Checking…</span>`;
+        if (glacierState.error) return `<button class="vcs-btn vcs-btn-ghost" data-glacier-retry><i class="fa-solid fa-rotate"></i> Retry</button>`;
+        if (!glacierState.latest) return "";
+        return glacierState.latest.installed
+            ? `<button class="vcs-btn" data-glacier-launch><i class="fa-solid fa-play"></i> Launch</button>
+               <button class="vcs-btn vcs-btn-ghost vcs-btn-icon" data-tooltip="Uninstall" data-glacier-uninstall><i class="fa-solid fa-trash"></i></button>`
+            : `<button class="vcs-btn" data-glacier-install><i class="fa-solid fa-download"></i> Install</button>`;
+    })();
+    const glacierSub = glacierState.loading
+        ? "Checking for releases…"
+        : glacierState.error
+            ? `<span class="error-text">${glacierState.error}</span>`
+            : glacierState.latest
+                ? `${glacierState.latest.name} · ${glacierState.latest.loader}${glacierState.latest.installed ? ` · <span style="color:var(--green);"><i class="fa-solid fa-circle-check"></i> Installed</span>` : ` · <span class="client-card-note">Not installed</span>`}`
+                : "No releases available right now.";
+
+    return `
+    <div class="mcv-info-bar">
+        <i class="fa-solid fa-circle-info"></i>
+        <span>Vanilla and Glacier Client launch through the Java Edition companion app. Lunar Client and Badlion don't ship an Android build — there's no client to detect or launch here.</span>
+    </div>
+    <div class="panel-body">
+        <span class="panel-section-label">Built-in</span>
+        <div class="credits-card credits-card-glacier">
+            <div class="credits-card-icon" style="background:var(--accent-bg); color:var(--accent);"><i class="fa-brands fa-java"></i></div>
+            <div class="credits-card-meta">
+                <span class="credits-card-name">Vanilla (Glacier built-in)</span>
+                <span class="credits-card-sub">Launches Mojang's Java client directly. Pick a version in the Versions panel.</span>
+            </div>
+            <div class="credits-card-actions">
+                <button class="vcs-btn" data-open-panel="javaversions"><i class="fa-solid fa-box-archive"></i> Versions</button>
+            </div>
+        </div>
+        <div class="credits-card">
+            <div class="credits-card-icon" style="background:var(--accent-bg); color:var(--accent);"><i class="fa-solid fa-snowflake"></i></div>
+            <div class="credits-card-meta">
+                <span class="credits-card-name">Glacier Client</span>
+                <span class="credits-card-sub">${glacierSub}</span>
+            </div>
+            <div class="credits-card-actions">${glacierActions}</div>
+        </div>
+        <span class="panel-section-label">Third-party</span>
+        <div class="credits-card">
+            <div class="credits-card-icon" style="background:#06b6d422; color:#22d3ee;"><i class="fa-solid fa-moon"></i></div>
+            <div class="credits-card-meta">
+                <span class="credits-card-name">Lunar Client <span style="opacity:0.55; font-weight:500;">incl. Badlion</span></span>
+                <span class="credits-card-sub">Not available on Android — Lunar/Badlion have no Android client to detect or launch.</span>
+            </div>
+            <div class="credits-card-actions">
+                <button class="vcs-btn vcs-btn-ghost" data-open-url="https://www.lunarclient.com"><i class="fa-solid fa-arrow-up-right-from-square"></i> Website</button>
+            </div>
+        </div>
+    </div>`;
+}
+
+// ── Java Versions ─────────────────────────────────────────────────────────
+// Real Mojang version_manifest_v2.json, same as JavaVersionService.cs.
+// Install/Launch hand off to the Java Edition companion app (Pojav owns
+// actual per-version install + launch), rather than duplicating that here.
+function javaVersionRowHtml(v) {
+    return `
+    <div class="version-row ${v.active ? "mcv-active-row" : ""}">
+        <div class="version-meta">
+            <div style="display:flex; align-items:center; gap:6px;">
+                <span class="version-name">Minecraft ${v.id}</span>
+                ${v.active ? `<span class="tag-active">Active</span>` : ""}
+                <span class="version-sub" style="opacity:0.6;">${v.typeLabel}</span>
+            </div>
+        </div>
+        <button class="vcs-btn" data-open-java-edition><i class="fa-solid fa-external-link-alt"></i>&nbsp;Open in Java Edition</button>
+    </div>`;
+}
+
+function javaVersionsPanelHtml(filter, showSnapshots, showHistorical, versions, loading, error) {
+    const filtered = versions.filter(v => {
+        if (v.type === "release") return true;
+        if (v.type === "snapshot") return showSnapshots;
+        if (v.type === "old_beta" || v.type === "old_alpha") return showHistorical;
+        return false;
+    }).filter(v => !filter || v.id.toLowerCase().includes(filter.toLowerCase()));
+
+    let listHtml;
+    if (loading) {
+        listHtml = `<div class="versions-loading"><span class="spinner"></span><span>Fetching Java versions...</span></div>`;
+    } else if (error && versions.length === 0) {
+        listHtml = `<div class="versions-loading versions-error"><i class="fa-solid fa-triangle-exclamation"></i><span>${error}</span>
+            <button class="vcs-btn" style="margin-top:8px;" data-refresh-java-versions><i class="fa-solid fa-rotate"></i> Retry</button></div>`;
+    } else if (filtered.length === 0) {
+        listHtml = `<div class="versions-loading"><span style="opacity:0.5;">No results${filter ? ` for "${filter}"` : ""}.</span></div>`;
+    } else {
+        listHtml = (error ? `<div class="cache-notice"><i class="fa-solid fa-circle-info"></i><span>${error}</span></div>` : "") +
+            `<span class="panel-section-label">Available (${filtered.length})</span>` +
+            filtered.slice(0, 200).map(javaVersionRowHtml).join("");
+    }
+
+    return `
+    <div class="panel-overlay" id="panel-javaversions">
+        <div class="panel-handle"></div>
+        <div class="panel-header">
+            <div class="panel-title-wrap"><span class="panel-title">Versions</span><div class="panel-title-underline"></div></div>
+            <div class="panel-header-actions">
+                <button class="panel-icon-btn ${showSnapshots ? "active" : ""}" data-toggle-java-snapshots data-tooltip="${showSnapshots ? "Hide snapshots" : "Show snapshots"}"><i class="fa-solid fa-flask"></i></button>
+                <button class="panel-icon-btn ${showHistorical ? "active" : ""}" data-toggle-java-historical data-tooltip="${showHistorical ? "Hide beta/alpha" : "Show beta/alpha"}"><i class="fa-solid fa-clock-rotate-left"></i></button>
+                <button class="panel-icon-btn" data-refresh-java-versions data-tooltip="Refresh"><i class="fa-solid fa-rotate"></i></button>
+                <button class="panel-back-btn" data-close-panel data-tooltip="Back"><i class="fa-solid fa-chevron-down"></i></button>
+            </div>
+        </div>
+        <div class="versions-client-switcher"><button class="vcs-btn active"><i class="fa-brands fa-java"></i> Vanilla</button></div>
+        <div class="panel-search-wrap">
+            <i class="fa-solid fa-magnifying-glass"></i>
+            <input class="panel-search-input" id="java-version-filter-input" placeholder="Filter Java versions (e.g. 1.21, 1.8.9)..." value="${filter}" />
+        </div>
+        <div class="panel-body">${listHtml}</div>
+        ${renderPanelTabs("javaversions")}
     </div>`;
 }

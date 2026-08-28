@@ -43,6 +43,8 @@ const App = {
         mrCategory: null,
         mrResults: [],
         mrTotalCount: 0,
+        glacier: { loading: false, latest: null, error: null },
+        javaVersions: { list: [], loading: false, error: null, filter: "", showSnapshots: false, showHistorical: false },
     },
 
     init() {
@@ -181,6 +183,27 @@ const App = {
             case "bedrockbackups": html = panelShell({ id, title: "Backups", body: emptyState("No backups yet", "World backups will list here once wired to shared storage."), activeTabId: id }); break;
             case "bedrockinstances": html = panelShell({ id, title: "Instances", body: emptyState("No instances yet", "Isolated Bedrock instances will list here once wired to shared storage."), activeTabId: id }); break;
             case "bedrockscreenshots": html = panelShell({ id, title: "Photos", body: emptyState("No screenshots yet", "Reads from the Java Edition companion app's shared storage once wired."), activeTabId: id }); break;
+            case "javaclients": {
+                html = `<div class="panel-overlay" id="panel-javaclients">
+                    <div class="panel-handle"></div>
+                    <div class="panel-header">
+                        <div class="panel-title-wrap"><span class="panel-title">Launchers</span><div class="panel-title-underline"></div></div>
+                        <div class="panel-header-actions"><button class="panel-back-btn" data-close-panel data-tooltip="Back"><i class="fa-solid fa-chevron-down"></i></button></div>
+                    </div>
+                    ${javaClientsPanelBody(this.state.glacier)}
+                    ${renderPanelTabs("javaclients")}
+                </div>`;
+                if (!this.state.glacier.latest && !this.state.glacier.loading) this.loadGlacierManifest();
+                break;
+            }
+            case "javaversions": {
+                const jv = this.state.javaVersions;
+                html = javaVersionsPanelHtml(jv.filter, jv.showSnapshots, jv.showHistorical, jv.list, jv.loading, jv.error);
+                if (jv.list.length === 0 && !jv.loading) this.loadJavaVersions();
+                break;
+            }
+            case "javaprofile": html = panelShell({ id, title: "Profile", body: emptyState("Java profile", "Skin management and Microsoft account sign-in are queued — see android/README.md."), activeTabId: id }); break;
+            case "javascreenshots": html = panelShell({ id, title: "Photos", body: emptyState("No screenshots yet", "Reads from the Java Edition companion app's shared storage once wired."), activeTabId: id }); break;
             default: html = panelShell({ id, title: id, body: emptyState("Coming soon", "This panel is queued — see android/README.md's status list."), activeTabId: id });
         }
         root.innerHTML = html;
@@ -319,6 +342,50 @@ const App = {
         if (loadMore) loadMore.addEventListener("click", () => this.runMrSearch(false));
     },
 
+    async loadGlacierManifest() {
+        this.state.glacier = { loading: true, latest: null, error: null };
+        if (this.state.openPanel === "javaclients") this.openPanel("javaclients");
+        try {
+            const manifest = await GlacierClient.fetchManifest();
+            const latestId = manifest.latestRelease;
+            const version = (manifest.versions || []).find(v => v.id === latestId) || (manifest.versions || [])[0];
+            this.state.glacier = {
+                loading: false,
+                error: null,
+                latest: version ? {
+                    name: version.name || version.id,
+                    loader: version.fabric ? "Fabric" : version.forge ? "Forge" : "Unknown",
+                    installed: false, // no local jar-tracking on Android yet — see JavaEditionBridge
+                } : null,
+            };
+        } catch (e) {
+            this.state.glacier = { loading: false, latest: null, error: `Failed to fetch manifest: ${e.message}` };
+        }
+        if (this.state.openPanel === "javaclients") this.openPanel("javaclients");
+    },
+
+    async loadJavaVersions() {
+        this.state.javaVersions.loading = true;
+        this.state.javaVersions.error = null;
+        if (this.state.openPanel === "javaversions") this.openPanel("javaversions");
+        try {
+            const manifest = await MojangVersions.fetchManifest();
+            // No installed/active version tracking on Android yet (see
+            // JavaEditionBridge) — the desktop app marks the user's actually
+            // active version here; we don't have one to mark truthfully.
+            this.state.javaVersions.list = manifest.versions.map(v => ({
+                id: v.id,
+                type: v.type,
+                typeLabel: MojangVersions.typeLabel(v.type),
+                active: false,
+            }));
+        } catch (e) {
+            this.state.javaVersions.error = `Failed to fetch Mojang manifest: ${e.message}`;
+        }
+        this.state.javaVersions.loading = false;
+        if (this.state.openPanel === "javaversions") this.openPanel("javaversions");
+    },
+
     closePanel() {
         this.state.openPanel = null;
         document.getElementById("main-content").classList.remove("panel-open");
@@ -427,11 +494,28 @@ const App = {
                 this.runMrSearch(true);
                 return;
             }
+
+            if (e.target.closest("[data-glacier-retry]") || e.target.closest("[data-glacier-install]")) { this.loadGlacierManifest(); return; }
+            if (e.target.closest("[data-glacier-launch]") || e.target.closest("[data-open-java-edition]")) { Bridge.launchJavaEdition(); return; }
+            if (e.target.closest("[data-glacier-uninstall]")) { this.state.glacier.latest.installed = false; this.openPanel("javaclients"); return; }
+
+            if (e.target.closest("[data-toggle-java-snapshots]")) {
+                this.state.javaVersions.showSnapshots = !this.state.javaVersions.showSnapshots;
+                this.openPanel("javaversions");
+                return;
+            }
+            if (e.target.closest("[data-toggle-java-historical]")) {
+                this.state.javaVersions.showHistorical = !this.state.javaVersions.showHistorical;
+                this.openPanel("javaversions");
+                return;
+            }
+            if (e.target.closest("[data-refresh-java-versions]")) { this.state.javaVersions.list = []; this.loadJavaVersions(); return; }
         });
 
         let cfDebounce;
         let mrDebounce;
         let mcvFilterDebounce;
+        let javaVersionFilterDebounce;
         document.body.addEventListener("input", (e) => {
             if (e.target.id === "cf-search-input") {
                 clearTimeout(cfDebounce);
@@ -440,6 +524,15 @@ const App = {
             if (e.target.id === "mr-search-input") {
                 clearTimeout(mrDebounce);
                 mrDebounce = setTimeout(() => this.runMrSearch(true), 350);
+            }
+            if (e.target.id === "java-version-filter-input") {
+                clearTimeout(javaVersionFilterDebounce);
+                const value = e.target.value;
+                javaVersionFilterDebounce = setTimeout(() => {
+                    this.state.javaVersions.filter = value;
+                    this.openPanel("javaversions");
+                    document.getElementById("java-version-filter-input")?.focus();
+                }, 250);
             }
             if (e.target.id === "mcv-filter-input") {
                 clearTimeout(mcvFilterDebounce);
