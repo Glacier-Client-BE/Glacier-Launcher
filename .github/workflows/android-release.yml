@@ -87,6 +87,18 @@ jobs:
       - name: Set up Gradle
         if: steps.versioning.outputs.SKIP != 'true'
         uses: gradle/actions/setup-gradle@v4
+        with:
+          # This project has no committed gradlew wrapper (only a stray
+          # gradle-wrapper.properties, never wired up), so `gradle` on PATH
+          # was always whatever setup-gradle provisions by default — Gradle
+          # 9.7.1. That's fine for :app alone, but app_pojavlauncher's own
+          # build.gradle (now built in as a library — see android/README.md)
+          # uses the imperative `exec { ... }` API on Project, which Gradle
+          # 9 removed outright (it was already deprecated, in favor of the
+          # ExecOperations service, since 8.x). Pin 8.9 explicitly instead —
+          # the same version AGP 8.7.2 requires as a minimum, and old enough
+          # that Project.exec() still works.
+          gradle-version: '8.9'
 
       - name: Convert PojavLauncher submodule into a library module
         if: steps.versioning.outputs.SKIP != 'true'
