@@ -39,6 +39,15 @@ python3 "$SCRIPT_DIR/patch_pojav_gradle.py" app_pojavlauncher/build.gradle patch
 # game surface (see android/README.md), not this setup/version-picker flow.
 python3 "$SCRIPT_DIR/patch_pojav_gradle.py" app_pojavlauncher/src/main/AndroidManifest.xml strip-launcher-intent-filter
 
+# GamepadMapperAdapter.java references 7 drawables (stick_left/right(+click),
+# dpad_up/down/left/right) that never existed anywhere in Pojav's own git
+# history — a real, pre-existing bug in upstream's final "Discontinued"
+# commit that only surfaces now that the module actually gets compiled
+# (previously nobody was building this exact submodule commit as a library
+# dependency of another app). Generate simple stand-in vector drawables so
+# compilation succeeds; see patch_pojav_gradle.py for details.
+python3 "$SCRIPT_DIR/patch_pojav_gradle.py" app_pojavlauncher/src/main/res/drawable add-missing-gamepad-drawables
+
 find . -name '*.bak' -delete
 
 echo "Converted pojavlauncher submodule into a library module (xyz.glacierclient.launcher process, no separate install)"

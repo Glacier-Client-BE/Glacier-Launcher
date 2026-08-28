@@ -102,10 +102,54 @@ def strip_launcher_intent_filter(path: str) -> None:
     open(path, "w").write(text)
 
 
+_VECTOR_DRAWABLE_TEMPLATE = """<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24"
+    android:tint="?attr/colorControlNormal">
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="{path}" />
+</vector>
+"""
+
+# GamepadMapperAdapter.java (controller-remap settings screen) references
+# these 7 drawables, but none of them ever existed anywhere in Pojav's own
+# git history (checked via `git log --all -- '**/<name>*'`) — a real,
+# pre-existing bug in upstream's final "Discontinued" commit, unrelated to
+# this merge. Stand in with plain glyph vectors (a filled circle for the
+# thumbsticks, a triangle per D-pad direction) so the controller-remap
+# screen still renders something recognizable instead of failing to
+# compile at all.
+_MISSING_GAMEPAD_DRAWABLES = {
+    "stick_left": "M12,6 C8.7,6 6,8.7 6,12 C6,15.3 8.7,18 12,18 C15.3,18 18,15.3 18,12 C18,8.7 15.3,6 12,6 Z",
+    "stick_right": "M12,6 C8.7,6 6,8.7 6,12 C6,15.3 8.7,18 12,18 C15.3,18 18,15.3 18,12 C18,8.7 15.3,6 12,6 Z",
+    "stick_left_click": "M12,4 C7.6,4 4,7.6 4,12 C4,16.4 7.6,20 12,20 C16.4,20 20,16.4 20,12 C20,7.6 16.4,4 12,4 Z M12,8 C14.2,8 16,9.8 16,12 C16,14.2 14.2,16 12,16 C9.8,16 8,14.2 8,12 C8,9.8 9.8,8 12,8 Z",
+    "stick_right_click": "M12,4 C7.6,4 4,7.6 4,12 C4,16.4 7.6,20 12,20 C16.4,20 20,16.4 20,12 C20,7.6 16.4,4 12,4 Z M12,8 C14.2,8 16,9.8 16,12 C16,14.2 14.2,16 12,16 C9.8,16 8,14.2 8,12 C8,9.8 9.8,8 12,8 Z",
+    "dpad_up": "M12,5 L18,13 L14,13 L14,19 L10,19 L10,13 L6,13 Z",
+    "dpad_down": "M12,19 L6,11 L10,11 L10,5 L14,5 L14,11 L18,11 Z",
+    "dpad_left": "M5,12 L13,6 L13,10 L19,10 L19,14 L13,14 L13,18 Z",
+    "dpad_right": "M19,12 L11,18 L11,14 L5,14 L5,10 L11,10 L11,6 Z",
+}
+
+
+def add_missing_gamepad_drawables(res_drawable_dir: str) -> None:
+    import os
+
+    os.makedirs(res_drawable_dir, exist_ok=True)
+    for name, path_data in _MISSING_GAMEPAD_DRAWABLES.items():
+        dest = os.path.join(res_drawable_dir, f"{name}.xml")
+        if not os.path.exists(dest):
+            open(dest, "w").write(_VECTOR_DRAWABLE_TEMPLATE.format(path=path_data))
+
+
 ACTIONS = {
     "strip-git-version-block": strip_git_version_block,
     "patch-app-module": patch_app_module,
     "strip-launcher-intent-filter": strip_launcher_intent_filter,
+    "add-missing-gamepad-drawables": add_missing_gamepad_drawables,
 }
 
 if __name__ == "__main__":
