@@ -126,6 +126,41 @@ without root. If a build's `assets/companion/` is empty (e.g. a local debug
 build that skipped the steps above), the UI honestly shows "This build
 doesn't include the companion installer" instead of a broken button.
 
+### Native, direct-to-gameplay launching
+
+Reading Pojav's own vendored source (`android/pojavlauncher/app_pojavlauncher`)
+found that its manifest's actual `LAUNCHER` activity
+(`TestStorageActivity` → `LauncherActivity`) is a setup/version-picker flow,
+but `net.kdt.pojavlaunch.MainActivity` — the activity this app has always
+targeted — **is** the real JVM/GLFW game-render surface itself: its
+`onCreate` calls `runCraft()` on the first frame, and it reads an
+`intent_version` extra (`MainActivity.INTENT_MINECRAFT_VERSION`) to pick
+which installed version to launch, falling back to Pojav's own
+last-used profile otherwise. `JavaEditionBridge.launch()` now passes the
+version the user tapped in *our own* Java Versions panel through that
+extra (`AndroidBridge.launchJavaEditionVersion()` /
+`Bridge.launchJavaEditionVersion()`), so launching a specific version from
+Glacier's own UI is a real, direct, native launch into that version's
+gameplay — not just a generic reopen of Pojav's separate home screen.
+
+This only works once Pojav's own one-time setup (JRE download, a saved
+launcher profile) has happened at least once; a completely fresh install
+may still land in Pojav's own setup screens first; that's an unavoidable
+first-run cost of any Pojav-based launcher, this one included.
+
+**What wasn't attempted, and why:** merging Pojav's actual Android module
+into this app's own Gradle build (one process, one Activity tree, no
+separate installed package at all) — the deepest version of "native like
+Pojav." Pojav's `app_pojavlauncher` module pins a different AGP version,
+ships its own CMake native modules and a from-source JRE/LWJGL-EGL native
+layer, and converting it from `com.android.application` to a library
+consumable by `:app` means resolving manifest merging, resource/R-class
+collisions, and native ABI filter conflicts between two independently
+evolved Android projects — real build-system surgery. It's not
+untouchable (a broken Gradle merge would at least fail loudly in CI,
+unlike a runtime bug), but it's a large, multi-step change in its own
+right and wasn't attempted blind in the same pass as everything else here.
+
 ### Release signing
 
 Release builds are unsigned unless `ANDROID_KEYSTORE_PATH` /

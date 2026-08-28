@@ -72,10 +72,25 @@ object JavaEditionBridge {
         false
     }
 
-    fun launch(context: Context): Boolean {
+    // Pojav's MainActivity IS the real JVM/GLFW game-render surface (its
+    // manifest LAUNCHER activity is TestStorageActivity -> LauncherActivity,
+    // a setup/version-picker flow; MainActivity is what actually runs
+    // runCraft() and boots straight into gameplay once its render surface is
+    // ready). It reads net.kdt.pojavlaunch.MainActivity.INTENT_MINECRAFT_VERSION
+    // ("intent_version") to pick which installed version to launch, falling
+    // back to Pojav's own last-used profile when omitted — so passing the
+    // version the user picked in *our* Java Versions panel makes launching
+    // from our own UI behave like a real, direct, native launch instead of
+    // just reopening Pojav's separate home screen. This only works once
+    // Pojav's own one-time setup (JRE download, a saved launcher profile)
+    // has happened at least once — a completely fresh install may still
+    // land in Pojav's own setup screens first, same as any first run of
+    // PojavLauncher itself.
+    fun launch(context: Context, versionId: String? = null): Boolean {
         val intent = Intent().apply {
             setClassName(JAVA_EDITION_PACKAGE, LAUNCH_ACTIVITY)
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            if (!versionId.isNullOrBlank()) putExtra("intent_version", versionId)
         }
         return try {
             context.startActivity(intent)

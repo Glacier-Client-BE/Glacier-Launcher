@@ -610,7 +610,7 @@ function javaVersionRowHtml(v) {
                 <span class="version-sub" style="opacity:0.6;">${v.typeLabel}</span>
             </div>
         </div>
-        <button class="vcs-btn" data-open-java-edition><i class="fa-solid fa-external-link-alt"></i>&nbsp;Open in Java Edition</button>
+        <button class="vcs-btn" data-launch-java-version="${escapeHtml(v.id)}"><i class="fa-solid fa-play"></i>&nbsp;Launch</button>
     </div>`;
 }
 

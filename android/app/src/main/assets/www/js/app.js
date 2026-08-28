@@ -732,6 +732,8 @@ const App = {
 
             if (e.target.closest("[data-glacier-retry]") || e.target.closest("[data-glacier-install]")) { this.loadGlacierManifest(); return; }
             if (e.target.closest("[data-glacier-launch]") || e.target.closest("[data-open-java-edition]")) { Bridge.launchJavaEdition(); return; }
+            const launchJavaVer = e.target.closest("[data-launch-java-version]");
+            if (launchJavaVer) { Bridge.launchJavaEditionVersion(launchJavaVer.dataset.launchJavaVersion); return; }
             if (e.target.closest("[data-install-java-edition]")) { Bridge.installJavaEditionCompanion(); return; }
             if (e.target.closest("[data-glacier-uninstall]")) { this.state.glacier.latest.installed = false; this.openPanel("javaclients"); return; }
 

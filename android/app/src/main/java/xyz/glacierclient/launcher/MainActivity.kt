@@ -149,6 +149,11 @@ private class AndroidBridge(private val activity: ComponentActivity, private val
     }
 
     @JavascriptInterface
+    fun launchJavaEditionVersion(versionId: String) {
+        activity.runOnUiThread { JavaEditionBridge.launch(activity, versionId) }
+    }
+
+    @JavascriptInterface
     fun hasBundledJavaEditionInstaller(): Boolean = JavaEditionBridge.hasBundledInstaller(activity)
 
     @JavascriptInterface
