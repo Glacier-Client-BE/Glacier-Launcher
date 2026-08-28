@@ -48,6 +48,14 @@ python3 "$SCRIPT_DIR/patch_pojav_gradle.py" app_pojavlauncher/src/main/AndroidMa
 # compilation succeeds; see patch_pojav_gradle.py for details.
 python3 "$SCRIPT_DIR/patch_pojav_gradle.py" app_pojavlauncher/src/main/res/drawable add-missing-gamepad-drawables
 
+# AGP never generates `final int` R fields for a library module (only for an
+# application, where resource IDs get inlined as constants) — `case
+# R.id.foo:` is a hard javac error there regardless of the nonFinalResIds
+# gradle.properties flag, which only ever affects applications.
+# JavaGUILauncherActivity.onTouch() is the one place in this codebase that
+# switches on a view ID; rewrite to an if/else-if chain instead.
+python3 "$SCRIPT_DIR/patch_pojav_gradle.py" app_pojavlauncher/src/main/java/net/kdt/pojavlaunch/JavaGUILauncherActivity.java fix-nonfinal-resid-switch
+
 find . -name '*.bak' -delete
 
 echo "Converted pojavlauncher submodule into a library module (xyz.glacierclient.launcher process, no separate install)"

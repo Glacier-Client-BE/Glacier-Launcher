@@ -158,11 +158,55 @@ def add_missing_gamepad_drawables(res_drawable_dir: str) -> None:
             open(dest, "w").write(_VECTOR_DRAWABLE_TEMPLATE.format(path=path_data))
 
 
+def fix_nonfinal_resid_switch(path: str) -> None:
+    """AGP never generates `final int` R fields for a library module (unlike
+    an application, where they're inlined constants) — `case R.id.foo:` is a
+    hard javac error ("constant expression required") there, regardless of
+    the nonFinalResIds gradle.properties flag, which only ever applied to
+    applications. JavaGUILauncherActivity.onTouch() switches on v.getId()
+    twice; rewrite both to if/else-if chains, which work with any int value
+    known only at runtime."""
+    text = open(path).read()
+
+    block_re = re.compile(
+        r"[ \t]*switch \(v\.getId\(\)\) \{.*?\n[ \t]*\}\n"
+        r"[ \t]*if\(isDown\) switch\(v\.getId\(\)\) \{.*?\n[ \t]*\}",
+        re.DOTALL,
+    )
+
+    new_block_1 = """        int vId = v.getId();
+        if (vId == R.id.installmod_mouse_pri) {
+            AWTInputBridge.sendMousePress(AWTInputEvent.BUTTON1_DOWN_MASK, isDown);
+        } else if (vId == R.id.installmod_mouse_sec) {
+            AWTInputBridge.sendMousePress(AWTInputEvent.BUTTON3_DOWN_MASK, isDown);
+        }
+        if (isDown) {
+            if (vId == R.id.installmod_window_moveup) {
+                AWTInputBridge.nativeMoveWindow(0, -10);
+            } else if (vId == R.id.installmod_window_movedown) {
+                AWTInputBridge.nativeMoveWindow(0, 10);
+            } else if (vId == R.id.installmod_window_moveleft) {
+                AWTInputBridge.nativeMoveWindow(-10, 0);
+            } else if (vId == R.id.installmod_window_moveright) {
+                AWTInputBridge.nativeMoveWindow(10, 0);
+            }
+        }"""
+
+    new_text, count = block_re.subn(new_block_1, text, count=1)
+    if count != 1:
+        raise SystemExit(
+            f"fix_nonfinal_resid_switch: expected switch block not found in {path} "
+            "(upstream source likely changed — update the patch)"
+        )
+    open(path, "w").write(new_text)
+
+
 ACTIONS = {
     "strip-git-version-block": strip_git_version_block,
     "patch-app-module": patch_app_module,
     "strip-launcher-intent-filter": strip_launcher_intent_filter,
     "add-missing-gamepad-drawables": add_missing_gamepad_drawables,
+    "fix-nonfinal-resid-switch": fix_nonfinal_resid_switch,
 }
 
 if __name__ == "__main__":
