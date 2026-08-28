@@ -219,6 +219,16 @@ as `ClientInjectionService`. Matches the desktop panel's own quirks too:
 no `.panel-tabs` footer, and a chevron-left back button (it's a sub-panel
 of Clients) instead of the chevron-down every top-level panel uses.
 
-**Not yet started:** `themestudio`, `modpacks`, `skinlibrary` — all three
-need a live theme preview / 3D skin canvas via `skinview3d.js`, a
-meaningfully larger chunk than the panels so far.
+`modpacks` is matched too: real CurseForge/Modrinth modpack search (reusing
+the same clients the Addons panel already uses) with source tabs, the same
+result-row layout (icon/author/downloads/summary), and the real "API key
+required" notice. Install is disabled — `ModpackInstallService.cs` unpacks
+a modpack into a brand-new Java instance, and this app has no
+instance-management model yet, so there's nothing to wire the button to
+truthfully. Reachable the same way as desktop: the "Modpacks" button in
+the Java Addons panel's header. No `.panel-tabs` footer, matching
+`ModpacksPanel.razor`.
+
+**Not yet started:** `themestudio`, `skinlibrary` — both need a live theme
+preview / 3D skin canvas via `skinview3d.js`, a meaningfully larger chunk
+than the panels so far.

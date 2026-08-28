@@ -47,6 +47,7 @@ const App = {
         javaVersions: { list: [], loading: false, error: null, filter: "", showSnapshots: false, showHistorical: false },
         downloads: [], // session-scoped, see downloadRowHtml()/downloadsPanelHtml() in panels.js
         levMods: { query: "", results: [], loading: false, error: null, hasSearched: false },
+        modpacks: { source: "mr", query: "", results: [], searching: false, searched: false, error: null },
         news: {
             loading: false, posts: [], releases: [],
             fallbackItems: [
@@ -183,7 +184,14 @@ const App = {
             case "addons": {
                 this.state.cfCategory = (this.state.edition === "java" ? CurseForge.javaCategories : CurseForge.bedrockCategories)[0].classId;
                 this.state.mrCategory = Modrinth.javaCategories[0].facet;
-                html = panelShell({ id, title: this.state.edition === "java" ? "Mods & Addons" : "Addons", body: addonsPanelBody(), activeTabId: id });
+                const isJava = this.state.edition === "java";
+                html = panelShell({
+                    id,
+                    title: isJava ? "Mods & Addons" : "Addons",
+                    headerActions: isJava ? `<button class="btn-sm" data-open-panel="modpacks"><i class="fa-solid fa-cubes"></i> Modpacks</button>` : "",
+                    body: addonsPanelBody(),
+                    activeTabId: id,
+                });
                 break;
             }
             case "mcversions": html = mcVersionsPanelHtml(this.state.mcVersionsChannel, this.state.mcVersionsFilter, this.state.mcVersions); break;
@@ -227,6 +235,12 @@ const App = {
             case "levimods": {
                 html = levModsPanelHtml(this.state.levMods);
                 if (!this.state.levMods.hasSearched && !this.state.levMods.loading) this.loadLevMods();
+                break;
+            }
+            case "modpacks": {
+                // No .panel-tabs footer on desktop (Components/ModpacksPanel.razor) either.
+                html = bareOverlayHtml("modpacks", "Modpacks", "", modpacksPanelBody(this.state.modpacks));
+                if (!this.state.modpacks.searched && !this.state.modpacks.searching) this.searchModpacks();
                 break;
             }
             default: html = panelShell({ id, title: id, body: emptyState("Coming soon", "This panel is queued — see android/README.md's status list."), activeTabId: id });
@@ -435,6 +449,31 @@ const App = {
         if (this.state.openPanel === "levimods") this.openPanel("levimods");
     },
 
+    async searchModpacks() {
+        const m = this.state.modpacks;
+        m.searching = true;
+        m.searched = true;
+        m.error = null;
+        if (this.state.openPanel === "modpacks") this.openPanel("modpacks");
+        try {
+            if (m.source === "cf") {
+                if (!CurseForge.isAvailable()) {
+                    m.results = [];
+                } else {
+                    const res = await CurseForge.search(CurseForge.GAME_ID_JAVA, CurseForge.JAVA_CLASS_MODPACKS, m.query);
+                    m.results = res.data.map(a => ({ title: a.name, author: "", summary: a.summary, icon: a.logo?.thumbnailUrl || "", downloads: a.downloadCount }));
+                }
+            } else {
+                const res = await Modrinth.search("modpack", m.query);
+                m.results = res.hits.map(p => ({ title: p.title, author: p.author || "", summary: p.description, icon: p.icon_url || "", downloads: p.downloads }));
+            }
+        } catch (e) {
+            m.error = e.message;
+        }
+        m.searching = false;
+        if (this.state.openPanel === "modpacks") this.openPanel("modpacks");
+    },
+
     closePanel() {
         this.state.openPanel = null;
         document.getElementById("main-content").classList.remove("panel-open");
@@ -584,6 +623,21 @@ const App = {
                 this.loadLevMods();
                 return;
             }
+
+            const modpackSource = e.target.closest("[data-modpack-source]");
+            if (modpackSource) {
+                const source = modpackSource.dataset.modpackSource;
+                if (this.state.modpacks.source !== source) {
+                    this.state.modpacks.source = source;
+                    this.searchModpacks();
+                }
+                return;
+            }
+            if (e.target.closest("[data-modpack-search]")) {
+                this.state.modpacks.query = document.getElementById("modpack-search-input")?.value || "";
+                this.searchModpacks();
+                return;
+            }
         });
 
         let cfDebounce;
@@ -591,6 +645,13 @@ const App = {
         let mcvFilterDebounce;
         let javaVersionFilterDebounce;
         let levModsFilterDebounce;
+        document.body.addEventListener("keydown", (e) => {
+            if (e.target.id === "modpack-search-input" && e.key === "Enter") {
+                this.state.modpacks.query = e.target.value;
+                this.searchModpacks();
+            }
+        });
+
         document.body.addEventListener("input", (e) => {
             if (e.target.id === "cf-search-input") {
                 clearTimeout(cfDebounce);

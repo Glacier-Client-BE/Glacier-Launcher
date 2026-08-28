@@ -931,3 +931,59 @@ function levModsPanelHtml(state) {
         <div class="panel-body">${body}</div>
     </div>`;
 }
+
+// ── Modpacks ───────────────────────────────────────────────────────────
+// Mirrors Components/ModpacksPanel.razor: CurseForge/Modrinth source tabs,
+// search, and a real result list (icon/author/downloads/summary) using the
+// same CurseForge/Modrinth clients the Addons panel already uses. Install
+// is disabled — ModpackInstallService.cs unpacks a modpack into a brand
+// new Java instance, and this app has no instance-management model yet
+// (see JavaEditionBridge); nothing to wire the button to truthfully.
+function formatDownloads(count) {
+    if (count >= 1_000_000) return `${(count / 1_000_000).toFixed(1)}M downloads`;
+    if (count >= 1_000) return `${(count / 1_000).toFixed(1)}K downloads`;
+    return `${count} downloads`;
+}
+
+function truncate(s, n) {
+    if (!s) return "";
+    return s.length <= n ? s : s.slice(0, n).trimEnd() + "…";
+}
+
+function modpackRowHtml(pack) {
+    return `
+    <div class="modpack-row">
+        ${pack.icon ? `<img class="modpack-icon" src="${escapeHtml(pack.icon)}" loading="lazy" />` : `<div class="modpack-icon modpack-icon-fallback"><i class="fa-solid fa-cubes"></i></div>`}
+        <div class="modpack-meta">
+            <span class="version-name">${escapeHtml(pack.title)}</span>
+            <span class="version-sub">${escapeHtml(pack.author)} · ${formatDownloads(pack.downloads)}</span>
+            <span class="modpack-summary">${escapeHtml(truncate(pack.summary, 90))}</span>
+        </div>
+        <button class="vcs-btn" disabled data-tooltip="Modpack install needs per-instance management this app doesn't have yet"><i class="fa-solid fa-download"></i>&nbsp;Install</button>
+    </div>`;
+}
+
+function modpacksPanelBody(state) {
+    const cfUnavailable = state.source === "cf" && !CurseForge.isAvailable();
+    let resultsHtml = "";
+    if (state.searching) {
+        resultsHtml = `<div class="versions-loading"><span class="spinner"></span><span>Searching…</span></div>`;
+    } else if (state.error) {
+        resultsHtml = `<div class="versions-loading versions-error"><i class="fa-solid fa-triangle-exclamation"></i><span>${escapeHtml(state.error)}</span></div>`;
+    } else if (state.results.length === 0 && state.searched) {
+        resultsHtml = `<div class="stats-empty">No modpacks found for "${escapeHtml(state.query)}".</div>`;
+    }
+    resultsHtml += state.results.map(modpackRowHtml).join("");
+
+    return `
+    <div class="modpack-source-tabs">
+        <button class="vcs-btn ${state.source === "cf" ? "active" : ""}" data-modpack-source="cf">CurseForge</button>
+        <button class="vcs-btn ${state.source === "mr" ? "active" : ""}" data-modpack-source="mr">Modrinth</button>
+    </div>
+    <div class="modpack-search">
+        <input class="panel-search-input" id="modpack-search-input" placeholder="Search modpacks…" value="${escapeHtml(state.query)}" />
+        <button class="btn-sm" data-modpack-search><i class="fa-solid fa-magnifying-glass"></i></button>
+    </div>
+    ${cfUnavailable ? `<div class="stats-empty">A CurseForge API key is required to browse CurseForge. Add one in Settings, or use Modrinth (no key needed).</div>` : ""}
+    ${resultsHtml}`;
+}
