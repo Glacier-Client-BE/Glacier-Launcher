@@ -45,6 +45,7 @@ const App = {
         mrTotalCount: 0,
         glacier: { loading: false, latest: null, error: null },
         javaVersions: { list: [], loading: false, error: null, filter: "", showSnapshots: false, showHistorical: false },
+        downloads: [], // session-scoped, see downloadRowHtml()/downloadsPanelHtml() in panels.js
         news: {
             loading: false, posts: [], releases: [],
             fallbackItems: [
@@ -216,6 +217,7 @@ const App = {
                 if (this.state.news.posts.length === 0 && this.state.news.releases.length === 0 && !this.state.news.loading) this.loadNews();
                 break;
             }
+            case "downloads": html = downloadsPanelHtml(this.state.downloads); break;
             default: html = panelShell({ id, title: id, body: emptyState("Coming soon", "This panel is queued — see android/README.md's status list."), activeTabId: id });
         }
         root.innerHTML = html;
@@ -451,12 +453,17 @@ const App = {
                 const key = dlBtn.dataset.downloadClient;
                 this.state.clients[key].downloading = true;
                 this.state.clients[key].progress = 0;
+                const downloadId = `client-${key}-${Date.now()}`;
+                const clientLabels = { flarial: "Flarial Client", oderso: "OderSo Client", levilamina: "LeviLamina Client" };
+                this.state.downloads = [{ id: downloadId, label: clientLabels[key] || key, status: "downloading", progress: 0 }, ...this.state.downloads];
                 this.openPanel("clients");
                 setTimeout(() => {
                     this.state.clients[key].downloading = false;
                     this.state.clients[key].downloaded = true;
                     this.state.clients[key].upToDate = true;
+                    this.state.downloads = this.state.downloads.map(d => d.id === downloadId ? { ...d, status: "complete", progress: 1 } : d);
                     if (this.state.openPanel === "clients") this.openPanel("clients");
+                    if (this.state.openPanel === "downloads") this.openPanel("downloads");
                 }, 800);
                 return;
             }
@@ -533,6 +540,18 @@ const App = {
             }
             if (e.target.closest("[data-refresh-java-versions]")) { this.state.javaVersions.list = []; this.loadJavaVersions(); return; }
             if (e.target.closest("[data-refresh-news]")) { this.loadNews(); return; }
+
+            const removeDl = e.target.closest("[data-remove-download]");
+            if (removeDl) {
+                this.state.downloads = this.state.downloads.filter(d => d.id !== removeDl.dataset.removeDownload);
+                this.openPanel("downloads");
+                return;
+            }
+            if (e.target.closest("[data-clear-finished-downloads]")) {
+                this.state.downloads = this.state.downloads.filter(d => d.status === "downloading");
+                this.openPanel("downloads");
+                return;
+            }
         });
 
         let cfDebounce;

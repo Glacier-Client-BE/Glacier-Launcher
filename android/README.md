@@ -193,5 +193,11 @@ currently opens this panel (it's reachable there via the command-palette
 search this app hasn't built) — it exists and renders correctly, just
 needs an entry point once a command palette or similar exists.
 
-**Not yet started:** `downloads`, `themestudio`, `modpacks`, `stats`,
-`logs`, `skinlibrary`, `levimods`.
+`downloads` is matched too: a session-scoped list (`App.state.downloads`)
+fed by the same client-download action that already drives the Clients
+panel's progress bars, with the real empty-state, clear-finished action,
+and its own distinct 4-tab bar (Settings/Home/Downloads/Credits) matching
+the desktop panel.
+
+**Not yet started:** `themestudio`, `modpacks`, `stats`, `logs`,
+`skinlibrary`, `levimods`.

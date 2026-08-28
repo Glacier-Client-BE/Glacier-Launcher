@@ -758,3 +758,57 @@ function newsPanelHtml(state) {
             </button>`).join("")}</div>
     </div>`;
 }
+
+// ── Downloads ──────────────────────────────────────────────────────────
+// Mirrors Pages/Home.razor's "downloads" panel — a session-scoped list fed
+// by DownloadService.cs on desktop; here it's App.state.downloads, pushed
+// to whenever a client/mod download starts (see app.js).
+const DOWNLOADS_PANEL_TABS = [
+    { id: "settings", label: "Settings", icon: "fa-solid fa-gear" },
+    { id: "home", label: "Home", icon: "fa-solid fa-house" },
+    { id: "downloads", label: "Downloads", icon: "fa-solid fa-download" },
+    { id: "credits", label: "Credits", icon: "fa-solid fa-heart" },
+];
+
+function downloadRowHtml(entry) {
+    const statusIcon = entry.status === "downloading" ? "fa-solid fa-arrow-down" : entry.status === "failed" ? "fa-solid fa-triangle-exclamation" : "fa-solid fa-circle-check";
+    const statusLabel = entry.status === "downloading" ? "Downloading" : entry.status === "failed" ? "Failed" : "Complete";
+    const sub = entry.status === "downloading" ? `${statusLabel} · ${Math.round(entry.progress * 100)}%` : entry.status === "failed" && entry.error ? `${statusLabel} · ${escapeHtml(entry.error)}` : statusLabel;
+    return `
+    <div class="version-row">
+        <div class="version-meta" style="flex:1; min-width:0;">
+            <span class="version-name" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(entry.label)}</span>
+            <span class="version-sub"><i class="${statusIcon}"></i> ${sub}</span>
+            ${entry.status === "downloading" ? `<div class="progress-bar-wrap" style="margin-top:4px;"><div class="progress-bar-fill" style="width:${Math.round(entry.progress * 100)}%"></div></div>` : ""}
+        </div>
+        <div class="version-actions">
+            <button class="icon-btn icon-btn-ghost" data-tooltip="${entry.status === "downloading" ? "Cancel" : "Remove"}" data-remove-download="${entry.id}">
+                <i class="fa-solid ${entry.status === "downloading" ? "fa-xmark" : "fa-trash"}"></i>
+            </button>
+        </div>
+    </div>`;
+}
+
+function downloadsPanelHtml(downloads) {
+    const hasFinished = downloads.some(d => d.status !== "downloading");
+    const body = downloads.length === 0
+        ? emptyState("No downloads yet", "Versions, mods, and packs you download this session show up here.", "fa-solid fa-download")
+        : downloads.map(downloadRowHtml).join("");
+
+    return `
+    <div class="panel-overlay" id="panel-downloads">
+        <div class="panel-handle"></div>
+        <div class="panel-header">
+            <div class="panel-title-wrap"><span class="panel-title">Downloads</span><div class="panel-title-underline"></div></div>
+            <div class="panel-header-actions">
+                ${hasFinished ? `<button class="panel-icon-btn" data-clear-finished-downloads data-tooltip="Clear finished"><i class="fa-solid fa-broom"></i></button>` : ""}
+                <button class="panel-back-btn" data-close-panel data-tooltip="Back"><i class="fa-solid fa-chevron-down"></i></button>
+            </div>
+        </div>
+        <div class="panel-body">${body}</div>
+        <div class="panel-tabs">${DOWNLOADS_PANEL_TABS.map(t => `
+            <button class="panel-tab ${t.id === "downloads" ? "active" : ""}" ${t.id === "home" ? "data-close-panel" : `data-open-panel="${t.id}"`}>
+                <i class="${t.icon}"></i>${t.label}
+            </button>`).join("")}</div>
+    </div>`;
+}
