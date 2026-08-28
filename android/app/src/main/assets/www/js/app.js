@@ -253,13 +253,16 @@ const App = {
             case "bedrockinstances": html = panelShell({ id, title: "Instances", body: emptyState("No instances yet", "Isolated Bedrock instances will list here once wired to shared storage."), activeTabId: id }); break;
             case "bedrockscreenshots": html = panelShell({ id, title: "Photos", body: emptyState("No screenshots yet", "Reads from the Java Edition companion app's shared storage once wired."), activeTabId: id }); break;
             case "javaclients": {
+                // Re-check on every open — the user may be returning from the
+                // system installer after tapping "Install" moments ago.
+                this.state.javaInstalled = Bridge.isJavaEditionInstalled();
                 html = `<div class="panel-overlay" id="panel-javaclients">
                     <div class="panel-handle"></div>
                     <div class="panel-header">
                         <div class="panel-title-wrap"><span class="panel-title">Launchers</span><div class="panel-title-underline"></div></div>
                         <div class="panel-header-actions"><button class="panel-back-btn" data-close-panel data-tooltip="Back"><i class="fa-solid fa-chevron-down"></i></button></div>
                     </div>
-                    ${javaClientsPanelBody(this.state.glacier)}
+                    ${javaClientsPanelBody(this.state.glacier, { installed: this.state.javaInstalled, hasBundledInstaller: Bridge.hasBundledJavaEditionInstaller() })}
                     ${renderPanelTabs("javaclients")}
                 </div>`;
                 if (!this.state.glacier.latest && !this.state.glacier.loading) this.loadGlacierManifest();
@@ -657,6 +660,7 @@ const App = {
 
             if (e.target.closest("[data-glacier-retry]") || e.target.closest("[data-glacier-install]")) { this.loadGlacierManifest(); return; }
             if (e.target.closest("[data-glacier-launch]") || e.target.closest("[data-open-java-edition]")) { Bridge.launchJavaEdition(); return; }
+            if (e.target.closest("[data-install-java-edition]")) { Bridge.installJavaEditionCompanion(); return; }
             if (e.target.closest("[data-glacier-uninstall]")) { this.state.glacier.latest.installed = false; this.openPanel("javaclients"); return; }
 
             if (e.target.closest("[data-toggle-java-snapshots]")) {

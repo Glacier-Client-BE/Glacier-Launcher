@@ -24,9 +24,37 @@ android {
         )
     }
 
+    // Release signing comes from CI secrets / local env vars, never committed
+    // to the repo. Set ANDROID_KEYSTORE_PATH/ANDROID_KEYSTORE_PASSWORD/
+    // ANDROID_KEY_ALIAS/ANDROID_KEY_PASSWORD to sign; if unset, release builds
+    // stay unsigned (installable for local testing via `adb install -r`, but
+    // not upgradeable in place and not suitable for distribution) rather than
+    // failing the build. See android/README.md for how to generate a keystore
+    // and where those secrets live in CI.
+    val ksPath = System.getenv("ANDROID_KEYSTORE_PATH")
+    val ksPassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
+    val ksKeyAlias = System.getenv("ANDROID_KEY_ALIAS")
+    val ksKeyPassword = System.getenv("ANDROID_KEY_PASSWORD")
+    val hasSigningConfig = !ksPath.isNullOrBlank() && !ksPassword.isNullOrBlank() &&
+        !ksKeyAlias.isNullOrBlank() && !ksKeyPassword.isNullOrBlank()
+
+    signingConfigs {
+        if (hasSigningConfig) {
+            create("release") {
+                storeFile = file(ksPath!!)
+                storePassword = ksPassword
+                keyAlias = ksKeyAlias
+                keyPassword = ksKeyPassword
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
+            if (hasSigningConfig) {
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
     }
 

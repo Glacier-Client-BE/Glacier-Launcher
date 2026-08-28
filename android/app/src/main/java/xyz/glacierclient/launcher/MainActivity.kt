@@ -29,6 +29,14 @@ class MainActivity : ComponentActivity() {
             settings.javaScriptEnabled = true
             settings.domStorageEnabled = true
             settings.allowFileAccess = true
+            // The UI is laid out against the viewport meta tag in index.html
+            // (device-width, initial-scale=1), not WebView's legacy zoom
+            // scaling — pinch/double-tap zoom would just fight the app's own
+            // fixed-chrome layout, so it's disabled like a native app's UI.
+            settings.useWideViewPort = true
+            settings.loadWithOverviewMode = true
+            settings.setSupportZoom(false)
+            settings.builtInZoomControls = false
             addJavascriptInterface(AndroidBridge(this@MainActivity), "AndroidBridge")
             loadUrl("file:///android_asset/www/index.html")
         }
@@ -53,6 +61,14 @@ private class AndroidBridge(private val activity: ComponentActivity) {
     @JavascriptInterface
     fun launchJavaEdition() {
         activity.runOnUiThread { JavaEditionBridge.launch(activity) }
+    }
+
+    @JavascriptInterface
+    fun hasBundledJavaEditionInstaller(): Boolean = JavaEditionBridge.hasBundledInstaller(activity)
+
+    @JavascriptInterface
+    fun installJavaEditionCompanion() {
+        activity.runOnUiThread { JavaEditionBridge.installBundled(activity) }
     }
 
     @JavascriptInterface

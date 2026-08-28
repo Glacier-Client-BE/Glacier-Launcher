@@ -98,12 +98,56 @@ through the native bridge (`AndroidBridge` → `SharedPreferences`).
 git submodule update --init --recursive   # first time only
 
 cd android
-gradle :app:assembleDebug                 # shell app
-
 ./scripts/rebrand-pojav.sh
 cd pojavlauncher
-./gradlew :app_pojavlauncher:assembleDebug  # Java Edition companion app
+./gradlew :app_pojavlauncher:assembleRelease  # Java Edition companion app
+cd ..
+mkdir -p app/src/main/assets/companion
+cp pojavlauncher/app_pojavlauncher/build/outputs/apk/**/*.apk app/src/main/assets/companion/java-edition.apk
+
+gradle :app:assembleDebug                 # shell app (bundles the companion APK above)
 ```
+
+### Single-APK distribution
+
+The app you actually ship is one APK: the companion Java Edition app (a
+rebranded PojavLauncher build) is embedded as a raw asset
+(`assets/companion/java-edition.apk`) inside the main app, copied in by the
+CI steps above before the main app is assembled. It is **not** a process
+merge — Pojav still runs as its own installed app/package with its own
+native-JVM/JNI Minecraft runtime, the same architectural reason
+`JavaEditionBridge`'s doc comment gives for not attempting a line-for-line
+build merge — but the user only ever downloads one file. Tapping "Install"
+on the Vanilla/Java Edition card (`JavaEditionBridge.installBundled()`)
+extracts that asset to cache and hands it to the system package installer
+via a `FileProvider` URI; Android's own "install unknown apps" confirmation
+still appears, since that's a system security control no app can bypass
+without root. If a build's `assets/companion/` is empty (e.g. a local debug
+build that skipped the steps above), the UI honestly shows "This build
+doesn't include the companion installer" instead of a broken button.
+
+### Release signing
+
+Release builds are unsigned unless `ANDROID_KEYSTORE_PATH` /
+`ANDROID_KEYSTORE_PASSWORD` / `ANDROID_KEY_ALIAS` / `ANDROID_KEY_PASSWORD`
+are set (`app/build.gradle.kts`), matching CI's
+`ANDROID_KEYSTORE_BASE64` / `ANDROID_KEYSTORE_PASSWORD` / `ANDROID_KEY_ALIAS`
+/ `ANDROID_KEY_PASSWORD` repo secrets (the base64-encoded keystore is
+decoded to a file at build time). No keystore is checked into this repo —
+generate your own once and keep it somewhere safe, since losing it means
+future releases can never update past versions in place:
+
+```
+keytool -genkeypair -v -keystore glacier-release.keystore -alias glacier \
+  -keyalg RSA -keysize 2048 -validity 10000
+base64 -w0 glacier-release.keystore > glacier-release.keystore.b64
+```
+
+Add `glacier-release.keystore.b64`'s contents as the `ANDROID_KEYSTORE_BASE64`
+repo secret, and the alias/store/key passwords as the other three secrets.
+Without them, CI still builds successfully — the release APK just comes out
+unsigned (installable via `adb install -r` for testing, not distributable
+as an in-place update).
 
 To iterate on layout without a device/emulator, open
 `android/app/src/main/assets/www/index.html` directly in a desktop browser
@@ -126,6 +170,31 @@ actions like launching the Java Edition app no-op).
 
 A CurseForge API key is read from the `CURSEFORGE_API_KEY` repo secret at
 build time for both apps, same as the desktop build.
+
+## Mobile-specific adjustments
+
+A few things depart from the desktop app on purpose because "mobile" is a
+genuinely different environment, not because of a shortcut:
+
+- **Landscape-only.** `MainActivity` is locked to
+  `android:screenOrientation="landscape"` — the desktop layout (a wide
+  top-bar, side-by-side footer, horizontal tab bars) was never designed for
+  a portrait phone screen, and there's no separate portrait layout to fall
+  back to.
+- **`css/mobile.css`** loads after the real `css/app.css` (kept byte-for-byte
+  for fidelity) and only shrinks chrome — top-bar/footer padding, action
+  button height, panel header/tab sizes — for short landscape viewports
+  (phones are usually 360-420px tall in landscape vs. app.css's 360px desktop
+  *minimum*). It doesn't change any markup or add new UI.
+- **Panel tab bar cycler.** `js/tabcycler.js` is a verbatim port of the
+  desktop app's own `wwwroot/js/interop.js` `ensureTabCyclers()` (already
+  plain, portable browser JS) — footers with more than 4 tabs page 4 at a
+  time with sticky prev/next arrows, exactly like desktop, instead of
+  showing all 11 Bedrock tabs squeezed into one row.
+- **App icon.** The adaptive icon foreground is now inset ~18% on each side
+  so the artwork sits inside the mask's real safe zone instead of filling
+  the whole 108dp canvas edge-to-edge, which read as oversized once Android
+  applied its shape mask on the home screen.
 
 ## UI parity status
 

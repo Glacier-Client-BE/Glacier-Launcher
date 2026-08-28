@@ -415,8 +415,12 @@ function settingsPanelBody(category) {
     if (cat("java")) {
         html += `<div class="settings-section"><span class="panel-section-label">Java Edition</span>
         <div style="padding:8px 0;">RAM, JVM args, resolution, offline mode, and version filters are configured in the Java Edition companion app itself.</div>
-        ${settingRow("Java Edition companion app", App.state.javaInstalled ? "Installed" : "Not installed",
-            `<button class="btn-sm" id="open-java-edition" ${App.state.javaInstalled ? "" : "disabled"}>Open</button>`)}
+        ${settingRow("Java Edition companion app", App.state.javaInstalled ? "Installed" : (Bridge.hasBundledJavaEditionInstaller() ? "Bundled with this app — not installed yet" : "Not installed"),
+            App.state.javaInstalled
+                ? `<button class="btn-sm" id="open-java-edition">Open</button>`
+                : (Bridge.hasBundledJavaEditionInstaller()
+                    ? `<button class="btn-sm" data-install-java-edition>Install</button>`
+                    : `<button class="btn-sm" id="open-java-edition" disabled>Open</button>`))}
         </div>`;
     }
 
@@ -553,7 +557,17 @@ function mcVersionsPanelHtml(channel, filter, versions) {
 // locally-installed Lunar/Badlion .exe and can direct-launch them; neither
 // client ships an Android build at all, so that row is an honest "not
 // available on Android" rather than fake detection.
-function javaClientsPanelBody(glacierState) {
+function javaClientsPanelBody(glacierState, javaEdition) {
+    const jeActions = javaEdition.installed
+        ? `<button class="vcs-btn" data-open-java-edition><i class="fa-solid fa-play"></i> Open</button>`
+        : javaEdition.hasBundledInstaller
+            ? `<button class="vcs-btn" data-install-java-edition><i class="fa-solid fa-download"></i> Install</button>`
+            : `<span class="client-card-note">Not bundled in this build</span>`;
+    const jeSub = javaEdition.installed
+        ? `<span style="color:var(--green);"><i class="fa-solid fa-circle-check"></i> Installed</span>`
+        : javaEdition.hasBundledInstaller
+            ? "Bundled with this app — installs like any other app update."
+            : "This build doesn't include the companion installer.";
     const glacierActions = (() => {
         if (glacierState.loading) return `<span style="opacity:0.6;">Checking…</span>`;
         if (glacierState.error) return `<button class="vcs-btn vcs-btn-ghost" data-glacier-retry><i class="fa-solid fa-rotate"></i> Retry</button>`;
@@ -582,10 +596,11 @@ function javaClientsPanelBody(glacierState) {
             <div class="credits-card-icon" style="background:var(--accent-bg); color:var(--accent);"><i class="fa-brands fa-java"></i></div>
             <div class="credits-card-meta">
                 <span class="credits-card-name">Vanilla (Glacier built-in)</span>
-                <span class="credits-card-sub">Launches Mojang's Java client directly. Pick a version in the Versions panel.</span>
+                <span class="credits-card-sub">${jeSub}</span>
             </div>
             <div class="credits-card-actions">
-                <button class="vcs-btn" data-open-panel="javaversions"><i class="fa-solid fa-box-archive"></i> Versions</button>
+                ${jeActions}
+                <button class="vcs-btn vcs-btn-ghost" data-open-panel="javaversions"><i class="fa-solid fa-box-archive"></i> Versions</button>
             </div>
         </div>
         <div class="credits-card">

@@ -10,6 +10,8 @@ const Bridge = (() => {
         attemptInject: (path) => (hasNative ? native.attemptInject(path) : "No native bridge (browser preview)."),
         isJavaEditionInstalled: () => (hasNative ? native.isJavaEditionInstalled() : false),
         launchJavaEdition: () => { if (hasNative) native.launchJavaEdition(); },
+        hasBundledJavaEditionInstaller: () => (hasNative ? native.hasBundledJavaEditionInstaller() : false),
+        installJavaEditionCompanion: () => { if (hasNative) native.installJavaEditionCompanion(); },
         launchBedrock: () => { if (hasNative) native.launchBedrock(); },
         getSettingsJson: () => (hasNative ? native.getSettingsJson() : "{}"),
         saveSettingsJson: (json) => { if (hasNative) native.saveSettingsJson(json); },

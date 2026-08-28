@@ -1,4 +1,13 @@
-<!-- The actual wwwroot/images/icon.png artwork, not a redrawn placeholder. -->
-<bitmap xmlns:android="http://schemas.android.com/apk/res/android"
-    android:src="@drawable/app_icon"
-    android:gravity="center" />
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Inset so the artwork sits inside the adaptive icon's ~66dp safe zone
+     (of the 108dp canvas) instead of filling the whole canvas edge to edge,
+     which read as an oversized icon once Android's mask/scaling was applied. -->
+<inset xmlns:android="http://schemas.android.com/apk/res/android"
+    android:insetLeft="18%"
+    android:insetTop="18%"
+    android:insetRight="18%"
+    android:insetBottom="18%">
+    <bitmap
+        android:src="@drawable/app_icon"
+        android:gravity="center" />
+</inset>

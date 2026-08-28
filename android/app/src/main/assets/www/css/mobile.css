@@ -1,0 +1,48 @@
+/* Android-only layout overrides, loaded after the desktop's own app.css
+   (kept byte-for-byte elsewhere for fidelity). app.css was designed for a
+   resizable desktop window (min 500x360); a phone in forced landscape is
+   usually much shorter (~360-420px tall), so top-bar/footer/panel chrome
+   needs to shrink to leave room for actual content instead of being
+   letterboxed. Values below are scaled-down versions of app.css's own
+   numbers, not new sizes invented from scratch. */
+
+@media (max-height: 480px) {
+    .top-bar { padding: 6px 10px 0; gap: 6px; }
+    .logo-icon { width: 26px; height: 26px; }
+    .branding-title { font-size: 12px; }
+    .branding-sub { display: none; }
+    .update-pill { display: none; }
+
+    .edition-tab { padding: 4px 8px; font-size: 11px; }
+    .topbar-client-chip { padding: 4px 8px; }
+
+    .action-btn { height: 38px; font-size: 12px; }
+    .btn-sq { width: 38px; }
+
+    .footer { padding: 0 10px 8px; gap: 6px; }
+    .avatar { width: 24px; height: 24px; }
+    .username { font-size: 12px; }
+    .user-handle { font-size: 10px; }
+    .footer-right span { display: none; }
+
+    .news-strip { height: 22px; }
+
+    .panel-overlay { padding-top: 4px; }
+    .panel-header { padding: 8px 12px; }
+    .panel-title { font-size: 14px; }
+    .panel-body { padding: 10px 12px; }
+
+    .panel-tabs { padding: 4px 10px 6px; }
+    .panel-tab { height: 28px; font-size: 10px; }
+    .panel-tabs-arrow { width: 28px; height: 28px; }
+
+    .setting-row { padding: 8px 0; }
+    .client-card { padding: 10px; }
+}
+
+/* Very short (compact multitasking / older phones) - trim further. */
+@media (max-height: 360px) {
+    .recently-launched { display: none !important; }
+    .status-msg { font-size: 11px; }
+    .action-btn { height: 34px; font-size: 11px; }
+}
