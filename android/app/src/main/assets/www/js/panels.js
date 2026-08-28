@@ -84,84 +84,23 @@ function clientCardHtml({ id, name, iconHtml, statusHtml, desc, actionsHtml, err
     </div>`;
 }
 
-function selectBtn(clientName) {
-    return `<button class="icon-btn" data-tooltip="Select" data-select-client="${clientName}"><i class="fa-solid fa-check"></i></button>`;
-}
-
 function clientsPanelBody() {
-    const s = App.state.settings;
-    const sel = (name) => s.selectedClient === name;
-
-    const flarial = App.state.clients.flarial;
-    const oderso = App.state.clients.oderso;
-    const levilamina = App.state.clients.levilamina;
-
-    const dlActions = (key, c, name) => {
-        if (c.downloading) return `<div class="dl-progress-row">
-            <div class="progress-bar-wrap" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(c.progress * 100)}">
-                <div class="progress-bar-fill" style="width:${Math.round(c.progress * 100)}%"></div>
-            </div>
-            <span class="dl-pct">${Math.round(c.progress * 100)}%</span>
-        </div>`;
-        let html = "";
-        if (!sel(name) && c.downloaded) html += selectBtn(name);
-        if (!c.downloaded || !c.upToDate) {
-            html += `<button class="icon-btn" data-tooltip="${c.downloaded ? "Update" : "Download"}" data-download-client="${key}"><i class="fa-solid ${c.downloaded ? "fa-arrow-up" : "fa-download"}"></i></button>`;
-        }
-        if (c.downloaded) html += `<button class="icon-btn icon-btn-ghost" data-tooltip="Delete" data-delete-client="${key}"><i class="fa-solid fa-trash"></i></button>`;
-        return html;
-    };
-
+    // Flarial/Latite/OderSo/LeviLamina are Windows DLL-injected clients (or,
+    // for LeviLamina, a native mod loader injected the same way) — none of
+    // that has a working equivalent on stock, non-rooted Android (see
+    // ClientInjectionService.kt), so this panel only offers the one client
+    // that's actually real here: unmodified Minecraft Bedrock.
     return `
-    ${clientCardHtml({
-        id: "flarial", name: "Flarial Client",
-        iconHtml: `<img src="images/clients/flarial.svg" alt="Flarial Client" />`,
-        statusHtml: flarial.downloaded
-            ? (flarial.upToDate ? `<span class="tag-uptodate"><i class="fa-solid fa-circle-check"></i> Up to date</span>` : `<span class="tag-outdated"><i class="fa-solid fa-triangle-exclamation"></i> Update available</span>`)
-            : `<span class="client-card-note">Not downloaded</span>`,
-        desc: "Feature-rich Bedrock client with modules, HUD customization, and active development.",
-        actionsHtml: dlActions("flarial", flarial, "Flarial Client"),
-        error: flarial.error || "",
-    })}
-    ${clientCardHtml({
-        id: "latite", name: "Latite Client",
-        iconHtml: `<img src="images/clients/latite.png" alt="Latite Client" />`,
-        statusHtml: `<span class="client-card-note">Versioned GitHub releases</span>`,
-        desc: "Classic Minecraft Bedrock client. Choose a specific release from the Versions panel.",
-        actionsHtml: `${!sel("Latite Client") ? selectBtn("Latite Client") : ""}
-            <button class="icon-btn icon-btn-ghost" style="background:var(--bg-item);" data-tooltip="View Versions" data-open-panel="mcversions"><i class="fa-solid fa-clock-rotate-left"></i></button>`,
-    })}
-    ${clientCardHtml({
-        id: "oderso", name: "OderSo Client",
-        iconHtml: `<img src="images/clients/oderso.png" alt="OderSo Client" />`,
-        statusHtml: oderso.downloaded
-            ? (oderso.upToDate ? `<span class="tag-uptodate"><i class="fa-solid fa-circle-check"></i> Up to date</span>` : `<span class="tag-outdated"><i class="fa-solid fa-triangle-exclamation"></i> Update available</span>`)
-            : `<span class="client-card-note">Not downloaded</span>`,
-        desc: "OderSo Client — curated Minecraft Bedrock experience by MasonOderSo.",
-        actionsHtml: dlActions("oderso", oderso, "OderSo Client"),
-        error: oderso.error || "",
-    })}
-    ${clientCardHtml({
-        id: "levilamina", name: "LeviLamina Client",
-        iconHtml: `<i class="fa-solid fa-layer-group"></i>`,
-        statusHtml: levilamina.downloaded
-            ? (levilamina.upToDate ? `<span class="tag-uptodate"><i class="fa-solid fa-circle-check"></i> Up to date</span>` : `<span class="tag-outdated"><i class="fa-solid fa-triangle-exclamation"></i> Update available</span>`)
-            : `<span class="client-card-note">Not downloaded</span>`,
-        desc: "LeviLamina — open-source native Bedrock mod loader by LiteLDev, injected the same way as the other clients here.",
-        actionsHtml: `${levilamina.downloaded ? `<button class="icon-btn" data-tooltip="Browse LeviLamina mods" data-open-panel="levimods"><i class="fa-solid fa-puzzle-piece"></i></button>` : ""}${dlActions("levilamina", levilamina, "LeviLamina Client")}`,
-        error: levilamina.error || "",
-    })}
     ${clientCardHtml({
         id: "vanilla", name: "Vanilla",
         iconHtml: `<i class="fa-solid fa-cube" style="color:var(--green);"></i>`,
-        statusHtml: `<span class="client-card-note">Launches Minecraft with no DLL injection</span>`,
-        desc: "Pure stock Minecraft Bedrock — useful for diagnostics, multiplayer realms, or just playing un-modified.",
-        actionsHtml: !sel("Vanilla") ? selectBtn("Vanilla") : "",
+        statusHtml: `<span class="tag-uptodate"><i class="fa-solid fa-circle-check"></i> Selected</span>`,
+        desc: "Pure stock Minecraft Bedrock — the only client this app can launch on Android.",
+        actionsHtml: "",
     })}
-    <div class="drop-hint-row">
-        <i class="fa-solid fa-file-arrow-down"></i>
-        <span>Client injection needs root on Android — see Settings</span>
-        <button class="btn-sm" id="browse-mod-file" style="margin-left:auto;"><i class="fa-solid fa-folder-open"></i> Browse...</button>
+    <div class="mcv-info-bar">
+        <i class="fa-solid fa-circle-info"></i>
+        <span>Flarial, Latite, OderSo and LeviLamina all rely on Windows-style DLL injection into Minecraft's process, which Android's app sandboxing has no non-root equivalent for — see Settings for details.</span>
     </div>`;
 }
 
@@ -377,7 +316,7 @@ function addonsPanelBody() {
 const SETTINGS_CATEGORIES = (edition) => ([
     { id: "all", label: "All", icon: "fa-solid fa-layer-group" },
     edition === "bedrock"
-        ? { id: "injection", label: "Inject", icon: "fa-solid fa-syringe" }
+        ? { id: "clients", label: "Clients", icon: "fa-solid fa-puzzle-piece" }
         : { id: "java", label: "Java", icon: "fa-brands fa-java" },
     { id: "appearance", label: "Looks", icon: "fa-solid fa-palette" },
     { id: "account", label: "Account", icon: "fa-solid fa-user" },
@@ -400,15 +339,20 @@ function settingsPanelBody(category) {
     const cat = (id) => category === "all" || category === id;
     let html = "";
 
-    if (cat("injection")) {
-        html += `<div class="settings-section"><span class="panel-section-label">Injection</span>
-        ${settingRow("Active client", "", `<select class="setting-select" id="setting-active-client">
-            ${["Latite Client", "Flarial Client", "OderSo Client", "LeviLamina Client", "Vanilla"].map(c => `<option value="${c}" ${s.selectedClient === c ? "selected" : ""}>${c}</option>`).join("")}
-        </select>`)}
-        ${settingRow("Injection delay", "How long to wait after game launches before injecting",
-            `<input type="range" min="500" max="15000" step="500" id="setting-injection-delay" value="${s.injectionDelayMs}" /><span style="font-size:11px;color:var(--text-dim);">${(s.injectionDelayMs / 1000).toFixed(1)}s</span>`)}
-        ${settingRow("Auto-inject", "Inject automatically once the game process is detected", toggleHtml("autoInject", s.autoInject))}
-        ${settingRow("Close after launch", "Minimise the launcher once injection succeeds", toggleHtml("closeAfterLaunch", s.closeAfterLaunch))}
+    if (cat("clients")) {
+        html += `<div class="settings-section"><span class="panel-section-label">Clients</span>
+        ${settingRow("Active client", "Vanilla — the only client this app can launch", `<span class="client-card-note">Vanilla</span>`)}
+        ${settingRow("Close after launch", "Minimise the launcher once Minecraft starts", toggleHtml("closeAfterLaunch", s.closeAfterLaunch))}
+        </div>
+        <div class="settings-section"><span class="panel-section-label">Why no Flarial / Latite / OderSo / LeviLamina?</span>
+        <div style="padding:4px 0; font-size:12px; color:var(--text-dim); line-height:1.5;">
+            All four work by loading a native DLL into Minecraft's own process on Windows
+            (<code>CreateRemoteThread</code> + <code>LoadLibrary</code>). Android sandboxes every
+            app by UID with no supported way to load code into another app's process without
+            root, and Minecraft Bedrock for Android exposes no mod-loader hook the way the
+            Windows clients target — so there's nothing honest to wire a "select client" button
+            to here.
+        </div>
         </div>`;
     }
 
@@ -694,12 +638,43 @@ function javaVersionsPanelHtml(filter, showSnapshots, showHistorical, versions, 
 // "not signed in" branch — the desktop panel's own gate when JavaUuid is
 // empty — is also this app's true current state, not a shortcut.
 function javaProfilePanelBody() {
-    return `<div class="skin-empty">
-        <i class="fa-solid fa-user-astronaut"></i>
-        <span>Sign in with your Microsoft account to view your Minecraft profile.</span>
-        <button class="vcs-btn" disabled data-tooltip="Microsoft sign-in is queued — see android/README.md">
-            <i class="fa-brands fa-xbox"></i>&nbsp;Sign in
-        </button>
+    const s = App.state.settings;
+    const auth = App.state.msAuth;
+
+    if (auth.loading) {
+        return `<div class="skin-empty"><span class="spinner"></span><span style="margin-top:10px;">Signing in…</span></div>`;
+    }
+
+    if (!s.javaUsername) {
+        return `<div class="skin-empty">
+            <i class="fa-solid fa-user-astronaut"></i>
+            <span>Sign in with your Microsoft account to view your Minecraft profile.</span>
+            ${auth.error ? `<span class="error-text" style="max-width:280px; text-align:center;">${escapeHtml(auth.error)}</span>` : ""}
+            <button class="vcs-btn" id="profile-signin-btn">
+                <i class="fa-brands fa-xbox"></i>&nbsp;Sign in
+            </button>
+        </div>`;
+    }
+
+    return `<div class="profile-actions" style="flex-direction:column; align-items:stretch; gap:10px;">
+        <div style="display:flex; align-items:center; gap:12px;">
+            ${s.javaSkinUrl
+                ? `<img src="${escapeHtml(s.javaSkinUrl)}" style="width:48px;height:48px;image-rendering:pixelated;border-radius:8px;" alt="" />`
+                : `<i class="fa-solid fa-user-astronaut" style="font-size:32px;color:var(--accent);"></i>`}
+            <div>
+                <div style="font-weight:600;">${escapeHtml(s.javaUsername)}</div>
+                <div style="font-size:11px;color:var(--text-dim);">${escapeHtml(s.xboxGamertag || "")}${s.xboxGamerscore ? ` · ${escapeHtml(s.xboxGamerscore)}G` : ""}</div>
+            </div>
+        </div>
+        <div class="pstat">
+            <i class="fa-solid fa-fingerprint"></i>
+            <span class="pstat-k">UUID</span>
+            <span class="pstat-v">${escapeHtml((s.javaUuid || "").slice(0, 12))}…</span>
+        </div>
+        <div class="profile-actions">
+            <button class="skin-btn" data-open-panel="skinlibrary"><i class="fa-solid fa-shirt"></i> Skin library</button>
+            <button class="skin-btn skin-btn-ghost" id="profile-signout-btn"><i class="fa-solid fa-right-from-bracket"></i> Sign out</button>
+        </div>
     </div>`;
 }
 
@@ -879,71 +854,6 @@ function bareOverlayHtml(id, title, headerActions, body) {
                     <i class="fa-solid fa-chevron-down"></i>
                 </button>
             </div>
-        </div>
-        <div class="panel-body">${body}</div>
-    </div>`;
-}
-
-// ── LeviLamina Mods ────────────────────────────────────────────────────
-// Mirrors Pages/Home.razor's "levimods" panel: real registry search (same
-// LiteLDev/lipr index as LeviLaminaModsService.cs), same client-card list
-// with avatar/version/stars. Install/remove are disabled — LeviLamina
-// itself is a native Bedrock injection mod loader with no Android build
-// to install these plugins into, same limitation as ClientInjectionService.
-// Note this panel has no .panel-tabs footer on desktop either, and its
-// back button is a chevron-left (it's a sub-panel of Clients), not the
-// chevron-down every top-level panel uses.
-function levModsCardHtml(mod) {
-    return `
-    <div class="client-card" style="margin-bottom:6px;">
-        <div class="client-card-header">
-            <div class="client-card-icon" style="padding:3px; border-radius:6px; overflow:hidden;">
-                ${mod.avatarUrl
-                    ? `<img src="${escapeHtml(mod.avatarUrl)}" style="width:100%;height:100%;object-fit:cover;border-radius:4px;" alt="" />`
-                    : `<i class="fa-solid fa-puzzle-piece" style="font-size:18px; color:var(--accent);"></i>`}
-            </div>
-            <div class="client-card-meta" style="min-width:0;">
-                <span class="client-card-name" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(mod.name)}</span>
-                <span class="client-card-sub" style="display:flex; gap:8px; align-items:center;">
-                    <span style="opacity:0.6;">v${escapeHtml(mod.latestVersion)}</span>
-                    <span style="opacity:0.4;"><i class="fa-solid fa-star"></i> ${mod.stars}</span>
-                </span>
-            </div>
-            <div class="client-card-actions">
-                <button class="icon-btn" disabled data-tooltip="Needs LeviLamina running on Android — not currently possible"><i class="fa-solid fa-download"></i></button>
-            </div>
-        </div>
-        ${mod.description ? `<p class="client-card-desc">${escapeHtml(mod.description)}</p>` : ""}
-    </div>`;
-}
-
-function levModsPanelHtml(state) {
-    let body;
-    if (state.loading) {
-        body = `<div style="display:flex; align-items:center; justify-content:center; padding:30px;"><span class="spinner"></span><span style="margin-left:10px; font-size:12px; color:var(--text-dim);">Loading mods...</span></div>`;
-    } else if (state.error && state.results.length === 0) {
-        body = `<div style="padding:20px; text-align:center;"><span class="error-text">${escapeHtml(state.error)}</span><br/>
-            <button class="btn-sm" style="margin-top:10px;" data-levmods-retry><i class="fa-solid fa-rotate"></i> Retry</button></div>`;
-    } else if (state.results.length === 0) {
-        body = emptyState("No mods found", "Try a different search term.", "fa-solid fa-box-open");
-    } else {
-        body = (state.error ? `<span class="error-text" style="display:block; margin-bottom:6px;">${escapeHtml(state.error)}</span>` : "") +
-            state.results.map(levModsCardHtml).join("");
-    }
-
-    return `
-    <div class="panel-overlay" id="panel-levimods">
-        <div class="panel-handle"></div>
-        <div class="panel-header">
-            <div class="panel-title-wrap"><span class="panel-title">LeviLamina Mods</span><div class="panel-title-underline"></div></div>
-            <div class="panel-header-actions">
-                <button class="panel-icon-btn ${state.loading ? "spinning" : ""}" ${state.loading ? "disabled" : ""} data-levmods-refresh data-tooltip="Refresh"><i class="fa-solid fa-rotate"></i></button>
-                <button class="panel-back-btn" data-close-panel data-tooltip="Back"><i class="fa-solid fa-chevron-left"></i></button>
-            </div>
-        </div>
-        <div class="panel-search-wrap">
-            <i class="fa-solid fa-magnifying-glass"></i>
-            <input class="panel-search-input" id="levmods-search-input" placeholder="Search LeviLamina mods..." value="${escapeHtml(state.query)}" />
         </div>
         <div class="panel-body">${body}</div>
     </div>`;
@@ -1190,12 +1100,13 @@ function skinLibraryPanelBody(state) {
 }
 
 function skinLibraryPanelHtml(state) {
+    const signedIn = !!App.state.settings.javaUsername;
     return `<div class="panel-overlay">
         <div class="panel-handle"></div>
         <div class="panel-header">
             <div class="panel-title-wrap"><span class="panel-title">Skin Library</span><div class="panel-title-underline"></div></div>
             <div class="panel-header-actions">
-                <button class="btn-sm" disabled data-tooltip="Sign in with Microsoft (Java) first to save your current skin">
+                <button class="btn-sm" id="skinlib-save-current" ${signedIn ? "" : "disabled"} ${signedIn ? "" : `data-tooltip="Sign in with Microsoft (Java) first to save your current skin"`}>
                     <i class="fa-solid fa-floppy-disk"></i> Save current</button>
                 <button class="btn-sm" disabled data-tooltip="Needs a native file picker this app doesn't have yet">
                     <i class="fa-solid fa-upload"></i> Add PNG</button>
@@ -1203,5 +1114,126 @@ function skinLibraryPanelHtml(state) {
             </div>
         </div>
         <div class="panel-body" id="skinlib-body">${skinLibraryPanelBody(state)}</div>
+    </div>`;
+}
+
+// ── Global search ──────────────────────────────────────────────────────
+// Real markup from Pages/Home.razor's search-overlay/search-modal (the
+// Ctrl+K command palette). The full desktop list mixes in live client/
+// version/server data via BuildDynamicSearchPool() in Home.Search.cs;
+// this is the curated subset that maps to panels/actions that actually
+// exist on Android, dropping Windows-only entries (fullscreen/F11, tray,
+// wallpaper picker, folder shortcuts) and DLL-client selection (no longer
+// offered — see clientsPanelBody()).
+function searchQuickActions(edition) {
+    const common = [
+        { icon: "fa-solid fa-play", label: "Launch Game", cat: "Quick Actions", sub: "Start Minecraft", action: "launch" },
+        { icon: "fa-solid fa-gear", label: "Open Settings", cat: "Quick Actions", sub: "Appearance, account, system", panel: "settings" },
+        { icon: "fa-solid fa-cube", label: "Browse Addons", cat: "Quick Actions", sub: "CurseForge / Modrinth content", panel: "addons" },
+        { icon: "fa-solid fa-chart-simple", label: "Statistics", cat: "Navigation", sub: "Playtime and sessions", panel: "stats" },
+        { icon: "fa-solid fa-shirt", label: "Skin Library", cat: "Account", sub: "Saved skins — apply to your account", panel: "skinlibrary" },
+        { icon: "fa-solid fa-gamepad", label: "Xbox Profile", cat: "Account", sub: "Sign in with Microsoft", action: "xbox" },
+        { icon: "fa-brands fa-discord", label: "Discord Account", cat: "Account", sub: "Connect or manage Discord", action: "discord" },
+        { icon: "fa-solid fa-download", label: "Downloads", cat: "Navigation", sub: "Active and finished downloads", panel: "downloads" },
+        { icon: "fa-solid fa-palette", label: "Theme Studio", cat: "Settings", sub: "Create a fully custom theme", panel: "themestudio" },
+        { icon: "fa-solid fa-heart", label: "Credits", cat: "About", sub: "View launcher credits", panel: "credits" },
+        { icon: "fa-solid fa-newspaper", label: "News", cat: "About", sub: "Glacier news and release notes", panel: "news" },
+    ];
+    if (edition === "bedrock") {
+        return [
+            { icon: "fa-solid fa-puzzle-piece", label: "Manage Clients", cat: "Quick Actions", sub: "Vanilla — see Settings for why that's the only option", panel: "clients" },
+            { icon: "fa-solid fa-server", label: "Servers", cat: "Quick Actions", sub: "Quick-launch into saved servers", panel: "servers" },
+            { icon: "fa-solid fa-box-archive", label: "MC Versions", cat: "Quick Actions", sub: "Switch Minecraft Bedrock versions", panel: "mcversions" },
+            ...common,
+        ];
+    }
+    return [
+        { icon: "fa-brands fa-java", label: "Java Launchers", cat: "Java", sub: "Vanilla and Glacier Client", panel: "javaclients" },
+        { icon: "fa-solid fa-box-archive", label: "Java Versions", cat: "Java", sub: "Install or launch Java Edition", panel: "javaversions" },
+        { icon: "fa-solid fa-cubes", label: "Browse Modpacks", cat: "Java", sub: "Install CurseForge / Modrinth modpacks", panel: "modpacks" },
+        { icon: "fa-solid fa-file-lines", label: "Logs & Crashes", cat: "Java", sub: "View logs and crash reports", panel: "logs" },
+        { icon: "fa-solid fa-user", label: "Profile", cat: "Java", sub: "Signed-in Java account", panel: "javaprofile" },
+        { icon: "fa-solid fa-images", label: "Screenshots", cat: "Java", sub: "Screenshots taken in-game", panel: "javascreenshots" },
+        ...common,
+    ];
+}
+
+function searchResultRowHtml(r, idx, selected) {
+    return `<div class="search-result-item ${selected ? "sel" : ""}" data-search-idx="${idx}">
+        <div class="search-result-icon"><i class="${r.icon}"></i></div>
+        <div class="search-result-text">
+            <span class="search-result-label">${escapeHtml(r.label)}</span>
+            ${r.sub ? `<span class="search-result-sub">${escapeHtml(r.sub)}</span>` : ""}
+        </div>
+        <span class="search-result-enter">↵</span>
+    </div>`;
+}
+
+function searchOverlayHtml(state) {
+    const query = (state.query || "").trim().toLowerCase();
+    const all = searchQuickActions(state.edition);
+    const filtered = query
+        ? all.filter(r => r.label.toLowerCase().includes(query) || (r.sub || "").toLowerCase().includes(query))
+        : all;
+
+    let resultsHtml;
+    if (filtered.length === 0) {
+        resultsHtml = `<div class="search-no-results">No results for "<strong>${escapeHtml(state.query)}</strong>"</div>`;
+    } else {
+        const groups = [];
+        for (const r of filtered) {
+            let g = groups.find(g => g.cat === r.cat);
+            if (!g) { g = { cat: r.cat, items: [] }; groups.push(g); }
+            g.items.push(r);
+        }
+        let flatIdx = 0;
+        resultsHtml = groups.map(g => `
+            <div class="search-category">${escapeHtml(g.cat)}</div>
+            ${g.items.map(r => searchResultRowHtml(r, flatIdx, flatIdx++ === state.selIdx)).join("")}
+        `).join("");
+    }
+
+    return `<div class="search-overlay" id="search-overlay-backdrop">
+        <div class="search-modal" id="search-modal">
+            <div class="search-modal-input-row">
+                <i class="fa-solid fa-magnifying-glass"></i>
+                <input class="search-modal-input" id="search-modal-input" placeholder="Search settings, panels, account..." value="${escapeHtml(state.query)}" />
+                <span class="search-modal-esc">ESC</span>
+            </div>
+            <div class="search-results" id="search-results">${resultsHtml}</div>
+        </div>
+    </div>`;
+}
+
+// ── Notification bell ──────────────────────────────────────────────────
+// Real markup from Home.razor's .notif-bell-wrap/.notif-panel. Desktop
+// mixes in a NotificationService event log (crash detection, update
+// checks, etc.) that doesn't exist here yet, so the notifications list
+// stays honestly empty — the bell's badge count and "Downloads" section
+// are real, driven by this app's own App.state.downloads.
+function notifPanelHtml(downloads) {
+    const active = downloads.filter(d => d.status === "downloading");
+    const downloadsSection = downloads.length > 0 ? `
+        <div class="notif-panel-header">
+            <span>Downloads</span>
+            <button class="notif-clear-btn" data-open-panel="downloads">View all</button>
+        </div>
+        <div class="notif-panel-list" style="max-height:160px;">
+            ${downloads.slice(0, 5).map(d => `
+                <div class="notif-item info">
+                    <i class="fa-solid ${d.status === "downloading" ? "fa-arrow-down" : d.status === "complete" ? "fa-circle-check" : "fa-triangle-exclamation"}"></i>
+                    <div class="notif-item-body">
+                        <div class="notif-item-title" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(d.label)}</div>
+                        <div class="notif-item-msg">${d.status}${d.status === "downloading" ? ` · ${Math.round((d.progress || 0) * 100)}%` : ""}</div>
+                    </div>
+                </div>`).join("")}
+        </div>` : "";
+
+    return `<div class="notif-panel" id="notif-panel">
+        ${downloadsSection}
+        <div class="notif-panel-header"><span>Notifications</span></div>
+        <div class="notif-panel-list">
+            <div class="notif-empty"><i class="fa-regular fa-bell-slash"></i><span>No notifications</span></div>
+        </div>
     </div>`;
 }

@@ -15,6 +15,7 @@
 
     .edition-tab { padding: 4px 8px; font-size: 11px; }
     .topbar-client-chip { padding: 4px 8px; }
+    .search-trigger, .notif-bell-btn { width: 30px; height: 30px; }
 
     .action-btn { height: 38px; font-size: 12px; }
     .btn-sq { width: 38px; }

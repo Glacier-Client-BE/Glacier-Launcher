@@ -60,4 +60,38 @@ const SkinLibrary = {
         const { url, slim } = await this.resolveSkinTexture(uuid, name);
         return { name, url, slim, id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}` };
     },
+
+    // Real port of Services/SkinService.cs's UploadSkinAsync — same endpoint,
+    // same multipart shape. The desktop version reads PNG bytes off disk;
+    // this app only ever has a texture URL (Mojang's own CDN), so it fetches
+    // that URL into a Blob first instead of downloading to a local file.
+    async applySkin(mcAccessToken, textureUrl, slim) {
+        if (!mcAccessToken) return "Not signed in — sign in with Microsoft first.";
+        let blob;
+        try {
+            const imgResp = await fetch(textureUrl);
+            if (!imgResp.ok) return `Couldn't fetch the skin texture (HTTP ${imgResp.status}).`;
+            blob = await imgResp.blob();
+        } catch (e) {
+            return "Couldn't download the skin texture - try again shortly.";
+        }
+
+        const form = new FormData();
+        form.append("variant", slim ? "slim" : "classic");
+        form.append("file", blob, "skin.png");
+
+        try {
+            const resp = await fetch("https://api.minecraftservices.com/minecraft/profile/skins", {
+                method: "POST",
+                headers: { Authorization: `Bearer ${mcAccessToken}` },
+                body: form,
+            });
+            if (resp.ok) return null;
+            if (resp.status === 401) return "Your session expired - re-sign in with Microsoft.";
+            const body = await resp.text().catch(() => "");
+            return `Minecraft rejected the skin (HTTP ${resp.status})${body ? `: ${body}` : "."}`;
+        } catch (e) {
+            return "No internet connection, or Minecraft services are unreachable.";
+        }
+    },
 };

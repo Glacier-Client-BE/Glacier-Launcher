@@ -41,11 +41,19 @@
                         <i class="fa-brands fa-java"></i><span>Java</span>
                     </button>
                 </div>
-                <div class="topbar-client-chip" id="client-chip" data-tooltip="Click to cycle client">
+                <div class="topbar-client-chip" id="client-chip" data-tooltip="Active client">
                     <div class="chip-dot"></div>
                     <i class="chip-icon fa-solid fa-cube"></i>
-                    <span id="client-chip-label">Latite Client</span>
-                    <i class="fa-solid fa-chevron-right chip-arrow"></i>
+                    <span id="client-chip-label">Vanilla</span>
+                </div>
+                <button class="search-trigger" id="search-trigger-btn" data-tooltip="Search">
+                    <i class="fa-solid fa-magnifying-glass"></i>
+                </button>
+                <div class="notif-bell-wrap" id="notif-bell-wrap">
+                    <button class="notif-bell-btn" id="notif-bell-btn" data-tooltip="Notifications & downloads">
+                        <i class="fa-solid fa-bell"></i>
+                        <span class="notif-bell-badge" id="notif-bell-badge" style="display:none;"></span>
+                    </button>
                 </div>
             </div>
 
@@ -97,6 +105,9 @@
                  keyframe animation (keyed on a .panel-overlay element mounting)
                  replays every time a panel opens, same as Blazor's @if. -->
             <div id="panel-root"></div>
+
+            <!-- Global search (real markup: .search-overlay > .search-modal) -->
+            <div id="search-root"></div>
         </div>
     </div>
 
@@ -104,8 +115,8 @@
     <script src="js/curseforge.js"></script>
     <script src="js/modrinth.js"></script>
     <script src="js/javaedition.js"></script>
-    <script src="js/levilamina.js"></script>
     <script src="js/skinlibrary.js"></script>
+    <script src="js/xboxauth.js"></script>
     <script src="js/theme.js"></script>
     <script src="js/panels.js"></script>
     <script src="js/app.js"></script>

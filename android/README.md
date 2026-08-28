@@ -195,6 +195,69 @@ genuinely different environment, not because of a shortcut:
   so the artwork sits inside the mask's real safe zone instead of filling
   the whole 108dp canvas edge-to-edge, which read as oversized once Android
   applied its shape mask on the home screen.
+- **Immersive fullscreen.** `MainActivity` hides the status bar and
+  nav/gesture bar (`WindowInsetsControllerCompat`, transient-on-swipe), since
+  the app already draws its own top-bar/footer chrome and the system bars
+  were just dead space at a phone's edges. Re-hides itself whenever the
+  window regains focus (e.g. returning from the system package installer).
+
+### Removed: DLL-injected clients (Flarial / Latite / OderSo / LeviLamina)
+
+The Clients panel only offers Vanilla now. All four removed clients work by
+loading a native DLL into `Minecraft.Windows.exe`'s own process
+(`CreateRemoteThread` + `LoadLibrary`); Android sandboxes every app by UID
+with no supported way to load code into another app's process without root,
+and Minecraft Bedrock for Android exposes no mod-loader hook the way the
+Windows clients target (see `ClientInjectionService.kt`'s doc comment for
+the full explanation, now also surfaced in-app under Settings → Clients).
+Since there was no honest "select client" action left to offer for any of
+the four, the LeviLamina Mods registry browser (`levimods`, a sub-panel of
+the now-removed LeviLamina Client card) was removed along with it, and the
+old Injection settings category (active-client picker, injection delay,
+auto-inject) was replaced with a "Clients" category explaining why. They're
+still credited in the Credits panel as real, separate open-source projects
+this app doesn't ship — that's unrelated to whether this app can launch them.
+
+### Search, notifications, and sign-in
+
+- **Global search** (`js/panels.js`'s `searchOverlayHtml()`/
+  `searchQuickActions()`, tapped via the new top-bar magnifying-glass
+  button) is a curated subset of the desktop command palette
+  (`Home.Search.cs`'s `BuildDefaultSearchResults()`) — real navigation to
+  every panel that exists on Android, minus Windows-only entries (F11
+  fullscreen, tray, wallpaper picker, folder shortcuts) and DLL-client
+  selection. This also gives the News panel its first real entry point on
+  Android, since neither app has one anywhere else in the built UI.
+- **Notification bell** (`notifPanelHtml()`) is real, not decorative: its
+  badge count and Downloads section are driven by this app's own
+  `App.state.downloads`. The Notifications list itself stays honestly empty
+  — desktop's bell also surfaces a `NotificationService` event log (crash
+  detection, update checks) that doesn't exist on Android yet.
+- **Microsoft / Xbox / Minecraft sign-in is real, not stubbed.** Tapping
+  "Sign in" (footer Xbox pill, Java Profile panel, or the search palette)
+  opens a native `Dialog`+`WebView` on the same legacy Microsoft OAuth
+  authorize page desktop's `LiveAuthWindow.xaml.cs` uses (same public
+  `client_id`/scope/redirect-URI constants — these identify the
+  community-launcher OAuth flow itself, not a secret). Once the dialog's
+  WebView reaches the `oauth20_desktop.srf` redirect, the authorization
+  `code` is read straight out of the URL (no custom URL scheme needed) and
+  handed to `js/xboxauth.js`, which does the rest as real `fetch()` calls
+  exactly mirroring `LiveAuthService.cs`/`XboxProfileService.cs`: token
+  exchange → Xbox Live user auth → XSTS (both the Xbox and Minecraft
+  relying parties) → Xbox profile → `login_with_xbox` → Minecraft profile.
+  A successful sign-in populates the same settings fields as desktop
+  (`xboxGamertag`, `javaUsername`, `javaUuid`, `javaAccessToken`, …), which
+  is what unlocks Skin Library's "Save current" and "Apply" actions —
+  applying a skin POSTs the real texture to
+  `api.minecraftservices.com/minecraft/profile/skins`
+  (`SkinLibrary.applySkin()` in `js/skinlibrary.js`, mirroring
+  `SkinService.UploadSkinAsync`), fetching the texture into a `Blob` first
+  since this app only ever has a Mojang CDN URL, never local PNG bytes.
+  Same caveat as the Skin Library's Mojang lookups: these are browser
+  `fetch()` calls from the WebView's `file://` origin rather than a native
+  `HttpClient`, so a CORS restriction on any of these endpoints would
+  surface as a real, visible sign-in error rather than being silently
+  worked around.
 
 ## UI parity status
 
@@ -208,8 +271,10 @@ Launchers/Mods/Versions/Profile/Screenshots for Java), footer
 (profile/RPC toggle/Xbox/Discord row), news ticker, `clients` (all six
 cards), `servers` (saved + "Popular" suggestions), `credits`, `settings`
 (category filter + sections — Java Edition section links out to the Pojav
-companion app instead of duplicating its own settings UI), `addons`
-Bedrock branch (CurseForge search with category chips and pagination),
+companion app instead of duplicating its own settings UI), `clients`
+(Vanilla — see "Removed: DLL-injected clients" below for why that's the
+only card), `addons` Bedrock branch (CurseForge search with category
+chips and pagination),
 `mcversions` (channel tabs, filter, version rows with download/switch/
 delete actions — the desktop panel's "Install from Microsoft Store" row
 is Windows-only sideloading with no Android equivalent, since Android
@@ -276,17 +341,6 @@ figure (no session tracking exists yet, same as a fresh desktop profile);
 Logs shows the real empty-state (listing needs shared-storage wiring;
 mclo.gs sharing is a real public paste API with nothing to share until
 then).
-
-`levimods` is matched too: real search against the same public registry
-LeviLaminaModsService.cs reads (LiteLDev/lipr's `index.json` — the actual
-"lip" package manager index, same package-key parsing, same
-levilamina+mod tag filter, same latest-version resolution), rendered as
-the same client-card list with avatar/version/star-count. Install/remove
-are disabled — LeviLamina itself is a native Bedrock injection mod loader
-with no Android build to install these plugins into, the same limitation
-as `ClientInjectionService`. Matches the desktop panel's own quirks too:
-no `.panel-tabs` footer, and a chevron-left back button (it's a sub-panel
-of Clients) instead of the chevron-down every top-level panel uses.
 
 `modpacks` is matched too: real CurseForge/Modrinth modpack search (reusing
 the same clients the Addons panel already uses) with source tabs, the same

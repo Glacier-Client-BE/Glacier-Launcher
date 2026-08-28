@@ -12,6 +12,7 @@ const Bridge = (() => {
         launchJavaEdition: () => { if (hasNative) native.launchJavaEdition(); },
         hasBundledJavaEditionInstaller: () => (hasNative ? native.hasBundledJavaEditionInstaller() : false),
         installJavaEditionCompanion: () => { if (hasNative) native.installJavaEditionCompanion(); },
+        signInMicrosoft: hasNative ? () => native.signInMicrosoft() : null,
         launchBedrock: () => { if (hasNative) native.launchBedrock(); },
         getSettingsJson: () => (hasNative ? native.getSettingsJson() : "{}"),
         saveSettingsJson: (json) => { if (hasNative) native.saveSettingsJson(json); },

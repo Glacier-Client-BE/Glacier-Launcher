@@ -3,11 +3,9 @@
 // (currentView string, OpenXxx() methods) translated to plain JS.
 
 const DEFAULT_SETTINGS = {
-    selectedClient: "Latite Client",
+    selectedClient: "Vanilla",
     discordRichPresence: true,
     username: "",
-    autoInject: false,
-    injectionDelayMs: 2000,
     closeAfterLaunch: false,
     accentColor: "#7289da",
     themePreset: "dark",
@@ -17,6 +15,14 @@ const DEFAULT_SETTINGS = {
     recentlyLaunched: [],
     checkUpdatesOnStartup: true,
     xboxGamertag: "",
+    xboxXuid: "",
+    xboxGamerPictureUrl: "",
+    xboxGamerscore: "",
+    xboxAccountTier: "",
+    javaUsername: "",
+    javaUuid: "",
+    javaAccessToken: "",
+    javaSkinUrl: "",
     profileDisplayMode: "auto",
     savedServers: [],
     curseForgeApiKeyOverride: "",
@@ -27,11 +33,6 @@ const App = {
     state: {
         edition: "bedrock", // "bedrock" | "java" — real toggle from Home.razor's .edition-switcher
         settings: { ...DEFAULT_SETTINGS },
-        clients: {
-            flarial: { downloaded: false, downloading: false, upToDate: true, progress: 0, error: "" },
-            oderso: { downloaded: false, downloading: false, upToDate: true, progress: 0, error: "" },
-            levilamina: { downloaded: false, downloading: false, upToDate: true, progress: 0, error: "" },
-        },
         openPanel: null,
         javaInstalled: false,
         cfCategory: null,
@@ -47,7 +48,6 @@ const App = {
         glacier: { loading: false, latest: null, error: null },
         javaVersions: { list: [], loading: false, error: null, filter: "", showSnapshots: false, showHistorical: false },
         downloads: [], // session-scoped, see downloadRowHtml()/downloadsPanelHtml() in panels.js
-        levMods: { query: "", results: [], loading: false, error: null, hasSearched: false },
         modpacks: { source: "mr", query: "", results: [], searching: false, searched: false, error: null },
         themes: [], // loaded from localStorage on init — see loadThemes()/saveThemes()
         selectedThemeId: null,
@@ -55,6 +55,7 @@ const App = {
         // URLs (stable, signed by Mojang's CDN) are kept in localStorage
         // instead of downloaded PNG bytes. See loadSkins()/saveSkins().
         skinLibrary: { skins: [], username: "", busy: false, error: null },
+        msAuth: { loading: false, error: null },
         news: {
             loading: false, posts: [], releases: [],
             fallbackItems: [
@@ -74,6 +75,7 @@ const App = {
         this.renderHome();
         this.renderFooter();
         this.renderNews();
+        this.updateNotifBadge();
         this.bindGlobalEvents();
 
         const active = this.state.themes.find(t => t.id === this.state.settings.activeThemeId);
@@ -118,6 +120,27 @@ const App = {
             sl.error = e.message;
         }
         sl.busy = false;
+        this.renderSkinLibraryBody();
+    },
+
+    async applySkinFromLibrary(skin, slim) {
+        const sl = this.state.skinLibrary;
+        if (!this.state.settings.javaAccessToken) {
+            sl.error = "Sign in with Microsoft (Java) first to apply skins.";
+            this.renderSkinLibraryBody();
+            return;
+        }
+        sl.busy = true; sl.error = null;
+        this.renderSkinLibraryBody();
+        const error = await SkinLibrary.applySkin(this.state.settings.javaAccessToken, skin.url, slim);
+        sl.busy = false;
+        if (error) {
+            sl.error = error;
+        } else {
+            this.state.settings.javaSkinUrl = skin.url;
+            this.saveSettings();
+            this.renderFooter();
+        }
         this.renderSkinLibraryBody();
     },
 
@@ -211,6 +234,98 @@ const App = {
         }
     },
 
+    async signInWithMicrosoft() {
+        if (this.state.msAuth.loading) return;
+        this.state.msAuth.loading = true;
+        this.state.msAuth.error = null;
+        this.renderFooter();
+        if (this.state.openPanel === "javaprofile") this.openPanel("javaprofile");
+        try {
+            const { profile, mcProfile, mcAccessToken } = await MicrosoftAuth.begin();
+            const s = this.state.settings;
+            s.xboxGamertag = profile.gamertag;
+            s.xboxXuid = profile.xuid;
+            s.xboxGamerPictureUrl = profile.gamerPictureUrl;
+            s.xboxGamerscore = profile.gamerscore;
+            s.xboxAccountTier = profile.accountTier;
+            if (mcProfile) {
+                s.javaUsername = mcProfile.name;
+                s.javaUuid = mcProfile.uuid;
+                s.javaAccessToken = mcAccessToken || "";
+                s.javaSkinUrl = mcProfile.skinUrl || "";
+            }
+            this.saveSettings();
+        } catch (e) {
+            this.state.msAuth.error = e.message;
+        }
+        this.state.msAuth.loading = false;
+        this.renderFooter();
+        if (this.state.openPanel === "javaprofile") this.openPanel("javaprofile");
+    },
+
+    signOutMicrosoft() {
+        const s = this.state.settings;
+        s.xboxGamertag = ""; s.xboxXuid = ""; s.xboxGamerPictureUrl = ""; s.xboxGamerscore = ""; s.xboxAccountTier = "";
+        s.javaUsername = ""; s.javaUuid = ""; s.javaAccessToken = ""; s.javaSkinUrl = "";
+        this.saveSettings();
+        this.renderFooter();
+        if (this.state.openPanel === "javaprofile") this.openPanel("javaprofile");
+    },
+
+    // ── Global search (real markup: .search-overlay/.search-modal) ──────
+    openSearch() {
+        this.state.search = { query: "", selIdx: 0, edition: this.state.edition };
+        this._searchResultsCache = searchQuickActions(this.state.edition);
+        document.getElementById("search-root").innerHTML = searchOverlayHtml(this.state.search);
+        setTimeout(() => document.getElementById("search-modal-input")?.focus(), 0);
+    },
+
+    closeSearch() {
+        this.state.search = null;
+        document.getElementById("search-root").innerHTML = "";
+    },
+
+    renderSearch() {
+        if (!this.state.search) return;
+        document.getElementById("search-root").innerHTML = searchOverlayHtml(this.state.search);
+        document.getElementById("search-modal-input")?.focus();
+    },
+
+    _filteredSearchResults() {
+        const q = (this.state.search?.query || "").trim().toLowerCase();
+        const all = searchQuickActions(this.state.search?.edition || this.state.edition);
+        return q ? all.filter(r => r.label.toLowerCase().includes(q) || (r.sub || "").toLowerCase().includes(q)) : all;
+    },
+
+    activateSearchResult(idx) {
+        const r = this._filteredSearchResults()[idx];
+        if (!r) return;
+        this.closeSearch();
+        if (r.panel) this.openPanel(r.panel);
+        else if (r.action === "launch") { if (this.state.edition === "bedrock") Bridge.launchBedrock(); else Bridge.launchJavaEdition(); }
+        else if (r.action === "xbox") { if (this.state.settings.xboxGamertag) this.signOutMicrosoft(); else this.signInWithMicrosoft(); }
+        else if (r.action === "discord") Bridge.openUrl("https://discord.com/login");
+    },
+
+    // ── Notifications bell (real markup: .notif-bell-wrap/.notif-panel) ──
+    toggleNotifPanel() {
+        const wrap = document.getElementById("notif-bell-wrap");
+        const existing = document.getElementById("notif-panel");
+        if (existing) { existing.remove(); return; }
+        wrap.insertAdjacentHTML("beforeend", notifPanelHtml(this.state.downloads));
+    },
+
+    closeNotifPanel() {
+        document.getElementById("notif-panel")?.remove();
+    },
+
+    updateNotifBadge() {
+        const badge = document.getElementById("notif-bell-badge");
+        const count = this.state.downloads.filter(d => d.status === "downloading").length;
+        badge.style.display = count > 0 ? "" : "none";
+        badge.textContent = count > 9 ? "9+" : String(count);
+    },
+
     renderNews() {
         const items = [
             { icon: "fa-solid fa-snowflake", title: "Glacier Launcher", subtitle: "now on Android", url: "https://glacierclient.xyz" },
@@ -287,11 +402,6 @@ const App = {
             // not routed through panelShell(), which always appends one.
             case "stats": html = bareOverlayHtml("stats", "Statistics", "", statsPanelBody(this.state.settings.totalPlaytimeSeconds || 0)); break;
             case "logs": html = bareOverlayHtml("logs", "Logs & Crashes", `<button class="btn-sm" data-tooltip="Refresh"><i class="fa-solid fa-rotate"></i> Refresh</button>`, logsPanelBody()); break;
-            case "levimods": {
-                html = levModsPanelHtml(this.state.levMods);
-                if (!this.state.levMods.hasSearched && !this.state.levMods.loading) this.loadLevMods();
-                break;
-            }
             case "skinlibrary": {
                 if (this.state.skinLibrary.skins.length === 0) this.loadSkins();
                 html = skinLibraryPanelHtml(this.state.skinLibrary);
@@ -352,8 +462,6 @@ const App = {
             this.saveSettings();
             this.openPanel("settings");
         }));
-        const activeClientSel = document.getElementById("setting-active-client");
-        if (activeClientSel) activeClientSel.addEventListener("change", (e) => { s.selectedClient = e.target.value; this.saveSettings(); this.renderTopBar(); });
         const usernameInput = document.getElementById("setting-username");
         if (usernameInput) usernameInput.addEventListener("change", (e) => { s.username = e.target.value; this.saveSettings(); this.renderFooter(); });
         const cfKeyInput = document.getElementById("setting-cf-key");
@@ -505,20 +613,6 @@ const App = {
         if (this.state.openPanel === "news") this.openPanel("news");
     },
 
-    async loadLevMods() {
-        this.state.levMods.loading = true;
-        this.state.levMods.error = null;
-        if (this.state.openPanel === "levimods") this.openPanel("levimods");
-        try {
-            this.state.levMods.results = await LeviLaminaMods.search(this.state.levMods.query);
-        } catch (e) {
-            this.state.levMods.error = `Failed to load registry: ${e.message}`;
-        }
-        this.state.levMods.loading = false;
-        this.state.levMods.hasSearched = true;
-        if (this.state.openPanel === "levimods") this.openPanel("levimods");
-    },
-
     async searchModpacks() {
         const m = this.state.modpacks;
         m.searching = true;
@@ -560,9 +654,30 @@ const App = {
             this.renderFooter();
         });
 
+        document.getElementById("search-trigger-btn").addEventListener("click", () => this.openSearch());
+        document.getElementById("notif-bell-btn").addEventListener("click", () => this.toggleNotifPanel());
+
         document.body.addEventListener("click", (e) => {
             const openBtn = e.target.closest("[data-open-panel]");
             if (openBtn) { this.openPanel(openBtn.dataset.openPanel); return; }
+
+            if (e.target.closest("#profile-signin-btn")) { this.signInWithMicrosoft(); return; }
+            if (e.target.closest("#profile-signout-btn")) { this.signOutMicrosoft(); return; }
+            if (e.target.closest("#xbox-connect-btn")) {
+                if (this.state.settings.xboxGamertag) this.signOutMicrosoft();
+                else this.signInWithMicrosoft();
+                return;
+            }
+            if (e.target.closest("#discord-connect-btn")) {
+                Bridge.openUrl("https://discord.com/login");
+                return;
+            }
+
+            if (e.target.closest("#search-overlay-backdrop") && !e.target.closest(".search-modal")) { this.closeSearch(); return; }
+            const searchResult = e.target.closest("[data-search-idx]");
+            if (searchResult) { this.activateSearchResult(Number(searchResult.dataset.searchIdx)); return; }
+
+            if (!e.target.closest("#notif-bell-wrap")) this.closeNotifPanel();
 
             const closeBtn = e.target.closest("[data-close-panel]");
             if (closeBtn) { this.closePanel(); return; }
@@ -572,38 +687,6 @@ const App = {
                 if (this.state.edition === "bedrock") Bridge.launchBedrock(); else Bridge.launchJavaEdition();
                 return;
             }
-
-            const selectClient = e.target.closest("[data-select-client]");
-            if (selectClient) {
-                this.state.settings.selectedClient = selectClient.dataset.selectClient;
-                this.saveSettings();
-                this.renderTopBar();
-                this.openPanel("clients");
-                return;
-            }
-
-            const dlBtn = e.target.closest("[data-download-client]");
-            if (dlBtn) {
-                const key = dlBtn.dataset.downloadClient;
-                this.state.clients[key].downloading = true;
-                this.state.clients[key].progress = 0;
-                const downloadId = `client-${key}-${Date.now()}`;
-                const clientLabels = { flarial: "Flarial Client", oderso: "OderSo Client", levilamina: "LeviLamina Client" };
-                this.state.downloads = [{ id: downloadId, label: clientLabels[key] || key, status: "downloading", progress: 0 }, ...this.state.downloads];
-                this.openPanel("clients");
-                setTimeout(() => {
-                    this.state.clients[key].downloading = false;
-                    this.state.clients[key].downloaded = true;
-                    this.state.clients[key].upToDate = true;
-                    this.state.downloads = this.state.downloads.map(d => d.id === downloadId ? { ...d, status: "complete", progress: 1 } : d);
-                    if (this.state.openPanel === "clients") this.openPanel("clients");
-                    if (this.state.openPanel === "downloads") this.openPanel("downloads");
-                }, 800);
-                return;
-            }
-
-            const delBtn = e.target.closest("[data-delete-client]");
-            if (delBtn) { this.state.clients[delBtn.dataset.deleteClient].downloaded = false; this.openPanel("clients"); return; }
 
             const urlBtn = e.target.closest("[data-open-url]");
             if (urlBtn) { Bridge.openUrl(urlBtn.dataset.openUrl); return; }
@@ -677,11 +760,19 @@ const App = {
             if (e.target.closest("[data-refresh-news]")) { this.loadNews(); return; }
 
             if (e.target.closest("#skinlib-add-btn")) { this.addSkinFromUsername(); return; }
+            if (e.target.closest("#skinlib-save-current")) {
+                if (this.state.settings.javaUsername) {
+                    this.state.skinLibrary.username = this.state.settings.javaUsername;
+                    this.addSkinFromUsername();
+                }
+                return;
+            }
             const slApply = e.target.closest("[data-skinlib-apply]");
             const slApplyAlt = e.target.closest("[data-skinlib-apply-alt]");
             if (slApply || slApplyAlt) {
-                this.state.skinLibrary.error = "Sign in with Microsoft (Java) first to apply skins.";
-                this.renderSkinLibraryBody();
+                const id = (slApply || slApplyAlt).dataset.skinlibApply || (slApply || slApplyAlt).dataset.skinlibApplyAlt;
+                const skin = this.state.skinLibrary.skins.find(s => s.id === id);
+                if (skin) this.applySkinFromLibrary(skin, slApplyAlt ? !skin.slim : skin.slim);
                 return;
             }
             const slDelete = e.target.closest("[data-skinlib-delete]");
@@ -702,13 +793,6 @@ const App = {
             if (e.target.closest("[data-clear-finished-downloads]")) {
                 this.state.downloads = this.state.downloads.filter(d => d.status === "downloading");
                 this.openPanel("downloads");
-                return;
-            }
-
-            if (e.target.closest("[data-levmods-refresh]") || e.target.closest("[data-levmods-retry]")) {
-                this.state.levMods.results = [];
-                LeviLaminaMods._cache = null;
-                this.loadLevMods();
                 return;
             }
 
@@ -818,7 +902,6 @@ const App = {
         let mrDebounce;
         let mcvFilterDebounce;
         let javaVersionFilterDebounce;
-        let levModsFilterDebounce;
         let themeSaveDebounce;
         document.body.addEventListener("keydown", (e) => {
             if (e.target.id === "modpack-search-input" && e.key === "Enter") {
@@ -829,11 +912,31 @@ const App = {
                 this.state.skinLibrary.username = e.target.value;
                 this.addSkinFromUsername();
             }
+            if (this.state.search) {
+                if (e.key === "Escape") { this.closeSearch(); return; }
+                const results = this._filteredSearchResults();
+                if (e.key === "ArrowDown") {
+                    e.preventDefault();
+                    this.state.search.selIdx = Math.min(results.length - 1, this.state.search.selIdx + 1);
+                    this.renderSearch();
+                } else if (e.key === "ArrowUp") {
+                    e.preventDefault();
+                    this.state.search.selIdx = Math.max(0, this.state.search.selIdx - 1);
+                    this.renderSearch();
+                } else if (e.key === "Enter" && e.target.id === "search-modal-input") {
+                    this.activateSearchResult(this.state.search.selIdx);
+                }
+            }
         });
 
         document.body.addEventListener("input", (e) => {
             if (e.target.id === "skinlib-username-input") {
                 this.state.skinLibrary.username = e.target.value;
+            }
+            if (e.target.id === "search-modal-input") {
+                this.state.search.query = e.target.value;
+                this.state.search.selIdx = 0;
+                this.renderSearch();
             }
             if (e.target.id === "cf-search-input") {
                 clearTimeout(cfDebounce);
@@ -851,15 +954,6 @@ const App = {
                     this.openPanel("javaversions");
                     document.getElementById("java-version-filter-input")?.focus();
                 }, 250);
-            }
-            if (e.target.id === "levmods-search-input") {
-                clearTimeout(levModsFilterDebounce);
-                const value = e.target.value;
-                levModsFilterDebounce = setTimeout(() => {
-                    this.state.levMods.query = value;
-                    this.loadLevMods();
-                    document.getElementById("levmods-search-input")?.focus();
-                }, 300);
             }
             if (e.target.id === "mcv-filter-input") {
                 clearTimeout(mcvFilterDebounce);
