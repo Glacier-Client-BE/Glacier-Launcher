@@ -32,3 +32,23 @@ const GlacierClient = {
         return res.json(); // { latestRelease, versions: [{id, name, tag, url, sha256, fabric, forge, changelog}] }
     },
 };
+
+// Mirrors NewsService.cs / AutoUpdateService.cs — same public endpoints,
+// no auth needed for either.
+const NewsFeed = {
+    NEWS_URL: "https://glacierclient.xyz/news.json",
+    RELEASES_URL: "https://api.github.com/repos/Glacier-Client-BE/Glacier-Launcher/releases?per_page=12",
+
+    async fetchPosts() {
+        const res = await fetch(this.NEWS_URL);
+        if (!res.ok) throw new Error(`news.json returned ${res.status}`);
+        return res.json(); // [{title, subtitle, url, icon}]
+    },
+
+    async fetchReleases() {
+        const res = await fetch(this.RELEASES_URL);
+        if (!res.ok) throw new Error(`GitHub releases returned ${res.status}`);
+        const data = await res.json();
+        return data.map(r => ({ tag: r.tag_name, publishedAt: r.published_at, body: r.body || "" }));
+    },
+};

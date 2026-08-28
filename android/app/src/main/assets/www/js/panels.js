@@ -669,3 +669,92 @@ function javaVersionsPanelHtml(filter, showSnapshots, showHistorical, versions, 
         ${renderPanelTabs("javaversions")}
     </div>`;
 }
+
+// ── Java Profile ───────────────────────────────────────────────────────
+// Mirrors Pages/Home.razor's "javaprofile" panel. The full signed-in view
+// (SkinViewer 3D preview, cape wardrobe, playtime stats) needs a real
+// Microsoft/Xbox sign-in this app doesn't have wired yet, so the honest
+// "not signed in" branch — the desktop panel's own gate when JavaUuid is
+// empty — is also this app's true current state, not a shortcut.
+function javaProfilePanelBody() {
+    return `<div class="skin-empty">
+        <i class="fa-solid fa-user-astronaut"></i>
+        <span>Sign in with your Microsoft account to view your Minecraft profile.</span>
+        <button class="vcs-btn" disabled data-tooltip="Microsoft sign-in is queued — see android/README.md">
+            <i class="fa-brands fa-xbox"></i>&nbsp;Sign in
+        </button>
+    </div>`;
+}
+
+// ── Java Screenshots ──────────────────────────────────────────────────────
+function javaScreenshotsPanelBody() {
+    return emptyState("No screenshots yet", "Press F2 in-game to capture one — they'll show up here once wired to shared storage.", "fa-solid fa-image");
+}
+
+// ── News & Updates ─────────────────────────────────────────────────────
+// Real data: GitHub's public releases API for this repo (same as
+// AutoUpdateService.cs) and the Glacier news feed (same as
+// NewsService.cs) — both plain public HTTP, no auth needed.
+const NEWS_PANEL_TABS = [
+    { id: "settings", label: "Settings", icon: "fa-solid fa-gear" },
+    { id: "home", label: "Home", icon: "fa-solid fa-house" },
+    { id: "news", label: "News", icon: "fa-solid fa-newspaper" },
+    { id: "credits", label: "Credits", icon: "fa-solid fa-heart" },
+];
+
+function escapeHtml(text) {
+    const div = document.createElement("div");
+    div.textContent = text ?? "";
+    // innerHTML only escapes &, <, > (safe for text nodes) — also escape quotes
+    // since callers interpolate this into HTML attributes too.
+    return div.innerHTML.replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
+
+function newsRowHtml(item) {
+    return `
+    <div class="news-row" data-open-url="${escapeHtml(item.url || "")}">
+        <div class="news-icon"><i class="${item.icon || "fa-solid fa-newspaper"}"></i></div>
+        <div class="news-meta">
+            <span class="news-title">${escapeHtml(item.title)}</span>
+            <span class="news-sub">${escapeHtml(item.subtitle || "")}</span>
+        </div>
+        ${item.url ? `<i class="fa-solid fa-arrow-up-right-from-square news-ext"></i>` : ""}
+    </div>`;
+}
+
+function newsPanelHtml(state) {
+    let body;
+    if (state.loading) {
+        body = `<div class="versions-loading"><span class="spinner"></span><span>Loading news…</span></div>`;
+    } else {
+        const posts = state.posts.length > 0 ? state.posts : state.fallbackItems;
+        body = `<span class="panel-section-label">Latest</span>${posts.map(newsRowHtml).join("")}`;
+        body += state.releases.length > 0
+            ? `<span class="panel-section-label">Changelog</span>${state.releases.map(r => `
+                <div class="changelog-entry">
+                    <div class="changelog-head">
+                        <span class="changelog-tag">${r.tag}</span>
+                        ${r.publishedAt ? `<span class="changelog-date">${new Date(r.publishedAt).toLocaleDateString()}</span>` : ""}
+                    </div>
+                    <div class="changelog-body">${escapeHtml(r.body).replace(/\n/g, "<br>")}</div>
+                </div>`).join("")}`
+            : `<div class="cache-notice"><i class="fa-solid fa-circle-info"></i><span>No release notes available (offline or rate-limited).</span></div>`;
+    }
+
+    return `
+    <div class="panel-overlay" id="panel-news">
+        <div class="panel-handle"></div>
+        <div class="panel-header">
+            <div class="panel-title-wrap"><span class="panel-title">News & Updates</span><div class="panel-title-underline"></div></div>
+            <div class="panel-header-actions">
+                <button class="panel-icon-btn ${state.loading ? "spinning" : ""}" ${state.loading ? "disabled" : ""} data-refresh-news data-tooltip="Refresh"><i class="fa-solid fa-rotate"></i></button>
+                <button class="panel-back-btn" data-close-panel data-tooltip="Back"><i class="fa-solid fa-chevron-down"></i></button>
+            </div>
+        </div>
+        <div class="panel-body">${body}</div>
+        <div class="panel-tabs">${NEWS_PANEL_TABS.map(t => `
+            <button class="panel-tab ${t.id === "news" ? "active" : ""}" ${t.id === "home" ? "data-close-panel" : `data-open-panel="${t.id}"`}>
+                <i class="${t.icon}"></i>${t.label}
+            </button>`).join("")}</div>
+    </div>`;
+}

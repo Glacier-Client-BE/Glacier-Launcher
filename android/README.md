@@ -179,7 +179,19 @@ The Java-edition panel-tabs bar (`JAVA_PANEL_TABS` in `panels.js`, mirrors
 `JavaTabs()` in `Home.BigFeatures.cs`) is also now used for every Java
 panel instead of the Bedrock tab set.
 
-**Not yet started:** `javaprofile` (skin management, Microsoft account
-sign-in), `javascreenshots`, `downloads`, `news` panel (the ticker exists,
-the dedicated panel doesn't), `themestudio`, `modpacks`, `stats`, `logs`,
-`skinlibrary`, `levimods`.
+`javaprofile` honestly shows the desktop panel's own "not signed in"
+branch (`.skin-empty`) — Microsoft/Xbox sign-in isn't wired on Android
+yet, so that's this app's true current state, not a shortcut around the
+full skin-viewer/cape-wardrobe view. `javascreenshots` has the real
+empty-state copy, listing queued (needs shared-storage wiring). `news`
+pulls real data — the Glacier news feed and this repo's public GitHub
+releases (`js/javaedition.js`'s `NewsFeed`, same endpoints as
+`NewsService.cs`/`AutoUpdateService.cs`, no auth needed) — with its own
+distinct 4-tab bar (Settings/Home/News/Credits) matching the desktop
+panel exactly. Note: like the desktop app, nothing in the built UI
+currently opens this panel (it's reachable there via the command-palette
+search this app hasn't built) — it exists and renders correctly, just
+needs an entry point once a command palette or similar exists.
+
+**Not yet started:** `downloads`, `themestudio`, `modpacks`, `stats`,
+`logs`, `skinlibrary`, `levimods`.

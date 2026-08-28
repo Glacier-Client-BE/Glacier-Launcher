@@ -45,6 +45,13 @@ const App = {
         mrTotalCount: 0,
         glacier: { loading: false, latest: null, error: null },
         javaVersions: { list: [], loading: false, error: null, filter: "", showSnapshots: false, showHistorical: false },
+        news: {
+            loading: false, posts: [], releases: [],
+            fallbackItems: [
+                { icon: "fa-solid fa-snowflake", title: "Glacier Launcher", subtitle: "now on Android", url: "https://glacierclient.xyz" },
+                { icon: "fa-brands fa-github", title: "Open source", subtitle: "contributions welcome", url: "https://github.com/Glacier-Client-BE/Glacier-Launcher" },
+            ],
+        },
     },
 
     init() {
@@ -202,8 +209,13 @@ const App = {
                 if (jv.list.length === 0 && !jv.loading) this.loadJavaVersions();
                 break;
             }
-            case "javaprofile": html = panelShell({ id, title: "Profile", body: emptyState("Java profile", "Skin management and Microsoft account sign-in are queued — see android/README.md."), activeTabId: id }); break;
-            case "javascreenshots": html = panelShell({ id, title: "Photos", body: emptyState("No screenshots yet", "Reads from the Java Edition companion app's shared storage once wired."), activeTabId: id }); break;
+            case "javaprofile": html = panelShell({ id, title: "Profile", body: javaProfilePanelBody(), activeTabId: id }); break;
+            case "javascreenshots": html = panelShell({ id, title: "Screenshots", headerActions: `<button class="panel-icon-btn" data-tooltip="Refresh"><i class="fa-solid fa-rotate"></i></button>`, body: javaScreenshotsPanelBody(), activeTabId: id }); break;
+            case "news": {
+                html = newsPanelHtml(this.state.news);
+                if (this.state.news.posts.length === 0 && this.state.news.releases.length === 0 && !this.state.news.loading) this.loadNews();
+                break;
+            }
             default: html = panelShell({ id, title: id, body: emptyState("Coming soon", "This panel is queued — see android/README.md's status list."), activeTabId: id });
         }
         root.innerHTML = html;
@@ -386,6 +398,16 @@ const App = {
         if (this.state.openPanel === "javaversions") this.openPanel("javaversions");
     },
 
+    async loadNews() {
+        this.state.news.loading = true;
+        if (this.state.openPanel === "news") this.openPanel("news");
+        const [postsResult, releasesResult] = await Promise.allSettled([NewsFeed.fetchPosts(), NewsFeed.fetchReleases()]);
+        this.state.news.posts = postsResult.status === "fulfilled" ? postsResult.value : [];
+        this.state.news.releases = releasesResult.status === "fulfilled" ? releasesResult.value : [];
+        this.state.news.loading = false;
+        if (this.state.openPanel === "news") this.openPanel("news");
+    },
+
     closePanel() {
         this.state.openPanel = null;
         document.getElementById("main-content").classList.remove("panel-open");
@@ -510,6 +532,7 @@ const App = {
                 return;
             }
             if (e.target.closest("[data-refresh-java-versions]")) { this.state.javaVersions.list = []; this.loadJavaVersions(); return; }
+            if (e.target.closest("[data-refresh-news]")) { this.loadNews(); return; }
         });
 
         let cfDebounce;
