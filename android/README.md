@@ -199,5 +199,15 @@ panel's progress bars, with the real empty-state, clear-finished action,
 and its own distinct 4-tab bar (Settings/Home/Downloads/Credits) matching
 the desktop panel.
 
-**Not yet started:** `themestudio`, `modpacks`, `stats`, `logs`,
-`skinlibrary`, `levimods`.
+`stats` and `logs` are matched too (`Components/StatsPanel.razor` and
+`LogsPanel.razor` — note neither has a `.panel-tabs` footer on desktop
+either, so these route through a bare overlay shell instead of
+`panelShell()`). Stats shows the honest zero/empty state for every
+figure (no session tracking exists yet, same as a fresh desktop profile);
+Logs shows the real empty-state (listing needs shared-storage wiring;
+mclo.gs sharing is a real public paste API with nothing to share until
+then).
+
+**Not yet started:** `themestudio`, `modpacks`, `skinlibrary` (all three
+need a live theme preview / 3D skin canvas via `skinview3d.js`, a
+meaningfully larger chunk than the panels so far), `levimods`.

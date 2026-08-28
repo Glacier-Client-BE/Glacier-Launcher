@@ -812,3 +812,57 @@ function downloadsPanelHtml(downloads) {
             </button>`).join("")}</div>
     </div>`;
 }
+
+// ── Statistics ─────────────────────────────────────────────────────────
+// Mirrors Components/StatsPanel.razor. This app doesn't track play
+// sessions yet (no launch-time hooks — see JavaEditionBridge), so every
+// figure is the honest zero/empty state rather than a fabricated number:
+// same as the desktop panel shows on a completely fresh profile.
+function statsPanelBody(totalPlaytimeSeconds) {
+    const formatH = (seconds) => {
+        if (seconds <= 0) return "0m";
+        const h = Math.floor(seconds / 3600);
+        const m = Math.floor((seconds % 3600) / 60);
+        return h > 0 ? (m > 0 ? `${h}h ${m}m` : `${h}h`) : `${m}m`;
+    };
+    return `
+    <div class="stats-cards">
+        <div class="stats-card"><i class="fa-solid fa-stopwatch"></i><span class="stats-val">${formatH(totalPlaytimeSeconds)}</span><span class="stats-label">Total playtime</span></div>
+        <div class="stats-card"><i class="fa-solid fa-gamepad"></i><span class="stats-val">0</span><span class="stats-label">Sessions</span></div>
+        <div class="stats-card"><i class="fa-solid fa-trophy"></i><span class="stats-val">0m</span><span class="stats-label">Longest session</span></div>
+        <div class="stats-card"><i class="fa-solid fa-calendar-day"></i><span class="stats-val">—</span><span class="stats-label">Last played</span></div>
+    </div>
+    <span class="panel-section-label">Last 14 days</span>
+    <div class="stats-empty">No play sessions recorded yet — launch the game to start tracking.</div>`;
+}
+
+// ── Logs & Crashes ─────────────────────────────────────────────────────
+// Mirrors Components/LogsPanel.razor. Listing real log/crash files needs
+// Storage Access Framework wiring to the Java Edition companion app's
+// shared storage (queued); mclo.gs sharing (a real public paste API) has
+// nothing to share until then.
+function logsPanelBody() {
+    return `<div class="stats-empty">No logs or crash reports found for the active instance yet.</div>`;
+}
+
+// Overlay shell for panels that have no .panel-tabs footer on desktop
+// (StatsPanel.razor, LogsPanel.razor) — panelShell() always appends one.
+function bareOverlayHtml(id, title, headerActions, body) {
+    return `
+    <div class="panel-overlay" id="panel-${id}">
+        <div class="panel-handle"></div>
+        <div class="panel-header">
+            <div class="panel-title-wrap">
+                <span class="panel-title">${title}</span>
+                <div class="panel-title-underline"></div>
+            </div>
+            <div class="panel-header-actions">
+                ${headerActions}
+                <button class="panel-back-btn" data-close-panel data-tooltip="Back">
+                    <i class="fa-solid fa-chevron-down"></i>
+                </button>
+            </div>
+        </div>
+        <div class="panel-body">${body}</div>
+    </div>`;
+}

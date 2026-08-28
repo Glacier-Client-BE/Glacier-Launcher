@@ -218,6 +218,11 @@ const App = {
                 break;
             }
             case "downloads": html = downloadsPanelHtml(this.state.downloads); break;
+            // Stats/Logs are standalone overlay components on desktop (Components/
+            // StatsPanel.razor, LogsPanel.razor) with no .panel-tabs footer at all —
+            // not routed through panelShell(), which always appends one.
+            case "stats": html = bareOverlayHtml("stats", "Statistics", "", statsPanelBody(this.state.settings.totalPlaytimeSeconds || 0)); break;
+            case "logs": html = bareOverlayHtml("logs", "Logs & Crashes", `<button class="btn-sm" data-tooltip="Refresh"><i class="fa-solid fa-rotate"></i> Refresh</button>`, logsPanelBody()); break;
             default: html = panelShell({ id, title: id, body: emptyState("Coming soon", "This panel is queued — see android/README.md's status list."), activeTabId: id });
         }
         root.innerHTML = html;
