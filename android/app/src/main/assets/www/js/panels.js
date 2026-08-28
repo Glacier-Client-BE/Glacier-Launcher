@@ -866,3 +866,68 @@ function bareOverlayHtml(id, title, headerActions, body) {
         <div class="panel-body">${body}</div>
     </div>`;
 }
+
+// ── LeviLamina Mods ────────────────────────────────────────────────────
+// Mirrors Pages/Home.razor's "levimods" panel: real registry search (same
+// LiteLDev/lipr index as LeviLaminaModsService.cs), same client-card list
+// with avatar/version/stars. Install/remove are disabled — LeviLamina
+// itself is a native Bedrock injection mod loader with no Android build
+// to install these plugins into, same limitation as ClientInjectionService.
+// Note this panel has no .panel-tabs footer on desktop either, and its
+// back button is a chevron-left (it's a sub-panel of Clients), not the
+// chevron-down every top-level panel uses.
+function levModsCardHtml(mod) {
+    return `
+    <div class="client-card" style="margin-bottom:6px;">
+        <div class="client-card-header">
+            <div class="client-card-icon" style="padding:3px; border-radius:6px; overflow:hidden;">
+                ${mod.avatarUrl
+                    ? `<img src="${escapeHtml(mod.avatarUrl)}" style="width:100%;height:100%;object-fit:cover;border-radius:4px;" alt="" />`
+                    : `<i class="fa-solid fa-puzzle-piece" style="font-size:18px; color:var(--accent);"></i>`}
+            </div>
+            <div class="client-card-meta" style="min-width:0;">
+                <span class="client-card-name" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(mod.name)}</span>
+                <span class="client-card-sub" style="display:flex; gap:8px; align-items:center;">
+                    <span style="opacity:0.6;">v${escapeHtml(mod.latestVersion)}</span>
+                    <span style="opacity:0.4;"><i class="fa-solid fa-star"></i> ${mod.stars}</span>
+                </span>
+            </div>
+            <div class="client-card-actions">
+                <button class="icon-btn" disabled data-tooltip="Needs LeviLamina running on Android — not currently possible"><i class="fa-solid fa-download"></i></button>
+            </div>
+        </div>
+        ${mod.description ? `<p class="client-card-desc">${escapeHtml(mod.description)}</p>` : ""}
+    </div>`;
+}
+
+function levModsPanelHtml(state) {
+    let body;
+    if (state.loading) {
+        body = `<div style="display:flex; align-items:center; justify-content:center; padding:30px;"><span class="spinner"></span><span style="margin-left:10px; font-size:12px; color:var(--text-dim);">Loading mods...</span></div>`;
+    } else if (state.error && state.results.length === 0) {
+        body = `<div style="padding:20px; text-align:center;"><span class="error-text">${escapeHtml(state.error)}</span><br/>
+            <button class="btn-sm" style="margin-top:10px;" data-levmods-retry><i class="fa-solid fa-rotate"></i> Retry</button></div>`;
+    } else if (state.results.length === 0) {
+        body = emptyState("No mods found", "Try a different search term.", "fa-solid fa-box-open");
+    } else {
+        body = (state.error ? `<span class="error-text" style="display:block; margin-bottom:6px;">${escapeHtml(state.error)}</span>` : "") +
+            state.results.map(levModsCardHtml).join("");
+    }
+
+    return `
+    <div class="panel-overlay" id="panel-levimods">
+        <div class="panel-handle"></div>
+        <div class="panel-header">
+            <div class="panel-title-wrap"><span class="panel-title">LeviLamina Mods</span><div class="panel-title-underline"></div></div>
+            <div class="panel-header-actions">
+                <button class="panel-icon-btn ${state.loading ? "spinning" : ""}" ${state.loading ? "disabled" : ""} data-levmods-refresh data-tooltip="Refresh"><i class="fa-solid fa-rotate"></i></button>
+                <button class="panel-back-btn" data-close-panel data-tooltip="Back"><i class="fa-solid fa-chevron-left"></i></button>
+            </div>
+        </div>
+        <div class="panel-search-wrap">
+            <i class="fa-solid fa-magnifying-glass"></i>
+            <input class="panel-search-input" id="levmods-search-input" placeholder="Search LeviLamina mods..." value="${escapeHtml(state.query)}" />
+        </div>
+        <div class="panel-body">${body}</div>
+    </div>`;
+}

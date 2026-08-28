@@ -46,6 +46,7 @@ const App = {
         glacier: { loading: false, latest: null, error: null },
         javaVersions: { list: [], loading: false, error: null, filter: "", showSnapshots: false, showHistorical: false },
         downloads: [], // session-scoped, see downloadRowHtml()/downloadsPanelHtml() in panels.js
+        levMods: { query: "", results: [], loading: false, error: null, hasSearched: false },
         news: {
             loading: false, posts: [], releases: [],
             fallbackItems: [
@@ -223,6 +224,11 @@ const App = {
             // not routed through panelShell(), which always appends one.
             case "stats": html = bareOverlayHtml("stats", "Statistics", "", statsPanelBody(this.state.settings.totalPlaytimeSeconds || 0)); break;
             case "logs": html = bareOverlayHtml("logs", "Logs & Crashes", `<button class="btn-sm" data-tooltip="Refresh"><i class="fa-solid fa-rotate"></i> Refresh</button>`, logsPanelBody()); break;
+            case "levimods": {
+                html = levModsPanelHtml(this.state.levMods);
+                if (!this.state.levMods.hasSearched && !this.state.levMods.loading) this.loadLevMods();
+                break;
+            }
             default: html = panelShell({ id, title: id, body: emptyState("Coming soon", "This panel is queued — see android/README.md's status list."), activeTabId: id });
         }
         root.innerHTML = html;
@@ -415,6 +421,20 @@ const App = {
         if (this.state.openPanel === "news") this.openPanel("news");
     },
 
+    async loadLevMods() {
+        this.state.levMods.loading = true;
+        this.state.levMods.error = null;
+        if (this.state.openPanel === "levimods") this.openPanel("levimods");
+        try {
+            this.state.levMods.results = await LeviLaminaMods.search(this.state.levMods.query);
+        } catch (e) {
+            this.state.levMods.error = `Failed to load registry: ${e.message}`;
+        }
+        this.state.levMods.loading = false;
+        this.state.levMods.hasSearched = true;
+        if (this.state.openPanel === "levimods") this.openPanel("levimods");
+    },
+
     closePanel() {
         this.state.openPanel = null;
         document.getElementById("main-content").classList.remove("panel-open");
@@ -557,12 +577,20 @@ const App = {
                 this.openPanel("downloads");
                 return;
             }
+
+            if (e.target.closest("[data-levmods-refresh]") || e.target.closest("[data-levmods-retry]")) {
+                this.state.levMods.results = [];
+                LeviLaminaMods._cache = null;
+                this.loadLevMods();
+                return;
+            }
         });
 
         let cfDebounce;
         let mrDebounce;
         let mcvFilterDebounce;
         let javaVersionFilterDebounce;
+        let levModsFilterDebounce;
         document.body.addEventListener("input", (e) => {
             if (e.target.id === "cf-search-input") {
                 clearTimeout(cfDebounce);
@@ -580,6 +608,15 @@ const App = {
                     this.openPanel("javaversions");
                     document.getElementById("java-version-filter-input")?.focus();
                 }, 250);
+            }
+            if (e.target.id === "levmods-search-input") {
+                clearTimeout(levModsFilterDebounce);
+                const value = e.target.value;
+                levModsFilterDebounce = setTimeout(() => {
+                    this.state.levMods.query = value;
+                    this.loadLevMods();
+                    document.getElementById("levmods-search-input")?.focus();
+                }, 300);
             }
             if (e.target.id === "mcv-filter-input") {
                 clearTimeout(mcvFilterDebounce);

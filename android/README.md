@@ -208,6 +208,17 @@ Logs shows the real empty-state (listing needs shared-storage wiring;
 mclo.gs sharing is a real public paste API with nothing to share until
 then).
 
-**Not yet started:** `themestudio`, `modpacks`, `skinlibrary` (all three
+`levimods` is matched too: real search against the same public registry
+LeviLaminaModsService.cs reads (LiteLDev/lipr's `index.json` — the actual
+"lip" package manager index, same package-key parsing, same
+levilamina+mod tag filter, same latest-version resolution), rendered as
+the same client-card list with avatar/version/star-count. Install/remove
+are disabled — LeviLamina itself is a native Bedrock injection mod loader
+with no Android build to install these plugins into, the same limitation
+as `ClientInjectionService`. Matches the desktop panel's own quirks too:
+no `.panel-tabs` footer, and a chevron-left back button (it's a sub-panel
+of Clients) instead of the chevron-down every top-level panel uses.
+
+**Not yet started:** `themestudio`, `modpacks`, `skinlibrary` — all three
 need a live theme preview / 3D skin canvas via `skinview3d.js`, a
-meaningfully larger chunk than the panels so far), `levimods`.
+meaningfully larger chunk than the panels so far.
