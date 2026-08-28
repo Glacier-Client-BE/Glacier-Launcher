@@ -136,12 +136,14 @@ jobs:
         if: steps.versioning.outputs.SKIP != 'true'
         env:
           GLACIER_VERSION: ${{ steps.versioning.outputs.NEXT_VERSION }}
+          CURSEFORGE_API_KEY: ${{ secrets.CURSEFORGE_API_KEY }}
         run: gradle :app:assembleDebug --no-daemon
 
       - name: Build release APK
         if: steps.versioning.outputs.SKIP != 'true'
         env:
           GLACIER_VERSION: ${{ steps.versioning.outputs.NEXT_VERSION }}
+          CURSEFORGE_API_KEY: ${{ secrets.CURSEFORGE_API_KEY }}
           ANDROID_KEYSTORE_PATH: ${{ steps.keystore.outputs.present == 'true' && format('{0}/glacier-release.keystore', runner.temp) || '' }}
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
