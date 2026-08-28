@@ -85,6 +85,12 @@ dependencies {
     // for the one settings-JSON read in AndroidBridge.
     implementation("androidx.core:core-ktx:1.13.1")
     implementation("androidx.activity:activity-ktx:1.9.1")
+    // net.kdt.pojavlaunch.MainActivity (below) extends AppCompatActivity, but
+    // app_pojavlauncher only pulls androidx.appcompat in transitively via its
+    // own `implementation`-scoped deps, which Gradle never re-exports to a
+    // consumer — Kotlin needs AppCompatActivity directly on :app's own
+    // compile classpath to resolve JavaEditionBridge.kt's reference to it.
+    implementation("androidx.appcompat:appcompat:1.7.0")
 
     // The Java Edition runtime — the vendored PojavLauncher submodule, built
     // as a library (see settings.gradle.kts + scripts/rebrand-pojav.sh)
