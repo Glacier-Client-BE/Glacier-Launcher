@@ -56,6 +56,19 @@ def patch_app_module(path: str) -> None:
     text = remove_matching_lines(text, r'^\s*applicationId "net\.kdt\.pojavlaunch"\s*$')
     text = remove_matching_lines(text, r"^\s*applicationIdSuffix '\.debug'\s*$")
 
+    # A library's BuildConfig omits VERSION_NAME/VERSION_CODE by default (they
+    # aren't meaningful for a library in general — AGP only auto-generates them
+    # for applications), but PojavApplication.java and Tools.java reference
+    # BuildConfig.VERSION_NAME directly. Recreate it explicitly via the same
+    # getVersionName()/getDateSeconds() calls `versionName`/`versionCode` above
+    # already use.
+    text = text.replace(
+        "versionName getVersionName()",
+        "versionName getVersionName()\n"
+        "        buildConfigField 'String', 'VERSION_NAME', \"\\\"${getVersionName()}\\\"\"\n"
+        "        buildConfigField 'int', 'VERSION_CODE', \"${getDateSeconds()}\"",
+    )
+
     # These package-shaped resValues back FileProvider authorities
     # (storageProviderAuthorities is the real manifest <provider
     # android:authorities>) — they must track the real applicationId
