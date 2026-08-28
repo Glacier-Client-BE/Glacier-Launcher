@@ -67,6 +67,17 @@ android {
     buildFeatures {
         buildConfig = true
     }
+
+    // app_pojavlauncher both compiles libbytehook.so from its own jni/
+    // sources AND depends on a prebuilt bytehook AAR that also ships
+    // lib/*/libbytehook.so — harmless duplicate (same native lib, two
+    // sources), but AGP's native-lib merge step refuses to silently pick
+    // one when packaging the final APK. pickFirst says either copy is fine.
+    packaging {
+        jniLibs {
+            pickFirsts += "lib/*/libbytehook.so"
+        }
+    }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
