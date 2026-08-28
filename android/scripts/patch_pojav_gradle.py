@@ -80,6 +80,10 @@ def patch_app_module(path: str) -> None:
     # The `signingConfig signingConfigs.*` assignments inside buildTypes
     # that referenced the now-removed signingConfigs block.
     text = remove_matching_lines(text, r"^\s*signingConfig signingConfigs\.\w+\s*$")
+    # "Resource shrinker cannot be used for libraries." — shrinkResources
+    # only applies at final APK packaging time, which a library module
+    # never does itself.
+    text = remove_matching_lines(text, r"^\s*shrinkResources (?:true|false)\s*$")
 
     open(path, "w").write(text)
 
