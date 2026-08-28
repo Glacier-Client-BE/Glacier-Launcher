@@ -7,6 +7,10 @@ on:
     paths:
       - 'android/**'
       - '.github/workflows/android-release.yml'
+  pull_request:
+    paths:
+      - 'android/**'
+      - '.github/workflows/android-release.yml'
   workflow_dispatch:
 
 jobs:
@@ -31,6 +35,15 @@ jobs:
         id: versioning
         shell: bash
         run: |
+          # PR builds (and manual runs off a non-main ref) just build + upload
+          # artifacts for review — no tagging or releasing off a PR head.
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "SKIP_RELEASE=true" >> "$GITHUB_OUTPUT"
+            echo "NEXT_VERSION=pr-${{ github.event.pull_request.number }}-$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+            echo "Building PR #${{ github.event.pull_request.number }} — no release."
+            exit 0
+          fi
+
           # Same scheme as the desktop launcher's release workflow:
           # "hotfix:" bumps patch, "update:" bumps minor, anything else -> just build (no release).
           existing_tag=$(git tag --points-at HEAD | grep '^android-v' | head -n1 || true)
