@@ -114,10 +114,23 @@ jobs:
           if [ -z "$apk" ]; then echo "No companion APK found to bundle" >&2; exit 1; fi
           cp "$apk" app/src/main/assets/companion/java-edition.apk
 
+      # `secrets.*` can't be referenced inside `if:`/ternary expressions
+      # (GitHub Actions rejects that at workflow-parse time, before any job
+      # runs) — so the presence check happens here, in a `run:` env block
+      # where secrets are always allowed, and everything downstream branches
+      # on this step's plain-string output instead.
+      - name: Check for release keystore secret
+        if: steps.versioning.outputs.SKIP != 'true'
+        id: keystore
+        env:
+          KS_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: echo "present=$([ -n \"$KS_B64\" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+
       - name: Decode release keystore
-        if: steps.versioning.outputs.SKIP != 'true' && secrets.ANDROID_KEYSTORE_BASE64 != ''
-        run: |
-          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > "$RUNNER_TEMP/glacier-release.keystore"
+        if: steps.versioning.outputs.SKIP != 'true' && steps.keystore.outputs.present == 'true'
+        env:
+          KS_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: echo "$KS_B64" | base64 -d > "$RUNNER_TEMP/glacier-release.keystore"
 
       - name: Build debug APK
         if: steps.versioning.outputs.SKIP != 'true'
@@ -129,7 +142,7 @@ jobs:
         if: steps.versioning.outputs.SKIP != 'true'
         env:
           GLACIER_VERSION: ${{ steps.versioning.outputs.NEXT_VERSION }}
-          ANDROID_KEYSTORE_PATH: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' && format('{0}/glacier-release.keystore', runner.temp) || '' }}
+          ANDROID_KEYSTORE_PATH: ${{ steps.keystore.outputs.present == 'true' && format('{0}/glacier-release.keystore', runner.temp) || '' }}
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
