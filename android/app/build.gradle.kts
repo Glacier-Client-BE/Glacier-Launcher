@@ -13,6 +13,12 @@ android {
         targetSdk = 34
         versionCode = 1
         versionName = System.getenv("GLACIER_VERSION") ?: "0.0.0-dev"
+        // The merged-in Java Edition runtime (androidx.constraintlayout,
+        // viewpager2, preference, bytehook, htmlcleaner, ...) pushes total
+        // method count well past the pre-multidex 64K limit. minSdk 26 has
+        // native ART multidex support, so this is just the DSL flag, no
+        // androidx.multidex compat library needed.
+        multiDexEnabled = true
 
         // Mirrors GlacierLauncher.csproj's CurseForgeApiKey AssemblyMetadataAttribute:
         // baked in at build time from the same CI secret, empty for local dev builds.
@@ -79,4 +85,11 @@ dependencies {
     // for the one settings-JSON read in AndroidBridge.
     implementation("androidx.core:core-ktx:1.13.1")
     implementation("androidx.activity:activity-ktx:1.9.1")
+
+    // The Java Edition runtime — the vendored PojavLauncher submodule, built
+    // as a library (see settings.gradle.kts + scripts/rebrand-pojav.sh)
+    // instead of a separate installable APK, so launching Java Edition is
+    // an in-process Intent to net.kdt.pojavlaunch.MainActivity
+    // (JavaEditionBridge.kt), not a second app the user has to install.
+    implementation(project(":app_pojavlauncher"))
 }

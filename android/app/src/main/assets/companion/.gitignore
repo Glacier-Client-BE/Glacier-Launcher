@@ -1,4 +1,0 @@
-# Populated at build time (CI, or manually per README's "Building locally"
-# instructions) from the rebranded PojavLauncher release APK. Never commit
-# a built APK here.
-*.apk

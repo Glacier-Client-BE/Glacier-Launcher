@@ -141,9 +141,6 @@ private class AndroidBridge(private val activity: ComponentActivity, private val
         ClientInjectionService.attemptInject(path).message
 
     @JavascriptInterface
-    fun isJavaEditionInstalled(): Boolean = JavaEditionBridge.isInstalled(activity)
-
-    @JavascriptInterface
     fun launchJavaEdition() {
         activity.runOnUiThread { JavaEditionBridge.launch(activity) }
     }
@@ -151,14 +148,6 @@ private class AndroidBridge(private val activity: ComponentActivity, private val
     @JavascriptInterface
     fun launchJavaEditionVersion(versionId: String) {
         activity.runOnUiThread { JavaEditionBridge.launch(activity, versionId) }
-    }
-
-    @JavascriptInterface
-    fun hasBundledJavaEditionInstaller(): Boolean = JavaEditionBridge.hasBundledInstaller(activity)
-
-    @JavascriptInterface
-    fun installJavaEditionCompanion() {
-        activity.runOnUiThread { JavaEditionBridge.installBundled(activity) }
     }
 
     @JavascriptInterface

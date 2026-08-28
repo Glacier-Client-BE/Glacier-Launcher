@@ -88,31 +88,9 @@ jobs:
         if: steps.versioning.outputs.SKIP != 'true'
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Rebrand PojavLauncher submodule
+      - name: Convert PojavLauncher submodule into a library module
         if: steps.versioning.outputs.SKIP != 'true'
         run: ./scripts/rebrand-pojav.sh
-
-      - name: Build Java Edition companion APK (rebranded PojavLauncher)
-        if: steps.versioning.outputs.SKIP != 'true'
-        working-directory: android/pojavlauncher
-        env:
-          CURSEFORGE_API_KEY: ${{ secrets.CURSEFORGE_API_KEY }}
-        run: |
-          chmod +x gradlew
-          ./gradlew :app_pojavlauncher:assembleRelease --no-daemon
-
-      - name: Bundle companion APK into the main app as an asset
-        if: steps.versioning.outputs.SKIP != 'true'
-        run: |
-          # Single-APK distribution: the companion Java Edition app (built above)
-          # is embedded as a raw asset in the main app, which installs it via
-          # the system package installer on request (JavaEditionBridge.installBundled).
-          # It's still a separate installed app/process — Pojav owns its own
-          # native-JVM/JNI Minecraft runtime — but the user only downloads one APK.
-          mkdir -p app/src/main/assets/companion
-          apk=$(find pojavlauncher/app_pojavlauncher/build/outputs/apk -name '*.apk' | head -n1)
-          if [ -z "$apk" ]; then echo "No companion APK found to bundle" >&2; exit 1; fi
-          cp "$apk" app/src/main/assets/companion/java-edition.apk
 
       # `secrets.*` can't be referenced inside `if:`/ternary expressions
       # (GitHub Actions rejects that at workflow-parse time, before any job

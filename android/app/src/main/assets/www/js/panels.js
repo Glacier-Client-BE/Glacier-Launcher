@@ -275,7 +275,7 @@ function javaAssetsBody() {
             <div class="client-card-icon" style="background:${r.color}; color:${r.fg}; padding:8px;"><i class="${r.icon}"></i></div>
             <div class="client-card-meta">
                 <span class="client-card-name">${r.name}</span>
-                <span class="client-card-sub" style="opacity:0.5;">Needs the Java Edition companion app installed</span>
+                <span class="client-card-sub" style="opacity:0.5;">Needs Storage Access Framework wiring to shared storage</span>
             </div>
             <div class="client-card-actions">
                 <button class="icon-btn" data-tooltip="Open folder" disabled><i class="fa-solid fa-folder-open"></i></button>
@@ -324,7 +324,7 @@ function javaAddonsBody(tab) {
         case "loaders": body = javaLoadersBody(); break;
         case "assets": body = javaAssetsBody(); break;
         case "tools": body = javaToolsBody(); break;
-        case "datapacks": body = emptyState("Datapacks", "Needs a world picker wired to the Java Edition companion app's shared storage — queued.", "fa-solid fa-cubes-stacked"); break;
+        case "datapacks": body = emptyState("Datapacks", "Needs a world picker wired to the built-in Java Edition runtime's shared storage — queued.", "fa-solid fa-cubes-stacked"); break;
         case "curseforge": return `${switcher}${curseForgeSearchBody()}`;
         case "modrinth": return `${switcher}${modrinthSearchBody()}`;
         default: body = javaModsBody();
@@ -385,13 +385,8 @@ function settingsPanelBody(category) {
 
     if (cat("java")) {
         html += `<div class="settings-section"><span class="panel-section-label">Java Edition</span>
-        <div style="padding:8px 0;">RAM, JVM args, resolution, offline mode, and version filters are configured in the Java Edition companion app itself.</div>
-        ${settingRow("Java Edition companion app", App.state.javaInstalled ? "Installed" : (Bridge.hasBundledJavaEditionInstaller() ? "Bundled with this app — not installed yet" : "Not installed"),
-            App.state.javaInstalled
-                ? `<button class="btn-sm" id="open-java-edition">Open</button>`
-                : (Bridge.hasBundledJavaEditionInstaller()
-                    ? `<button class="btn-sm" data-install-java-edition>Install</button>`
-                    : `<button class="btn-sm" id="open-java-edition" disabled>Open</button>`))}
+        <div style="padding:8px 0;">RAM, JVM args, resolution, offline mode, and version filters are configured in the Java Edition runtime's own in-game settings.</div>
+        ${settingRow("Java Edition runtime", "Built in — no separate app to install", `<button class="btn-sm" id="open-java-edition">Open</button>`)}
         </div>`;
     }
 
@@ -528,17 +523,9 @@ function mcVersionsPanelHtml(channel, filter, versions) {
 // locally-installed Lunar/Badlion .exe and can direct-launch them; neither
 // client ships an Android build at all, so that row is an honest "not
 // available on Android" rather than fake detection.
-function javaClientsPanelBody(glacierState, javaEdition) {
-    const jeActions = javaEdition.installed
-        ? `<button class="vcs-btn" data-open-java-edition><i class="fa-solid fa-play"></i> Open</button>`
-        : javaEdition.hasBundledInstaller
-            ? `<button class="vcs-btn" data-install-java-edition><i class="fa-solid fa-download"></i> Install</button>`
-            : `<span class="client-card-note">Not bundled in this build</span>`;
-    const jeSub = javaEdition.installed
-        ? `<span style="color:var(--green);"><i class="fa-solid fa-circle-check"></i> Installed</span>`
-        : javaEdition.hasBundledInstaller
-            ? "Bundled with this app — installs like any other app update."
-            : "This build doesn't include the companion installer.";
+function javaClientsPanelBody(glacierState) {
+    const jeActions = `<button class="vcs-btn" data-open-java-edition><i class="fa-solid fa-play"></i> Open</button>`;
+    const jeSub = `<span style="color:var(--green);"><i class="fa-solid fa-circle-check"></i> Built in</span>`;
     const glacierActions = (() => {
         if (glacierState.loading) return `<span style="opacity:0.6;">Checking…</span>`;
         if (glacierState.error) return `<button class="vcs-btn vcs-btn-ghost" data-glacier-retry><i class="fa-solid fa-rotate"></i> Retry</button>`;
@@ -559,7 +546,7 @@ function javaClientsPanelBody(glacierState, javaEdition) {
     return `
     <div class="mcv-info-bar">
         <i class="fa-solid fa-circle-info"></i>
-        <span>Vanilla and Glacier Client launch through the Java Edition companion app. Lunar Client and Badlion don't ship an Android build — there's no client to detect or launch here.</span>
+        <span>Vanilla and Glacier Client launch through Glacier's built-in Java Edition runtime. Lunar Client and Badlion don't ship an Android build — there's no client to detect or launch here.</span>
     </div>
     <div class="panel-body">
         <span class="panel-section-label">Built-in</span>
@@ -598,7 +585,7 @@ function javaClientsPanelBody(glacierState, javaEdition) {
 
 // ── Java Versions ─────────────────────────────────────────────────────────
 // Real Mojang version_manifest_v2.json, same as JavaVersionService.cs.
-// Install/Launch hand off to the Java Edition companion app (Pojav owns
+// Install/Launch hand off to the built-in Java Edition runtime (it owns
 // actual per-version install + launch), rather than duplicating that here.
 function javaVersionRowHtml(v) {
     return `
@@ -857,7 +844,7 @@ function statsPanelBody(totalPlaytimeSeconds) {
 
 // ── Logs & Crashes ─────────────────────────────────────────────────────
 // Mirrors Components/LogsPanel.razor. Listing real log/crash files needs
-// Storage Access Framework wiring to the Java Edition companion app's
+// Storage Access Framework wiring to the built-in Java Edition runtime's
 // shared storage (queued); mclo.gs sharing (a real public paste API) has
 // nothing to share until then.
 function logsPanelBody() {

@@ -98,47 +98,100 @@ through the native bridge (`AndroidBridge` → `SharedPreferences`).
 git submodule update --init --recursive   # first time only
 
 cd android
-./scripts/rebrand-pojav.sh
-cd pojavlauncher
-./gradlew :app_pojavlauncher:assembleRelease  # Java Edition companion app
-cd ..
-mkdir -p app/src/main/assets/companion
-cp pojavlauncher/app_pojavlauncher/build/outputs/apk/**/*.apk app/src/main/assets/companion/java-edition.apk
-
-gradle :app:assembleDebug                 # shell app (bundles the companion APK above)
+./scripts/rebrand-pojav.sh                # converts the submodule into a library, see below
+gradle :app:assembleDebug                 # builds the whole app, Java Edition runtime included
 ```
 
-### Single-APK distribution
+### Single-APK, single-process Java Edition — no separate app to install
 
-The app you actually ship is one APK: the companion Java Edition app (a
-rebranded PojavLauncher build) is embedded as a raw asset
-(`assets/companion/java-edition.apk`) inside the main app, copied in by the
-CI steps above before the main app is assembled. It is **not** a process
-merge — Pojav still runs as its own installed app/package with its own
-native-JVM/JNI Minecraft runtime, the same architectural reason
-`JavaEditionBridge`'s doc comment gives for not attempting a line-for-line
-build merge — but the user only ever downloads one file. Tapping "Install"
-on the Vanilla/Java Edition card (`JavaEditionBridge.installBundled()`)
-extracts that asset to cache and hands it to the system package installer
-via a `FileProvider` URI; Android's own "install unknown apps" confirmation
-still appears, since that's a system security control no app can bypass
-without root. If a build's `assets/companion/` is empty (e.g. a local debug
-build that skipped the steps above), the UI honestly shows "This build
-doesn't include the companion installer" instead of a broken button.
+The vendored PojavLauncher submodule (`android/pojavlauncher`) is built
+directly into this app as a library dependency of `:app`, not as its own
+installable APK. There is no companion app, no install step, and no
+"install unknown apps" prompt for Java Edition — one APK, one process,
+`net.kdt.pojavlaunch.MainActivity` (the real JVM/GLFW game surface — see
+below) is just another Activity in this same package, launched by a plain
+explicit `Intent(context, MainActivity::class.java)`.
+
+How this works, mechanically:
+
+- **`settings.gradle.kts`** wires `app_pojavlauncher` (plus its three plain
+  `java`/`java-library` support modules — `jre_lwjgl3glfw`,
+  `arc_dns_injector`, `forge_installer` — which just build small jars
+  copied into `app_pojavlauncher`'s own assets) in as subprojects of this
+  build, at their existing paths under `android/pojavlauncher/`, bypassing
+  that submodule's own root `build.gradle`/`settings.gradle` entirely.
+- **`scripts/rebrand-pojav.sh`** (via `scripts/patch_pojav_gradle.py`, a
+  brace-depth-aware structural patcher — plain regex is too fragile for
+  reliably removing a `{ ... }` block from someone else's Groovy build
+  script) converts `app_pojavlauncher` from `com.android.application` to
+  `com.android.library` at build time, never committed into the submodule
+  itself (same reasoning as always: a submodule commit only this sandbox
+  has isn't fetchable by CI or any other clone). Concretely, it: drops the
+  library-illegal `applicationId`/`applicationIdSuffix`/`bundle{}`/
+  `signingConfigs{}` declarations; retargets the `application_package`/
+  `storageProviderAuthorities`/`shareProviderAuthority` resValues from the
+  old standalone `net.kdt.pojavlaunch` package to the real merged
+  `xyz.glacierclient.launcher` one (these back a real manifest
+  `<provider android:authorities>` — leaving them stale would either not
+  match the real provider authority, or collide with any other
+  Pojav-based app on the same device); and strips the `LAUNCHER`
+  intent-filter from `TestStorageActivity` so it doesn't show as a second
+  home-screen icon next to Glacier's own.
+- **`app/build.gradle.kts`** bumps `com.android.application`/library to
+  8.7.2 (matching what `app_pojavlauncher` itself pins — also the AGP
+  version that requires Gradle 8.9+, which `gradle/wrapper` already is)
+  and adds `implementation(project(":app_pojavlauncher"))`, plus
+  `multiDexEnabled = true` (the merged-in dependency graph — constraintlayout,
+  viewpager2, preference, bytehook, htmlcleaner, ... — pushes method count
+  well past the pre-multidex 64K limit; minSdk 26 has native ART multidex
+  support, so no `androidx.multidex` compat library is needed).
+- **`AndroidManifest.xml`**'s `<application>` tag adds
+  `tools:replace="android:name,android:icon,android:theme,android:process"`
+  to resolve real attribute conflicts with the merged-in library's own
+  `<application>` declaration: keep Glacier's icon/theme, keep the app in
+  its own real default process (`android:process="${applicationId}"`,
+  overriding Pojav's own `:launcher` secondary-process default — this is
+  one merged app now, not two), and keep `GlacierApp` as the Application
+  class — which, critically, isn't a plain `android.app.Application`
+  anymore.
+- **`GlacierApp.kt`** now extends `net.kdt.pojavlaunch.PojavApplication`
+  instead of `android.app.Application`. `PojavApplication.onCreate()` does
+  real one-time setup — a crash handler, `LauncherPreferences.loadPreferences()`,
+  device-architecture detection, and unpacking the bundled JRE/LWJGL
+  runtime out of assets — that `MainActivity` depends on unconditionally.
+  Skipping it (e.g. by keeping a plain `Application` and only changing
+  `android:name` back) would make the real game activity crash immediately
+  on first touch.
+- **`JavaEditionBridge.launch()`** now takes a compile-time reference to
+  `net.kdt.pojavlaunch.MainActivity` (no more `Intent.setClassName()` by
+  string, no more `PackageManager` install checks — the class is just
+  linked in) and still passes the selected version through
+  `MainActivity.INTENT_MINECRAFT_VERSION` (see the next section) for a
+  direct launch into that version's gameplay.
+
+This is a real architectural merge, verified only by a successful Gradle
+build in CI, not by running the merged app on a device — there is no
+physical device in this environment. A clean CI build proves the manifest
+merge, the library conversion, and the dependency graph all resolve
+correctly; it does not prove `PojavApplication`'s runtime unpacking or the
+game's own render loop behave identically once actually launched. If
+something is subtly wrong at that layer, it will surface as a real bug
+report against an actual device, not as a CI failure — flagged here
+plainly rather than glossed over.
 
 ### Native, direct-to-gameplay launching
 
-Reading Pojav's own vendored source (`android/pojavlauncher/app_pojavlauncher`)
-found that its manifest's actual `LAUNCHER` activity
-(`TestStorageActivity` → `LauncherActivity`) is a setup/version-picker flow,
-but `net.kdt.pojavlaunch.MainActivity` — the activity this app has always
-targeted — **is** the real JVM/GLFW game-render surface itself: its
-`onCreate` calls `runCraft()` on the first frame, and it reads an
-`intent_version` extra (`MainActivity.INTENT_MINECRAFT_VERSION`) to pick
-which installed version to launch, falling back to Pojav's own
-last-used profile otherwise. `JavaEditionBridge.launch()` now passes the
-version the user tapped in *our own* Java Versions panel through that
-extra (`AndroidBridge.launchJavaEditionVersion()` /
+Reading Pojav's own vendored source found that its manifest's actual
+`LAUNCHER` activity (`TestStorageActivity` → `LauncherActivity`, now with
+its intent-filter stripped per the previous section) is a setup/
+version-picker flow, but `net.kdt.pojavlaunch.MainActivity` — the activity
+this app targets directly — **is** the real JVM/GLFW game-render surface
+itself: its `onCreate` calls `runCraft()` on the first frame, and it reads
+an `intent_version` extra (`MainActivity.INTENT_MINECRAFT_VERSION`) to pick
+which installed version to launch, falling back to Pojav's own last-used
+profile otherwise. `JavaEditionBridge.launch()` passes the version the user
+tapped in *our own* Java Versions panel through that extra
+(`AndroidBridge.launchJavaEditionVersion()` /
 `Bridge.launchJavaEditionVersion()`), so launching a specific version from
 Glacier's own UI is a real, direct, native launch into that version's
 gameplay — not just a generic reopen of Pojav's separate home screen.
@@ -147,19 +200,6 @@ This only works once Pojav's own one-time setup (JRE download, a saved
 launcher profile) has happened at least once; a completely fresh install
 may still land in Pojav's own setup screens first; that's an unavoidable
 first-run cost of any Pojav-based launcher, this one included.
-
-**What wasn't attempted, and why:** merging Pojav's actual Android module
-into this app's own Gradle build (one process, one Activity tree, no
-separate installed package at all) — the deepest version of "native like
-Pojav." Pojav's `app_pojavlauncher` module pins a different AGP version,
-ships its own CMake native modules and a from-source JRE/LWJGL-EGL native
-layer, and converting it from `com.android.application` to a library
-consumable by `:app` means resolving manifest merging, resource/R-class
-collisions, and native ABI filter conflicts between two independently
-evolved Android projects — real build-system surgery. It's not
-untouchable (a broken Gradle merge would at least fail loudly in CI,
-unlike a runtime bug), but it's a large, multi-step change in its own
-right and wasn't attempted blind in the same pass as everything else here.
 
 ### Release signing
 
@@ -194,17 +234,21 @@ actions like launching the Java Edition app no-op).
 
 `.github/workflows/android-release.yml`:
 - checks out submodules recursively,
-- builds the shell app (`:app:assembleDebug`/`assembleRelease`),
-- runs `scripts/rebrand-pojav.sh` then builds the rebranded Pojav companion
-  app (`:app_pojavlauncher:assembleRelease`),
-- uploads both APKs as build artifacts on every push to `main` touching
+- runs `scripts/rebrand-pojav.sh` to convert the vendored PojavLauncher
+  submodule into a library module (see "Single-APK, single-process Java
+  Edition" above),
+- builds the one app (`:app:assembleDebug`/`assembleRelease` — this
+  transitively builds `:app_pojavlauncher` and its native components too,
+  there's nothing separate left to build),
+- uploads the APK as a build artifact on every push to `main` touching
   `android/**`,
 - and — on commits prefixed `hotfix:`/`update:` — tags and publishes a
-  GitHub Release with both APKs attached, mirroring the desktop launcher's
+  GitHub Release with it attached, mirroring the desktop launcher's
   `release.yml` versioning scheme.
 
 A CurseForge API key is read from the `CURSEFORGE_API_KEY` repo secret at
-build time for both apps, same as the desktop build.
+build time (both this app's own CurseForge search and
+`app_pojavlauncher`'s own `getCFApiKey()` read the same env var).
 
 ## Mobile-specific adjustments
 
@@ -535,15 +579,15 @@ wiring lands).
 
 ### The Java Edition runtime itself
 
-To be direct about scope: "build your own version to play Java Edition on
-mobile" (rather than bundling the rebranded PojavLauncher APK) means
-reimplementing what PojavLauncher/Zalith Launcher actually are — a portable
-JRE built for Android, plus a translation layer so LWJGL's desktop
-OpenGL calls run against Android's OpenGL ES (or a Vulkan-via-ANGLE path),
-plus touch-control input mapping, plus a full mod-loader-compatible class
-path. That's a multi-year effort by dedicated native-toolchain teams, not
-something buildable or verifiable inside a single coding session — there's
-no physical device here to even compile-test a JNI/native change against,
-let alone a custom JVM port. The bundled-companion-APK approach (see
-"Single-APK distribution" above) stays the pragmatic path until there's an
-explicit decision to invest in that from scratch.
+To be direct about scope: a *fully from-scratch* Java Edition runtime —
+writing your own portable JRE for Android and your own translation layer
+from LWJGL's desktop OpenGL calls to Android's OpenGL ES, rather than using
+PojavLauncher's own (real, mature, years-refined) versions of both — is a
+multi-year effort by dedicated native-toolchain teams, not something this
+pass reimplemented. What this pass did instead: took PojavLauncher's actual
+JRE/LWJGL-EGL runtime and merged it directly into this app as a library
+(see "Single-APK, single-process Java Edition" above), so the end result is
+genuinely "one app, native launching, no separate install" — just built on
+Pojav's real engine rather than a second one written from zero, the same
+way the Bedrock side of this app launches the real Minecraft Bedrock APK
+rather than reimplementing a Bedrock client.

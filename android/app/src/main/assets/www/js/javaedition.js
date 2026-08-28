@@ -1,7 +1,7 @@
 // Real data sources for the Java-edition panels — same endpoints the desktop
 // services use, called directly via fetch() since there's nothing Windows-
-// specific about the network calls themselves (unlike installing/launching,
-// which the Pojav companion app owns on Android — see JavaEditionBridge.kt).
+// specific about the network calls themselves (unlike launching, which the
+// built-in Java Edition runtime owns on Android — see JavaEditionBridge.kt).
 
 const MojangVersions = {
     MANIFEST_URL: "https://piston-meta.mojang.com/mc/game/version_manifest_v2.json",

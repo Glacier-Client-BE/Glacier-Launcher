@@ -11,9 +11,6 @@
         android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE"
         tools:ignore="ScopedStorage" />
-    <!-- Needed to hand the bundled Java Edition companion APK (assets/companion/
-         java-edition.apk) to the system installer — see JavaEditionBridge.installBundled(). -->
-    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
     <application
         android:name=".GlacierApp"
@@ -21,17 +18,22 @@
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:theme="@style/Theme.Glacier"
-        android:supportsRtl="true">
-
-        <provider
-            android:name="androidx.core.content.FileProvider"
-            android:authorities="${applicationId}.fileprovider"
-            android:exported="false"
-            android:grantUriPermissions="true">
-            <meta-data
-                android:name="android.support.FILE_PROVIDER_PATHS"
-                android:resource="@xml/file_paths" />
-        </provider>
+        android:process="${applicationId}"
+        android:supportsRtl="true"
+        tools:replace="android:name,android:icon,android:theme,android:process">
+        <!-- tools:replace above resolves real conflicts with the merged-in
+             app_pojavlauncher library's own <application> attributes (see
+             android/README.md's "Single-APK distribution" section):
+               - android:name: keep GlacierApp (which extends Pojav's own
+                 PojavApplication and calls super.onCreate() — its one-time
+                 runtime/crash-handler setup still runs), not PojavApplication
+                 directly.
+               - android:icon / android:theme: keep Glacier's own, not
+                 Pojav's — a plain attribute-value conflict, not exclusion of
+                 functionality.
+               - android:process: force the app's real default main process
+                 instead of inheriting Pojav's own ":launcher" secondary
+                 process, since this is one merged app now, not two. -->
 
         <activity
             android:name=".MainActivity"

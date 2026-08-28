@@ -1,6 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<paths xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- Where JavaEditionBridge.installBundled() extracts the bundled
-         companion APK before handing it to the system package installer. -->
-    <cache-path name="companion_apk" path="companion/" />
-</paths>

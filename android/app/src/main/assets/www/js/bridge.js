@@ -8,11 +8,8 @@ const Bridge = (() => {
     return {
         isRootAvailable: () => (hasNative ? native.isRootAvailable() : false),
         attemptInject: (path) => (hasNative ? native.attemptInject(path) : "No native bridge (browser preview)."),
-        isJavaEditionInstalled: () => (hasNative ? native.isJavaEditionInstalled() : false),
         launchJavaEdition: () => { if (hasNative) native.launchJavaEdition(); },
         launchJavaEditionVersion: (versionId) => { if (hasNative) native.launchJavaEditionVersion(versionId); },
-        hasBundledJavaEditionInstaller: () => (hasNative ? native.hasBundledJavaEditionInstaller() : false),
-        installJavaEditionCompanion: () => { if (hasNative) native.installJavaEditionCompanion(); },
         signInMicrosoft: hasNative ? () => native.signInMicrosoft() : null,
         launchBedrock: () => { if (hasNative) native.launchBedrock(); },
         getSettingsJson: () => (hasNative ? native.getSettingsJson() : "{}"),
