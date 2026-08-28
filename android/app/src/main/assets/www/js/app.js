@@ -36,6 +36,9 @@ const App = {
         cfCategory: null,
         cfResults: [],
         cfTotalCount: 0,
+        mcVersions: [], // no real data source yet — see android/README.md
+        mcVersionsChannel: "all",
+        mcVersionsFilter: "",
     },
 
     init() {
@@ -167,7 +170,7 @@ const App = {
                 html = panelShell({ id, title: this.state.edition === "java" ? "Mods & Addons" : "Addons", body: addonsPanelBody(), activeTabId: id });
                 break;
             }
-            case "mcversions": html = panelShell({ id, title: "MC Versions", body: emptyState("No versions cached yet", "Bedrock version management is queued — see android/README.md."), activeTabId: id }); break;
+            case "mcversions": html = mcVersionsPanelHtml(this.state.mcVersionsChannel, this.state.mcVersionsFilter, this.state.mcVersions); break;
             case "bedrockworlds": html = panelShell({ id, title: "Worlds", body: emptyState("No worlds found", "Needs Storage Access Framework wiring to the Java Edition companion app's shared storage."), activeTabId: id }); break;
             case "bedrockpacks": html = panelShell({ id, title: "Packs", body: emptyState("No packs installed", "Behavior and resource packs will list here once wired to shared storage."), activeTabId: id }); break;
             case "bedrockbackups": html = panelShell({ id, title: "Backups", body: emptyState("No backups yet", "World backups will list here once wired to shared storage."), activeTabId: id }); break;
@@ -354,14 +357,30 @@ const App = {
                 this.openPanel("servers");
                 return;
             }
+
+            const mcvChannel = e.target.closest("[data-mcv-channel]");
+            if (mcvChannel) {
+                this.state.mcVersionsChannel = mcvChannel.dataset.mcvChannel;
+                this.openPanel("mcversions");
+                return;
+            }
         });
 
-        const cfSearchInput = document.body;
         let cfDebounce;
+        let mcvFilterDebounce;
         document.body.addEventListener("input", (e) => {
             if (e.target.id === "cf-search-input") {
                 clearTimeout(cfDebounce);
                 cfDebounce = setTimeout(() => this.runCfSearch(true), 350);
+            }
+            if (e.target.id === "mcv-filter-input") {
+                clearTimeout(mcvFilterDebounce);
+                const value = e.target.value;
+                mcvFilterDebounce = setTimeout(() => {
+                    this.state.mcVersionsFilter = value;
+                    this.openPanel("mcversions");
+                    document.getElementById("mcv-filter-input")?.focus();
+                }, 250);
             }
         });
     },

@@ -352,3 +352,79 @@ function settingsPanelBody(category) {
 
     return html;
 }
+
+// ── MC Versions ────────────────────────────────────────────────────────
+// Mirrors Pages/Home.razor's "mcversions" panel structure (channel tabs,
+// filter, version rows with download/switch/delete). The desktop panel's
+// "Install from Microsoft Store" row (VanillaVersionService/
+// StoreInstallService's BedrockUpdater sideload) is Windows-only — Android
+// Bedrock is a single always-current Play Store app with no side-loadable
+// version history, so that row is replaced with an honest note instead of
+// a non-functional button, same treatment as ClientInjectionService.
+function versionRowHtml(v) {
+    const actionsHtml = v.downloaded
+        ? `<div class="version-actions">
+            <button class="icon-btn icon-btn-ghost" title="Delete" data-delete-mcversion="${v.id}"><i class="fa-solid fa-trash"></i></button>
+            ${!v.active ? `<button class="icon-btn mcv-switch-btn" title="Switch to this version" data-switch-mcversion="${v.id}"><i class="fa-solid fa-right-left"></i></button>` : ""}
+        </div>`
+        : `<div class="version-actions"><button class="icon-btn" title="Download" data-download-mcversion="${v.id}"><i class="fa-solid fa-download"></i></button></div>`;
+    return `
+    <div class="version-row ${v.active ? "mcv-active-row" : ""}">
+        <div class="version-meta">
+            <div style="display:flex; align-items:center; gap:6px;">
+                <span class="version-name">Minecraft ${v.id}</span>
+                ${v.active ? `<span class="tag-active">Active</span>` : ""}
+            </div>
+            ${v.downloaded ? `<span class="version-sub">Ready · ${v.size}</span>` : `<span class="version-sub">${v.size}</span>`}
+        </div>
+        ${actionsHtml}
+    </div>`;
+}
+
+// Full panel-overlay markup, not routed through panelShell(): the desktop
+// panel puts the info bar / search / channel tabs BETWEEN .panel-header and
+// .panel-body (siblings, not nested inside it), unlike the other panels.
+function mcVersionsPanelHtml(channel, filter, versions) {
+    const filtered = versions.filter(v =>
+        (channel === "all" || v.channel === channel) &&
+        (!filter || v.id.toLowerCase().includes(filter.toLowerCase())));
+    const active = filtered.filter(v => v.active);
+    const rest = filtered.filter(v => !v.active);
+
+    const listHtml = filtered.length === 0
+        ? `<div class="versions-loading"><span style="opacity:0.5;">${
+            versions.length === 0 ? "No versions found." : `No results for "${filter}".`
+        }</span></div>`
+        : `${active.length > 0 ? `<span class="panel-section-label">Active</span>${active.map(versionRowHtml).join("")}<span class="panel-section-label">All Versions</span>` : ""}
+           ${rest.map(versionRowHtml).join("")}`;
+
+    return `
+    <div class="panel-overlay" id="panel-mcversions">
+        <div class="panel-handle"></div>
+        <div class="panel-header">
+            <div class="panel-title-wrap">
+                <span class="panel-title">MC Versions</span>
+                <div class="panel-title-underline"></div>
+            </div>
+            <div class="panel-header-actions">
+                <button class="panel-back-btn" data-close-panel data-tooltip="Back"><i class="fa-solid fa-chevron-down"></i></button>
+            </div>
+        </div>
+        <div class="mcv-info-bar">
+            <i class="fa-solid fa-circle-info"></i>
+            <span>Android Bedrock is a single always-current Play Store app — there's no side-loadable
+            version history the way Windows' Developer Mode sideload or Microsoft Store rollback allow.
+            This list is illustrative of the desktop panel's layout; switching versions isn't possible here.</span>
+        </div>
+        <div class="panel-search-wrap">
+            <i class="fa-solid fa-magnifying-glass"></i>
+            <input class="panel-search-input" id="mcv-filter-input" placeholder="Filter Minecraft versions..." value="${filter}" />
+        </div>
+        <div class="mcv-channel-tabs">
+            ${["all", "release", "preview"].map(c =>
+                `<button class="mcv-channel-tab ${channel === c ? "active" : ""}" data-mcv-channel="${c}">${c === "all" ? "All" : c === "release" ? "Releases" : "Previews"}</button>`).join("")}
+        </div>
+        <div class="panel-body">${listHtml}</div>
+        ${renderPanelTabs("mcversions")}
+    </div>`;
+}

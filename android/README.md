@@ -140,12 +140,19 @@ Launchers/Mods/Versions/Profile/Screenshots for Java), footer
 cards), `servers` (saved + "Popular" suggestions), `credits`, `settings`
 (category filter + sections — Java Edition section links out to the Pojav
 companion app instead of duplicating its own settings UI), `addons`
-Bedrock branch (CurseForge search with category chips and pagination).
+Bedrock branch (CurseForge search with category chips and pagination),
+`mcversions` (channel tabs, filter, version rows with download/switch/
+delete actions — the desktop panel's "Install from Microsoft Store" row
+is Windows-only sideloading with no Android equivalent, since Android
+Bedrock is a single always-current Play Store app; replaced with an
+honest note instead of a non-functional button, and the list itself is
+empty pending a real version data source rather than seeded with fake
+version numbers).
 
 **Empty-state placeholders (correct panel/labels, listing logic queued):**
 `bedrockworlds`, `bedrockpacks`, `bedrockbackups`, `bedrockinstances`,
-`bedrockscreenshots`, `mcversions` — each needs real on-device data (world
-files, packs, backups) wired in; the empty-state markup itself is the real
+`bedrockscreenshots` — each needs real on-device data (world files,
+packs, backups) wired in; the empty-state markup itself is the real
 `.empty-state` class from app.css.
 
 **Not yet started:** `addons` Java branch (Loaders/Mods/Assets/Datapacks/
