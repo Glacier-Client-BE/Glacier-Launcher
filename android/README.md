@@ -229,6 +229,23 @@ truthfully. Reachable the same way as desktop: the "Modpacks" button in
 the Java Addons panel's header. No `.panel-tabs` footer, matching
 `ModpacksPanel.razor`.
 
-**Not yet started:** `themestudio`, `skinlibrary` — both need a live theme
-preview / 3D skin canvas via `skinview3d.js`, a meaningfully larger chunk
-than the panels so far.
+`themestudio` is matched and genuinely live, not a mockup: `js/theme.js`
+(`ThemeEngine`) is a port of the desktop app's own `wwwroot/js/interop.js`
+theme-application functions (already plain browser JS, portable as-is) and
+`Models/ThemeDefinition.cs`'s `BuildCssVars()` — same derived accent-glow/
+hover/background-overlay math. Theme create/select/duplicate/delete,
+per-color editing (native `<input type="color">` swatches instead of
+porting `ColorPicker.razor`'s custom hue/saturation picker), radius/blur/
+overlay/animation-speed sliders, and custom CSS all apply live by setting
+real CSS custom properties on the document — picking a color or dragging a
+slider actually re-skins the running app. Themes persist to `localStorage`
+(the closest analogue to the desktop's own `themes.json` file) rather than
+the settings blob, since it's a list of documents, not a single settings
+object. Wallpaper picking is disabled (needs a file picker this app
+doesn't have a bridge for yet). Reachable the same way as desktop: the
+"Theme Studio" row in Settings → Appearance.
+
+**Not yet started:** `skinlibrary` — needs a 3D skin canvas via
+`skinview3d.js`, real Microsoft/Xbox sign-in to have a skin to show in the
+first place (same gate `javaprofile` hit), and skin upload/library
+management on top.

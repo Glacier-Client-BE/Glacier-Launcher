@@ -20,6 +20,7 @@ const DEFAULT_SETTINGS = {
     profileDisplayMode: "auto",
     savedServers: [],
     curseForgeApiKeyOverride: "",
+    activeThemeId: "",
 };
 
 const App = {
@@ -48,6 +49,8 @@ const App = {
         downloads: [], // session-scoped, see downloadRowHtml()/downloadsPanelHtml() in panels.js
         levMods: { query: "", results: [], loading: false, error: null, hasSearched: false },
         modpacks: { source: "mr", query: "", results: [], searching: false, searched: false, error: null },
+        themes: [], // loaded from localStorage on init — see loadThemes()/saveThemes()
+        selectedThemeId: null,
         news: {
             loading: false, posts: [], releases: [],
             fallbackItems: [
@@ -60,6 +63,7 @@ const App = {
     init() {
         try { this.state.settings = { ...DEFAULT_SETTINGS, ...JSON.parse(Bridge.getSettingsJson() || "{}") }; } catch (e) {}
         this.state.javaInstalled = Bridge.isJavaEditionInstalled();
+        this.loadThemes();
         document.getElementById("version-pill").textContent = `v${Bridge.appVersionName()}`;
         this.renderTopBar();
         this.renderQuickActions();
@@ -67,10 +71,24 @@ const App = {
         this.renderFooter();
         this.renderNews();
         this.bindGlobalEvents();
+
+        const active = this.state.themes.find(t => t.id === this.state.settings.activeThemeId);
+        if (active) ThemeEngine.apply(active);
     },
 
     saveSettings() {
         Bridge.saveSettingsJson(JSON.stringify(this.state.settings));
+    },
+
+    // Theme Studio's list lives in localStorage (per-device, like the desktop
+    // app's themes.json file) rather than the SharedPreferences settings blob,
+    // since it's a list of documents rather than a single settings object.
+    loadThemes() {
+        try { this.state.themes = JSON.parse(localStorage.getItem("glacier_themes") || "[]"); } catch (e) { this.state.themes = []; }
+    },
+
+    saveThemes() {
+        localStorage.setItem("glacier_themes", JSON.stringify(this.state.themes));
     },
 
     setEdition(edition) {
@@ -241,6 +259,16 @@ const App = {
                 // No .panel-tabs footer on desktop (Components/ModpacksPanel.razor) either.
                 html = bareOverlayHtml("modpacks", "Modpacks", "", modpacksPanelBody(this.state.modpacks));
                 if (!this.state.modpacks.searched && !this.state.modpacks.searching) this.searchModpacks();
+                break;
+            }
+            case "themestudio": {
+                if (this.state.selectedThemeId === null && this.state.themes.length > 0) {
+                    this.state.selectedThemeId = this.state.themes.find(t => t.id === this.state.settings.activeThemeId)?.id || this.state.themes[0].id;
+                }
+                const sel = this.state.themes.find(t => t.id === this.state.selectedThemeId) || null;
+                const headerActions = `<button class="btn-sm" data-theme-new-header><i class="fa-solid fa-plus"></i> New</button>`;
+                // No .panel-tabs footer on desktop (Components/ThemeStudioPanel.razor) either.
+                html = bareOverlayHtml("themestudio", "Theme Studio", headerActions, themeStudioPanelBody(this.state.themes, sel, this.state.settings.activeThemeId));
                 break;
             }
             default: html = panelShell({ id, title: id, body: emptyState("Coming soon", "This panel is queued — see android/README.md's status list."), activeTabId: id });
@@ -638,6 +666,92 @@ const App = {
                 this.searchModpacks();
                 return;
             }
+
+            // ── Theme Studio ──────────────────────────────────────────
+            if (e.target.closest("[data-theme-new]") || e.target.closest("[data-theme-new-header]")) {
+                const t = newThemeFrom(this.state.settings.themePreset, this.state.settings.accentColor);
+                this.state.themes = [...this.state.themes, t];
+                this.state.selectedThemeId = t.id;
+                this.saveThemes();
+                ThemeEngine.apply(t);
+                this.openPanel("themestudio");
+                return;
+            }
+            const themeSelect = e.target.closest("[data-theme-select]");
+            if (themeSelect) {
+                this.state.selectedThemeId = themeSelect.dataset.themeSelect;
+                const t = this.state.themes.find(x => x.id === this.state.selectedThemeId);
+                if (t) ThemeEngine.apply(t);
+                this.openPanel("themestudio");
+                return;
+            }
+            if (e.target.closest("[data-theme-activate]")) {
+                this.state.settings.activeThemeId = this.state.selectedThemeId;
+                this.saveSettings();
+                this.openPanel("themestudio");
+                return;
+            }
+            if (e.target.closest("[data-theme-deactivate]")) {
+                this.state.settings.activeThemeId = "";
+                this.saveSettings();
+                this.openPanel("themestudio");
+                return;
+            }
+            if (e.target.closest("[data-theme-duplicate]")) {
+                const src = this.state.themes.find(t => t.id === this.state.selectedThemeId);
+                if (src) {
+                    const copy = { ...src, id: `theme-${Date.now()}`, name: `${src.name} Copy` };
+                    this.state.themes = [...this.state.themes, copy];
+                    this.state.selectedThemeId = copy.id;
+                    this.saveThemes();
+                    this.openPanel("themestudio");
+                }
+                return;
+            }
+            if (e.target.closest("[data-theme-delete]")) {
+                const wasActive = this.state.selectedThemeId === this.state.settings.activeThemeId;
+                this.state.themes = this.state.themes.filter(t => t.id !== this.state.selectedThemeId);
+                this.state.selectedThemeId = this.state.themes[0]?.id || null;
+                this.saveThemes();
+                if (wasActive) { this.state.settings.activeThemeId = ""; this.saveSettings(); ThemeEngine.clear(); }
+                this.openPanel("themestudio");
+                return;
+            }
+            if (e.target.closest("[data-theme-reseed]")) {
+                const t = this.state.themes.find(x => x.id === this.state.selectedThemeId);
+                if (t) {
+                    const seed = PRESET_SEEDS.find(p => p.preset === t.basePreset) || PRESET_SEEDS[0];
+                    Object.assign(t, { bg: seed.bg, bgPanel: seed.bgPanel, text: seed.text, textDim: seed.textDim });
+                    this.saveThemes();
+                    ThemeEngine.apply(t);
+                    this.openPanel("themestudio");
+                }
+                return;
+            }
+            const colorCell = e.target.closest("[data-theme-color-key]");
+            if (colorCell && !e.target.closest("[data-theme-color-input]")) {
+                colorCell.querySelector("[data-theme-color-input]")?.click();
+                return;
+            }
+            if (e.target.closest("[data-theme-apply-css]")) {
+                const t = this.state.themes.find(x => x.id === this.state.selectedThemeId);
+                if (t) {
+                    t.customCss = document.getElementById("theme-custom-css")?.value || "";
+                    this.saveThemes();
+                    ThemeEngine.setCustomCss(t.customCss);
+                }
+                return;
+            }
+            if (e.target.closest("[data-theme-reset-css]")) {
+                const t = this.state.themes.find(x => x.id === this.state.selectedThemeId);
+                if (t) {
+                    t.customCss = "";
+                    this.saveThemes();
+                    ThemeEngine.setCustomCss("");
+                    this.openPanel("themestudio");
+                }
+                return;
+            }
         });
 
         let cfDebounce;
@@ -645,6 +759,7 @@ const App = {
         let mcvFilterDebounce;
         let javaVersionFilterDebounce;
         let levModsFilterDebounce;
+        let themeSaveDebounce;
         document.body.addEventListener("keydown", (e) => {
             if (e.target.id === "modpack-search-input" && e.key === "Enter") {
                 this.state.modpacks.query = e.target.value;
@@ -687,6 +802,44 @@ const App = {
                     this.openPanel("mcversions");
                     document.getElementById("mcv-filter-input")?.focus();
                 }, 250);
+            }
+
+            // ── Theme Studio: live-apply sliders/fields without a full re-render
+            // (dragging a slider is 60fps; re-rendering the whole panel isn't) ──
+            const t = this.state.themes.find(x => x.id === this.state.selectedThemeId);
+            if (!t) return;
+            const applyAndSave = () => { ThemeEngine.apply(t); clearTimeout(themeSaveDebounce); themeSaveDebounce = setTimeout(() => this.saveThemes(), 500); };
+
+            if (e.target.id === "theme-name-input") { t.name = e.target.value; clearTimeout(themeSaveDebounce); themeSaveDebounce = setTimeout(() => this.saveThemes(), 500); }
+            if (e.target.id === "theme-font-input") { t.fontFamily = e.target.value; applyAndSave(); }
+            if (e.target.id === "theme-custom-css") { /* applied via the explicit Apply button, not live */ }
+            if (e.target.id === "theme-radius-sm") { t.radiusSm = Number(e.target.value); e.target.nextElementSibling.textContent = `${t.radiusSm}px`; applyAndSave(); }
+            if (e.target.id === "theme-radius-md") { t.radiusMd = Number(e.target.value); e.target.nextElementSibling.textContent = `${t.radiusMd}px`; applyAndSave(); }
+            if (e.target.id === "theme-blur") { t.blur = Number(e.target.value); e.target.nextElementSibling.textContent = `${t.blur}px`; applyAndSave(); }
+            if (e.target.id === "theme-overlay") { t.overlayStrength = Number(e.target.value) / 100; e.target.nextElementSibling.textContent = `${Number(e.target.value)}%`; applyAndSave(); }
+            if (e.target.id === "theme-anim-speed") { t.animationSpeed = Number(e.target.value); e.target.nextElementSibling.textContent = `${t.animationSpeed}x`; applyAndSave(); }
+        });
+
+        document.body.addEventListener("change", (e) => {
+            const colorInput = e.target.closest("[data-theme-color-input]");
+            if (colorInput) {
+                const t = this.state.themes.find(x => x.id === this.state.selectedThemeId);
+                if (t) {
+                    t[colorInput.dataset.themeColorInput] = colorInput.value;
+                    ThemeEngine.apply(t);
+                    this.saveThemes();
+                    this.openPanel("themestudio");
+                }
+                return;
+            }
+            if (e.target.id === "theme-base-preset-select") {
+                const t = this.state.themes.find(x => x.id === this.state.selectedThemeId);
+                if (t) {
+                    t.basePreset = e.target.value;
+                    ThemeEngine.apply(t);
+                    this.saveThemes();
+                }
+                return;
             }
         });
     },

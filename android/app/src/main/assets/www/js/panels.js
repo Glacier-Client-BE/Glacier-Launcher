@@ -430,6 +430,7 @@ function settingsPanelBody(category) {
                 `<option value="${t}" ${s.themePreset === t ? "selected" : ""}>${t[0].toUpperCase() + t.slice(1)}</option>`).join("")}</select>`)}
         ${settingRow("Compact mode", "Tighter spacing throughout", toggleHtml("compactMode", s.compactMode))}
         ${settingRow("Animations", "Disable for low-end devices", toggleHtml("animationsEnabled", s.animationsEnabled))}
+        ${settingRow("Theme Studio", "Build a fully custom theme — every color, radius and font is editable", `<button class="btn-sm" data-open-panel="themestudio">Open</button>`)}
         </div>`;
     }
 
@@ -986,4 +987,160 @@ function modpacksPanelBody(state) {
     </div>
     ${cfUnavailable ? `<div class="stats-empty">A CurseForge API key is required to browse CurseForge. Add one in Settings, or use Modrinth (no key needed).</div>` : ""}
     ${resultsHtml}`;
+}
+
+// ── Theme Studio ───────────────────────────────────────────────────────
+// Mirrors Components/ThemeStudioPanel.razor: theme list (create/select/
+// duplicate/delete), color editing, shape/effect sliders, custom CSS —
+// all genuinely live via ThemeEngine (a port of ThemeService.cs's own
+// interop.js functions and ThemeDefinition.cs's BuildCssVars()), not a
+// static mockup. Wallpaper picking needs real file access this WebView
+// doesn't have a bridge for yet, so that row stays disabled.
+const PRESET_SEEDS = [
+    { preset: "dark", label: "Dark", bg: "#23272a", bgPanel: "#2c2f33", text: "#ffffff", textDim: "#99aab5" },
+    { preset: "darker", label: "Darker", bg: "#1e2124", bgPanel: "#26292c", text: "#ffffff", textDim: "#99aab5" },
+    { preset: "midnight", label: "Midnight", bg: "#141520", bgPanel: "#1c1e30", text: "#ffffff", textDim: "#99aab5" },
+    { preset: "slate", label: "Slate", bg: "#2a2d35", bgPanel: "#33373f", text: "#ffffff", textDim: "#99aab5" },
+    { preset: "ocean", label: "Ocean", bg: "#0e1f2a", bgPanel: "#13293a", text: "#ffffff", textDim: "#99aab5" },
+    { preset: "forest", label: "Forest", bg: "#16241a", bgPanel: "#1d2f22", text: "#ffffff", textDim: "#99aab5" },
+    { preset: "sunset", label: "Sunset", bg: "#2a1a26", bgPanel: "#33212f", text: "#ffffff", textDim: "#99aab5" },
+    { preset: "light", label: "Light", bg: "#f5f6f8", bgPanel: "#ffffff", text: "#0e1116", textDim: "#5b6470" },
+];
+
+function newThemeFrom(preset, accent) {
+    const seed = PRESET_SEEDS.find(p => p.preset === preset) || PRESET_SEEDS[0];
+    return {
+        id: `theme-${Date.now()}`,
+        name: `${seed.label} Custom`,
+        basePreset: seed.preset,
+        accent: accent || "#7289da",
+        bg: seed.bg, bgPanel: seed.bgPanel, text: seed.text, textDim: seed.textDim,
+        red: "#ff5c5c", green: "#43b581", orange: "#faa61a",
+        radiusSm: 8, radiusMd: 12, blur: 14, overlayStrength: 1.0,
+        fontFamily: "", animationSpeed: 1.0,
+        backgroundImage: "", backgroundFit: "cover", backgroundOpacity: 1.0,
+        customCss: "",
+    };
+}
+
+function themeColorCell(label, key, value) {
+    return `
+    <button type="button" class="ts-color-cell" data-theme-color-key="${key}">
+        <span class="ts-color-dot" style="--dot-color:${escapeHtml(value)};"></span>
+        <span>${label}</span>
+        <input type="color" class="ts-color-native-input" data-theme-color-input="${key}" value="${toHexColor(value)}" style="position:absolute; opacity:0; width:0; height:0;" />
+    </button>`;
+}
+
+function toHexColor(v) {
+    // <input type="color"> only accepts #rrggbb — fall back to accent if we can't parse.
+    if (/^#[0-9a-fA-F]{6}$/.test(v)) return v;
+    return "#7289da";
+}
+
+function themeStudioPanelBody(themes, sel, activeThemeId) {
+    if (themes.length === 0) {
+        return `<div class="ts-empty">
+            <i class="fa-solid fa-palette"></i>
+            <span>No custom themes yet</span>
+            <small>Start from the current preset and make it yours — every color, radius and font is editable.</small>
+            <button class="btn-sm" data-theme-new><i class="fa-solid fa-plus"></i> Create your first theme</button>
+        </div>`;
+    }
+
+    const chips = themes.map(t => `
+        <button class="ts-chip ${sel && t.id === sel.id ? "selected" : ""} ${t.id === activeThemeId ? "active" : ""}" data-theme-select="${t.id}">
+            <span class="ts-chip-swatch" style="background:${escapeHtml(t.accent)}"></span>
+            ${escapeHtml(t.name)}
+            ${t.id === activeThemeId ? `<i class="fa-solid fa-circle-check"></i>` : ""}
+        </button>`).join("");
+
+    if (!sel) return `<div class="ts-chips">${chips}</div>`;
+
+    const isActive = sel.id === activeThemeId;
+    return `
+    <div class="ts-chips">${chips}</div>
+    <div class="ts-actions">
+        ${isActive
+            ? `<button class="btn-sm ts-active-btn" data-theme-deactivate><i class="fa-solid fa-circle-check"></i> Active — click to stop using</button>`
+            : `<button class="btn-sm btn-accent" data-theme-activate><i class="fa-solid fa-wand-magic-sparkles"></i> Use this theme</button>`}
+        <button class="btn-sm" data-theme-duplicate><i class="fa-solid fa-copy"></i> Duplicate</button>
+        <button class="btn-sm ts-danger" data-theme-delete><i class="fa-solid fa-trash"></i> Delete</button>
+    </div>
+
+    <div class="panel-section-label">Identity</div>
+    <div class="setting-row">
+        <div class="setting-meta"><span class="setting-label">Name</span><span class="setting-hint">Shown in the theme list</span></div>
+        <input class="setting-input" id="theme-name-input" value="${escapeHtml(sel.name)}" maxlength="40" />
+    </div>
+    <div class="setting-row">
+        <div class="setting-meta"><span class="setting-label">Base preset</span><span class="setting-hint">Inherits component styling — pick Light for light themes</span></div>
+        <div style="display:flex; align-items:center; gap:6px;">
+            <select class="setting-select" id="theme-base-preset-select">
+                ${PRESET_SEEDS.map(p => `<option value="${p.preset}" ${sel.basePreset === p.preset ? "selected" : ""}>${p.label}</option>`).join("")}
+            </select>
+            <button class="btn-sm" title="Reset colors to this preset's defaults" data-theme-reseed><i class="fa-solid fa-rotate-left"></i></button>
+        </div>
+    </div>
+
+    <div class="panel-section-label">Colors</div>
+    <div class="ts-color-grid">
+        ${themeColorCell("Accent", "accent", sel.accent)}
+        ${themeColorCell("Background", "bg", sel.bg)}
+        ${themeColorCell("Panels", "bgPanel", sel.bgPanel)}
+        ${themeColorCell("Text", "text", sel.text)}
+        ${themeColorCell("Muted text", "textDim", sel.textDim)}
+        ${themeColorCell("Error", "red", sel.red)}
+        ${themeColorCell("Success", "green", sel.green)}
+        ${themeColorCell("Warning", "orange", sel.orange)}
+    </div>
+
+    <div class="panel-section-label">Shape & effects</div>
+    <div class="setting-row">
+        <div class="setting-meta"><span class="setting-label">Corner radius</span><span class="setting-hint">Small controls / large cards</span></div>
+        <div style="display:flex; align-items:center; gap:8px;">
+            <input type="range" min="0" max="24" id="theme-radius-sm" value="${sel.radiusSm}" /><span class="ts-slider-val">${sel.radiusSm}px</span>
+            <input type="range" min="0" max="32" id="theme-radius-md" value="${sel.radiusMd}" /><span class="ts-slider-val">${sel.radiusMd}px</span>
+        </div>
+    </div>
+    <div class="setting-row">
+        <div class="setting-meta"><span class="setting-label">Panel blur</span><span class="setting-hint">Backdrop blur behind panels — 0 disables (fastest)</span></div>
+        <div style="display:flex; align-items:center; gap:8px;">
+            <input type="range" min="0" max="30" step="2" id="theme-blur" value="${sel.blur}" /><span class="ts-slider-val">${sel.blur}px</span>
+        </div>
+    </div>
+    <div class="setting-row">
+        <div class="setting-meta"><span class="setting-label">Overlay strength</span><span class="setting-hint">How much the wallpaper is dimmed toward the background color</span></div>
+        <div style="display:flex; align-items:center; gap:8px;">
+            <input type="range" min="0" max="100" step="5" id="theme-overlay" value="${Math.round(sel.overlayStrength * 100)}" /><span class="ts-slider-val">${Math.round(sel.overlayStrength * 100)}%</span>
+        </div>
+    </div>
+
+    <div class="panel-section-label">Background</div>
+    <div class="setting-row">
+        <div class="setting-meta"><span class="setting-label">Wallpaper</span><span class="setting-hint">Needs a file picker this app doesn't have yet</span></div>
+        <button class="btn-sm" disabled><i class="fa-solid fa-image"></i> Choose</button>
+    </div>
+
+    <div class="panel-section-label">Typography & motion</div>
+    <div class="setting-row">
+        <div class="setting-meta"><span class="setting-label">Font family</span><span class="setting-hint">Any font the system provides — empty uses the default</span></div>
+        <input class="setting-input" id="theme-font-input" placeholder="Segoe UI" value="${escapeHtml(sel.fontFamily)}" />
+    </div>
+    <div class="setting-row">
+        <div class="setting-meta"><span class="setting-label">Animation speed</span><span class="setting-hint">Bundled with the theme — 1x is default</span></div>
+        <div style="display:flex; align-items:center; gap:8px;">
+            <input type="range" min="0.25" max="2" step="0.25" id="theme-anim-speed" value="${sel.animationSpeed}" /><span class="ts-slider-val">${sel.animationSpeed}x</span>
+        </div>
+    </div>
+
+    <div class="panel-section-label">Custom CSS</div>
+    <div class="ts-css-editor">
+        <textarea class="setting-input ts-css-textarea" id="theme-custom-css" spellcheck="false" rows="6" placeholder=".action-btn { border: 1px solid var(--accent); }">${escapeHtml(sel.customCss)}</textarea>
+        <div class="ts-css-actions">
+            <button class="btn-sm" data-theme-apply-css><i class="fa-solid fa-play"></i> Apply</button>
+            <button class="btn-sm" data-theme-reset-css><i class="fa-solid fa-rotate-left"></i> Reset</button>
+            <span class="setting-hint">Injected last, so it wins over everything.</span>
+        </div>
+    </div>`;
 }
