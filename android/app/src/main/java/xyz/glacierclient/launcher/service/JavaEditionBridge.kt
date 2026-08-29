@@ -85,7 +85,8 @@ object JavaEditionBridge {
      * @return false when Pojav's storage paths aren't usable, in which case
      *         launching is aborted rather than crashed into.
      */
-    private fun ensureCurrentProfile(context: Context, versionId: String?): Boolean = try {
+    private fun ensureCurrentProfile(context: Context, versionId: String?): Boolean {
+      return try {
         // LauncherProfiles' own profile-file path is a `static final` read
         // from Tools.GAME_PROFILES_FILE at class-load time, so the storage
         // constants have to exist before the class is first touched or it
@@ -133,8 +134,9 @@ object JavaEditionBridge {
         }
         LauncherProfiles.write()
         true
-    } catch (e: Exception) {
+      } catch (e: Exception) {
         false
+      }
     }
 
     private fun pojavModsDir(): File =
