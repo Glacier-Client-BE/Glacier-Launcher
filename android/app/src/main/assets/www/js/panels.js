@@ -312,11 +312,16 @@ function javaAssetsBody() {
     </div>`).join("");
 }
 
+// Backed by JavaInstanceService.kt's backupSaves/exportModpack/duplicate,
+// which are ports of the desktop service's BackupSavesAsync/
+// ExportModpackAsync/Duplicate. These were rendered as permanently disabled
+// cards; they are plain file I/O over the instance directory, so nothing
+// blocked them beyond not being written yet.
 function javaToolsBody() {
     const rows = [
-        { name: "Backup Saves", sub: "Zip your worlds before a risky update", icon: "fa-solid fa-box-archive", color: "rgba(114,137,218,0.15)", fg: "var(--accent)", action: "fa-solid fa-download" },
-        { name: "Export Modpack", sub: "Bundle mods + config into a shareable zip", icon: "fa-solid fa-file-zipper", color: "rgba(67,181,129,0.15)", fg: "var(--green)", action: "fa-solid fa-file-export" },
-        { name: "Duplicate Instance", sub: "Clone your active instance with all mods & config", icon: "fa-solid fa-clone", color: "rgba(250,166,26,0.15)", fg: "var(--orange)", action: "fa-solid fa-copy" },
+        { id: "backup-saves", name: "Backup Saves", sub: "Zip your worlds before a risky update", icon: "fa-solid fa-box-archive", color: "rgba(114,137,218,0.15)", fg: "var(--accent)", action: "fa-solid fa-download" },
+        { id: "export-modpack", name: "Export Modpack", sub: "Bundle mods + config into a shareable zip", icon: "fa-solid fa-file-zipper", color: "rgba(67,181,129,0.15)", fg: "var(--green)", action: "fa-solid fa-file-export" },
+        { id: "duplicate-instance", name: "Duplicate Instance", sub: "Clone your active instance with all mods & config", icon: "fa-solid fa-clone", color: "rgba(250,166,26,0.15)", fg: "var(--orange)", action: "fa-solid fa-copy" },
     ];
     return rows.map(r => `
     <div class="client-card">
@@ -324,10 +329,10 @@ function javaToolsBody() {
             <div class="client-card-icon" style="background:${r.color}; color:${r.fg}; padding:8px;"><i class="${r.icon}"></i></div>
             <div class="client-card-meta">
                 <span class="client-card-name">${r.name}</span>
-                <span class="client-card-sub" style="opacity:0.5;">${r.sub}</span>
+                <span class="client-card-sub" style="opacity:0.5;" data-java-tool-status="${r.id}">${r.sub}</span>
             </div>
             <div class="client-card-actions">
-                <button class="icon-btn" disabled><i class="${r.action}"></i></button>
+                <button class="icon-btn" data-java-tool="${r.id}" data-tooltip="${r.name}"><i class="${r.action}"></i></button>
             </div>
         </div>
     </div>`).join("");
@@ -1537,7 +1542,7 @@ function skinLibraryPanelHtml(state) {
             <div class="panel-header-actions">
                 <button class="btn-sm" id="skinlib-save-current" ${signedIn ? "" : "disabled"} ${signedIn ? "" : `data-tooltip="Sign in with Microsoft (Java) first to save your current skin"`}>
                     <i class="fa-solid fa-floppy-disk"></i> Save current</button>
-                <button class="btn-sm" disabled data-tooltip="Needs a native file picker this app doesn't have yet">
+                <button class="btn-sm" id="skinlib-add-png" data-tooltip="Import a skin PNG from this device">
                     <i class="fa-solid fa-upload"></i> Add PNG</button>
                 <button class="panel-back-btn" data-close-panel data-tooltip="Back"><i class="fa-solid fa-chevron-down"></i></button>
             </div>

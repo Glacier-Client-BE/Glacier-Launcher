@@ -360,6 +360,40 @@ const App = {
         if (body) body.innerHTML = skinLibraryPanelBody(this.state.skinLibrary);
     },
 
+    // Reports the real outcome in the card's own subtitle rather than a
+    // generic success: each native call returns the produced path, or "" when
+    // there was nothing to do (e.g. no worlds to back up), and desktop
+    // distinguishes those cases too.
+    runJavaTool(id) {
+        const status = document.querySelector(`[data-java-tool-status="${id}"]`);
+        const say = (msg) => { if (status) status.textContent = msg; };
+        say("Working…");
+
+        let result = "";
+        try {
+            if (id === "backup-saves") result = Bridge.backupJavaSaves();
+            else if (id === "export-modpack") result = Bridge.exportJavaModpack();
+            else if (id === "duplicate-instance") {
+                const active = JSON.parse(Bridge.listJavaInstances() || "[]").find(i => i.isActive);
+                result = active ? Bridge.duplicateJavaInstance(active.id) : "";
+            }
+        } catch (e) {
+            say("Failed: " + e.message);
+            return;
+        }
+
+        if (!result) {
+            say(id === "backup-saves" ? "Nothing to back up yet." : "Couldn't complete — no active instance.");
+            return;
+        }
+        if (id === "duplicate-instance") {
+            const copy = JSON.parse(result);
+            say(`Duplicated as "${copy.name}".`);
+            return;
+        }
+        say("Saved to " + result.split("/").pop());
+    },
+
     async addSkinFromUsername() {
         const sl = this.state.skinLibrary;
         if (!sl.username.trim() || sl.busy) return;
@@ -1427,7 +1461,11 @@ const App = {
             if (e.target.closest("[data-refresh-java-versions]")) { this.state.javaVersions.list = []; this.loadJavaVersions(); return; }
             if (e.target.closest("[data-refresh-news]")) { this.loadNews(); return; }
 
+            const javaTool = e.target.closest("[data-java-tool]");
+            if (javaTool) { this.runJavaTool(javaTool.dataset.javaTool); return; }
+
             if (e.target.closest("#skinlib-add-btn")) { this.addSkinFromUsername(); return; }
+            if (e.target.closest("#skinlib-add-png")) { SkinLibrary.addFromPng(); return; }
             if (e.target.closest("#skinlib-save-current")) {
                 if (this.state.settings.javaUsername) {
                     this.state.skinLibrary.username = this.state.settings.javaUsername;

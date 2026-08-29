@@ -62,6 +62,31 @@ class MainActivity : ComponentActivity() {
         openBedrockStorageTree.launch(null)
     }
 
+    private var onSkinPngPicked: ((String?) -> Unit)? = null
+
+    // Skin Library "Add PNG" — the button was disabled with the hint "Needs a
+    // native file picker this app doesn't have yet". A skin is a small PNG, so
+    // it is read straight to a base64 data URL rather than staged on disk:
+    // js/skinlibrary.js already stores library entries as data URLs, and that
+    // keeps the picked file out of app storage entirely.
+    private val openSkinPngDocument = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        onSkinPngPicked?.invoke(uri?.let { readAsDataUrl(it) })
+        onSkinPngPicked = null
+    }
+
+    fun requestSkinPng(onResult: (String?) -> Unit) {
+        onSkinPngPicked = onResult
+        openSkinPngDocument.launch(arrayOf("image/png"))
+    }
+
+    /** Minecraft skins are 64x64/64x32 PNGs — a few KB. Capped anyway so a
+     *  mis-picked large image can't be inlined into the WebView as base64. */
+    private fun readAsDataUrl(uri: Uri): String? = runCatching {
+        val bytes = contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: return@runCatching null
+        if (bytes.size > 2 * 1024 * 1024) return@runCatching null
+        "data:image/png;base64," + android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP)
+    }.getOrNull()
+
     private var onCustomDllPicked: ((String?) -> Unit)? = null
 
     // Mirrors desktop's PickDllFile (Pages/Home.Settings.cs) — a plain
@@ -519,6 +544,33 @@ private class AndroidBridge(private val activity: MainActivity, private val webV
     fun resetWallpaper() {
         runCatching { File(activity.filesDir, "wallpaper").listFiles()?.forEach { it.delete() } }
     }
+
+    // Skin Library "Add PNG" (desktop's own file-dialog import).
+    @JavascriptInterface
+    fun pickSkinPng() {
+        activity.runOnUiThread {
+            activity.requestSkinPng { dataUrl ->
+                val js = if (dataUrl != null)
+                    "window.SkinLibrary && window.SkinLibrary._onPngPicked(${org.json.JSONObject.quote(dataUrl)})"
+                else
+                    "window.SkinLibrary && window.SkinLibrary._onPngPicked(null)"
+                webView.evaluateJavascript(js, null)
+            }
+        }
+    }
+
+    // ── Java Tools (desktop's JavaInstanceService.cs) ────────────────
+    // Each returns the produced path, or "" when there was nothing to do,
+    // so the UI can report the real outcome instead of guessing.
+
+    @JavascriptInterface
+    fun backupJavaSaves(): String = JavaInstanceService.backupSaves() ?: ""
+
+    @JavascriptInterface
+    fun exportJavaModpack(): String = JavaInstanceService.exportModpack() ?: ""
+
+    @JavascriptInterface
+    fun duplicateJavaInstance(id: String): String = JavaInstanceService.duplicate(id) ?: ""
 
     // ── Discord Rich Presence ────────────────────────────────────────
     //

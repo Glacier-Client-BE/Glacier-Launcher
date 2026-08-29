@@ -607,7 +607,20 @@ wiring lands).
 5. **Custom DLL/.so picker** for Bedrock (`PickDllFile`/`CopyDllPath`/
    `ClearCustomDll`) — see injection section above, buildable now via SAF
    independent of the fuller package-context work.
-6. ~~**Custom wallpaper**~~ — done: `pickWallpaper()`/`customBackgroundUrl()`/
+6. ~~**Java Tools**~~ — done: Backup Saves / Export Modpack / Duplicate
+   Instance were rendered as permanently disabled cards; they are ports of
+   `JavaInstanceService.cs`'s `BackupSavesAsync`/`ExportModpackAsync`/
+   `Duplicate` and are plain file I/O over the instance directory
+   `directoryFor()` already resolved, so nothing blocked them beyond not
+   being written. Export produces the same CurseForge-shaped zip
+   (`overrides/` + `manifest.json`) desktop does. Each reports its real
+   outcome in the card, including "nothing to back up".
+7. ~~**Skin Library "Add PNG"**~~ — done: `pickSkinPng()` imports a skin file
+   through SAF and hands it back as a base64 `data:` URL, which slots into
+   the same entry shape `addFromUsername` produces — `applySkin()` `fetch()`es
+   `url` into a Blob, and that works for `data:` URLs exactly as for Mojang's
+   CDN, so an imported skin is applyable with no special-casing.
+8. ~~**Custom wallpaper**~~ — done: `pickWallpaper()`/`customBackgroundUrl()`/
    `resetWallpaper()` in `MainActivity.kt` are desktop's `PickWallpaper`/
    `ResetWallpaper` (`Pages/Home.Settings.cs`) over SAF's single-document
    picker instead of `OpenFileDialog`. The image is copied into app-private

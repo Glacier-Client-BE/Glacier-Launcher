@@ -7,6 +7,11 @@ import net.kdt.pojavlaunch.value.launcherprofiles.MinecraftProfile
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import java.util.zip.ZipEntry
+import java.util.zip.ZipOutputStream
 
 /**
  * Android analogue of Services/JavaInstanceService.cs — built directly on
@@ -104,6 +109,114 @@ object JavaInstanceService {
         profile.lastVersionId = versionId
         LauncherProfiles.write()
         return true
+    }
+
+    // ── Java Tools (desktop's JavaInstanceService.cs) ────────────────────
+    //
+    // These three were rendered as permanently disabled cards in the Java
+    // Tools panel. They are plain file I/O over the instance directory that
+    // directoryFor() already resolves, so nothing blocked them beyond not
+    // being written yet.
+
+    private fun timestamp(): String =
+        SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(Date())
+
+    private fun activeProfileId(): String? {
+        LauncherProfiles.load()
+        val current = LauncherPreferences.DEFAULT_PREF
+            ?.getString(LauncherPreferences.PREF_KEY_CURRENT_PROFILE, "")
+        if (!current.isNullOrBlank() && LauncherProfiles.mainProfileJson.profiles.containsKey(current)) return current
+        return LauncherProfiles.mainProfileJson.profiles.keys.firstOrNull()
+    }
+
+    /**
+     * Desktop's BackupSavesAsync(): zips the active instance's saves folder
+     * into backups/saves-<timestamp>.zip. Returns null when there is nothing
+     * to back up, exactly as desktop does for an empty/missing saves dir,
+     * so the caller can say so rather than producing an empty archive.
+     */
+    fun backupSaves(): String? {
+        val dir = activeProfileId()?.let { directoryFor(it) } ?: return null
+        val saves = File(dir, "saves")
+        if (!saves.isDirectory || saves.listFiles().isNullOrEmpty()) return null
+
+        val backups = File(dir, "backups").apply { mkdirs() }
+        val zip = File(backups, "saves-${timestamp()}.zip")
+        return try {
+            ZipOutputStream(zip.outputStream().buffered()).use { out -> zipTree(out, saves, "") }
+            zip.absolutePath
+        } catch (e: Exception) {
+            zip.delete()
+            null
+        }
+    }
+
+    /**
+     * Desktop's ExportModpackAsync(): a CurseForge-shaped modpack zip —
+     * mods/config/resourcepacks/shaderpacks under overrides/, plus the same
+     * manifest.json. Written to exports/<id>-<timestamp>.zip.
+     */
+    fun exportModpack(): String? {
+        val id = activeProfileId() ?: return null
+        val dir = directoryFor(id) ?: return null
+        val profile = LauncherProfiles.mainProfileJson.profiles[id] ?: return null
+
+        val exports = File(Tools.DIR_GAME_HOME, "exports").apply { mkdirs() }
+        val zip = File(exports, "$id-${timestamp()}.zip")
+        return try {
+            ZipOutputStream(zip.outputStream().buffered()).use { out ->
+                for (name in listOf("mods", "config", "resourcepacks", "shaderpacks")) {
+                    val source = File(dir, name)
+                    if (source.isDirectory) zipTree(out, source, "overrides/$name/")
+                }
+                val manifest = JSONObject()
+                    .put("minecraft", JSONObject().put("version", profile.lastVersionId ?: ""))
+                    .put("manifestType", "minecraftModpack")
+                    .put("manifestVersion", 1)
+                    .put("name", profile.name ?: "Instance")
+                    .put("version", "1.0.0")
+                    .put("files", JSONArray())
+                    .put("overrides", "overrides")
+                out.putNextEntry(ZipEntry("manifest.json"))
+                out.write(manifest.toString(2).toByteArray())
+                out.closeEntry()
+            }
+            zip.absolutePath
+        } catch (e: Exception) {
+            zip.delete()
+            null
+        }
+    }
+
+    /** Desktop's Duplicate(id): a new profile named "<name> Copy" with the whole directory tree copied. */
+    fun duplicate(id: String): String? {
+        LauncherProfiles.load()
+        val source = LauncherProfiles.mainProfileJson.profiles[id] ?: return null
+        val sourceDir = directoryFor(id)
+
+        val createdJson = create("${source.name ?: "Instance"} Copy", source.lastVersionId)
+        val copyId = JSONObject(createdJson).optString("id")
+        if (copyId.isBlank()) return null
+
+        val destDir = directoryFor(copyId)
+        if (sourceDir != null && sourceDir.isDirectory && destDir != null) {
+            runCatching { sourceDir.copyRecursively(destDir, overwrite = true) }
+        }
+        return createdJson
+    }
+
+    /**
+     * Writes [dir]'s tree into [out] under [prefix]. Directories are not
+     * given their own entries — a zip is defined by its file paths, and
+     * every consumer recreates the intermediate folders.
+     */
+    private fun zipTree(out: ZipOutputStream, dir: File, prefix: String) {
+        dir.walkTopDown().filter { it.isFile }.forEach { file ->
+            val relative = file.relativeTo(dir).path.replace(File.separatorChar, '/')
+            out.putNextEntry(ZipEntry(prefix + relative))
+            file.inputStream().use { it.copyTo(out) }
+            out.closeEntry()
+        }
     }
 
     /** Resolves an instance's real game directory the same way Pojav's own MainActivity does (Tools.getGameDirPath). */

@@ -19,6 +19,15 @@ const Bridge = (() => {
         appVersionName: () => (hasNative ? native.appVersionName() : "0.0.0-dev"),
         openUrl: (url) => { if (hasNative) { native.openUrl(url); } else { window.open(url, "_blank"); } },
 
+        // Skin Library "Add PNG" import.
+        pickSkinPng: () => { if (hasNative) native.pickSkinPng(); },
+
+        // Java Tools (desktop's JavaInstanceService.cs). Each returns the
+        // produced path, or "" when there was nothing to do.
+        backupJavaSaves: () => (hasNative ? native.backupJavaSaves() : ""),
+        exportJavaModpack: () => (hasNative ? native.exportJavaModpack() : ""),
+        duplicateJavaInstance: (id) => (hasNative ? native.duplicateJavaInstance(id) : ""),
+
         // Custom wallpaper (desktop's PickWallpaper/ResetWallpaper).
         pickWallpaper: () => { if (hasNative) native.pickWallpaper(); },
         customBackgroundUrl: () => (hasNative ? native.customBackgroundUrl() : ""),

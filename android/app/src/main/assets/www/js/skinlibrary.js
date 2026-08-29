@@ -61,6 +61,36 @@ const SkinLibrary = {
         return { name, url, slim, id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}` };
     },
 
+    // "Add PNG" — imports a skin file off the device via the native picker
+    // (MainActivity.pickSkinPng), which hands back a base64 data: URL. That
+    // slots straight into the same entry shape addFromUsername produces, and
+    // applySkin() fetch()es `url` into a Blob, which works for data: URLs
+    // exactly as it does for Mojang's CDN URLs — so an imported skin is
+    // applyable with no special-casing anywhere downstream.
+    addFromPng() {
+        Bridge.pickSkinPng();
+    },
+
+    // Called from native once the picker returns; null means cancelled or
+    // rejected (not a PNG, or over the size cap).
+    _onPngPicked(dataUrl) {
+        const sl = window.App && App.state && App.state.skinLibrary;
+        if (!sl) return;
+        if (!dataUrl) {
+            sl.error = "Couldn't read that PNG.";
+        } else {
+            sl.error = null;
+            sl.skins.unshift({
+                name: "Imported skin",
+                url: dataUrl,
+                slim: false,
+                id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            });
+            App.saveSkins();
+        }
+        App.renderSkinLibraryBody();
+    },
+
     // Real port of Services/SkinService.cs's UploadSkinAsync — same endpoint,
     // same multipart shape. The desktop version reads PNG bytes off disk;
     // this app only ever has a texture URL (Mojang's own CDN), so it fetches
@@ -95,3 +125,8 @@ const SkinLibrary = {
         }
     },
 };
+
+// Same reason as js/xboxauth.js's window.MicrosoftAuth assignment: a
+// top-level `const` doesn't attach to `window`, and MainActivity.kt's
+// pickSkinPng() calls back via `window.SkinLibrary`.
+window.SkinLibrary = SkinLibrary;
