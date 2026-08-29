@@ -84,6 +84,56 @@ class MainActivity : ComponentActivity() {
         openCustomDllDocument.launch(arrayOf("*/*"))
     }
 
+    private var onWallpaperPicked: ((String?) -> Unit)? = null
+
+    // Mirrors desktop's PickWallpaper (Pages/Home.Settings.cs) — an
+    // OpenFileDialog filtered to image types there, SAF's single-document
+    // picker here. Same as the DLL picker above, the chosen file only exists
+    // as a content:// Uri, so it is copied into app-private storage and the
+    // real path handed back; the WebView can then reference it as a file://
+    // URL for the CSS background (settings.allowFileAccess is already on).
+    private val openWallpaperDocument = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        val staged = uri?.let { stageWallpaper(it) }
+        onWallpaperPicked?.invoke(staged)
+        onWallpaperPicked = null
+    }
+
+    fun requestWallpaperFile(onResult: (String?) -> Unit) {
+        onWallpaperPicked = onResult
+        openWallpaperDocument.launch(arrayOf("image/*"))
+    }
+
+    /**
+     * Copies the picked image to filesDir/wallpaper/custom-bg.<ext>,
+     * replacing any previous one. Enforces desktop's own 20 MB ceiling
+     * (OnWallpaperPicked) — a phone has less headroom than a desktop, and
+     * decoding an arbitrarily large bitmap into a WebView layer is the kind
+     * of thing that OOMs on low-end devices.
+     */
+    private fun stageWallpaper(uri: Uri): String? = runCatching {
+        contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+            val sizeIdx = cursor.getColumnIndex(android.provider.OpenableColumns.SIZE)
+            if (cursor.moveToFirst() && sizeIdx >= 0 && !cursor.isNull(sizeIdx)) {
+                if (cursor.getLong(sizeIdx) > 20L * 1024 * 1024) return@runCatching null
+            }
+        }
+
+        val extension = contentResolver.getType(uri)
+            ?.let { android.webkit.MimeTypeMap.getSingleton().getExtensionFromMimeType(it) }
+            ?: "png"
+
+        val dir = File(filesDir, "wallpaper").apply { mkdirs() }
+        // Only one custom wallpaper is kept, so clear older ones rather than
+        // letting a different extension leave the previous file orphaned.
+        dir.listFiles()?.forEach { it.delete() }
+
+        val dest = File(dir, "custom-bg.$extension")
+        contentResolver.openInputStream(uri)?.use { input ->
+            dest.outputStream().use { output -> input.copyTo(output) }
+        } ?: return@runCatching null
+        dest.absolutePath
+    }.getOrNull()
+
     private fun stageCustomDll(uri: Uri): String? = runCatching {
         val name = contentResolver.query(uri, null, null, null, null)?.use { cursor ->
             val idx = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
@@ -436,6 +486,38 @@ private class AndroidBridge(private val activity: MainActivity, private val webV
                 webView.evaluateJavascript(js, null)
             }
         }
+    }
+
+    // Custom wallpaper — desktop's PickWallpaper/ResetWallpaper
+    // (Pages/Home.Settings.cs). The staged path is returned as a file:// URL
+    // because that is what CSS background-image needs; the WebView is
+    // already configured with allowFileAccess = true, and the file lives in
+    // app-private storage that no other app can read.
+    @JavascriptInterface
+    fun pickWallpaper() {
+        activity.runOnUiThread {
+            activity.requestWallpaperFile { path ->
+                val js = if (path != null)
+                    "window.Theme && window.Theme._onWallpaperPicked(${org.json.JSONObject.quote("file://$path")})"
+                else
+                    "window.Theme && window.Theme._onWallpaperPicked(null)"
+                webView.evaluateJavascript(js, null)
+            }
+        }
+    }
+
+    /** Current wallpaper as a file:// URL, or "" when none is set. */
+    @JavascriptInterface
+    fun customBackgroundUrl(): String {
+        val dir = File(activity.filesDir, "wallpaper")
+        val file = dir.listFiles()?.firstOrNull { it.isFile } ?: return ""
+        return "file://${file.absolutePath}"
+    }
+
+    /** Desktop's ResetWallpaper: clears the choice and falls back to the bundled bg. */
+    @JavascriptInterface
+    fun resetWallpaper() {
+        runCatching { File(activity.filesDir, "wallpaper").listFiles()?.forEach { it.delete() } }
     }
 
     // ── Discord Rich Presence ────────────────────────────────────────

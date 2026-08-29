@@ -1470,8 +1470,11 @@ function themeStudioPanelBody(themes, sel, activeThemeId) {
 
     <div class="panel-section-label">Background</div>
     <div class="setting-row">
-        <div class="setting-meta"><span class="setting-label">Wallpaper</span><span class="setting-hint">Needs a file picker this app doesn't have yet</span></div>
-        <button class="btn-sm" disabled><i class="fa-solid fa-image"></i> Choose</button>
+        <div class="setting-meta"><span class="setting-label">Wallpaper</span><span class="setting-hint">Any image on the device — replaces the launcher background</span></div>
+        <div style="display:flex; gap:6px;">
+            <button class="btn-sm" id="theme-pick-wallpaper"><i class="fa-solid fa-image"></i> Choose</button>
+            <button class="btn-sm" id="theme-reset-wallpaper">Reset</button>
+        </div>
     </div>
 
     <div class="panel-section-label">Typography & motion</div>

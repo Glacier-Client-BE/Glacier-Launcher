@@ -19,6 +19,11 @@ const Bridge = (() => {
         appVersionName: () => (hasNative ? native.appVersionName() : "0.0.0-dev"),
         openUrl: (url) => { if (hasNative) { native.openUrl(url); } else { window.open(url, "_blank"); } },
 
+        // Custom wallpaper (desktop's PickWallpaper/ResetWallpaper).
+        pickWallpaper: () => { if (hasNative) native.pickWallpaper(); },
+        customBackgroundUrl: () => (hasNative ? native.customBackgroundUrl() : ""),
+        resetWallpaper: () => { if (hasNative) native.resetWallpaper(); },
+
         // Discord Rich Presence (DiscordRpcService.kt). Opt-in and off by
         // default: Android has no Discord desktop client to speak the real
         // RPC pipe to, so presence rides a Gateway WebSocket authenticated

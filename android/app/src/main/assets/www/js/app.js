@@ -132,6 +132,9 @@ const App = {
 
         const active = this.state.themes.find(t => t.id === this.state.settings.activeThemeId);
         if (active) ThemeEngine.apply(active);
+        // Re-applies a previously chosen wallpaper (MainActivity's
+        // customBackgroundUrl) over index.html's bundled bg.jpg default.
+        ThemeEngine.restoreWallpaper();
 
         if (this.state.settings.checkUpdatesOnStartup) this.checkForUpdate(false);
         this.loadAnnouncement();
@@ -1399,6 +1402,9 @@ const App = {
             if (e.target.closest("[data-glacier-retry]") || e.target.closest("[data-glacier-install]")) { this.loadGlacierManifest(); return; }
             if (e.target.closest("[data-glacier-launch]") || e.target.closest("[data-open-java-edition]")) { this.launchJava(); return; }
             const launchJavaVer = e.target.closest("[data-launch-java-version]");
+            if (e.target.closest("#theme-pick-wallpaper")) { ThemeEngine.pickWallpaper(); return; }
+            if (e.target.closest("#theme-reset-wallpaper")) { ThemeEngine.clearWallpaper(); return; }
+
             if (launchJavaVer) {
                 const versionId = launchJavaVer.dataset.launchJavaVersion;
                 this.recordLaunchStart();

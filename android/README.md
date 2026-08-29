@@ -575,8 +575,7 @@ something this pass had room to implement and verify.
 `OpenUpdateModal`/`ApplyLauncherUpdate`/`SkipLauncherUpdate`/
 `ManualUpdateCheck`/`DismissAnnouncement` (Windows self-update flow — Android
 updates ship through the Play Store or a new APK, not an in-app updater),
-`PickWallpaper`/`ResetWallpaper` (no file picker bridge yet — tracked
-separately), `OpenLauncherFolder`/`OpenMinecraftFolder`/`Open*Folder`
+`OpenLauncherFolder`/`OpenMinecraftFolder`/`Open*Folder`
 (Windows Explorer shortcuts — Android has no equivalent "reveal in Explorer"
 concept; a SAF folder-open intent is the closest analogue once storage
 wiring lands).
@@ -608,6 +607,14 @@ wiring lands).
 5. **Custom DLL/.so picker** for Bedrock (`PickDllFile`/`CopyDllPath`/
    `ClearCustomDll`) — see injection section above, buildable now via SAF
    independent of the fuller package-context work.
+6. ~~**Custom wallpaper**~~ — done: `pickWallpaper()`/`customBackgroundUrl()`/
+   `resetWallpaper()` in `MainActivity.kt` are desktop's `PickWallpaper`/
+   `ResetWallpaper` (`Pages/Home.Settings.cs`) over SAF's single-document
+   picker instead of `OpenFileDialog`. The image is copied into app-private
+   storage (`filesDir/wallpaper/custom-bg.<ext>`, one kept at a time) and
+   applied to `.window-bg` as a `file://` URL, enforcing the same 20 MB
+   ceiling desktop's `OnWallpaperPicked` does. Theme Studio's Wallpaper row
+   is live rather than disabled, and the choice is restored on startup.
 
 ### The Java Edition runtime itself
 

@@ -108,8 +108,50 @@ const ThemeEngine = {
         tag.textContent = css;
     },
 
-    // Wallpaper picking needs real file access this WebView doesn't have a
-    // bridge for yet — theme wallpaper stays the default background.
+    // Applies a wallpaper to .window-bg, the same element index.html sets
+    // the bundled bg.jpg on. An empty url restores that default. Mirrors
+    // desktop's setCustomBackground JS interop (Pages/Home.Settings.cs).
+    setWallpaper(url) {
+        const el = document.querySelector(".window-bg");
+        if (!el) return;
+        el.style.backgroundImage = `url('${(url || "images/bg.jpg").replace(/'/g, "\\'")}')`;
+    },
+
+    /** Restores the saved wallpaper on startup, before first paint of the panel. */
+    restoreWallpaper() {
+        const saved = Bridge.customBackgroundUrl();
+        if (saved) this.setWallpaper(saved);
+    },
+
+    /** Opens the native picker; the result comes back via _onWallpaperPicked. */
+    pickWallpaper() {
+        Bridge.pickWallpaper();
+    },
+
+    clearWallpaper() {
+        Bridge.resetWallpaper();
+        this.setWallpaper("");
+    },
+
+    // Called from native (MainActivity.pickWallpaper). null means the user
+    // cancelled, or the file was rejected — desktop rejects >20 MB the same
+    // way, so say so rather than silently doing nothing.
+    _onWallpaperPicked(url) {
+        if (!url) {
+            // Cancelled, or rejected by the 20 MB ceiling desktop's
+            // OnWallpaperPicked enforces too. Reported through the same
+            // #status-msg line the home view already uses for errors.
+            const statusEl = document.getElementById("status-msg");
+            if (statusEl) {
+                statusEl.textContent = "Couldn't use that image (max 20 MB).";
+                statusEl.classList.add("visible", "error");
+            }
+            return;
+        }
+        this.setWallpaper(url);
+        if (window.App && App.state && App.state.openPanel === "themestudio") App.openPanel("themestudio");
+    },
+
     apply(t) {
         this.setBasePreset(t.basePreset);
         this.setThemeVars(this.buildCssVars(t));
@@ -126,3 +168,8 @@ const ThemeEngine = {
         this.setCustomCss("");
     },
 };
+
+// Same reason as js/xboxauth.js's window.MicrosoftAuth assignment: a
+// top-level `const` doesn't attach to `window`, and MainActivity.kt's
+// pickWallpaper() calls back via `window.Theme`.
+window.Theme = ThemeEngine;
