@@ -4,7 +4,10 @@
 
 const DEFAULT_SETTINGS = {
     selectedClient: "Vanilla",
-    discordRichPresence: true,
+    // Off by default to match DiscordRpcService.kt: presence needs a user
+    // account token the user must supply deliberately (ToS/ban risk), so a
+    // default-on toggle would claim to be doing something it isn't.
+    discordRichPresence: false,
     username: "",
     closeAfterLaunch: false,
     accentColor: "#7289da",
@@ -584,12 +587,26 @@ const App = {
     // approximated per MainActivity.kt's onResume() doc comment) ──────────
     launchJava() {
         this.recordLaunchStart();
+        // No version id: launchJavaEdition() lets Pojav resolve the profile's
+        // own last-used version, so presence reports the menu state. The
+        // versioned launch path below sets the real version instead.
+        Bridge.discordRpcSetJava("", "");
         Bridge.launchJavaEdition();
     },
 
     launchBedrockGame() {
         this.recordLaunchStart();
+        // selectedClient holds exactly the names DiscordRpcService.cs's
+        // SetInGamePresence() switches on. Bedrock is launched as an
+        // installed app here, so its version tag isn't ours to know.
+        Bridge.discordRpcSetBedrock("", this.state.settings.selectedClient);
         Bridge.launchBedrock();
+    },
+
+    // Pushes the current enabled-state to the native service. Called on the
+    // toggle and once at startup so the two stay in step.
+    applyDiscordRpcSetting() {
+        Bridge.discordRpcConfigure(!!this.state.settings.discordRichPresence, "");
     },
 
     recordLaunchStart() {
@@ -604,6 +621,9 @@ const App = {
         const start = this.state.pendingSessionStart;
         if (!start) return;
         this.state.pendingSessionStart = null;
+        // Back to the launcher, so back to the idle presence — same
+        // transition the desktop app makes when the game exits.
+        Bridge.discordRpcSetIdle();
         const durationSeconds = Math.round((Date.now() - start) / 1000);
         if (durationSeconds < 10) return;
 
@@ -1002,6 +1022,10 @@ const App = {
         body.querySelectorAll("[data-toggle-setting]").forEach(el => el.addEventListener("click", () => {
             const key = el.dataset.toggleSetting;
             s[key] = !s[key];
+            // Rich Presence lives natively (DiscordRpcService.kt), so the
+            // flag alone does nothing — the native side has to connect or
+            // disconnect. Passing "" keeps the stored token.
+            if (key === "discordRichPresence") this.applyDiscordRpcSetting();
             this.saveSettings();
             this.openPanel("settings"); // re-render with current category preserved via active tab class already set server-side isn't tracked; acceptable re-open to "all"
         }));
@@ -1013,6 +1037,14 @@ const App = {
         }));
         const usernameInput = document.getElementById("setting-username");
         if (usernameInput) usernameInput.addEventListener("change", (e) => { s.username = e.target.value; this.saveSettings(); this.renderFooter(); });
+        const discordToken = document.getElementById("setting-discord-token");
+        if (discordToken) discordToken.addEventListener("change", (e) => {
+            const token = e.target.value.trim();
+            if (!token) return;                 // empty submit keeps the stored token
+            e.target.value = "";                // never leave credentials sitting in the DOM
+            Bridge.discordRpcConfigure(!!s.discordRichPresence, token);
+            e.target.placeholder = "Token saved — type to replace";
+        });
         const cfKeyInput = document.getElementById("setting-cf-key");
         if (cfKeyInput) cfKeyInput.addEventListener("change", (e) => { s.curseForgeApiKeyOverride = e.target.value; this.saveSettings(); });
         const openJava = document.getElementById("open-java-edition");
@@ -1210,6 +1242,9 @@ const App = {
         document.getElementById("edition-java").addEventListener("click", () => this.setEdition("java"));
         document.getElementById("rpc-toggle").addEventListener("click", () => {
             this.state.settings.discordRichPresence = !this.state.settings.discordRichPresence;
+            // Same as the Settings toggle: the flag is only the UI half,
+            // the native service has to connect/disconnect (DiscordRpcService.kt).
+            this.applyDiscordRpcSetting();
             this.saveSettings();
             this.renderFooter();
         });
@@ -1364,7 +1399,13 @@ const App = {
             if (e.target.closest("[data-glacier-retry]") || e.target.closest("[data-glacier-install]")) { this.loadGlacierManifest(); return; }
             if (e.target.closest("[data-glacier-launch]") || e.target.closest("[data-open-java-edition]")) { this.launchJava(); return; }
             const launchJavaVer = e.target.closest("[data-launch-java-version]");
-            if (launchJavaVer) { this.recordLaunchStart(); Bridge.launchJavaEditionVersion(launchJavaVer.dataset.launchJavaVersion); return; }
+            if (launchJavaVer) {
+                const versionId = launchJavaVer.dataset.launchJavaVersion;
+                this.recordLaunchStart();
+                Bridge.discordRpcSetJava(versionId, "");
+                Bridge.launchJavaEditionVersion(versionId);
+                return;
+            }
             if (e.target.closest("[data-glacier-uninstall]")) { this.state.glacier.latest.installed = false; this.openPanel("javaclients"); return; }
 
             if (e.target.closest("[data-toggle-java-snapshots]")) {

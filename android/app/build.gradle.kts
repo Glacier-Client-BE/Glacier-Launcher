@@ -107,6 +107,14 @@ dependencies {
     // compile classpath to resolve JavaEditionBridge.kt's reference to it.
     implementation("androidx.appcompat:appcompat:1.7.0")
 
+    // Discord Rich Presence (DiscordRpcService.kt) talks to the Discord
+    // Gateway over a WebSocket, which the Android framework has no client
+    // for — unlike the desktop app, whose DiscordRPC NuGet package uses a
+    // local IPC pipe to the Discord *desktop* client that simply does not
+    // exist on Android. OkHttp is the standard WebSocket client here and is
+    // used for nothing else.
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+
     // The Java Edition runtime — the vendored PojavLauncher submodule, built
     // as a library (see settings.gradle.kts + scripts/rebrand-pojav.sh)
     // instead of a separate installable APK, so launching Java Edition is

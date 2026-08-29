@@ -84,11 +84,34 @@ rather than pretending to work; the client cards in the UI still render and
 select correctly, but the actual injection step is honestly gated on root.
 
 Also genuinely not portable:
-- **Native Discord Rich Presence** — that's an IPC pipe between a local
-  Discord *desktop* client and a local game process; there's no equivalent
-  channel on Android, and Discord's Game SDK doesn't run on mobile. The
-  footer's Discord RPC toggle persists a preference but has no native
-  presence to drive yet.
+- **Native Discord Rich Presence, as the desktop app does it** — the desktop
+  `DiscordRpcService.cs` uses the DiscordRPC NuGet package, which is an IPC
+  pipe to a local Discord *desktop* client. There is no Discord desktop
+  client on Android and the Game SDK doesn't run on mobile, so that exact
+  protocol has no endpoint here and cannot be ported.
+
+  Presence *is* implemented now, by the only route that works on-device —
+  see `service/DiscordRpcService.kt`. The research, so it isn't repeated:
+
+  | Approach | Verdict |
+  | --- | --- |
+  | RPC IPC pipe (what desktop uses) | Impossible — no Discord desktop client on Android |
+  | Discord OAuth (`identify`, already implemented) | Cannot set presence. No OAuth scope or bot token can set a *user's* presence |
+  | Bot account | Bots have their own presence; they cannot set a user's |
+  | **Gateway WebSocket + user account token** | **Works. This is what we do — and what every Android RPC app does** |
+  | Companion PC app (e.g. AndroRPC) | ToS-safe, but needs a PC running alongside — pointless for a phone launcher |
+
+  The catch is unavoidable and worth being blunt about: driving the Gateway
+  with a user account token is **self-botting, which Discord's Terms of
+  Service prohibit, and accounts have been terminated for it.** So presence
+  is opt-in, **off by default**, never acquires a token by itself, and the
+  settings row that collects one says so plainly. `discordRpcHasToken()`
+  reports only whether a token is stored — the token is full account
+  credentials and is never handed back out to page scripts.
+
+  The presence payloads mirror `DiscordRpcService.cs` exactly (same
+  application id, asset keys, and Details/State wording) so a user running
+  both desktop and Android sees one consistent presence.
 - **System tray** — no desktop shell concept on Android; omitted.
 
 Real, working code here: the Glacier Client card states, CurseForge mod
@@ -574,8 +597,9 @@ wiring lands).
    desktop's `OpenDiscordOAuth()`. This is only the `identify`-scope login for
    the profile switcher's username/avatar (`EffectiveProfile()`/footer parity
    is wired in `app.js`'s `effectiveProfile()`/`renderFooter()`) — it has
-   nothing to do with Discord Rich Presence, which still has no Android
-   equivalent (see the Rich Presence note above).
+   nothing to do with Discord Rich Presence — presence cannot be driven by
+   an OAuth session at all, and is implemented separately via the Gateway
+   (see the Rich Presence note above).
 4. **Java multi-instance management** (`NewJavaInstance`/`NewBedrockInstance`/
    `CommitRenameInstance`/instance folders) — this is what actually blocks
    Modpack "Install" and several Java Addons actions from being real instead

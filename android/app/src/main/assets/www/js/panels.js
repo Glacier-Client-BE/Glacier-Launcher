@@ -386,6 +386,38 @@ function toggleHtml(key, on) {
     return `<div class="toggle ${on ? "on" : ""}" data-toggle-setting="${key}"></div>`;
 }
 
+// Discord Rich Presence token row.
+//
+// Android has no Discord desktop client, so the real RPC pipe the desktop
+// app's DiscordRpcService.cs uses has no endpoint here. The only way a phone
+// can set its own presence is an authenticated Discord Gateway WebSocket,
+// which needs the user's account token — and Discord's Terms of Service
+// treat automating a user account as self-botting, which accounts do get
+// terminated for. The signed-in Discord OAuth session cannot substitute:
+// "identify" (and in fact no OAuth scope or bot token) can set a user's
+// presence. So the risk is stated in the row itself rather than buried, and
+// nothing connects until the user pastes a token by choice.
+//
+// Bridge.discordRpcHasToken() reports only whether one is stored; the token
+// is never returned to page scripts, so the field shows a placeholder
+// instead of the value and an empty submit keeps the existing token.
+function discordRpcTokenRow() {
+    const hasToken = Bridge.discordRpcHasToken();
+    return `<div class="setting-row">
+        <div class="setting-meta">
+            <span class="setting-label">Discord account token</span>
+            <span class="setting-hint">
+                Required for Rich Presence on Android — there is no Discord desktop app here to connect to.
+                <strong style="color:var(--red);">Using an account token this way is against Discord's Terms of Service and can get your account banned.</strong>
+                Leave this empty to keep Rich Presence off.
+            </span>
+        </div>
+        <input class="setting-input" id="setting-discord-token" type="password"
+               autocomplete="off" spellcheck="false"
+               placeholder="${hasToken ? "Token saved — type to replace" : "Paste token to enable"}" />
+    </div>`;
+}
+
 function settingsPanelBody(category) {
     const s = App.state.settings;
     const cat = (id) => category === "all" || category === id;
@@ -440,7 +472,8 @@ function settingsPanelBody(category) {
                 `<option value="${m}" ${s.profileDisplayMode === m ? "selected" : ""}>${m}</option>`).join("")}</select>`)}
         </div>
         <div class="settings-section"><span class="panel-section-label">Social</span>
-        ${settingRow("Discord Rich Presence", "Posts a “now playing” webhook message (no native IPC on Android)", toggleHtml("discordRichPresence", s.discordRichPresence))}
+        ${settingRow("Discord Rich Presence", "Shows what you're playing on your Discord profile", toggleHtml("discordRichPresence", s.discordRichPresence))}
+        ${discordRpcTokenRow()}
         ${settingRow("Xbox profile", s.xboxGamertag || "Not signed in", `<button class="btn-sm" id="xbox-sign-in-settings">Sign in</button>`)}
         ${settingRow("Skin Library", "Saved skins — apply to your account", `<button class="btn-sm" data-open-panel="skinlibrary">Open</button>`)}
         </div>`;
