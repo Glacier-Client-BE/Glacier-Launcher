@@ -1528,7 +1528,10 @@ const App = {
             if (e.target.closest("[data-leveldat-close]")) { this.closeLevelDatEditor(); return; }
             if (e.target.closest("[data-leveldat-save]")) { this.saveLevelDat(); return; }
             if (e.target.closest("[data-leveldat-cheats]")) {
-                this.setLevelDatField("cheats", !this.state.bedrockWorlds.levelDat.cheats); return;
+                // Optional-chained: the argument is evaluated before
+                // setLevelDatField's own null guard can run, so a click
+                // landing on a stale node would throw here otherwise.
+                this.setLevelDatField("cheats", !this.state.bedrockWorlds.levelDat?.cheats); return;
             }
             const ldGameType = e.target.closest("[data-leveldat-gametype]");
             if (ldGameType) { this.setLevelDatField("gameType", Number(ldGameType.dataset.leveldatGametype)); return; }
