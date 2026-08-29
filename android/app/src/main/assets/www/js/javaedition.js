@@ -104,3 +104,22 @@ const NewsFeed = {
         return data.map(r => ({ tag: r.tag_name, publishedAt: r.published_at, body: r.body || "" }));
     },
 };
+
+// Mirrors Services/AnnouncementService.cs — same optional remote banner
+// file, same "absent/unreachable is normal, fail silently" contract (a
+// stale "maintenance in progress" banner surviving after the outage ended
+// would be actively misleading, so unlike news there's no cached fallback).
+const AnnouncementFeed = {
+    URL: "https://glacierclient.xyz/announcement.json",
+
+    async fetch() {
+        try {
+            const res = await fetch(this.URL);
+            if (!res.ok) return null;
+            const a = await res.json();
+            return a && a.id ? a : null;
+        } catch (e) {
+            return null;
+        }
+    },
+};

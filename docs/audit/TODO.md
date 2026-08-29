@@ -116,7 +116,12 @@
 
 ## Low
 - [ ] Port onboarding wizard to Android.
-- [ ] Port announcement banner to Android.
+- [x] Port announcement banner to Android (`AnnouncementFeed.fetch()` in
+      `javaedition.js`, same remote `announcement.json`/silent-fail contract
+      as `Services/AnnouncementService.cs` — no cached fallback, since a
+      stale "maintenance in progress" banner would be actively misleading).
+      Real `.announcement-banner` markup, dismiss persisted per-id in
+      settings the same way desktop does.
 - [ ] Add localization/string-table support to Android (currently hard-coded English).
 - [ ] Add LevelDat editor to Android (depends on world-listing work above).
 - [ ] Add SAF folder-open shortcuts to Android (replaces desktop's Explorer shortcuts).

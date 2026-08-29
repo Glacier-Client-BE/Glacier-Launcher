@@ -15,6 +15,7 @@ const DEFAULT_SETTINGS = {
     recentlyLaunched: [],
     checkUpdatesOnStartup: true,
     skippedLauncherVersion: "",
+    lastDismissedAnnouncementId: "",
     xboxGamertag: "",
     xboxXuid: "",
     xboxGamerPictureUrl: "",
@@ -97,6 +98,7 @@ const App = {
         bedrockPacks: { hasAccess: false, loading: false, loaded: false, kind: "resource", packs: [] },
         bedrockBackups: { hasAccess: false, loading: false, loaded: false, creating: false, confirmDeleteName: null, backups: [] },
         bedrockScreenshots: { hasAccess: false, loading: false, loaded: false, screenshots: [] },
+        announcement: null,
         javaInstances: { instances: [], renamingId: null, renameValue: "", confirmDeleteId: null },
         news: {
             loading: false, posts: [], releases: [],
@@ -124,6 +126,7 @@ const App = {
         if (active) ThemeEngine.apply(active);
 
         if (this.state.settings.checkUpdatesOnStartup) this.checkForUpdate(false);
+        this.loadAnnouncement();
 
         const hasBedrockAccess = BedrockStorage.hasAccess();
         this.state.bedrockWorlds.hasAccess = hasBedrockAccess;
@@ -565,6 +568,23 @@ const App = {
         s.discordLoggedIn = false; s.discordUsername = ""; s.discordAvatar = ""; s.discordUserId = ""; s.discordAccessToken = "";
         this.saveSettings();
         this.renderFooter();
+    },
+
+    // ── Announcement / maintenance banner (mirrors Home.Announcement.cs) ──
+    async loadAnnouncement() {
+        this.state.announcement = await AnnouncementFeed.fetch();
+        this.renderAnnouncement();
+    },
+
+    renderAnnouncement() {
+        document.getElementById("announcement-root").innerHTML =
+            announcementBannerHtml(this.state.announcement, this.state.settings.lastDismissedAnnouncementId);
+    },
+
+    dismissAnnouncement(id) {
+        this.state.settings.lastDismissedAnnouncementId = id;
+        this.saveSettings();
+        this.renderAnnouncement();
     },
 
     // ── Launcher self-update (mirrors AutoUpdateService.cs / Home.Panels.cs's
@@ -1144,6 +1164,8 @@ const App = {
             if (e.target.closest("[data-cancel-delete-bedrock-backup]")) { this.cancelDeleteBedrockBackup(); return; }
             const deleteBackupBtn = e.target.closest("[data-delete-bedrock-backup]");
             if (deleteBackupBtn) { this.deleteBedrockBackup(deleteBackupBtn.dataset.deleteBedrockBackup); return; }
+            const dismissAnnouncementBtn = e.target.closest("[data-dismiss-announcement]");
+            if (dismissAnnouncementBtn) { this.dismissAnnouncement(dismissAnnouncementBtn.dataset.dismissAnnouncement); return; }
             if (e.target.closest("[data-skip-update]")) { this.skipUpdate(); return; }
             if (e.target.closest("[data-install-update]")) { this.installUpdate(); return; }
             if (e.target.closest("[data-close-update]")) { this.closeUpdateModal(); return; }

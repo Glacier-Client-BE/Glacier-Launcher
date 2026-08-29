@@ -764,6 +764,25 @@ function javaScreenshotsPanelBody() {
     return emptyState("No screenshots yet", "Press F2 in-game to capture one — they'll show up here once wired to shared storage.", "fa-solid fa-image");
 }
 
+// ── Announcement / maintenance banner ────────────────────────────────────
+// Real markup from Pages/Home.razor's ANNOUNCEMENT / MAINTENANCE BANNER
+// block. A "maintenance" kind has no dismiss button, matching desktop —
+// it's meant to stay visible for the duration of the outage it describes.
+function announcementBannerHtml(announcement, dismissedId) {
+    if (!announcement || announcement.id === dismissedId) return "";
+    const icon = announcement.kind === "maintenance" ? "fa-solid fa-triangle-exclamation" : "fa-solid fa-bullhorn";
+    return `
+    <div class="announcement-banner ${escapeHtml(announcement.kind || "")}">
+        <i class="${icon}"></i>
+        <div class="announcement-banner-text">
+            <span class="announcement-banner-title">${escapeHtml(announcement.title)}</span>
+            <span class="announcement-banner-msg">${escapeHtml(announcement.message)}</span>
+        </div>
+        ${announcement.url ? `<button class="btn-sm" data-open-url="${escapeHtml(announcement.url)}">Learn more</button>` : ""}
+        ${announcement.kind !== "maintenance" ? `<button class="announcement-banner-close" data-dismiss-announcement="${escapeHtml(announcement.id)}" data-tooltip="Dismiss"><i class="fa-solid fa-xmark"></i></button>` : ""}
+    </div>`;
+}
+
 // ── Bedrock Worlds ───────────────────────────────────────────────────────
 // Read half of Pages/Home.razor's "bedrockworlds" panel (world-icon markup
 // is real: .version-row/.version-icon/.version-meta from the same "worlds"
