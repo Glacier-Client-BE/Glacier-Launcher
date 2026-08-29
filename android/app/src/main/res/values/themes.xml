@@ -4,5 +4,12 @@
         <item name="android:statusBarColor">#23272A</item>
         <item name="android:navigationBarColor">#23272A</item>
         <item name="android:windowBackground">#23272A</item>
+        <!-- MainActivity forces landscape + draws fully edge-to-edge
+             (setDecorFitsSystemWindows(false)); without this, the display
+             cutout area (camera notch — on the short/left-or-right edge in
+             landscape) is left as unfilled black letterboxing instead of
+             having content drawn under it. Ignored harmlessly on API < 28,
+             which predates this attribute. -->
+        <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>
     </style>
 </resources>

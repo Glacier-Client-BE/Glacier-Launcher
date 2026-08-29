@@ -39,6 +39,14 @@ python3 "$SCRIPT_DIR/patch_pojav_gradle.py" app_pojavlauncher/build.gradle patch
 # game surface (see android/README.md), not this setup/version-picker flow.
 python3 "$SCRIPT_DIR/patch_pojav_gradle.py" app_pojavlauncher/src/main/AndroidManifest.xml strip-launcher-intent-filter
 
+# Glacier's own manifest force-overrides the merged <application>'s theme to
+# Theme.Glacier (a plain android:Theme.Material descendant, for its own
+# ComponentActivity UI) — but every one of Pojav's own top-level activities
+# extends AppCompatActivity and crashes instantly ("You need to use a
+# Theme.AppCompat theme") the moment it inherits that instead of its own
+# real AppTheme. Point them back at their own theme explicitly.
+python3 "$SCRIPT_DIR/patch_pojav_gradle.py" app_pojavlauncher/src/main/AndroidManifest.xml force-appcompat-theme
+
 # GamepadMapperAdapter.java references 7 drawables (stick_left/right(+click),
 # dpad_up/down/left/right) that never existed anywhere in Pojav's own git
 # history — a real, pre-existing bug in upstream's final "Discontinued"

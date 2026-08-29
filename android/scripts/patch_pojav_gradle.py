@@ -101,6 +101,66 @@ def patch_app_module(path: str) -> None:
     open(path, "w").write(text)
 
 
+def force_appcompat_theme(path: str) -> None:
+    # Pojav's own top-level activities (MainActivity, LauncherActivity,
+    # TestStorageActivity, ImportControlActivity, JavaGUILauncherActivity,
+    # CustomControlsActivity) declare no android:theme of their own, so they
+    # inherit whatever the merged <application> element's theme ends up
+    # being. Glacier's own manifest force-overrides that to Theme.Glacier
+    # (tools:replace="...,android:theme,...") for its own ComponentActivity
+    # UI, which is NOT an AppCompat descendant — but every one of these
+    # Pojav activities extends BaseActivity -> AppCompatActivity, and
+    # AppCompatDelegateImpl.createSubDecor() hard-crashes
+    # ("You need to use a Theme.AppCompat theme") the instant one of them
+    # calls findViewById(), which BaseActivity.onCreate() does immediately
+    # via Tools.updateWindowSize(). Pojav's own real theme (styles.xml's
+    # AppTheme, extending Theme.AppCompat.NoActionBar) still exists as a
+    # library resource post-merge — this just points these activities back
+    # at it explicitly so they're unaffected by whatever Glacier's own
+    # <application> theme is. (FatalErrorActivity/ShowErrorActivity/
+    # ExitActivity already declare their own Theme.AppCompat...Dialog and
+    # are unaffected either way.)
+    text = open(path).read()
+    target_names = {
+        "MainActivity",
+        "LauncherActivity",
+        "TestStorageActivity",
+        "ImportControlActivity",
+        "JavaGUILauncherActivity",
+        "CustomControlsActivity",
+    }
+    found = set()
+
+    # Match each <activity ...> opening tag generically (non-greedy up to
+    # its own closing `>`/`/>` — none of these activities' attribute values
+    # contain `>`) rather than assuming android:name is the first attribute,
+    # since some (e.g. JavaGUILauncherActivity) list android:process first.
+    def patch_tag(match: "re.Match[str]") -> str:
+        tag = match.group(0)
+        name_match = re.search(r'android:name="\.(\w+)"', tag)
+        if not name_match or name_match.group(1) not in target_names:
+            return tag
+        activity_name = name_match.group(1)
+        if "android:theme=" in tag:
+            raise SystemExit(
+                f"force_appcompat_theme: <activity android:name=\".{activity_name}\"> already declares "
+                "its own android:theme — Pojav's manifest changed, this patch is no longer needed there."
+            )
+        found.add(activity_name)
+        closing = "/>" if tag.endswith("/>") else ">"
+        return tag[: -len(closing)] + f' android:theme="@style/AppTheme"{closing}'
+
+    text = re.sub(r"<activity\b[^>]*?/?>", patch_tag, text)
+
+    missing = target_names - found
+    if missing:
+        raise SystemExit(
+            "force_appcompat_theme: could not find <activity> tag(s) for "
+            f"{sorted(missing)} — Pojav's manifest layout changed, update the pattern."
+        )
+    open(path, "w").write(text)
+
+
 def strip_launcher_intent_filter(path: str) -> None:
     text = open(path).read()
     text = re.sub(
@@ -205,6 +265,7 @@ ACTIONS = {
     "strip-git-version-block": strip_git_version_block,
     "patch-app-module": patch_app_module,
     "strip-launcher-intent-filter": strip_launcher_intent_filter,
+    "force-appcompat-theme": force_appcompat_theme,
     "add-missing-gamepad-drawables": add_missing_gamepad_drawables,
     "fix-nonfinal-resid-switch": fix_nonfinal_resid_switch,
 }

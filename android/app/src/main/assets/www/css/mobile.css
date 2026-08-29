@@ -33,9 +33,11 @@
     .panel-title { font-size: 14px; }
     .panel-body { padding: 10px 12px; }
 
-    .panel-tabs { padding: 4px 10px 6px; }
-    .panel-tab { height: 28px; font-size: 10px; }
-    .panel-tabs-arrow { width: 28px; height: 28px; }
+    .panel-tabs { padding: 4px 8px 6px; gap: 1px; }
+    .panel-tab { height: 30px; font-size: 9px; padding: 0 4px; gap: 3px; }
+    .panel-tab i { font-size: 12px; }
+    .panel-tabs-arrow { width: 24px; height: 30px; }
+    .panel-tabs-arrow i { font-size: 11px; }
 
     .setting-row { padding: 8px 0; }
     .client-card { padding: 10px; }
