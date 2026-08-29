@@ -49,8 +49,16 @@
       Restore is NOT implemented — writing back into com.mojang through SAF
       is a meaningfully bigger, riskier change (a bug there risks wiping
       real worlds) than a read-only listing or an app-private zip write, so
-      it's left as an explicit follow-up rather than rushed. Instances and
-      Screenshots panels remain stubs.
+      it's left as an explicit follow-up rather than rushed.
+- [x] Bedrock **Screenshots** panel: `BedrockStorageService.listScreenshots()`
+      recursively lists `.jpeg` files under `com.mojang/Screenshots/`
+      through the shared SAF grant, into the real `.screenshot-grid`
+      markup. Xbox Game Bar's Captures-folder merge (Windows-only) is
+      skipped rather than faked, matching `BedrockScreenshotService.cs`'s
+      own per-source availability. Bedrock **Instances** panel remains a
+      stub — it's a materially different feature (isolated Bedrock
+      account-folder copies, `Home.BedrockInstances.cs`) rather than a
+      plain SAF list, and is lower priority than what's already real.
 - [ ] Diff `Components/*.razor` output markup against `panels.js`/`app.js`
       generated HTML for spinners, tooltips, error dialogs, and toggles to
       close the "Unverified" rows in `07_UI_PARITY.md`.

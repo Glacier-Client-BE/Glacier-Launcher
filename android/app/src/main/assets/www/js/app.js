@@ -96,6 +96,7 @@ const App = {
         bedrockWorlds: { hasAccess: false, loading: false, loaded: false, worlds: [] },
         bedrockPacks: { hasAccess: false, loading: false, loaded: false, kind: "resource", packs: [] },
         bedrockBackups: { hasAccess: false, loading: false, loaded: false, creating: false, confirmDeleteName: null, backups: [] },
+        bedrockScreenshots: { hasAccess: false, loading: false, loaded: false, screenshots: [] },
         javaInstances: { instances: [], renamingId: null, renameValue: "", confirmDeleteId: null },
         news: {
             loading: false, posts: [], releases: [],
@@ -128,24 +129,38 @@ const App = {
         this.state.bedrockWorlds.hasAccess = hasBedrockAccess;
         this.state.bedrockPacks.hasAccess = hasBedrockAccess;
         this.state.bedrockBackups.hasAccess = hasBedrockAccess;
+        this.state.bedrockScreenshots.hasAccess = hasBedrockAccess;
     },
 
-    // Worlds, Packs, and Backups share the same one-time SAF grant (all read
-    // through the same com.mojang root) — a grant from any one panel
-    // unlocks the others too.
+    // Worlds, Packs, Backups, and Screenshots share the same one-time SAF
+    // grant (all read through the same com.mojang root) — a grant from any
+    // one panel unlocks the others too.
     async requestBedrockStorageAccess() {
         const granted = await BedrockStorage.requestAccess();
         this.state.bedrockWorlds.hasAccess = granted;
         this.state.bedrockPacks.hasAccess = granted;
         this.state.bedrockBackups.hasAccess = granted;
+        this.state.bedrockScreenshots.hasAccess = granted;
         if (granted) {
             if (this.state.openPanel === "bedrockworlds") await this.loadBedrockWorlds();
             if (this.state.openPanel === "bedrockpacks") await this.loadBedrockPacks();
             if (this.state.openPanel === "bedrockbackups") await this.loadBedrockBackups();
+            if (this.state.openPanel === "bedrockscreenshots") await this.loadBedrockScreenshots();
         }
         if (this.state.openPanel === "bedrockworlds") this.openPanel("bedrockworlds");
         if (this.state.openPanel === "bedrockpacks") this.openPanel("bedrockpacks");
         if (this.state.openPanel === "bedrockbackups") this.openPanel("bedrockbackups");
+        if (this.state.openPanel === "bedrockscreenshots") this.openPanel("bedrockscreenshots");
+    },
+
+    async loadBedrockScreenshots() {
+        const bs = this.state.bedrockScreenshots;
+        bs.loading = true;
+        if (this.state.openPanel === "bedrockscreenshots") this.openPanel("bedrockscreenshots");
+        bs.screenshots = BedrockStorage.listScreenshots().sort((a, b) => b.modifiedAt - a.modifiedAt);
+        bs.loading = false;
+        bs.loaded = true;
+        if (this.state.openPanel === "bedrockscreenshots") this.openPanel("bedrockscreenshots");
     },
 
     async loadBedrockBackups() {
@@ -760,7 +775,20 @@ const App = {
                 break;
             }
             case "bedrockinstances": html = panelShell({ id, title: "Instances", body: emptyState("No instances yet", "Isolated Bedrock instances will list here once wired to shared storage."), activeTabId: id }); break;
-            case "bedrockscreenshots": html = panelShell({ id, title: "Photos", body: emptyState("No screenshots yet", "Reads from the built-in Java Edition runtime's shared storage once wired."), activeTabId: id }); break;
+            case "bedrockscreenshots": {
+                const bs = this.state.bedrockScreenshots;
+                html = panelShell({
+                    id,
+                    title: "Photos",
+                    headerActions: bs.hasAccess
+                        ? `<button class="panel-icon-btn ${bs.loading ? "spinning" : ""}" ${bs.loading ? "disabled" : ""} data-refresh-bedrock-screenshots data-tooltip="Refresh"><i class="fa-solid fa-rotate"></i></button>`
+                        : "",
+                    body: bedrockScreenshotsPanelBody(bs),
+                    activeTabId: id,
+                });
+                if (bs.hasAccess && !bs.loaded && !bs.loading) this.loadBedrockScreenshots();
+                break;
+            }
             case "javaclients": {
                 html = `<div class="panel-overlay" id="panel-javaclients">
                     <div class="panel-handle"></div>
@@ -1085,6 +1113,7 @@ const App = {
             const packKindBtn = e.target.closest("[data-bedrock-pack-kind]");
             if (packKindBtn) { this.switchBedrockPackKind(packKindBtn.dataset.bedrockPackKind); return; }
             if (e.target.closest("[data-refresh-bedrock-backups]")) { this.loadBedrockBackups(); return; }
+            if (e.target.closest("[data-refresh-bedrock-screenshots]")) { this.loadBedrockScreenshots(); return; }
             if (e.target.closest("[data-create-bedrock-backup]")) { this.createBedrockBackup(); return; }
             const confirmDeleteBackupBtn = e.target.closest("[data-confirm-delete-bedrock-backup]");
             if (confirmDeleteBackupBtn) { this.confirmDeleteBedrockBackup(confirmDeleteBackupBtn.dataset.confirmDeleteBedrockBackup); return; }

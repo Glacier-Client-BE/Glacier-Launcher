@@ -156,4 +156,33 @@ object BedrockStorageService {
             if (name.isNullOrBlank() || name.startsWith("pack.", ignoreCase = true)) null else name
         }.getOrNull()
     }
+
+    // Android analogue of Services/BedrockScreenshotService.cs's real half —
+    // in-game captures under com.mojang/Screenshots/<xbox-user-id>/*.jpeg.
+    // Xbox Game Bar's Captures folder (Win+Alt+PrtScn) is Windows-only, so
+    // that merge source is skipped entirely rather than faked.
+    fun listScreenshots(context: Context): String {
+        val root = rootDocument(context) ?: return "[]"
+        val screenshotsDir = findChildDir(root, "Screenshots") ?: return "[]"
+        val result = JSONArray()
+        collectScreenshots(screenshotsDir, result)
+        return result.toString()
+    }
+
+    private fun collectScreenshots(dir: DocumentFile, out: JSONArray) {
+        for (child in dir.listFiles()) {
+            if (child.isDirectory) {
+                collectScreenshots(child, out)
+            } else if (child.isFile && (child.name?.endsWith(".jpeg", ignoreCase = true) == true)) {
+                out.put(
+                    JSONObject().apply {
+                        put("name", child.name)
+                        put("uri", child.uri.toString())
+                        put("sizeBytes", child.length())
+                        put("modifiedAt", child.lastModified())
+                    },
+                )
+            }
+        }
+    }
 }

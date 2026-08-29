@@ -911,6 +911,37 @@ function bedrockBackupsPanelBody(state) {
     return `${createRowHtml}${state.backups.map(b => bedrockBackupRowHtml(b, state.confirmDeleteName)).join("")}`;
 }
 
+// ── Bedrock Screenshots ──────────────────────────────────────────────────
+// Read half of Pages/Home.razor's "bedrockscreenshots" panel — real
+// .screenshot-grid/.screenshot-tile markup, fed by
+// BedrockStorageService.listScreenshots() (in-game captures under
+// com.mojang/Screenshots only; Xbox Game Bar's Captures folder is
+// Windows-only and skipped rather than faked).
+function bedrockScreenshotsPanelBody(state) {
+    if (!state.hasAccess) {
+        return `<div class="empty-state" style="padding:28px 20px;">
+            <i class="fa-solid fa-folder-open"></i>
+            <span>Grant access to your screenshots</span>
+            <small>Same one-time folder permission as Worlds/Packs/Backups.</small>
+            <button class="modal-btn modal-btn-confirm" style="margin-top:12px;" data-grant-bedrock-storage>Grant Access</button>
+        </div>`;
+    }
+    if (state.loading) {
+        return `<div class="versions-loading"><span class="spinner"></span><span>Loading screenshots…</span></div>`;
+    }
+    if (state.screenshots.length === 0) {
+        return `<div class="empty-state" style="padding:28px 20px;">
+            <i class="fa-solid fa-image"></i>
+            <span>No screenshots yet</span>
+            <small>In-game screenshots show up here.</small>
+        </div>`;
+    }
+    return `<div class="screenshot-grid">${state.screenshots.map(s => `
+        <button class="screenshot-tile" data-tooltip="${escapeHtml(s.name)}">
+            <img src="${s.uri}" loading="lazy" alt="${escapeHtml(s.name)}" />
+        </button>`).join("")}</div>`;
+}
+
 // ── Launcher update modal ────────────────────────────────────────────────
 // Same markup/classes as Pages/Home.razor's LAUNCHER UPDATE MODAL block.
 function updateModalHtml(u, currentVersion) {

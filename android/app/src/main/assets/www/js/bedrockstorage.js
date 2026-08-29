@@ -55,6 +55,11 @@ const BedrockStorage = {
     deleteBackup(fileName) {
         return !!(Bridge.deleteBedrockBackup && Bridge.deleteBedrockBackup(fileName));
     },
+
+    listScreenshots() {
+        if (!Bridge.listBedrockScreenshots) return [];
+        try { return JSON.parse(Bridge.listBedrockScreenshots() || "[]"); } catch (e) { return []; }
+    },
 };
 
 function formatBytes(bytes) {

@@ -348,6 +348,9 @@ private class AndroidBridge(private val activity: MainActivity, private val webV
     fun listBedrockPacks(kind: String): String = BedrockStorageService.listPacks(activity, kind)
 
     @JavascriptInterface
+    fun listBedrockScreenshots(): String = BedrockStorageService.listScreenshots(activity)
+
+    @JavascriptInterface
     fun listBedrockBackups(): String = BedrockBackupService.listBackups(activity)
 
     @JavascriptInterface
