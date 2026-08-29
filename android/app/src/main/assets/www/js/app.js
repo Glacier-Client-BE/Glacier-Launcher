@@ -17,6 +17,8 @@ const DEFAULT_SETTINGS = {
     skippedLauncherVersion: "",
     lastDismissedAnnouncementId: "",
     playSessions: [],
+    onboardingCompleted: false,
+    userHandle: "",
     xboxGamertag: "",
     xboxXuid: "",
     xboxGamerPictureUrl: "",
@@ -100,6 +102,7 @@ const App = {
         bedrockBackups: { hasAccess: false, loading: false, loaded: false, creating: false, confirmDeleteName: null, backups: [] },
         bedrockScreenshots: { hasAccess: false, loading: false, loaded: false, screenshots: [] },
         announcement: null,
+        onboarding: { open: false, step: 0, edition: "bedrock", username: "" },
         pendingSessionStart: null,
         javaInstances: { instances: [], renamingId: null, renameValue: "", confirmDeleteId: null },
         news: {
@@ -129,6 +132,11 @@ const App = {
 
         if (this.state.settings.checkUpdatesOnStartup) this.checkForUpdate(false);
         this.loadAnnouncement();
+
+        this.state.onboarding.open = !this.state.settings.onboardingCompleted;
+        this.state.onboarding.edition = this.state.edition;
+        this.state.onboarding.username = this.state.settings.username;
+        this.renderOnboarding();
 
         const hasBedrockAccess = BedrockStorage.hasAccess();
         this.state.bedrockWorlds.hasAccess = hasBedrockAccess;
@@ -605,6 +613,50 @@ const App = {
         this.state.settings.playSessions = sessions;
         this.saveSettings();
         if (this.state.openPanel === "stats") this.openPanel("stats");
+    },
+
+    // ── Onboarding wizard (mirrors Home.Onboarding.cs) ─────────────────────
+    renderOnboarding() {
+        document.getElementById("onboarding-root").innerHTML = onboardingModalHtml(this.state.onboarding);
+    },
+
+    onboardingPickEdition(edition) {
+        this.state.onboarding.edition = edition;
+        this.renderOnboarding();
+    },
+
+    onboardingNext() {
+        const input = document.getElementById("onboarding-username-input");
+        if (input) this.state.onboarding.username = input.value;
+        this.setEdition(this.state.onboarding.edition);
+        this.state.onboarding.step = 1;
+        this.renderOnboarding();
+    },
+
+    onboardingBack() {
+        this.state.onboarding.step = 0;
+        this.renderOnboarding();
+    },
+
+    finishOnboarding() {
+        const input = document.getElementById("onboarding-username-input");
+        const username = (input ? input.value : this.state.onboarding.username).trim();
+        if (username) {
+            this.state.settings.username = username;
+            this.state.settings.userHandle = "@" + username.toLowerCase().replace(/\s+/g, "");
+        }
+        this.state.settings.onboardingCompleted = true;
+        this.saveSettings();
+        this.state.onboarding.open = false;
+        this.renderOnboarding();
+        this.renderFooter();
+    },
+
+    skipOnboarding() {
+        this.state.settings.onboardingCompleted = true;
+        this.saveSettings();
+        this.state.onboarding.open = false;
+        this.renderOnboarding();
     },
 
     // ── Announcement / maintenance banner (mirrors Home.Announcement.cs) ──
@@ -1206,6 +1258,12 @@ const App = {
             if (e.target.closest("[data-cancel-delete-bedrock-backup]")) { this.cancelDeleteBedrockBackup(); return; }
             const deleteBackupBtn = e.target.closest("[data-delete-bedrock-backup]");
             if (deleteBackupBtn) { this.deleteBedrockBackup(deleteBackupBtn.dataset.deleteBedrockBackup); return; }
+            const onboardingEditionBtn = e.target.closest("[data-onboarding-pick-edition]");
+            if (onboardingEditionBtn) { this.onboardingPickEdition(onboardingEditionBtn.dataset.onboardingPickEdition); return; }
+            if (e.target.closest("[data-onboarding-next]")) { this.onboardingNext(); return; }
+            if (e.target.closest("[data-onboarding-back]")) { this.onboardingBack(); return; }
+            if (e.target.closest("[data-onboarding-finish]")) { this.finishOnboarding(); return; }
+            if (e.target.closest("[data-onboarding-skip]")) { this.skipOnboarding(); return; }
             const dismissAnnouncementBtn = e.target.closest("[data-dismiss-announcement]");
             if (dismissAnnouncementBtn) { this.dismissAnnouncement(dismissAnnouncementBtn.dataset.dismissAnnouncement); return; }
             if (e.target.closest("[data-skip-update]")) { this.skipUpdate(); return; }

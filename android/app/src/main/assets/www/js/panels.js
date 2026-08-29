@@ -764,6 +764,51 @@ function javaScreenshotsPanelBody() {
     return emptyState("No screenshots yet", "Press F2 in-game to capture one — they'll show up here once wired to shared storage.", "fa-solid fa-image");
 }
 
+// ── Onboarding wizard ─────────────────────────────────────────────────────
+// Real markup/classes from Pages/Home.razor's onboarding modal, minus the
+// "Import existing .minecraft" step: that assumes a prior install of
+// Mojang's official Java launcher on the same machine, which doesn't exist
+// on Android at all (Java Edition here only exists inside this app's own
+// built-in runtime) — so edition pick + username are the whole wizard.
+function onboardingModalHtml(state) {
+    if (!state.open) return "";
+    const lastStep = 1;
+    const step0 = `
+        <p style="color:var(--text-dim); font-size:12px; margin:0 0 10px;">Which edition of Minecraft do you play?</p>
+        <div style="display:flex; gap:8px;">
+            <button class="btn-sm ${state.edition === "bedrock" ? "btn-accent" : ""}" style="flex:1;" data-onboarding-pick-edition="bedrock">
+                <i class="fa-solid fa-cube"></i> Bedrock
+            </button>
+            <button class="btn-sm ${state.edition === "java" ? "btn-accent" : ""}" style="flex:1;" data-onboarding-pick-edition="java">
+                <i class="fa-solid fa-mug-hot"></i> Java
+            </button>
+        </div>
+        <small style="color:var(--text-dim); display:block; margin-top:8px;">You can switch editions anytime from the home screen.</small>`;
+    const step1 = `
+        <label class="modal-input-label">Display name</label>
+        <input class="modal-input" id="onboarding-username-input" placeholder="Player" value="${escapeHtml(state.username)}" />
+        <small style="color:var(--text-dim); display:block; margin-top:8px;">Shown in the launcher's footer and recent-launches list. Optional.</small>`;
+
+    return `
+    <div class="search-overlay">
+        <div class="modal-box" style="width:340px;">
+            <div class="modal-header">
+                <span class="modal-title"><i class="fa-solid fa-snowflake" style="color:var(--accent);margin-right:8px;"></i>Welcome to Glacier</span>
+                <button class="modal-close-btn" data-onboarding-skip data-tooltip="Skip setup"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="modal-body">${state.step === 0 ? step0 : step1}</div>
+            <div class="modal-actions">
+                ${state.step > 0
+                    ? `<button class="modal-btn modal-btn-cancel" data-onboarding-back>Back</button>`
+                    : `<button class="modal-btn modal-btn-cancel" data-onboarding-skip>Skip</button>`}
+                ${state.step < lastStep
+                    ? `<button class="modal-btn modal-btn-confirm" data-onboarding-next>Next</button>`
+                    : `<button class="modal-btn modal-btn-confirm" data-onboarding-finish><i class="fa-solid fa-check"></i> Finish</button>`}
+            </div>
+        </div>
+    </div>`;
+}
+
 // ── Announcement / maintenance banner ────────────────────────────────────
 // Real markup from Pages/Home.razor's ANNOUNCEMENT / MAINTENANCE BANNER
 // block. A "maintenance" kind has no dismiss button, matching desktop —

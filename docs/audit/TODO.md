@@ -115,7 +115,13 @@
       injection work itself lands (content change, not a standalone fix).
 
 ## Low
-- [ ] Port onboarding wizard to Android.
+- [x] Port onboarding wizard to Android (`onboardingModalHtml` in
+      `panels.js`, real `.modal-box`/`.btn-accent` markup from
+      `Pages/Home.razor`) — edition pick + display name, first run only,
+      gated on the new `onboardingCompleted` setting. Drops desktop's
+      "Import existing .minecraft" step: that assumes a prior install of
+      Mojang's official Java launcher on the same machine, which has no
+      Android equivalent at all (nothing to import from).
 - [x] Port announcement banner to Android (`AnnouncementFeed.fetch()` in
       `javaedition.js`, same remote `announcement.json`/silent-fail contract
       as `Services/AnnouncementService.cs` — no cached fallback, since a
