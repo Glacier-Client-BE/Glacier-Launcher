@@ -94,6 +94,7 @@ const App = {
         discordAuth: { loading: false, error: null },
         update: { checking: false, available: false, modalOpen: false, installing: false, progress: 0, info: null },
         bedrockWorlds: { hasAccess: false, loading: false, loaded: false, worlds: [] },
+        bedrockPacks: { hasAccess: false, loading: false, loaded: false, kind: "resource", packs: [] },
         javaInstances: { instances: [], renamingId: null, renameValue: "", confirmDeleteId: null },
         news: {
             loading: false, posts: [], releases: [],
@@ -122,14 +123,41 @@ const App = {
 
         if (this.state.settings.checkUpdatesOnStartup) this.checkForUpdate(false);
 
-        this.state.bedrockWorlds.hasAccess = BedrockStorage.hasAccess();
+        const hasBedrockAccess = BedrockStorage.hasAccess();
+        this.state.bedrockWorlds.hasAccess = hasBedrockAccess;
+        this.state.bedrockPacks.hasAccess = hasBedrockAccess;
     },
 
+    // Worlds and Packs share the same one-time SAF grant (both live under
+    // the same com.mojang root) — a grant from either panel unlocks both.
     async requestBedrockStorageAccess() {
         const granted = await BedrockStorage.requestAccess();
         this.state.bedrockWorlds.hasAccess = granted;
-        if (granted) await this.loadBedrockWorlds();
+        this.state.bedrockPacks.hasAccess = granted;
+        if (granted) {
+            if (this.state.openPanel === "bedrockworlds") await this.loadBedrockWorlds();
+            if (this.state.openPanel === "bedrockpacks") await this.loadBedrockPacks();
+        }
         if (this.state.openPanel === "bedrockworlds") this.openPanel("bedrockworlds");
+        if (this.state.openPanel === "bedrockpacks") this.openPanel("bedrockpacks");
+    },
+
+    async loadBedrockPacks() {
+        const bp = this.state.bedrockPacks;
+        bp.loading = true;
+        if (this.state.openPanel === "bedrockpacks") this.openPanel("bedrockpacks");
+        bp.packs = BedrockStorage.listPacks(bp.kind);
+        bp.loading = false;
+        bp.loaded = true;
+        if (this.state.openPanel === "bedrockpacks") this.openPanel("bedrockpacks");
+    },
+
+    switchBedrockPackKind(kind) {
+        const bp = this.state.bedrockPacks;
+        if (bp.kind === kind) return;
+        bp.kind = kind;
+        bp.loaded = false;
+        if (this.state.openPanel === "bedrockpacks") this.openPanel("bedrockpacks");
     },
 
     async pickCustomDll() {
@@ -655,7 +683,20 @@ const App = {
                 if (bw.hasAccess && !bw.loaded && !bw.loading) this.loadBedrockWorlds();
                 break;
             }
-            case "bedrockpacks": html = panelShell({ id, title: "Packs", body: emptyState("No packs installed", "Behavior and resource packs will list here once wired to shared storage."), activeTabId: id }); break;
+            case "bedrockpacks": {
+                const bp = this.state.bedrockPacks;
+                html = panelShell({
+                    id,
+                    title: "Packs",
+                    headerActions: bp.hasAccess
+                        ? `<button class="panel-icon-btn ${bp.loading ? "spinning" : ""}" ${bp.loading ? "disabled" : ""} data-refresh-bedrock-packs data-tooltip="Refresh"><i class="fa-solid fa-rotate"></i></button>`
+                        : "",
+                    body: bedrockPacksPanelBody(bp),
+                    activeTabId: id,
+                });
+                if (bp.hasAccess && !bp.loaded && !bp.loading) this.loadBedrockPacks();
+                break;
+            }
             case "bedrockbackups": html = panelShell({ id, title: "Backups", body: emptyState("No backups yet", "World backups will list here once wired to shared storage."), activeTabId: id }); break;
             case "bedrockinstances": html = panelShell({ id, title: "Instances", body: emptyState("No instances yet", "Isolated Bedrock instances will list here once wired to shared storage."), activeTabId: id }); break;
             case "bedrockscreenshots": html = panelShell({ id, title: "Photos", body: emptyState("No screenshots yet", "Reads from the built-in Java Edition runtime's shared storage once wired."), activeTabId: id }); break;
@@ -979,6 +1020,9 @@ const App = {
             if (e.target.closest("[data-stage-custom-dll]")) { this.stageCustomDllInjection(); return; }
             if (e.target.closest("[data-grant-bedrock-storage]")) { this.requestBedrockStorageAccess(); return; }
             if (e.target.closest("[data-refresh-bedrock-worlds]")) { this.loadBedrockWorlds(); return; }
+            if (e.target.closest("[data-refresh-bedrock-packs]")) { this.loadBedrockPacks(); return; }
+            const packKindBtn = e.target.closest("[data-bedrock-pack-kind]");
+            if (packKindBtn) { this.switchBedrockPackKind(packKindBtn.dataset.bedrockPackKind); return; }
             if (e.target.closest("[data-skip-update]")) { this.skipUpdate(); return; }
             if (e.target.closest("[data-install-update]")) { this.installUpdate(); return; }
             if (e.target.closest("[data-close-update]")) { this.closeUpdateModal(); return; }

@@ -41,21 +41,23 @@ object BedrockStorageService {
         return DocumentFile.fromTreeUri(context, uri)
     }
 
-    // The user might pick games/com.mojang itself, its minecraftWorlds child
-    // directly, or a parent folder above games/ — walk down to find it
-    // instead of requiring one exact folder, since SAF's tree picker doesn't
-    // let this app suggest a starting path on most devices/OEM file pickers.
-    private fun findWorldsDir(root: DocumentFile): DocumentFile? {
-        if (root.name == "minecraftWorlds") return root
-        root.findFile("minecraftWorlds")?.let { return it }
-        root.findFile("games")?.findFile("com.mojang")?.findFile("minecraftWorlds")?.let { return it }
-        root.findFile("com.mojang")?.findFile("minecraftWorlds")?.let { return it }
+    // The user might pick games/com.mojang itself, one of its child folders
+    // directly, or a parent folder above games/ — walk down to find a named
+    // child instead of requiring one exact folder, since SAF's tree picker
+    // doesn't let this app suggest a starting path on most devices/OEM file
+    // pickers. Shared by worlds and packs since they're siblings under the
+    // same com.mojang root.
+    private fun findChildDir(root: DocumentFile, name: String): DocumentFile? {
+        if (root.name == name) return root
+        root.findFile(name)?.let { return it }
+        root.findFile("games")?.findFile("com.mojang")?.findFile(name)?.let { return it }
+        root.findFile("com.mojang")?.findFile(name)?.let { return it }
         return null
     }
 
     fun listWorlds(context: Context): String {
         val root = rootDocument(context) ?: return "[]"
-        val worldsDir = findWorldsDir(root) ?: return "[]"
+        val worldsDir = findChildDir(root, "minecraftWorlds") ?: return "[]"
         val result = JSONArray()
 
         for (dir in worldsDir.listFiles()) {
@@ -101,4 +103,52 @@ object BedrockStorageService {
     private fun readText(context: Context, uri: Uri): String? =
         runCatching { context.contentResolver.openInputStream(uri)?.use { it.readBytes().toString(Charsets.UTF_8) } }
             .getOrNull()
+
+    // Android analogue of Services/BedrockPackService.cs — same folder
+    // names, same manifest.json "header.name" read (falling back to the
+    // folder name for a "pack.xyz" language-key reference, which needs the
+    // pack's own texts/en_US.lang to resolve and isn't worth it here either).
+    private fun packDirName(kind: String) = when (kind) {
+        "behavior" -> "behavior_packs"
+        "skin" -> "skin_packs"
+        "resource-dev" -> "development_resource_packs"
+        "behavior-dev" -> "development_behavior_packs"
+        "skin-dev" -> "development_skin_packs"
+        else -> "resource_packs"
+    }
+
+    private val packIconNames = listOf("pack_icon.png", "pack_icon.jpg", "pack_icon.jpeg")
+
+    fun listPacks(context: Context, kind: String): String {
+        val root = rootDocument(context) ?: return "[]"
+        val packsDir = findChildDir(root, packDirName(kind)) ?: return "[]"
+        val result = JSONArray()
+
+        for (dir in packsDir.listFiles()) {
+            if (!dir.isDirectory) continue
+            val name = readPackName(context, dir) ?: dir.name.orEmpty()
+            val sizeBytes = dir.listFiles().sumOf { if (it.isFile) it.length() else 0L }
+            val icon = packIconNames.firstNotNullOfOrNull { dir.findFile(it) }
+
+            result.put(
+                JSONObject().apply {
+                    put("id", dir.name)
+                    put("name", name)
+                    put("kind", kind)
+                    put("sizeBytes", sizeBytes)
+                    put("iconUri", icon?.uri?.toString() ?: "")
+                },
+            )
+        }
+        return result.toString()
+    }
+
+    private fun readPackName(context: Context, packDir: DocumentFile): String? {
+        val manifest = packDir.findFile("manifest.json") ?: return null
+        val text = readText(context, manifest.uri) ?: return null
+        return runCatching {
+            val name = JSONObject(text).optJSONObject("header")?.optString("name")
+            if (name.isNullOrBlank() || name.startsWith("pack.", ignoreCase = true)) null else name
+        }.getOrNull()
+    }
 }

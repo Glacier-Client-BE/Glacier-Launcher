@@ -36,6 +36,12 @@
       equivalent — so the panel renders a read-only list
       (`mcVersionInfoRowHtml`) instead of desktop's dead-if-copied
       download/switch/delete buttons.
+- [x] Bedrock **Packs** panel: reused the SAF grant from Worlds
+      (`BedrockStorageService.listPacks()`, same manifest.json "header.name"
+      read as `Services/BedrockPackService.cs`) across all 6 kinds
+      (resource/behavior/skin × normal/dev). Backups/Instances/Screenshots
+      panels remain stubs — same SAF pattern, smaller scope each (plain
+      files, no manifest/NBT parsing at all).
 - [ ] Diff `Components/*.razor` output markup against `panels.js`/`app.js`
       generated HTML for spinners, tooltips, error dialogs, and toggles to
       close the "Unverified" rows in `07_UI_PARITY.md`.

@@ -33,6 +33,11 @@ const BedrockStorage = {
         if (!Bridge.listBedrockWorlds) return [];
         try { return JSON.parse(Bridge.listBedrockWorlds() || "[]"); } catch (e) { return []; }
     },
+
+    listPacks(kind) {
+        if (!Bridge.listBedrockPacks) return [];
+        try { return JSON.parse(Bridge.listBedrockPacks(kind) || "[]"); } catch (e) { return []; }
+    },
 };
 
 function formatBytes(bytes) {

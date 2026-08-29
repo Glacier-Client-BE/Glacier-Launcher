@@ -801,6 +801,62 @@ function bedrockWorldsPanelBody(state) {
     return state.worlds.map(bedrockWorldRowHtml).join("");
 }
 
+// ── Bedrock Packs ────────────────────────────────────────────────────────
+// Read half of Pages/Home.razor's "bedrockpacks" panel — real markup
+// (.ts-chip-row kind switcher, .version-row pack rows) fed by
+// BedrockStorageService.kt's manifest.json reads (see bedrockstorage.js).
+const BEDROCK_PACK_KINDS = [
+    { id: "resource", label: "Resource", icon: "fa-solid fa-palette" },
+    { id: "behavior", label: "Behavior", icon: "fa-solid fa-gears" },
+    { id: "skin", label: "Skin", icon: "fa-solid fa-shirt" },
+    { id: "resource-dev", label: "Resource (dev)", icon: "fa-solid fa-code" },
+    { id: "behavior-dev", label: "Behavior (dev)", icon: "fa-solid fa-code" },
+    { id: "skin-dev", label: "Skin (dev)", icon: "fa-solid fa-code" },
+];
+
+function bedrockPackRowHtml(p) {
+    const iconHtml = p.iconUri
+        ? `<img class="version-icon" src="${p.iconUri}" alt="" />`
+        : `<div class="version-icon version-icon-placeholder"><i class="fa-solid fa-boxes-stacked"></i></div>`;
+    return `
+    <div class="version-row">
+        ${iconHtml}
+        <div class="version-meta">
+            <span class="version-name">${escapeHtml(p.name)}</span>
+            <span class="version-sub">${formatBytes(p.sizeBytes)}</span>
+        </div>
+    </div>`;
+}
+
+function bedrockPacksPanelBody(state) {
+    const chipsHtml = `<div class="ts-chip-row" style="padding:10px 14px 0;">${BEDROCK_PACK_KINDS.map(k => `
+        <button class="ts-chip ${state.kind === k.id ? "selected" : ""}" data-bedrock-pack-kind="${k.id}">
+            <i class="${k.icon}"></i> ${k.label}
+        </button>`).join("")}</div>`;
+
+    let bodyHtml;
+    if (!state.hasAccess) {
+        bodyHtml = `<div class="empty-state" style="padding:20px 20px 8px;">
+            <i class="fa-solid fa-folder-open"></i>
+            <span>Grant access to your packs</span>
+            <small>Same one-time folder permission as Worlds — pick the folder containing "resource_packs"/"behavior_packs" (inside Android/data/com.mojang.minecraftpe/files/games/com.mojang).</small>
+            <button class="modal-btn modal-btn-confirm" style="margin-top:12px;" data-grant-bedrock-storage>Grant Access</button>
+        </div>`;
+    } else if (state.loading) {
+        bodyHtml = `<div class="versions-loading"><span class="spinner"></span><span>Loading packs…</span></div>`;
+    } else if (state.packs.length === 0) {
+        bodyHtml = `<div class="empty-state" style="padding:20px 20px 8px;">
+            <i class="fa-solid fa-boxes-stacked"></i>
+            <span>No ${state.kind} packs yet</span>
+            <small>Import a .mcpack, or install one from CurseForge/Modrinth in Addons.</small>
+        </div>`;
+    } else {
+        bodyHtml = state.packs.map(bedrockPackRowHtml).join("");
+    }
+
+    return `${chipsHtml}${bodyHtml}`;
+}
+
 // ── Launcher update modal ────────────────────────────────────────────────
 // Same markup/classes as Pages/Home.razor's LAUNCHER UPDATE MODAL block.
 function updateModalHtml(u, currentVersion) {

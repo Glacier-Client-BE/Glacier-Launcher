@@ -343,6 +343,9 @@ private class AndroidBridge(private val activity: MainActivity, private val webV
     @JavascriptInterface
     fun listBedrockWorlds(): String = BedrockStorageService.listWorlds(activity)
 
+    @JavascriptInterface
+    fun listBedrockPacks(kind: String): String = BedrockStorageService.listPacks(activity, kind)
+
     // Java multi-instance management (Home.Panels.cs's Modpack "Install" and
     // several Java Addons actions are disabled on Android for lack of this —
     // see JavaInstanceService.kt for how it reuses Pojav's own profile system).
