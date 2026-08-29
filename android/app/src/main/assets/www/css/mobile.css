@@ -6,17 +6,27 @@
    letterboxed. Values below are scaled-down versions of app.css's own
    numbers, not new sizes invented from scratch. */
 
-/* app.css's .window-bg uses background-size:cover, sized against a
-   resizable desktop window whose aspect ratio stays reasonably close to
-   bg.jpg's own (1280x720, 16:9). A phone forced into landscape is
-   noticeably wider/shorter than that (~19.5:9 on most modern screens), so
-   cover scales the image up far more aggressively to fill the width,
-   cropping most of its height — reads as "zoomed"/stretched compared to
-   desktop's much gentler crop. `contain` guarantees the image is shown at
-   its real proportions with zero cropping or distortion, letterboxed with
-   the app's own dark chrome color instead of a jarring raw black gap. */
+/* The background must reach every edge of the display.
+
+   This previously forced `background-size: contain` to avoid the heavier
+   crop that `cover` applies on a ~19.5:9 phone in landscape versus bg.jpg's
+   own 16:9. But `contain` fits the whole image inside the viewport, which
+   by definition cannot fill a viewport of a different aspect ratio — it
+   left flat #23272A letterbox bands down the left and right edges, so the
+   wallpaper visibly stopped short of the screen edges (and of the display
+   cutout the window already draws under, since MainActivity sets
+   setDecorFitsSystemWindows(false) and Theme.Glacier sets
+   windowLayoutInDisplayCutoutMode=shortEdges).
+
+   Back to `cover`, which is also what the desktop app's own app.css uses:
+   it scales the image to fill both axes and crops the overflow, so the
+   background is genuinely edge to edge. `center` keeps the crop even on
+   both sides instead of favouring one edge. background-color stays as the
+   paint behind the image while it decodes, and for a custom user
+   background whose own aspect ratio leaves nothing to show. */
 .window-bg {
-    background-size: contain;
+    background-size: cover;
+    background-position: center;
     background-repeat: no-repeat;
     background-color: #23272A;
 }
@@ -85,4 +95,48 @@
     .recently-launched { display: none !important; }
     .status-msg { font-size: 11px; }
     .action-btn { height: 34px; font-size: 11px; }
+}
+
+/* Safe-area insets for the chrome, the other half of drawing edge to edge.
+
+   The background above now fills the whole display, and the window itself
+   already extends under the system bars and the display cutout
+   (MainActivity's setDecorFitsSystemWindows(false) plus Theme.Glacier's
+   windowLayoutInDisplayCutoutMode=shortEdges). That is what we want for the
+   wallpaper, but interactive chrome underneath a camera notch is not
+   reachable — and in the forced landscape orientation this app runs in, the
+   notch sits on the left or right edge, exactly where the branding block
+   and the footer's account row are.
+
+   So the background stays edge to edge while only the chrome is padded in
+   by env(safe-area-inset-*), which index.html already opts into with
+   viewport-fit=cover in its viewport meta. max() keeps each of app.css's
+   own padding values as the floor, so on a device with no cutout (all
+   insets 0) these rules change nothing at all. Declared after the
+   max-height blocks above so the shorter-screen padding overrides still
+   apply as the floor on small screens. */
+.top-bar {
+    padding-left: max(14px, env(safe-area-inset-left));
+    padding-right: max(14px, env(safe-area-inset-right));
+    padding-top: max(10px, env(safe-area-inset-top));
+}
+
+.footer {
+    padding-left: max(16px, env(safe-area-inset-left));
+    padding-right: max(16px, env(safe-area-inset-right));
+    padding-bottom: max(16px, env(safe-area-inset-bottom));
+}
+
+@media (max-height: 480px) {
+    .top-bar {
+        padding-left: max(10px, env(safe-area-inset-left));
+        padding-right: max(10px, env(safe-area-inset-right));
+        padding-top: max(6px, env(safe-area-inset-top));
+    }
+
+    .footer {
+        padding-left: max(10px, env(safe-area-inset-left));
+        padding-right: max(10px, env(safe-area-inset-right));
+        padding-bottom: max(8px, env(safe-area-inset-bottom));
+    }
 }

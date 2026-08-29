@@ -62,12 +62,17 @@ def patch_app_module(path: str) -> None:
     # BuildConfig.VERSION_NAME directly. Recreate it explicitly via the same
     # getVersionName()/getDateSeconds() calls `versionName`/`versionCode` above
     # already use.
-    text = text.replace(
-        "versionName getVersionName()",
-        "versionName getVersionName()\n"
-        "        buildConfigField 'String', 'VERSION_NAME', \"\\\"${getVersionName()}\\\"\"\n"
-        "        buildConfigField 'int', 'VERSION_CODE', \"${getDateSeconds()}\"",
-    )
+    # Guarded because the replacement text itself still contains the string
+    # being matched on, so an unguarded re-run (rebrand-pojav.sh documents
+    # itself as idempotent, for local rebuilds) appends a second copy of both
+    # buildConfigField lines into the same defaultConfig block every time.
+    if "buildConfigField 'String', 'VERSION_NAME'" not in text:
+        text = text.replace(
+            "versionName getVersionName()",
+            "versionName getVersionName()\n"
+            "        buildConfigField 'String', 'VERSION_NAME', \"\\\"${getVersionName()}\\\"\"\n"
+            "        buildConfigField 'int', 'VERSION_CODE', \"${getDateSeconds()}\"",
+        )
 
     # These package-shaped resValues back FileProvider authorities
     # (storageProviderAuthorities is the real manifest <provider
@@ -141,6 +146,15 @@ def force_appcompat_theme(path: str) -> None:
         if not name_match or name_match.group(1) not in target_names:
             return tag
         activity_name = name_match.group(1)
+        if 'android:theme="@style/AppTheme"' in tag:
+            # Already patched by an earlier run of rebrand-pojav.sh against
+            # this same working copy — the script documents itself as
+            # idempotent (local rebuilds re-run it against an already-patched
+            # submodule, unlike CI which always starts from a fresh
+            # checkout). Count it as done rather than treating our own
+            # previous output as an upstream change and aborting the build.
+            found.add(activity_name)
+            return tag
         if "android:theme=" in tag:
             raise SystemExit(
                 f"force_appcompat_theme: <activity android:name=\".{activity_name}\"> already declares "
@@ -159,6 +173,42 @@ def force_appcompat_theme(path: str) -> None:
             f"{sorted(missing)} — Pojav's manifest layout changed, update the pattern."
         )
     open(path, "w").write(text)
+
+
+def drop_localized_app_names(res_dir: str) -> None:
+    """Removes app_name/app_short_name from every localized values-*/strings.xml.
+
+    Android resolves a resource to the *best config match*, and only then
+    falls back to the app-over-library override. app_name is declared both
+    by :app's own values/strings.xml ("Glacier Launcher") and by 48 of this
+    library's values-<locale>/strings.xml translations. On a device whose
+    locale matches any of those translations, values-de (say) is a strictly
+    better config match than :app's unqualified values/, so the library's
+    German "PojavLauncher (Minecraft: Java Edition fuer Android)" wins and
+    the launcher label reverts to PojavLauncher — even though the icon,
+    which has no localized variant, stays Glacier's. Only an en-US-ish
+    device that falls all the way back to values/ ever saw the right name.
+
+    Deleting the two names from the translations (rather than rewriting each
+    to "Glacier Launcher") makes every locale fall back to the rebranded
+    default in values/strings.xml, so there is exactly one place the app
+    name is defined. Every other translated string is left untouched.
+    """
+    import glob
+    import os
+
+    name_re = re.compile(
+        r'^[ \t]*<string\s+name="(?:app_name|app_short_name)"[^>]*>.*?</string>[ \t]*\r?\n',
+        re.MULTILINE | re.DOTALL,
+    )
+    patched = 0
+    for path in sorted(glob.glob(os.path.join(res_dir, "values-*", "strings.xml"))):
+        text = open(path, encoding="utf-8").read()
+        stripped, count = name_re.subn("", text)
+        if count:
+            open(path, "w", encoding="utf-8").write(stripped)
+            patched += 1
+    print(f"drop-localized-app-names: cleared app name overrides in {patched} translation(s)")
 
 
 def strip_launcher_intent_filter(path: str) -> None:
@@ -228,6 +278,14 @@ def fix_nonfinal_resid_switch(path: str) -> None:
     known only at runtime."""
     text = open(path).read()
 
+    # Already rewritten by an earlier run against this same working copy.
+    # rebrand-pojav.sh documents itself as idempotent (a local rebuild
+    # re-runs it over an already-patched submodule, where CI always starts
+    # from a fresh checkout), so recognise our own previous output instead
+    # of reporting it as an upstream source change and aborting the build.
+    if "int vId = v.getId();" in text:
+        return
+
     block_re = re.compile(
         r"[ \t]*switch \(v\.getId\(\)\) \{.*?\n[ \t]*\}\n"
         r"[ \t]*if\(isDown\) switch\(v\.getId\(\)\) \{.*?\n[ \t]*\}",
@@ -268,6 +326,7 @@ ACTIONS = {
     "force-appcompat-theme": force_appcompat_theme,
     "add-missing-gamepad-drawables": add_missing_gamepad_drawables,
     "fix-nonfinal-resid-switch": fix_nonfinal_resid_switch,
+    "drop-localized-app-names": drop_localized_app_names,
 }
 
 if __name__ == "__main__":

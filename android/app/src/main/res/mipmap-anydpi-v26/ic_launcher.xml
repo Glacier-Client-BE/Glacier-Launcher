@@ -2,4 +2,12 @@
 <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
     <background android:drawable="@drawable/ic_launcher_background" />
     <foreground android:drawable="@drawable/ic_launcher_foreground" />
+    <!-- Android 13+ themed ("monochrome") icons. Without this layer a themed
+         launcher has nothing of Glacier's to tint and falls back to the
+         merged-in app_pojavlauncher library's own mipmap assets, i.e. Pojav's
+         mascot. The monochrome layer is drawn from the source's alpha channel
+         only (the system supplies the colour), and app_icon.png is the bear
+         on full transparency, so reusing the same foreground gives the
+         correct silhouette rather than needing a separate one-colour asset. -->
+    <monochrome android:drawable="@drawable/ic_launcher_foreground" />
 </adaptive-icon>

@@ -12,8 +12,23 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR/../pojavlauncher"
 
+# app_name is what the merged <application> element's android:label points
+# at; app_short_name is what several of Pojav's own activities set as their
+# own android:label (TestStorageActivity, LauncherActivity), which is what
+# surfaces in the recents/task switcher and in system permission dialogs.
+# Both have to be rebranded — rewriting only app_name left the app still
+# calling itself "PojavLauncher" everywhere app_short_name was used.
 sed -i.bak 's/PojavLauncher (Minecraft: Java Edition for Android)/Glacier Launcher (Java Edition)/' \
     app_pojavlauncher/src/main/res/values/strings.xml
+sed -i.bak 's|<string name="app_short_name">PojavLauncher</string>|<string name="app_short_name">Glacier Launcher</string>|' \
+    app_pojavlauncher/src/main/res/values/strings.xml
+
+# Pojav ships translated strings.xml files too, and a localized app_name /
+# app_short_name overrides the default one on a device set to that locale —
+# so a German or Russian phone would still show "PojavLauncher" even after
+# the two rewrites above. Drop those two names from every translation so
+# they all fall back to the rebranded default values.
+python3 "$SCRIPT_DIR/patch_pojav_gradle.py" app_pojavlauncher/src/main/res drop-localized-app-names
 
 # jre_lwjgl3glfw / arc_dns_injector / forge_installer are plain `java`/
 # `java-library` modules (no AGP dependency at all) whose jar tasks write

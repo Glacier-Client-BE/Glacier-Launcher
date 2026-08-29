@@ -36,7 +36,7 @@
         android:theme="@style/Theme.Glacier"
         android:process="${applicationId}"
         android:supportsRtl="true"
-        tools:replace="android:name,android:icon,android:roundIcon,android:theme,android:process">
+        tools:replace="android:name,android:icon,android:roundIcon,android:label,android:theme,android:process">
         <!-- tools:replace above resolves real conflicts with the merged-in
              app_pojavlauncher library's own <application> attributes (see
              android/README.md's "Single-APK distribution" section):
@@ -55,6 +55,19 @@
                  adaptive icon already renders correctly under a round mask,
                  no separate round-specific asset needed) so a round-icon
                  launcher shows Glacier's icon too, not Pojav's.
+               - android:label: both manifests happen to name @string/app_name,
+                 so the merger sees no conflict — but which app_name that
+                 resolves to is decided by resource merging, not by the
+                 merger, and Pojav shipped 48 localized values-<locale>/
+                 strings.xml files that also define it. A locale-qualified
+                 library resource beats :app's unqualified values/ one, so on
+                 any device whose locale matched one of those translations
+                 the launcher label reverted to "PojavLauncher" while the
+                 icon (which has no localized variant) stayed Glacier's.
+                 scripts/rebrand-pojav.sh now strips app_name/app_short_name
+                 from every translation so they all fall back to Glacier's
+                 own; this tools:replace states the intent explicitly rather
+                 than relying on the two values coincidentally matching.
                - android:process: force the app's real default main process
                  instead of inheriting Pojav's own ":launcher" secondary
                  process, since this is one merged app now, not two. -->
