@@ -652,7 +652,7 @@ something this pass had room to implement and verify.
 `OpenUpdateModal`/`ApplyLauncherUpdate`/`SkipLauncherUpdate`/
 `ManualUpdateCheck`/`DismissAnnouncement` (Windows self-update flow — Android
 updates ship through the Play Store or a new APK, not an in-app updater),
-`OpenLauncherFolder`/`OpenMinecraftFolder`/`Open*Folder`
+`OpenLauncherFolder`/`OpenMinecraftFolder`
 (Windows Explorer shortcuts — Android has no equivalent "reveal in Explorer"
 concept; a SAF folder-open intent is the closest analogue once storage
 wiring lands).

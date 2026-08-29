@@ -1540,6 +1540,9 @@ const App = {
             const ldExperiment = e.target.closest("[data-leveldat-experiment]");
             if (ldExperiment) { this.toggleLevelDatExperiment(ldExperiment.dataset.leveldatExperiment); return; }
 
+            const openAsset = e.target.closest("[data-open-java-asset]");
+            if (openAsset) { Bridge.openJavaAssetFolder(openAsset.dataset.openJavaAsset); return; }
+
             const javaTool = e.target.closest("[data-java-tool]");
             if (javaTool) { this.runJavaTool(javaTool.dataset.javaTool); return; }
 

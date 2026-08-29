@@ -1,5 +1,7 @@
 package xyz.glacierclient.launcher.service
 
+import android.os.Environment
+import android.provider.DocumentsContract
 import net.kdt.pojavlaunch.Tools
 import net.kdt.pojavlaunch.prefs.LauncherPreferences
 import net.kdt.pojavlaunch.value.launcherprofiles.LauncherProfiles
@@ -217,6 +219,72 @@ object JavaInstanceService {
             file.inputStream().use { it.copyTo(out) }
             out.closeEntry()
         }
+    }
+
+    // ── Java asset folders (desktop's Open*Folder shortcuts) ─────────────
+    //
+    // The Java Assets panel rendered these five as disabled cards labelled
+    // "Needs Storage Access Framework wiring to shared storage". That was
+    // simply wrong about the storage model: Java Edition's data lives under
+    // Pojav's own directory on primary external storage (Tools.DIR_GAME_HOME),
+    // which is a real java.io.File path reachable with the
+    // MANAGE_EXTERNAL_STORAGE permission this app already declares — SAF is
+    // only needed for Bedrock, whose data sits in another app's
+    // Android/data sandbox.
+
+    private val ASSET_FOLDERS = linkedMapOf(
+        "Resource Packs" to "resourcepacks",
+        "Shader Packs" to "shaderpacks",
+        "Saves / Worlds" to "saves",
+        "Screenshots" to "screenshots",
+        "Schematics" to "schematics",
+    )
+
+    /** Item count and size for each asset folder of the active instance. */
+    fun listAssetFolders(): String {
+        val base = activeProfileId()?.let { directoryFor(it) }
+        val out = JSONArray()
+        for ((label, child) in ASSET_FOLDERS) {
+            val dir = base?.let { File(it, child) }
+            val files = dir?.takeIf { it.isDirectory }?.listFiles()
+            out.put(
+                JSONObject()
+                    .put("name", label)
+                    .put("folder", child)
+                    .put("path", dir?.absolutePath ?: "")
+                    .put("exists", dir?.isDirectory == true)
+                    .put("count", files?.size ?: 0)
+                    // Top level only: walking a saves/ tree of many worlds on
+                    // every panel render would make opening the tab crawl.
+                    .put("sizeBytes", files?.sumOf { if (it.isFile) it.length() else 0L } ?: 0L),
+            )
+        }
+        return out.toString()
+    }
+
+    /**
+     * A document Uri for one of the asset folders, for handing to a file
+     * manager via ACTION_VIEW. Built against the external-storage provider
+     * from the folder's path relative to primary storage, since that is the
+     * document-id scheme that provider uses.
+     *
+     * Best-effort, exactly like desktop's own Open*Folder shortcuts, which
+     * do nothing if no Explorer-equivalent is registered — Android has no
+     * guaranteed "reveal this folder" intent.
+     */
+    fun assetFolderDocumentUri(folder: String): String? {
+        val base = activeProfileId()?.let { directoryFor(it) } ?: return null
+        val dir = File(base, folder)
+        if (!dir.isDirectory) dir.mkdirs()
+
+        val root = Environment.getExternalStorageDirectory().absolutePath
+        val absolute = dir.absolutePath
+        if (!absolute.startsWith(root)) return null
+        val relative = absolute.removePrefix(root).trimStart('/')
+        return DocumentsContract.buildDocumentUri(
+            "com.android.externalstorage.documents",
+            "primary:$relative",
+        ).toString()
     }
 
     /** Resolves an instance's real game directory the same way Pojav's own MainActivity does (Tools.getGameDirPath). */

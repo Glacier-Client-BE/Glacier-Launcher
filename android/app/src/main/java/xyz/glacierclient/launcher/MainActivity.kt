@@ -597,6 +597,27 @@ private class AndroidBridge(private val activity: MainActivity, private val webV
     fun saveLevelDat(worldId: String, patchJson: String): String =
         LevelDatService.save(activity, worldId, patchJson)
 
+    // Java asset folders (desktop's Open*Folder shortcuts). Java data is a
+    // real path under Pojav's storage, not behind SAF — see
+    // JavaInstanceService.listAssetFolders.
+    @JavascriptInterface
+    fun listJavaAssetFolders(): String = JavaInstanceService.listAssetFolders()
+
+    /** Best-effort, like desktop's own shortcut: silently does nothing if no file manager handles it. */
+    @JavascriptInterface
+    fun openJavaAssetFolder(folder: String) {
+        activity.runOnUiThread {
+            val uri = JavaInstanceService.assetFolderDocumentUri(folder) ?: return@runOnUiThread
+            runCatching {
+                activity.startActivity(
+                    Intent(Intent.ACTION_VIEW)
+                        .setDataAndType(Uri.parse(uri), "vnd.android.document/directory")
+                        .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION),
+                )
+            }
+        }
+    }
+
     // ── Java Tools (desktop's JavaInstanceService.cs) ────────────────
     // Each returns the produced path, or "" when there was nothing to do,
     // so the UI can report the real outcome instead of guessing.

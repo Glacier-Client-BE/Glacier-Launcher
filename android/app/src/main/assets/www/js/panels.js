@@ -289,27 +289,46 @@ function javaModsBody() {
     return emptyState("No local mods", "Drop jars into the active instance mods folder, or browse CurseForge/Modrinth.", "fa-solid fa-puzzle-piece");
 }
 
+// Real counts and sizes from JavaInstanceService.listAssetFolders(). These
+// were disabled cards captioned "Needs Storage Access Framework wiring to
+// shared storage", which had the storage model wrong: Java Edition's data
+// lives at a real path under Pojav's own directory on primary external
+// storage, reachable with the MANAGE_EXTERNAL_STORAGE permission this app
+// already declares. SAF is only needed for Bedrock, whose data sits inside
+// another app's Android/data sandbox.
+const JAVA_ASSET_STYLES = {
+    "Resource Packs": { icon: "fa-solid fa-image", color: "rgba(67,181,129,0.15)", fg: "var(--green)" },
+    "Shader Packs": { icon: "fa-solid fa-wand-magic-sparkles", color: "rgba(255,200,50,0.15)", fg: "#ffc832" },
+    "Saves / Worlds": { icon: "fa-solid fa-map", color: "rgba(114,137,218,0.15)", fg: "var(--accent)" },
+    "Screenshots": { icon: "fa-solid fa-camera", color: "rgba(240,71,71,0.15)", fg: "var(--red)" },
+    "Schematics": { icon: "fa-solid fa-drafting-compass", color: "rgba(250,166,26,0.15)", fg: "var(--orange)" },
+};
+
 function javaAssetsBody() {
-    const rows = [
-        { name: "Resource Packs", icon: "fa-solid fa-image", color: "rgba(67,181,129,0.15)", fg: "var(--green)" },
-        { name: "Shader Packs", icon: "fa-solid fa-wand-magic-sparkles", color: "rgba(255,200,50,0.15)", fg: "#ffc832" },
-        { name: "Saves / Worlds", icon: "fa-solid fa-map", color: "rgba(114,137,218,0.15)", fg: "var(--accent)" },
-        { name: "Screenshots", icon: "fa-solid fa-camera", color: "rgba(240,71,71,0.15)", fg: "var(--red)" },
-        { name: "Schematics", icon: "fa-solid fa-drafting-compass", color: "rgba(250,166,26,0.15)", fg: "var(--orange)" },
-    ];
-    return rows.map(r => `
+    let rows;
+    try { rows = JSON.parse(Bridge.listJavaAssetFolders() || "[]"); } catch (e) { rows = []; }
+    if (rows.length === 0) {
+        return emptyState("No Java instance yet", "Create one from the Java Versions panel first.", "fa-solid fa-folder-open");
+    }
+    return rows.map(r => {
+        const style = JAVA_ASSET_STYLES[r.name] || { icon: "fa-solid fa-folder", color: "rgba(114,137,218,0.15)", fg: "var(--accent)" };
+        const sub = !r.exists
+            ? "Not created yet — opening it will make the folder"
+            : `${r.count} item${r.count === 1 ? "" : "s"} · ${formatBytes(r.sizeBytes)}`;
+        return `
     <div class="client-card">
         <div class="client-card-header">
-            <div class="client-card-icon" style="background:${r.color}; color:${r.fg}; padding:8px;"><i class="${r.icon}"></i></div>
+            <div class="client-card-icon" style="background:${style.color}; color:${style.fg}; padding:8px;"><i class="${style.icon}"></i></div>
             <div class="client-card-meta">
-                <span class="client-card-name">${r.name}</span>
-                <span class="client-card-sub" style="opacity:0.5;">Needs Storage Access Framework wiring to shared storage</span>
+                <span class="client-card-name">${escapeHtml(r.name)}</span>
+                <span class="client-card-sub" style="opacity:0.5;">${escapeHtml(sub)}</span>
             </div>
             <div class="client-card-actions">
-                <button class="icon-btn" data-tooltip="Open folder" disabled><i class="fa-solid fa-folder-open"></i></button>
+                <button class="icon-btn" data-open-java-asset="${escapeHtml(r.folder)}" data-tooltip="Open folder"><i class="fa-solid fa-folder-open"></i></button>
             </div>
         </div>
-    </div>`).join("");
+    </div>`;
+    }).join("");
 }
 
 // Backed by JavaInstanceService.kt's backupSaves/exportModpack/duplicate,

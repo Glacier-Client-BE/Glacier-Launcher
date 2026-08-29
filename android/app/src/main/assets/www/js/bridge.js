@@ -28,6 +28,8 @@ const Bridge = (() => {
 
         // Java Tools (desktop's JavaInstanceService.cs). Each returns the
         // produced path, or "" when there was nothing to do.
+        listJavaAssetFolders: () => (hasNative ? native.listJavaAssetFolders() : "[]"),
+        openJavaAssetFolder: (folder) => { if (hasNative) native.openJavaAssetFolder(folder); },
         backupJavaSaves: () => (hasNative ? native.backupJavaSaves() : ""),
         exportJavaModpack: () => (hasNative ? native.exportJavaModpack() : ""),
         duplicateJavaInstance: (id) => (hasNative ? native.duplicateJavaInstance(id) : ""),
