@@ -50,7 +50,7 @@ object JavaEditionBridge {
             if (!versionId.isNullOrBlank()) putExtra(net.kdt.pojavlaunch.MainActivity.INTENT_MINECRAFT_VERSION, versionId)
         }
         return try {
-            context.startActivity(intent)
+                context.startActivity(intent)
             true
         } catch (e: Exception) {
             false
@@ -85,58 +85,62 @@ object JavaEditionBridge {
      * @return false when Pojav's storage paths aren't usable, in which case
      *         launching is aborted rather than crashed into.
      */
+    // Block body rather than an expression body: Kotlin disallows `return`
+    // inside an expression-bodied function, and the storage-unavailable path
+    // below has to bail out early.
     private fun ensureCurrentProfile(context: Context, versionId: String?): Boolean {
-      return try {
-        // LauncherProfiles' own profile-file path is a `static final` read
-        // from Tools.GAME_PROFILES_FILE at class-load time, so the storage
-        // constants have to exist before the class is first touched or it
-        // loads with a null path. PojavApplication.onCreate() normally does
-        // this, but it silently skips when the storage root wasn't ready at
-        // process start (permission not yet granted on first run) — in which
-        // case do it now, and refuse to launch if storage still isn't there.
-        if (Tools.GAME_PROFILES_FILE == null) {
-            if (!Tools.checkStorageRoot(context)) return false
-            LauncherPreferences.loadPreferences(context)
+        return try {
+            // LauncherProfiles' own profile-file path is a `static final` read
+            // from Tools.GAME_PROFILES_FILE at class-load time, so the storage
+            // constants have to exist before the class is first touched or it
+            // loads with a null path. PojavApplication.onCreate() normally does
+            // this, but it silently skips when the storage root wasn't ready at
+            // process start (permission not yet granted on first run) — in
+            // which case do it now, and refuse to launch if storage still
+            // isn't there.
+            if (Tools.GAME_PROFILES_FILE == null) {
+                if (!Tools.checkStorageRoot(context)) return false
+                LauncherPreferences.loadPreferences(context)
+            }
+
+            LauncherProfiles.load()
+            val profiles = LauncherProfiles.mainProfileJson.profiles
+
+            val prefs = LauncherPreferences.DEFAULT_PREF
+                ?: context.getSharedPreferences("${context.packageName}_preferences", Context.MODE_PRIVATE)
+
+            val key: String = run {
+                val selected = prefs.getString(LauncherPreferences.PREF_KEY_CURRENT_PROFILE, "")
+                // isNullOrBlank() smart-casts `selected` to non-null String
+                // for containsKey, whose parameter type is non-null.
+                if (!selected.isNullOrBlank() && profiles.containsKey(selected)) return@run selected
+
+                // Prefer a profile that already exists — load() has just
+                // seeded a default one if the map was empty, and any instance
+                // made through our own Java Instances panel lives in this same
+                // map — over minting another, so repeated launches can't
+                // accumulate throwaway profiles.
+                val chosen = profiles.keys.firstOrNull()
+                    ?: LauncherProfiles.getFreeProfileKey().also {
+                        profiles[it] = MinecraftProfile.getDefaultProfile()
+                    }
+                prefs.edit().putString(LauncherPreferences.PREF_KEY_CURRENT_PROFILE, chosen).apply()
+                chosen
+            }
+
+            // MainActivity reads the version from our Intent extra, but it
+            // also reads minecraftProfile.lastVersionId directly (for the
+            // window title, and as the fallback when no extra is set), and
+            // persisting it keeps our Java Versions panel's choice as the
+            // profile's own last-used version for the next launch.
+            if (!versionId.isNullOrBlank()) {
+                profiles[key]?.lastVersionId = versionId
+            }
+            LauncherProfiles.write()
+            true
+        } catch (e: Exception) {
+            false
         }
-
-        LauncherProfiles.load()
-        val profiles = LauncherProfiles.mainProfileJson.profiles
-
-        val prefs = LauncherPreferences.DEFAULT_PREF
-            ?: context.getSharedPreferences("${context.packageName}_preferences", Context.MODE_PRIVATE)
-
-        val key: String = run {
-            val selected = prefs.getString(LauncherPreferences.PREF_KEY_CURRENT_PROFILE, "")
-            // isNullOrBlank() smart-casts `selected` to non-null String for
-            // containsKey, whose parameter type is non-null.
-            if (!selected.isNullOrBlank() && profiles.containsKey(selected)) return@run selected
-
-            // Prefer a profile that already exists — load() has just seeded a
-            // default one if the map was empty, and any instance made through
-            // our own Java Instances panel lives in this same map — over
-            // minting another, so repeated launches can't accumulate
-            // throwaway profiles.
-            val chosen = profiles.keys.firstOrNull()
-                ?: LauncherProfiles.getFreeProfileKey().also {
-                    profiles[it] = MinecraftProfile.getDefaultProfile()
-                }
-            prefs.edit().putString(LauncherPreferences.PREF_KEY_CURRENT_PROFILE, chosen).apply()
-            chosen
-        }
-
-        // MainActivity reads the version from our Intent extra, but it also
-        // reads minecraftProfile.lastVersionId directly (for the window
-        // title, and as the fallback when no extra is set), and persisting
-        // it keeps our Java Versions panel's choice as the profile's own
-        // last-used version for the next launch.
-        if (!versionId.isNullOrBlank()) {
-            profiles[key]?.lastVersionId = versionId
-        }
-        LauncherProfiles.write()
-        true
-      } catch (e: Exception) {
-        false
-      }
     }
 
     private fun pojavModsDir(): File =
