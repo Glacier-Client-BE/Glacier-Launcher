@@ -11,10 +11,12 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.activity.ComponentActivity
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.edit
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import xyz.glacierclient.launcher.service.BedrockStorageService
 import xyz.glacierclient.launcher.service.ClientInjectionService
 import xyz.glacierclient.launcher.service.JavaEditionBridge
 import xyz.glacierclient.launcher.service.LauncherUpdateService
@@ -31,6 +33,28 @@ import xyz.glacierclient.launcher.service.LauncherUpdateService
 class MainActivity : ComponentActivity() {
 
     private lateinit var insetsController: WindowInsetsControllerCompat
+    private var onBedrockStorageResult: ((Boolean) -> Unit)? = null
+
+    // Must be registered before the activity reaches STARTED — a class-body
+    // property initializer runs during construction, ahead of onCreate.
+    private val openBedrockStorageTree = registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+        val granted = uri != null
+        if (uri != null) {
+            contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            BedrockStorageService.onAccessGranted(this, uri)
+        }
+        onBedrockStorageResult?.invoke(granted)
+        onBedrockStorageResult = null
+    }
+
+    // Called by AndroidBridge.requestBedrockStorageAccess() — SAF's tree
+    // picker can't be pre-pointed at games/com.mojang on most OEM file
+    // pickers, so the user picks whatever folder actually contains it
+    // (BedrockStorageService.findWorldsDir walks down from there).
+    fun requestBedrockStorageAccess(onResult: (Boolean) -> Unit) {
+        onBedrockStorageResult = onResult
+        openBedrockStorageTree.launch(null)
+    }
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -70,7 +94,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-private class AndroidBridge(private val activity: ComponentActivity, private val webView: WebView) {
+private class AndroidBridge(private val activity: MainActivity, private val webView: WebView) {
 
     private val prefs = activity.getSharedPreferences("glacier_settings", 0)
 
@@ -265,6 +289,24 @@ private class AndroidBridge(private val activity: ComponentActivity, private val
             )
         }
     }
+
+    // Bedrock world listing (Home.Worlds.cs's read half) — see
+    // BedrockStorageService.kt/BedrockNbt.kt for why this needs a
+    // one-time SAF grant instead of a plain file path.
+    @JavascriptInterface
+    fun hasBedrockStorageAccess(): Boolean = BedrockStorageService.hasAccess(activity)
+
+    @JavascriptInterface
+    fun requestBedrockStorageAccess() {
+        activity.runOnUiThread {
+            activity.requestBedrockStorageAccess { granted ->
+                webView.evaluateJavascript("window.BedrockStorage && window.BedrockStorage._onAccessResult($granted)", null)
+            }
+        }
+    }
+
+    @JavascriptInterface
+    fun listBedrockWorlds(): String = BedrockStorageService.listWorlds(activity)
 
     @JavascriptInterface
     fun openUrl(url: String) {

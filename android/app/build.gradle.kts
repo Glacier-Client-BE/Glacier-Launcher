@@ -96,6 +96,10 @@ dependencies {
     // for the one settings-JSON read in AndroidBridge.
     implementation("androidx.core:core-ktx:1.13.1")
     implementation("androidx.activity:activity-ktx:1.9.1")
+    // DocumentFile wraps the SAF tree the user grants access to for Bedrock's
+    // shared-storage world/pack/backup data (BedrockStorageService.kt) —
+    // plain java.io.File can't address a content:// tree Uri.
+    implementation("androidx.documentfile:documentfile:1.0.1")
     // net.kdt.pojavlaunch.MainActivity (below) extends AppCompatActivity, but
     // app_pojavlauncher only pulls androidx.appcompat in transitively via its
     // own `implementation`-scoped deps, which Gradle never re-exports to a

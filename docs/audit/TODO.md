@@ -1,8 +1,17 @@
 # TODO — Prioritized Task List
 
 ## High
-- [ ] Implement pure-Kotlin LevelDB + little-endian NBT readers for Bedrock
-      world/pack/backup/instance/screenshot listing (unblocks 5 Android panels).
+- [x] Bedrock **Worlds** panel: pure-Kotlin little-endian NBT reader
+      (`BedrockNbt.kt`) + SAF-backed storage service (`BedrockStorageService.kt`)
+      reading `levelname.txt`/`level.dat` through a one-time folder grant
+      (`MainActivity.kt`'s `requestBedrockStorageAccess`), wired end to end
+      in `panels.js`/`app.js`/`js/bedrockstorage.js`. Deliberately does not
+      touch the actual LevelDB store in `db/` — nothing needed for listing
+      worlds requires parsing it. Packs/Backups/Instances/Screenshots panels
+      are still empty-state stubs but need no NBT work, only the same SAF
+      pattern applied to different folders (`resource_packs`/`behavior_packs`
+      have JSON `manifest.json`, backups/screenshots are plain files) — real
+      remaining work, not blocked on anything above.
 - [ ] Build a Java multi-instance management model on Android (unblocks
       Modpack Install + several disabled Java Addons actions).
 - [ ] Wire a real Bedrock version data source into Android's MC Versions panel.

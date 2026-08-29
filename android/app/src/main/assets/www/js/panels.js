@@ -697,6 +697,43 @@ function javaScreenshotsPanelBody() {
     return emptyState("No screenshots yet", "Press F2 in-game to capture one — they'll show up here once wired to shared storage.", "fa-solid fa-image");
 }
 
+// ── Bedrock Worlds ───────────────────────────────────────────────────────
+// Read half of Pages/Home.razor's "bedrockworlds" panel (world-icon markup
+// is real: .version-row/.version-icon/.version-meta from the same "worlds"
+// block desktop uses) — see BedrockStorage (bedrockstorage.js) and
+// BedrockStorageService.kt for how the data itself is fetched.
+function bedrockWorldRowHtml(w) {
+    const iconHtml = w.iconUri
+        ? `<img class="version-icon" src="${w.iconUri}" alt="" />`
+        : `<div class="version-icon version-icon-placeholder"><i class="fa-solid fa-globe"></i></div>`;
+    return `
+    <div class="version-row">
+        ${iconHtml}
+        <div class="version-meta">
+            <span class="version-name">${escapeHtml(w.name)}</span>
+            <span class="version-sub">${formatBytes(w.sizeBytes)} · ${formatRelativeTime(w.lastPlayed)}</span>
+        </div>
+    </div>`;
+}
+
+function bedrockWorldsPanelBody(state) {
+    if (!state.hasAccess) {
+        return `<div class="empty-state" style="padding:20px 20px 8px;">
+            <i class="fa-solid fa-folder-open"></i>
+            <span>Grant access to your worlds</span>
+            <small>Android requires a one-time folder permission to read Bedrock's shared storage — pick the folder containing "minecraftWorlds" (usually inside Android/data/com.mojang.minecraftpe/files/games/com.mojang).</small>
+            <button class="modal-btn modal-btn-confirm" style="margin-top:12px;" data-grant-bedrock-storage>Grant Access</button>
+        </div>`;
+    }
+    if (state.loading) {
+        return `<div class="versions-loading"><span class="spinner"></span><span>Loading worlds…</span></div>`;
+    }
+    if (state.worlds.length === 0) {
+        return emptyState("No worlds yet", "Worlds you create in Minecraft show up here.", "fa-solid fa-globe");
+    }
+    return state.worlds.map(bedrockWorldRowHtml).join("");
+}
+
 // ── Launcher update modal ────────────────────────────────────────────────
 // Same markup/classes as Pages/Home.razor's LAUNCHER UPDATE MODAL block.
 function updateModalHtml(u, currentVersion) {

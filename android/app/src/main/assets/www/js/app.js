@@ -90,6 +90,7 @@ const App = {
         msAuth: { loading: false, error: null },
         discordAuth: { loading: false, error: null },
         update: { checking: false, available: false, modalOpen: false, installing: false, progress: 0, info: null },
+        bedrockWorlds: { hasAccess: false, loading: false, loaded: false, worlds: [] },
         news: {
             loading: false, posts: [], releases: [],
             fallbackItems: [
@@ -116,6 +117,24 @@ const App = {
         if (active) ThemeEngine.apply(active);
 
         if (this.state.settings.checkUpdatesOnStartup) this.checkForUpdate(false);
+
+        this.state.bedrockWorlds.hasAccess = BedrockStorage.hasAccess();
+    },
+
+    async requestBedrockStorageAccess() {
+        const granted = await BedrockStorage.requestAccess();
+        this.state.bedrockWorlds.hasAccess = granted;
+        if (granted) await this.loadBedrockWorlds();
+        if (this.state.openPanel === "bedrockworlds") this.openPanel("bedrockworlds");
+    },
+
+    async loadBedrockWorlds() {
+        this.state.bedrockWorlds.loading = true;
+        if (this.state.openPanel === "bedrockworlds") this.openPanel("bedrockworlds");
+        this.state.bedrockWorlds.worlds = BedrockStorage.listWorlds();
+        this.state.bedrockWorlds.loading = false;
+        this.state.bedrockWorlds.loaded = true;
+        if (this.state.openPanel === "bedrockworlds") this.openPanel("bedrockworlds");
     },
 
     saveSettings() {
@@ -529,7 +548,20 @@ const App = {
                 break;
             }
             case "mcversions": html = mcVersionsPanelHtml(this.state.mcVersionsChannel, this.state.mcVersionsFilter, this.state.mcVersions); break;
-            case "bedrockworlds": html = panelShell({ id, title: "Worlds", body: emptyState("No worlds found", "Needs Storage Access Framework wiring to the built-in Java Edition runtime's shared storage."), activeTabId: id }); break;
+            case "bedrockworlds": {
+                const bw = this.state.bedrockWorlds;
+                html = panelShell({
+                    id,
+                    title: "Worlds",
+                    headerActions: bw.hasAccess
+                        ? `<button class="panel-icon-btn ${bw.loading ? "spinning" : ""}" ${bw.loading ? "disabled" : ""} data-refresh-bedrock-worlds data-tooltip="Refresh"><i class="fa-solid fa-rotate"></i></button>`
+                        : "",
+                    body: bedrockWorldsPanelBody(bw),
+                    activeTabId: id,
+                });
+                if (bw.hasAccess && !bw.loaded && !bw.loading) this.loadBedrockWorlds();
+                break;
+            }
             case "bedrockpacks": html = panelShell({ id, title: "Packs", body: emptyState("No packs installed", "Behavior and resource packs will list here once wired to shared storage."), activeTabId: id }); break;
             case "bedrockbackups": html = panelShell({ id, title: "Backups", body: emptyState("No backups yet", "World backups will list here once wired to shared storage."), activeTabId: id }); break;
             case "bedrockinstances": html = panelShell({ id, title: "Instances", body: emptyState("No instances yet", "Isolated Bedrock instances will list here once wired to shared storage."), activeTabId: id }); break;
@@ -831,6 +863,8 @@ const App = {
                 else this.signInWithDiscord();
                 return;
             }
+            if (e.target.closest("[data-grant-bedrock-storage]")) { this.requestBedrockStorageAccess(); return; }
+            if (e.target.closest("[data-refresh-bedrock-worlds]")) { this.loadBedrockWorlds(); return; }
             if (e.target.closest("[data-skip-update]")) { this.skipUpdate(); return; }
             if (e.target.closest("[data-install-update]")) { this.installUpdate(); return; }
             if (e.target.closest("[data-close-update]")) { this.closeUpdateModal(); return; }
