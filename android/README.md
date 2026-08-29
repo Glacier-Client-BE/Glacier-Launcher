@@ -1,15 +1,15 @@
 # Glacier Launcher — Android
 
-Two coordinated apps, built from this one directory:
+One APK, one process, built from this one directory:
 
-1. **`app/`** — the Glacier shell. Architecturally this is now a single
+1. **`app/`** — the Glacier shell. Architecturally this is a single
    full-screen `WebView` (`MainActivity.kt`) loading `assets/www/index.html`,
    which reuses the desktop app's **real** `wwwroot/css/app.css` and image
    assets byte-for-byte (see "How the UI is built" below) instead of
    hand-translating each panel into Compose widgets. Kotlin's only job is a
    small native bridge (`AndroidBridge` in `MainActivity.kt`) for the handful
-   of things a WebView genuinely can't do: root checks, launching the Java
-   Edition companion app, and settings persistence.
+   of things a WebView genuinely can't do: root checks, launching Bedrock/Java
+   Edition, and settings persistence.
 2. **`pojavlauncher/`** — a **git submodule** pinned to the unmodified
    upstream [PojavLauncherTeam/PojavLauncher](https://github.com/PojavLauncherTeam/PojavLauncher),
    the open-source Android Java Edition runtime. This is what actually runs
@@ -18,19 +18,23 @@ Two coordinated apps, built from this one directory:
    isn't worth reimplementing; using it (rather than rewriting it) is what
    "make your own version of Pojav" means in practice here.
 
-   `scripts/rebrand-pojav.sh` applies the "Glacier Launcher (Java Edition)"
-   rebrand (`applicationId xyz.glacierclient.launcher.java`, app name) as a
-   build-time patch rather than a commit inside the submodule — a commit
-   there would only exist in whichever clone made it and wouldn't be
-   fetchable from the upstream URL `.gitmodules` points at. Run it once
-   before building the companion APK, locally or in CI.
+   Rather than shipping as its own separate installable APK, `app_pojavlauncher`
+   is built directly into `:app` as a Gradle **library** dependency —
+   `scripts/rebrand-pojav.sh` (via `scripts/patch_pojav_gradle.py`) converts
+   it from `com.android.application` to `com.android.library` and applies a
+   handful of other build-time-only structural patches (see "Single-APK,
+   single-process Java Edition" below for the full mechanics) rather than
+   committing any of this inside the submodule — a commit there would only
+   exist in whichever clone made it and wouldn't be fetchable from the
+   upstream URL `.gitmodules` points at. Run it once before building, locally
+   or in CI.
 
-The shell app hands off to the Pojav companion app via an explicit intent
-(`JavaEditionBridge.kt`) rather than merging both into a single APK — Pojav
-is itself a multi-module Android app with its own native libraries and build
-quirks, and a byte-level Gradle merge risks bringing its own long tail of
-native/JNI issues without a real device to validate against. Both APKs ship
-together in the same release.
+The shell hands off to Java Edition via a direct explicit Intent to
+`net.kdt.pojavlaunch.MainActivity` (`JavaEditionBridge.kt`) — Pojav's real
+JVM/GLFW game-render surface, now just another Activity in this same
+package. There is no separate companion app, no install step, and no
+"install unknown apps" prompt for Java Edition; one APK ships in the
+release.
 
 ## How the UI is built
 
@@ -349,8 +353,8 @@ top bar (branding, edition switcher, client chip), quick-actions dock
 Launchers/Mods/Versions/Profile/Screenshots for Java), footer
 (profile/RPC toggle/Xbox/Discord row), news ticker, `clients` (all six
 cards), `servers` (saved + "Popular" suggestions), `credits`, `settings`
-(category filter + sections — Java Edition section links out to the Pojav
-companion app instead of duplicating its own settings UI), `clients`
+(category filter + sections — Java Edition section links into the built-in
+Java Edition runtime's own settings instead of duplicating them), `clients`
 (Vanilla — see "Removed: DLL-injected clients" below for why that's the
 only card), `addons` Bedrock branch (CurseForge search with category
 chips and pagination),
@@ -386,8 +390,8 @@ available on Android" — neither ships an Android build to detect or
 launch, unlike the desktop panel's local .exe detection); Java Versions
 pulls the real Mojang `version_manifest_v2.json` (same as
 `JavaVersionService.cs`) with working release/snapshot/historical filters
-and search, though Install/Launch hand off to the Java Edition companion
-app rather than duplicating its own per-version install management.
+and search, though Install/Launch hand off to the built-in Java Edition
+runtime rather than duplicating its own per-version install management.
 The Java-edition panel-tabs bar (`JAVA_PANEL_TABS` in `panels.js`, mirrors
 `JavaTabs()` in `Home.BigFeatures.cs`) is also now used for every Java
 panel instead of the Bedrock tab set.
@@ -571,8 +575,8 @@ wiring lands).
 4. **Java multi-instance management** (`NewJavaInstance`/`NewBedrockInstance`/
    `CommitRenameInstance`/instance folders) — this is what actually blocks
    Modpack "Install" and several Java Addons actions from being real instead
-   of disabled; needs a instance-directory model on top of the Java Edition
-   companion app's shared storage.
+   of disabled; needs a instance-directory model on top of the built-in
+   Java Edition runtime's shared storage.
 5. **Custom DLL/.so picker** for Bedrock (`PickDllFile`/`CopyDllPath`/
    `ClearCustomDll`) — see injection section above, buildable now via SAF
    independent of the fuller package-context work.
