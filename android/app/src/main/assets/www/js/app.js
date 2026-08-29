@@ -16,6 +16,7 @@ const DEFAULT_SETTINGS = {
     checkUpdatesOnStartup: true,
     skippedLauncherVersion: "",
     lastDismissedAnnouncementId: "",
+    playSessions: [],
     xboxGamertag: "",
     xboxXuid: "",
     xboxGamerPictureUrl: "",
@@ -99,6 +100,7 @@ const App = {
         bedrockBackups: { hasAccess: false, loading: false, loaded: false, creating: false, confirmDeleteName: null, backups: [] },
         bedrockScreenshots: { hasAccess: false, loading: false, loaded: false, screenshots: [] },
         announcement: null,
+        pendingSessionStart: null,
         javaInstances: { instances: [], renamingId: null, renameValue: "", confirmDeleteId: null },
         news: {
             loading: false, posts: [], releases: [],
@@ -570,6 +572,41 @@ const App = {
         this.renderFooter();
     },
 
+    // ── Lightweight session-timer (mirrors StatsPanel's session tracking,
+    // approximated per MainActivity.kt's onResume() doc comment) ──────────
+    launchJava() {
+        this.recordLaunchStart();
+        Bridge.launchJavaEdition();
+    },
+
+    launchBedrockGame() {
+        this.recordLaunchStart();
+        Bridge.launchBedrock();
+    },
+
+    recordLaunchStart() {
+        this.state.pendingSessionStart = Date.now();
+    },
+
+    // Called from native (MainActivity.kt's onResume) once this Activity
+    // regains focus — the closest signal Android gives for "the launched
+    // game Activity closed." Sessions under 10s are dropped as probably a
+    // launch that immediately failed/bounced rather than real play.
+    onResumeFromGame() {
+        const start = this.state.pendingSessionStart;
+        if (!start) return;
+        this.state.pendingSessionStart = null;
+        const durationSeconds = Math.round((Date.now() - start) / 1000);
+        if (durationSeconds < 10) return;
+
+        const sessions = this.state.settings.playSessions || [];
+        sessions.push({ start, durationSeconds });
+        if (sessions.length > 200) sessions.splice(0, sessions.length - 200);
+        this.state.settings.playSessions = sessions;
+        this.saveSettings();
+        if (this.state.openPanel === "stats") this.openPanel("stats");
+    },
+
     // ── Announcement / maintenance banner (mirrors Home.Announcement.cs) ──
     async loadAnnouncement() {
         this.state.announcement = await AnnouncementFeed.fetch();
@@ -688,7 +725,7 @@ const App = {
         if (!r) return;
         this.closeSearch();
         if (r.panel) this.openPanel(r.panel);
-        else if (r.action === "launch") { if (this.state.edition === "bedrock") Bridge.launchBedrock(); else Bridge.launchJavaEdition(); }
+        else if (r.action === "launch") { if (this.state.edition === "bedrock") this.launchBedrockGame(); else this.launchJava(); }
         else if (r.action === "xbox") { if (this.state.settings.xboxGamertag) this.signOutMicrosoft(); else this.signInWithMicrosoft(); }
         else if (r.action === "discord") { if (this.state.settings.discordLoggedIn) this.signOutDiscord(); else this.signInWithDiscord(); }
     },
@@ -758,7 +795,8 @@ const App = {
                     id,
                     title: "Worlds",
                     headerActions: bw.hasAccess
-                        ? `<button class="panel-icon-btn ${bw.loading ? "spinning" : ""}" ${bw.loading ? "disabled" : ""} data-refresh-bedrock-worlds data-tooltip="Refresh"><i class="fa-solid fa-rotate"></i></button>`
+                        ? `<button class="panel-icon-btn" data-open-bedrock-folder="minecraftWorlds" data-tooltip="Open folder"><i class="fa-solid fa-folder-open"></i></button>
+                           <button class="panel-icon-btn ${bw.loading ? "spinning" : ""}" ${bw.loading ? "disabled" : ""} data-refresh-bedrock-worlds data-tooltip="Refresh"><i class="fa-solid fa-rotate"></i></button>`
                         : "",
                     body: bedrockWorldsPanelBody(bw),
                     activeTabId: id,
@@ -772,7 +810,8 @@ const App = {
                     id,
                     title: "Packs",
                     headerActions: bp.hasAccess
-                        ? `<button class="panel-icon-btn ${bp.loading ? "spinning" : ""}" ${bp.loading ? "disabled" : ""} data-refresh-bedrock-packs data-tooltip="Refresh"><i class="fa-solid fa-rotate"></i></button>`
+                        ? `<button class="panel-icon-btn" data-open-bedrock-folder="${BEDROCK_PACK_DIR_NAMES[bp.kind]}" data-tooltip="Open folder"><i class="fa-solid fa-folder-open"></i></button>
+                           <button class="panel-icon-btn ${bp.loading ? "spinning" : ""}" ${bp.loading ? "disabled" : ""} data-refresh-bedrock-packs data-tooltip="Refresh"><i class="fa-solid fa-rotate"></i></button>`
                         : "",
                     body: bedrockPacksPanelBody(bp),
                     activeTabId: id,
@@ -801,7 +840,8 @@ const App = {
                     id,
                     title: "Photos",
                     headerActions: bs.hasAccess
-                        ? `<button class="panel-icon-btn ${bs.loading ? "spinning" : ""}" ${bs.loading ? "disabled" : ""} data-refresh-bedrock-screenshots data-tooltip="Refresh"><i class="fa-solid fa-rotate"></i></button>`
+                        ? `<button class="panel-icon-btn" data-open-bedrock-folder="Screenshots" data-tooltip="Open folder"><i class="fa-solid fa-folder-open"></i></button>
+                           <button class="panel-icon-btn ${bs.loading ? "spinning" : ""}" ${bs.loading ? "disabled" : ""} data-refresh-bedrock-screenshots data-tooltip="Refresh"><i class="fa-solid fa-rotate"></i></button>`
                         : "",
                     body: bedrockScreenshotsPanelBody(bs),
                     activeTabId: id,
@@ -843,7 +883,7 @@ const App = {
             // Stats/Logs are standalone overlay components on desktop (Components/
             // StatsPanel.razor, LogsPanel.razor) with no .panel-tabs footer at all —
             // not routed through panelShell(), which always appends one.
-            case "stats": html = bareOverlayHtml("stats", "Statistics", "", statsPanelBody(this.state.settings.totalPlaytimeSeconds || 0)); break;
+            case "stats": html = bareOverlayHtml("stats", "Statistics", "", statsPanelBody(this.state.settings.playSessions || [])); break;
             case "logs": html = bareOverlayHtml("logs", "Logs & Crashes", `<button class="btn-sm" data-tooltip="Refresh"><i class="fa-solid fa-rotate"></i> Refresh</button>`, logsPanelBody()); break;
             case "skinlibrary": {
                 if (this.state.skinLibrary.skins.length === 0) this.loadSkins();
@@ -910,7 +950,7 @@ const App = {
         const cfKeyInput = document.getElementById("setting-cf-key");
         if (cfKeyInput) cfKeyInput.addEventListener("change", (e) => { s.curseForgeApiKeyOverride = e.target.value; this.saveSettings(); });
         const openJava = document.getElementById("open-java-edition");
-        if (openJava) openJava.addEventListener("click", () => Bridge.launchJavaEdition());
+        if (openJava) openJava.addEventListener("click", () => this.launchJava());
         const resetBtn = document.getElementById("reset-settings");
         if (resetBtn) resetBtn.addEventListener("click", () => { this.state.settings = autoSavingSettings({ ...DEFAULT_SETTINGS }, () => this.saveSettings()); this.saveSettings(); this.openPanel("settings"); this.renderFooter(); this.renderHome(); });
         const clearHistory = document.getElementById("clear-recent-history");
@@ -1152,6 +1192,8 @@ const App = {
             if (e.target.closest("[data-clear-custom-dll]")) { this.clearCustomDll(); return; }
             if (e.target.closest("[data-stage-custom-dll]")) { this.stageCustomDllInjection(); return; }
             if (e.target.closest("[data-grant-bedrock-storage]")) { this.requestBedrockStorageAccess(); return; }
+            const openFolderBtn = e.target.closest("[data-open-bedrock-folder]");
+            if (openFolderBtn) { BedrockStorage.openFolder(openFolderBtn.dataset.openBedrockFolder); return; }
             if (e.target.closest("[data-refresh-bedrock-worlds]")) { this.loadBedrockWorlds(); return; }
             if (e.target.closest("[data-refresh-bedrock-packs]")) { this.loadBedrockPacks(); return; }
             const packKindBtn = e.target.closest("[data-bedrock-pack-kind]");
@@ -1189,7 +1231,7 @@ const App = {
 
             const launchBtn = e.target.closest("#launch-btn");
             if (launchBtn) {
-                if (this.state.edition === "bedrock") Bridge.launchBedrock(); else Bridge.launchJavaEdition();
+                if (this.state.edition === "bedrock") this.launchBedrockGame(); else this.launchJava();
                 return;
             }
 
@@ -1247,9 +1289,9 @@ const App = {
             }
 
             if (e.target.closest("[data-glacier-retry]") || e.target.closest("[data-glacier-install]")) { this.loadGlacierManifest(); return; }
-            if (e.target.closest("[data-glacier-launch]") || e.target.closest("[data-open-java-edition]")) { Bridge.launchJavaEdition(); return; }
+            if (e.target.closest("[data-glacier-launch]") || e.target.closest("[data-open-java-edition]")) { this.launchJava(); return; }
             const launchJavaVer = e.target.closest("[data-launch-java-version]");
-            if (launchJavaVer) { Bridge.launchJavaEditionVersion(launchJavaVer.dataset.launchJavaVersion); return; }
+            if (launchJavaVer) { this.recordLaunchStart(); Bridge.launchJavaEditionVersion(launchJavaVer.dataset.launchJavaVersion); return; }
             if (e.target.closest("[data-glacier-uninstall]")) { this.state.glacier.latest.installed = false; this.openPanel("javaclients"); return; }
 
             if (e.target.closest("[data-toggle-java-snapshots]")) {
@@ -1511,5 +1553,11 @@ const App = {
         });
     },
 };
+
+// See js/xboxauth.js's window.MicrosoftAuth comment — a top-level `const`
+// doesn't attach to `window`, but MainActivity.kt's onResume() calls back
+// via window.App.onResumeFromGame() for the Stats session-timer, which
+// needs an explicit assignment.
+window.App = App;
 
 document.addEventListener("DOMContentLoaded", () => App.init());

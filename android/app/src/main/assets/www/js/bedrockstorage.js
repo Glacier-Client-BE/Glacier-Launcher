@@ -60,6 +60,25 @@ const BedrockStorage = {
         if (!Bridge.listBedrockScreenshots) return [];
         try { return JSON.parse(Bridge.listBedrockScreenshots() || "[]"); } catch (e) { return []; }
     },
+
+    // Mirrors desktop's OpenXxxFolder shortcuts (Process.Start) — best
+    // effort, since SAF has no guaranteed "reveal in file manager" and not
+    // every device has one that handles vnd.android.document/directory.
+    openFolder(name) {
+        if (Bridge.openBedrockFolder) Bridge.openBedrockFolder(name);
+    },
+};
+// See js/xboxauth.js's window.MicrosoftAuth comment — MainActivity.kt calls
+// back via window.BedrockStorage, which needs an explicit assignment.
+window.BedrockStorage = BedrockStorage;
+
+const BEDROCK_PACK_DIR_NAMES = {
+    resource: "resource_packs",
+    behavior: "behavior_packs",
+    skin: "skin_packs",
+    "resource-dev": "development_resource_packs",
+    "behavior-dev": "development_behavior_packs",
+    "skin-dev": "development_skin_packs",
 };
 
 function formatBytes(bytes) {

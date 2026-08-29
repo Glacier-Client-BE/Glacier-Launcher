@@ -145,3 +145,7 @@ const MicrosoftAuth = {
         return { uuid: data.id, name: data.name, skinUrl: skin ? skin.url : "" };
     },
 };
+// A top-level `const` doesn't attach to `window` the way `var`/function
+// declarations do — MainActivity.kt's notifySignInResult calls back via
+// `window.MicrosoftAuth`, so this needs an explicit assignment.
+window.MicrosoftAuth = MicrosoftAuth;

@@ -37,6 +37,7 @@ import java.io.File
 class MainActivity : ComponentActivity() {
 
     private lateinit var insetsController: WindowInsetsControllerCompat
+    private lateinit var webView: WebView
     private var onBedrockStorageResult: ((Boolean) -> Unit)? = null
 
     // Must be registered before the activity reaches STARTED — a class-body
@@ -107,7 +108,7 @@ class MainActivity : ComponentActivity() {
             systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         }
 
-        val webView = WebView(this).apply {
+        webView = WebView(this).apply {
             settings.javaScriptEnabled = true
             settings.domStorageEnabled = true
             settings.allowFileAccess = true
@@ -128,6 +129,20 @@ class MainActivity : ComponentActivity() {
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
         if (hasFocus) insetsController.hide(WindowInsetsCompat.Type.systemBars())
+    }
+
+    // Lightweight session-timer heuristic for the Stats panel (see
+    // js/app.js's recordLaunchStart()/onResumeFromGame()): Android has no
+    // callback for "the app I launched via startActivity() has closed", so
+    // this is the best available signal — Bedrock/Java Edition run as their
+    // own Activity on top of this one, and this Activity's onResume fires
+    // again once the user backs out of it, same approximation real
+    // launchers without a play-time API from the OS have to make.
+    override fun onResume() {
+        super.onResume()
+        if (::webView.isInitialized) {
+            webView.evaluateJavascript("window.App && window.App.onResumeFromGame && window.App.onResumeFromGame()", null)
+        }
     }
 }
 
@@ -350,6 +365,20 @@ private class AndroidBridge(private val activity: MainActivity, private val webV
 
     @JavascriptInterface
     fun listBedrockScreenshots(): String = BedrockStorageService.listScreenshots(activity)
+
+    @JavascriptInterface
+    fun openBedrockFolder(name: String) {
+        activity.runOnUiThread {
+            val uriString = BedrockStorageService.folderUri(activity, name) ?: return@runOnUiThread
+            runCatching {
+                activity.startActivity(
+                    Intent(Intent.ACTION_VIEW)
+                        .setDataAndType(Uri.parse(uriString), "vnd.android.document/directory")
+                        .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION),
+                )
+            }
+        }
+    }
 
     @JavascriptInterface
     fun listBedrockBackups(): String = BedrockBackupService.listBackups(activity)

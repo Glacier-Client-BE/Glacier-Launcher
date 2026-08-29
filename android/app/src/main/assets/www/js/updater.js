@@ -74,3 +74,6 @@ const LauncherUpdate = {
         reject(new Error(message));
     },
 };
+// See js/xboxauth.js's window.MicrosoftAuth comment — MainActivity.kt calls
+// back via window.LauncherUpdate, which needs an explicit assignment.
+window.LauncherUpdate = LauncherUpdate;

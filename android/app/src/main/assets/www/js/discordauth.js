@@ -79,3 +79,6 @@ const DiscordAuth = {
         return { userId: data.id, username: data.username, avatarUrl };
     },
 };
+// See xboxauth.js's window.MicrosoftAuth comment — same reason this needs
+// an explicit assignment (MainActivity.kt calls back via window.DiscordAuth).
+window.DiscordAuth = DiscordAuth;

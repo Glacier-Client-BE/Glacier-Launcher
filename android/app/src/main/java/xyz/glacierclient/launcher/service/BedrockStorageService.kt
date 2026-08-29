@@ -148,6 +148,15 @@ object BedrockStorageService {
         return result.toString()
     }
 
+    // Android equivalent of desktop's OpenXxxFolder shortcuts
+    // (Process.Start on the real path) — SAF has no "reveal in file
+    // manager" primitive, so this hands the folder's own content:// Uri to
+    // whatever app on the device declares it can view a document tree
+    // (most file managers do); best-effort, same as desktop's own shortcut
+    // failing quietly if no Explorer-equivalent is registered.
+    fun folderUri(context: Context, name: String): String? =
+        findComMojangChild(context, name)?.uri?.toString()
+
     private fun readPackName(context: Context, packDir: DocumentFile): String? {
         val manifest = packDir.findFile("manifest.json") ?: return null
         val text = readText(context, manifest.uri) ?: return null

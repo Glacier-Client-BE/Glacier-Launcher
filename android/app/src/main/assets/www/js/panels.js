@@ -1125,26 +1125,44 @@ function downloadsPanelHtml(downloads) {
 }
 
 // ── Statistics ─────────────────────────────────────────────────────────
-// Mirrors Components/StatsPanel.razor. This app doesn't track play
-// sessions yet (no launch-time hooks — see JavaEditionBridge), so every
-// figure is the honest zero/empty state rather than a fabricated number:
-// same as the desktop panel shows on a completely fresh profile.
-function statsPanelBody(totalPlaytimeSeconds) {
+// Mirrors Components/StatsPanel.razor. Sessions come from a lightweight
+// heuristic (MainActivity.kt's onResume() firing again once the user backs
+// out of the launched Bedrock/Java Edition Activity — see
+// App.recordLaunchStart()/onResumeFromGame() in app.js) rather than a real
+// OS play-time API, same approximation any launcher without one has to
+// make. An empty list still renders the honest zero/empty state.
+function statsPanelBody(sessions) {
     const formatH = (seconds) => {
         if (seconds <= 0) return "0m";
         const h = Math.floor(seconds / 3600);
         const m = Math.floor((seconds % 3600) / 60);
         return h > 0 ? (m > 0 ? `${h}h ${m}m` : `${h}h`) : `${m}m`;
     };
+    const total = sessions.reduce((sum, s) => sum + s.durationSeconds, 0);
+    const longest = sessions.reduce((max, s) => Math.max(max, s.durationSeconds), 0);
+    const lastPlayed = sessions.length > 0 ? formatRelativeTime(Math.floor(sessions[sessions.length - 1].start / 1000)) : "—";
+
+    const cutoff = Date.now() - 14 * 24 * 60 * 60 * 1000;
+    const recent = sessions.filter(s => s.start >= cutoff);
+    const recentHtml = recent.length === 0
+        ? `<div class="stats-empty">No play sessions recorded yet — launch the game to start tracking.</div>`
+        : recent.slice().reverse().map(s => `
+            <div class="version-row">
+                <div class="version-meta">
+                    <span class="version-name">${new Date(s.start).toLocaleDateString()}</span>
+                    <span class="version-sub">${formatH(s.durationSeconds)}</span>
+                </div>
+            </div>`).join("");
+
     return `
     <div class="stats-cards">
-        <div class="stats-card"><i class="fa-solid fa-stopwatch"></i><span class="stats-val">${formatH(totalPlaytimeSeconds)}</span><span class="stats-label">Total playtime</span></div>
-        <div class="stats-card"><i class="fa-solid fa-gamepad"></i><span class="stats-val">0</span><span class="stats-label">Sessions</span></div>
-        <div class="stats-card"><i class="fa-solid fa-trophy"></i><span class="stats-val">0m</span><span class="stats-label">Longest session</span></div>
-        <div class="stats-card"><i class="fa-solid fa-calendar-day"></i><span class="stats-val">—</span><span class="stats-label">Last played</span></div>
+        <div class="stats-card"><i class="fa-solid fa-stopwatch"></i><span class="stats-val">${formatH(total)}</span><span class="stats-label">Total playtime</span></div>
+        <div class="stats-card"><i class="fa-solid fa-gamepad"></i><span class="stats-val">${sessions.length}</span><span class="stats-label">Sessions</span></div>
+        <div class="stats-card"><i class="fa-solid fa-trophy"></i><span class="stats-val">${formatH(longest)}</span><span class="stats-label">Longest session</span></div>
+        <div class="stats-card"><i class="fa-solid fa-calendar-day"></i><span class="stats-val">${lastPlayed}</span><span class="stats-label">Last played</span></div>
     </div>
     <span class="panel-section-label">Last 14 days</span>
-    <div class="stats-empty">No play sessions recorded yet — launch the game to start tracking.</div>`;
+    ${recentHtml}`;
 }
 
 // ── Logs & Crashes ─────────────────────────────────────────────────────

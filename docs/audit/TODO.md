@@ -124,9 +124,38 @@
       settings the same way desktop does.
 - [ ] Add localization/string-table support to Android (currently hard-coded English).
 - [ ] Add LevelDat editor to Android (depends on world-listing work above).
-- [ ] Add SAF folder-open shortcuts to Android (replaces desktop's Explorer shortcuts).
+- [x] Add SAF folder-open shortcuts to Android (`BedrockStorageService.folderUri()`
+      + `MainActivity.kt`'s `openBedrockFolder()`) — Worlds/Packs/Screenshots
+      panel headers now have a real "Open folder" button (best-effort: not
+      every device has a file manager that handles
+      `vnd.android.document/directory`, same as desktop's own shortcut
+      failing quietly with no Explorer-equivalent registered).
 - [ ] Add a Logs panel capture pipeline + mclo.gs sharing to Android.
-- [ ] Add lightweight session-timer service for Android Stats panel.
+- [x] Add lightweight session-timer service for Android Stats panel —
+      `MainActivity.kt`'s `onResume()` is the closest signal Android gives
+      for "the launched game Activity closed" (there's no real callback),
+      so `App.recordLaunchStart()`/`onResumeFromGame()` treat a return to
+      this Activity after 10+ seconds as one play session. Approximate by
+      nature (matches any launcher without an OS play-time API), documented
+      as such in both files' comments.
+
+### Critical fix found while adding the above
+While wiring `onResume()`'s `window.App.onResumeFromGame()` callback,
+discovered that **every existing native→JS callback was silently broken**:
+`MicrosoftAuth`/`DiscordAuth`/`LauncherUpdate`/`BedrockStorage`/
+`CustomDllPicker`/`App` are all declared as top-level `const`, which does
+NOT attach to `window` in a classic (non-module) script — so every
+`window.X.method(...)` call from `MainActivity.kt` (sign-in completion,
+update progress, storage-access results, custom DLL pick results, and now
+the session timer) was a silent no-op this entire session, since
+`window.X && ...` just short-circuits to false with no error. Fixed by
+adding an explicit `window.X = X;` assignment at the end of each affected
+file (`xboxauth.js`, `discordauth.js`, `updater.js`, `bedrockstorage.js`,
+`customdll.js`, `app.js`). This was never caught by CI (build-only, no
+runtime JS execution) or by this session's own device-less verification —
+worth specifically re-testing Microsoft/Discord sign-in and the update
+flow once a device is available, since those are the highest-value
+features this bug affected.
 - [ ] Audit `Home.razor`'s `StateHasChanged()` call sites for over-broad re-renders (Windows).
 - [ ] Cache rendered panel HTML strings in `panels.js`, invalidate only on
       underlying data change, to reduce panel-switch jank.

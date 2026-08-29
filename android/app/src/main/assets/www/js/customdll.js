@@ -26,3 +26,6 @@ const CustomDllPicker = {
         resolve(path);
     },
 };
+// See js/xboxauth.js's window.MicrosoftAuth comment — MainActivity.kt calls
+// back via window.CustomDllPicker, which needs an explicit assignment.
+window.CustomDllPicker = CustomDllPicker;
