@@ -1,12 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Inset so the artwork sits inside the adaptive icon's ~66dp safe zone
-     (of the 108dp canvas) instead of filling the whole canvas edge to edge,
-     which read as an oversized icon once Android's mask/scaling was applied. -->
+     (of the 108dp canvas) instead of filling the whole canvas edge to edge.
+     app_icon.png's own bear artwork is already cropped tight to its 128x128
+     canvas (opaque bounding box ~83% of the width, ~72% of the height), so
+     even the standard ~18% adaptive-icon inset still reads as oversized —
+     needs extra breathing room on top of that to actually look right once
+     Android's mask/scaling is applied. -->
 <inset xmlns:android="http://schemas.android.com/apk/res/android"
-    android:insetLeft="18%"
-    android:insetTop="18%"
-    android:insetRight="18%"
-    android:insetBottom="18%">
+    android:insetLeft="28%"
+    android:insetTop="28%"
+    android:insetRight="28%"
+    android:insetBottom="28%">
     <bitmap
         android:src="@drawable/app_icon"
         android:gravity="center" />
