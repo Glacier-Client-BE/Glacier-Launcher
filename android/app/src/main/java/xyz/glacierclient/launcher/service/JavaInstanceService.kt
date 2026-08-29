@@ -97,6 +97,22 @@ object JavaInstanceService {
         return true
     }
 
+    fun setVersion(id: String, versionId: String): Boolean {
+        if (versionId.isBlank()) return false
+        LauncherProfiles.load()
+        val profile = LauncherProfiles.mainProfileJson.profiles[id] ?: return false
+        profile.lastVersionId = versionId
+        LauncherProfiles.write()
+        return true
+    }
+
+    /** Resolves an instance's real game directory the same way Pojav's own MainActivity does (Tools.getGameDirPath). */
+    fun directoryFor(id: String): File? {
+        LauncherProfiles.load()
+        val profile = LauncherProfiles.mainProfileJson.profiles[id] ?: return null
+        return Tools.getGameDirPath(profile)
+    }
+
     private fun uniqueSlug(base: String): String {
         var candidate = base
         var n = 2

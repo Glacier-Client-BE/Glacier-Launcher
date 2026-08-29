@@ -83,7 +83,7 @@ const App = {
         glacier: { loading: false, latest: null, error: null },
         javaVersions: { list: [], loading: false, error: null, filter: "", showSnapshots: false, showHistorical: false },
         downloads: [], // session-scoped, see downloadRowHtml()/downloadsPanelHtml() in panels.js
-        modpacks: { source: "mr", query: "", results: [], searching: false, searched: false, error: null },
+        modpacks: { source: "mr", query: "", results: [], searching: false, searched: false, error: null, installingId: null },
         themes: [], // loaded from localStorage on init — see loadThemes()/saveThemes()
         selectedThemeId: null,
         // No filesystem skin library on Android, so resolved Mojang texture
@@ -1037,17 +1037,39 @@ const App = {
                     m.results = [];
                 } else {
                     const res = await CurseForge.search(CurseForge.GAME_ID_JAVA, CurseForge.JAVA_CLASS_MODPACKS, m.query);
-                    m.results = res.data.map(a => ({ title: a.name, author: "", summary: a.summary, icon: a.logo?.thumbnailUrl || "", downloads: a.downloadCount }));
+                    m.results = res.data.map(a => ({ id: a.id, source: "cf", title: a.name, author: "", summary: a.summary, icon: a.logo?.thumbnailUrl || "", downloads: a.downloadCount }));
                 }
             } else {
                 const res = await Modrinth.search("modpack", m.query);
-                m.results = res.hits.map(p => ({ title: p.title, author: p.author || "", summary: p.description, icon: p.icon_url || "", downloads: p.downloads }));
+                m.results = res.hits.map(p => ({ id: p.project_id, source: "mr", title: p.title, author: p.author || "", summary: p.description, icon: p.icon_url || "", downloads: p.downloads }));
             }
         } catch (e) {
             m.error = e.message;
         }
         m.searching = false;
         if (this.state.openPanel === "modpacks") this.openPanel("modpacks");
+    },
+
+    async installModpack(projectId, packName) {
+        const m = this.state.modpacks;
+        if (m.installingId) return;
+        m.installingId = projectId;
+        if (this.state.openPanel === "modpacks") this.openPanel("modpacks");
+
+        const result = await ModpackInstall.installModrinth(projectId, packName);
+        m.installingId = null;
+        if (this.state.openPanel === "modpacks") this.openPanel("modpacks");
+
+        if (!result.success) {
+            alert(result.message);
+            return;
+        }
+        this.state.javaInstances.instances = JavaInstances.list();
+        const loaderNote = result.loader
+            ? `\n\nThis pack uses ${result.loader} — add that loader profile from the MC Versions panel before launching, mods won't load on vanilla.`
+            : "";
+        const failedNote = result.failedFiles > 0 ? `\n\n${result.failedFiles} file(s) failed to download — check Profile > Instances.` : "";
+        alert(`Installed "${result.instanceName}" (${result.downloadedFiles} files).${loaderNote}${failedNote}`);
     },
 
     closePanel() {
@@ -1104,6 +1126,8 @@ const App = {
             const deleteInstanceBtn = e.target.closest("[data-delete-instance]");
             if (deleteInstanceBtn) { this.deleteJavaInstance(deleteInstanceBtn.dataset.deleteInstance); return; }
 
+            const installModpackBtn = e.target.closest("[data-install-modpack]");
+            if (installModpackBtn) { this.installModpack(installModpackBtn.dataset.installModpack, installModpackBtn.dataset.installModpackName); return; }
             if (e.target.closest("[data-pick-custom-dll]")) { this.pickCustomDll(); return; }
             if (e.target.closest("[data-clear-custom-dll]")) { this.clearCustomDll(); return; }
             if (e.target.closest("[data-stage-custom-dll]")) { this.stageCustomDllInjection(); return; }

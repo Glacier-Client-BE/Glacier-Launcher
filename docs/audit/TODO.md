@@ -67,6 +67,21 @@
       `05_REFACTOR_PLAN.md`.
 
 ## Medium
+- [x] Modrinth-only modpack install (`ModpackInstallService.kt` +
+      `js/modpackinstall.js`) — downloads a project's latest `.mrpack`,
+      extracts `overrides/` and every listed file into a brand-new Java
+      instance (`JavaInstanceService.directoryFor`/`setVersion`, both added
+      alongside this). CurseForge packs stay disabled (would need
+      CurseForge's own API-keyed project/file-ID resolution ported
+      natively, not worth duplicating the existing JS client for a first
+      pass). Mod-loader installation (Fabric/Quilt/Forge/NeoForge) is NOT
+      done — Forge/NeoForge's installer-jar-as-subprocess step has no
+      Android equivalent at all (Pojav embeds its JVM via JNI, there's no
+      spawnable `java` binary), and shipping Fabric/Quilt-only support
+      would make one loader silently work and the others silently not,
+      which is worse than surfacing the gap — the UI tells the user which
+      loader the pack needs and that they must add it manually via Pojav's
+      own version-install flow before launching.
 - [ ] Implement non-root Bedrock client injection via package-context +
       JNI `dlopen()` (`BedrockGamePackageManager.kt` + `NativeLoader` shim).
 - [x] Custom `.so` picker for Bedrock (`pickCustomDllFile()` in

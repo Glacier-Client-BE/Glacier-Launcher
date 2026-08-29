@@ -22,6 +22,7 @@ import xyz.glacierclient.launcher.service.ClientInjectionService
 import xyz.glacierclient.launcher.service.JavaEditionBridge
 import xyz.glacierclient.launcher.service.JavaInstanceService
 import xyz.glacierclient.launcher.service.LauncherUpdateService
+import xyz.glacierclient.launcher.service.ModpackInstallService
 import java.io.File
 
 /**
@@ -376,6 +377,12 @@ private class AndroidBridge(private val activity: MainActivity, private val webV
 
     @JavascriptInterface
     fun setActiveJavaInstance(id: String): Boolean = JavaInstanceService.setActive(id)
+
+    // Modrinth-only modpack install (see ModpackInstallService.kt for why
+    // CurseForge and loader installation aren't covered here yet).
+    @JavascriptInterface
+    fun installModrinthPack(mrpackUrl: String, packName: String): String =
+        ModpackInstallService.installModrinthPack(activity, mrpackUrl, packName)
 
     // Custom Bedrock client .so picker — mirrors desktop's PickDllFile/
     // CopyDllPath/ClearCustomDll (Home.Settings.cs/Home.Clients.cs). The

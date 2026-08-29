@@ -1179,7 +1179,16 @@ function truncate(s, n) {
     return s.length <= n ? s : s.slice(0, n).trimEnd() + "…";
 }
 
-function modpackRowHtml(pack) {
+function modpackRowHtml(pack, installingId) {
+    // Modrinth packs install for real (overrides + mods into a new Java
+    // instance — see ModpackInstallService.kt); CurseForge still needs its
+    // own project/file-ID resolution step ported, so stays disabled.
+    const installing = installingId === pack.id;
+    const installBtn = pack.source === "mr"
+        ? `<button class="vcs-btn" ${installing ? "disabled" : ""} data-install-modpack="${pack.id}" data-install-modpack-name="${escapeHtml(pack.title)}" data-tooltip="Installs overrides + mods into a new instance — a Fabric/Forge profile still needs adding manually afterward">
+               ${installing ? `<span class="spinner"></span>` : `<i class="fa-solid fa-download"></i>`}&nbsp;Install
+           </button>`
+        : `<button class="vcs-btn" disabled data-tooltip="CurseForge modpack install isn't ported yet — try the Modrinth tab"><i class="fa-solid fa-download"></i>&nbsp;Install</button>`;
     return `
     <div class="modpack-row">
         ${pack.icon ? `<img class="modpack-icon" src="${escapeHtml(pack.icon)}" loading="lazy" />` : `<div class="modpack-icon modpack-icon-fallback"><i class="fa-solid fa-cubes"></i></div>`}
@@ -1188,7 +1197,7 @@ function modpackRowHtml(pack) {
             <span class="version-sub">${escapeHtml(pack.author)} · ${formatDownloads(pack.downloads)}</span>
             <span class="modpack-summary">${escapeHtml(truncate(pack.summary, 90))}</span>
         </div>
-        <button class="vcs-btn" disabled data-tooltip="Modpack install needs a mod-download/extraction step this app doesn't have yet"><i class="fa-solid fa-download"></i>&nbsp;Install</button>
+        ${installBtn}
     </div>`;
 }
 
@@ -1202,7 +1211,7 @@ function modpacksPanelBody(state) {
     } else if (state.results.length === 0 && state.searched) {
         resultsHtml = `<div class="stats-empty">No modpacks found for "${escapeHtml(state.query)}".</div>`;
     }
-    resultsHtml += state.results.map(modpackRowHtml).join("");
+    resultsHtml += state.results.map(p => modpackRowHtml(p, state.installingId)).join("");
 
     return `
     <div class="modpack-source-tabs">

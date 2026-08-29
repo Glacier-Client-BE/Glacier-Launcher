@@ -20,4 +20,20 @@ const Modrinth = {
         if (!res.ok) throw new Error(`Modrinth returned ${res.status}`);
         return res.json(); // { hits: [...], total_hits }
     },
+
+    // Mirrors ModrinthService.cs's GetLatestVersionAsync/GetModpackFileAsync
+    // — the latest version's primary file (falling back to the first file
+    // if none is flagged primary), used to resolve a project id to a
+    // downloadable .mrpack URL for ModpackInstall (js/modpackinstall.js).
+    async getLatestFile(projectId) {
+        const res = await fetch(`${this.BASE_URL}/project/${projectId}/version?limit=1`);
+        if (!res.ok) throw new Error(`Modrinth returned ${res.status}`);
+        const versions = await res.json();
+        for (const ver of versions) {
+            if (!Array.isArray(ver.files) || ver.files.length === 0) continue;
+            const primary = ver.files.find(f => f.primary) || ver.files[0];
+            return { url: primary.url, fileName: primary.filename, size: primary.size || 0 };
+        }
+        return null;
+    },
 };
