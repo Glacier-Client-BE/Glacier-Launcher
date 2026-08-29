@@ -38,6 +38,23 @@ const BedrockStorage = {
         if (!Bridge.listBedrockPacks) return [];
         try { return JSON.parse(Bridge.listBedrockPacks(kind) || "[]"); } catch (e) { return []; }
     },
+
+    listBackups() {
+        if (!Bridge.listBedrockBackups) return [];
+        try { return JSON.parse(Bridge.listBedrockBackups() || "[]"); } catch (e) { return []; }
+    },
+
+    // Writing the backup zip needs no SAF grant (it's saved to this app's
+    // own storage), but reading the worlds/packs it zips does — same
+    // hasAccess()/requestAccess() gate as listWorlds()/listPacks().
+    createBackup() {
+        if (!Bridge.createBedrockBackup) return { success: false, message: "Backups aren't available in this preview (no native bridge)." };
+        try { return JSON.parse(Bridge.createBedrockBackup()); } catch (e) { return { success: false, message: "Backup failed." }; }
+    },
+
+    deleteBackup(fileName) {
+        return !!(Bridge.deleteBedrockBackup && Bridge.deleteBedrockBackup(fileName));
+    },
 };
 
 function formatBytes(bytes) {

@@ -42,6 +42,15 @@
       (resource/behavior/skin × normal/dev). Backups/Instances/Screenshots
       panels remain stubs — same SAF pattern, smaller scope each (plain
       files, no manifest/NBT parsing at all).
+- [x] Bedrock **Backups** panel: create/list/delete are real
+      (`BedrockBackupService.kt` zips `minecraftWorlds`/`*_packs` — read
+      through the same SAF grant as Worlds/Packs — into this app's own
+      external-files storage, which needs no SAF *write* access at all).
+      Restore is NOT implemented — writing back into com.mojang through SAF
+      is a meaningfully bigger, riskier change (a bug there risks wiping
+      real worlds) than a read-only listing or an app-private zip write, so
+      it's left as an explicit follow-up rather than rushed. Instances and
+      Screenshots panels remain stubs.
 - [ ] Diff `Components/*.razor` output markup against `panels.js`/`app.js`
       generated HTML for spinners, tooltips, error dialogs, and toggles to
       close the "Unverified" rows in `07_UI_PARITY.md`.

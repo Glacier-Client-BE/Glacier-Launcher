@@ -857,6 +857,60 @@ function bedrockPacksPanelBody(state) {
     return `${chipsHtml}${bodyHtml}`;
 }
 
+// ── Bedrock Backups ──────────────────────────────────────────────────────
+// Mirrors Pages/Home.razor's "bedrockbackups" panel — create + list +
+// delete are real (BedrockBackupService.kt zips worlds/packs read through
+// the same SAF grant as Worlds/Packs into this app's own storage, which
+// needs no SAF *write* access at all). Restore is not implemented yet —
+// writing back into com.mojang through SAF is a meaningfully bigger, more
+// dangerous change (a bug there risks wiping real worlds) than a read-only
+// listing, so this only offers create/delete for now.
+function bedrockBackupRowHtml(b, confirmDeleteName) {
+    const confirming = confirmDeleteName === b.fileName;
+    return `
+    <div class="version-row">
+        <div class="version-meta">
+            <span class="version-name">${escapeHtml(b.name)}</span>
+            <span class="version-sub">${formatBytes(b.sizeBytes)} · ${formatRelativeTime(Math.floor(b.createdAt / 1000))}</span>
+        </div>
+        <div class="version-actions">
+            ${confirming
+                ? `<button class="icon-btn icon-btn-ghost" data-tooltip="Confirm delete" data-delete-bedrock-backup="${b.fileName}"><i class="fa-solid fa-check"></i></button>
+                   <button class="icon-btn icon-btn-ghost" data-tooltip="Cancel" data-cancel-delete-bedrock-backup><i class="fa-solid fa-xmark"></i></button>`
+                : `<button class="icon-btn icon-btn-ghost" data-tooltip="Delete" data-confirm-delete-bedrock-backup="${b.fileName}"><i class="fa-solid fa-trash"></i></button>`}
+        </div>
+    </div>`;
+}
+
+function bedrockBackupsPanelBody(state) {
+    const createRowHtml = `
+    <div style="display:flex; gap:8px; padding:12px 14px 4px;">
+        <button class="btn-sm btn-blue" ${state.creating ? "disabled" : ""} data-create-bedrock-backup>
+            ${state.creating ? `<span class="spinner"></span>` : `<i class="fa-solid fa-camera"></i>`} Back up now
+        </button>
+    </div>`;
+
+    if (!state.hasAccess) {
+        return `${createRowHtml}<div class="empty-state" style="padding:20px 20px 8px;">
+            <i class="fa-solid fa-folder-open"></i>
+            <span>Grant access to back up your worlds/packs</span>
+            <small>Same one-time folder permission as Worlds/Packs.</small>
+            <button class="modal-btn modal-btn-confirm" style="margin-top:12px;" data-grant-bedrock-storage>Grant Access</button>
+        </div>`;
+    }
+    if (state.loading) {
+        return `${createRowHtml}<div class="versions-loading"><span class="spinner"></span><span>Loading backups…</span></div>`;
+    }
+    if (state.backups.length === 0) {
+        return `${createRowHtml}<div class="empty-state" style="padding:20px 20px 8px;">
+            <i class="fa-solid fa-clock-rotate-left"></i>
+            <span>No backups yet</span>
+            <small>Snapshot your worlds and packs before a risky install.</small>
+        </div>`;
+    }
+    return `${createRowHtml}${state.backups.map(b => bedrockBackupRowHtml(b, state.confirmDeleteName)).join("")}`;
+}
+
 // ── Launcher update modal ────────────────────────────────────────────────
 // Same markup/classes as Pages/Home.razor's LAUNCHER UPDATE MODAL block.
 function updateModalHtml(u, currentVersion) {

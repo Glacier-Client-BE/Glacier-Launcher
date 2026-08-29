@@ -95,6 +95,7 @@ const App = {
         update: { checking: false, available: false, modalOpen: false, installing: false, progress: 0, info: null },
         bedrockWorlds: { hasAccess: false, loading: false, loaded: false, worlds: [] },
         bedrockPacks: { hasAccess: false, loading: false, loaded: false, kind: "resource", packs: [] },
+        bedrockBackups: { hasAccess: false, loading: false, loaded: false, creating: false, confirmDeleteName: null, backups: [] },
         javaInstances: { instances: [], renamingId: null, renameValue: "", confirmDeleteId: null },
         news: {
             loading: false, posts: [], releases: [],
@@ -126,20 +127,67 @@ const App = {
         const hasBedrockAccess = BedrockStorage.hasAccess();
         this.state.bedrockWorlds.hasAccess = hasBedrockAccess;
         this.state.bedrockPacks.hasAccess = hasBedrockAccess;
+        this.state.bedrockBackups.hasAccess = hasBedrockAccess;
     },
 
-    // Worlds and Packs share the same one-time SAF grant (both live under
-    // the same com.mojang root) — a grant from either panel unlocks both.
+    // Worlds, Packs, and Backups share the same one-time SAF grant (all read
+    // through the same com.mojang root) — a grant from any one panel
+    // unlocks the others too.
     async requestBedrockStorageAccess() {
         const granted = await BedrockStorage.requestAccess();
         this.state.bedrockWorlds.hasAccess = granted;
         this.state.bedrockPacks.hasAccess = granted;
+        this.state.bedrockBackups.hasAccess = granted;
         if (granted) {
             if (this.state.openPanel === "bedrockworlds") await this.loadBedrockWorlds();
             if (this.state.openPanel === "bedrockpacks") await this.loadBedrockPacks();
+            if (this.state.openPanel === "bedrockbackups") await this.loadBedrockBackups();
         }
         if (this.state.openPanel === "bedrockworlds") this.openPanel("bedrockworlds");
         if (this.state.openPanel === "bedrockpacks") this.openPanel("bedrockpacks");
+        if (this.state.openPanel === "bedrockbackups") this.openPanel("bedrockbackups");
+    },
+
+    async loadBedrockBackups() {
+        const bb = this.state.bedrockBackups;
+        bb.loading = true;
+        if (this.state.openPanel === "bedrockbackups") this.openPanel("bedrockbackups");
+        bb.backups = BedrockStorage.listBackups();
+        bb.loading = false;
+        bb.loaded = true;
+        if (this.state.openPanel === "bedrockbackups") this.openPanel("bedrockbackups");
+    },
+
+    async createBedrockBackup() {
+        const bb = this.state.bedrockBackups;
+        bb.creating = true;
+        if (this.state.openPanel === "bedrockbackups") this.openPanel("bedrockbackups");
+        const result = BedrockStorage.createBackup();
+        bb.creating = false;
+        if (result.success) {
+            bb.backups = BedrockStorage.listBackups();
+        } else {
+            alert(result.message);
+        }
+        if (this.state.openPanel === "bedrockbackups") this.openPanel("bedrockbackups");
+    },
+
+    confirmDeleteBedrockBackup(fileName) {
+        this.state.bedrockBackups.confirmDeleteName = fileName;
+        if (this.state.openPanel === "bedrockbackups") this.openPanel("bedrockbackups");
+    },
+
+    cancelDeleteBedrockBackup() {
+        this.state.bedrockBackups.confirmDeleteName = null;
+        if (this.state.openPanel === "bedrockbackups") this.openPanel("bedrockbackups");
+    },
+
+    deleteBedrockBackup(fileName) {
+        BedrockStorage.deleteBackup(fileName);
+        const bb = this.state.bedrockBackups;
+        bb.confirmDeleteName = null;
+        bb.backups = BedrockStorage.listBackups();
+        if (this.state.openPanel === "bedrockbackups") this.openPanel("bedrockbackups");
     },
 
     async loadBedrockPacks() {
@@ -697,7 +745,20 @@ const App = {
                 if (bp.hasAccess && !bp.loaded && !bp.loading) this.loadBedrockPacks();
                 break;
             }
-            case "bedrockbackups": html = panelShell({ id, title: "Backups", body: emptyState("No backups yet", "World backups will list here once wired to shared storage."), activeTabId: id }); break;
+            case "bedrockbackups": {
+                const bb = this.state.bedrockBackups;
+                html = panelShell({
+                    id,
+                    title: "Backups",
+                    headerActions: bb.hasAccess
+                        ? `<button class="panel-icon-btn ${bb.loading ? "spinning" : ""}" ${bb.loading ? "disabled" : ""} data-refresh-bedrock-backups data-tooltip="Refresh"><i class="fa-solid fa-rotate"></i></button>`
+                        : "",
+                    body: bedrockBackupsPanelBody(bb),
+                    activeTabId: id,
+                });
+                if (bb.hasAccess && !bb.loaded && !bb.loading) this.loadBedrockBackups();
+                break;
+            }
             case "bedrockinstances": html = panelShell({ id, title: "Instances", body: emptyState("No instances yet", "Isolated Bedrock instances will list here once wired to shared storage."), activeTabId: id }); break;
             case "bedrockscreenshots": html = panelShell({ id, title: "Photos", body: emptyState("No screenshots yet", "Reads from the built-in Java Edition runtime's shared storage once wired."), activeTabId: id }); break;
             case "javaclients": {
@@ -1023,6 +1084,13 @@ const App = {
             if (e.target.closest("[data-refresh-bedrock-packs]")) { this.loadBedrockPacks(); return; }
             const packKindBtn = e.target.closest("[data-bedrock-pack-kind]");
             if (packKindBtn) { this.switchBedrockPackKind(packKindBtn.dataset.bedrockPackKind); return; }
+            if (e.target.closest("[data-refresh-bedrock-backups]")) { this.loadBedrockBackups(); return; }
+            if (e.target.closest("[data-create-bedrock-backup]")) { this.createBedrockBackup(); return; }
+            const confirmDeleteBackupBtn = e.target.closest("[data-confirm-delete-bedrock-backup]");
+            if (confirmDeleteBackupBtn) { this.confirmDeleteBedrockBackup(confirmDeleteBackupBtn.dataset.confirmDeleteBedrockBackup); return; }
+            if (e.target.closest("[data-cancel-delete-bedrock-backup]")) { this.cancelDeleteBedrockBackup(); return; }
+            const deleteBackupBtn = e.target.closest("[data-delete-bedrock-backup]");
+            if (deleteBackupBtn) { this.deleteBedrockBackup(deleteBackupBtn.dataset.deleteBedrockBackup); return; }
             if (e.target.closest("[data-skip-update]")) { this.skipUpdate(); return; }
             if (e.target.closest("[data-install-update]")) { this.installUpdate(); return; }
             if (e.target.closest("[data-close-update]")) { this.closeUpdateModal(); return; }

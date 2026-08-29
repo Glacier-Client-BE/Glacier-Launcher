@@ -45,8 +45,13 @@ object BedrockStorageService {
     // directly, or a parent folder above games/ — walk down to find a named
     // child instead of requiring one exact folder, since SAF's tree picker
     // doesn't let this app suggest a starting path on most devices/OEM file
-    // pickers. Shared by worlds and packs since they're siblings under the
-    // same com.mojang root.
+    // pickers. Shared by worlds, packs, and BedrockBackupService since
+    // they're all read through the same com.mojang root.
+    fun findComMojangChild(context: Context, name: String): DocumentFile? {
+        val root = rootDocument(context) ?: return null
+        return findChildDir(root, name)
+    }
+
     private fun findChildDir(root: DocumentFile, name: String): DocumentFile? {
         if (root.name == name) return root
         root.findFile(name)?.let { return it }

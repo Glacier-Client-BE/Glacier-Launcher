@@ -16,6 +16,7 @@ import androidx.core.content.edit
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import xyz.glacierclient.launcher.service.BedrockBackupService
 import xyz.glacierclient.launcher.service.BedrockStorageService
 import xyz.glacierclient.launcher.service.ClientInjectionService
 import xyz.glacierclient.launcher.service.JavaEditionBridge
@@ -345,6 +346,15 @@ private class AndroidBridge(private val activity: MainActivity, private val webV
 
     @JavascriptInterface
     fun listBedrockPacks(kind: String): String = BedrockStorageService.listPacks(activity, kind)
+
+    @JavascriptInterface
+    fun listBedrockBackups(): String = BedrockBackupService.listBackups(activity)
+
+    @JavascriptInterface
+    fun createBedrockBackup(): String = BedrockBackupService.createBackup(activity)
+
+    @JavascriptInterface
+    fun deleteBedrockBackup(fileName: String): Boolean = BedrockBackupService.deleteBackup(activity, fileName)
 
     // Java multi-instance management (Home.Panels.cs's Modpack "Install" and
     // several Java Addons actions are disabled on Android for lack of this —
