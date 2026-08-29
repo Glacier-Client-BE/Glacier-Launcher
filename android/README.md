@@ -358,13 +358,12 @@ Java Edition runtime's own settings instead of duplicating them), `clients`
 (Vanilla — see "Removed: DLL-injected clients" below for why that's the
 only card), `addons` Bedrock branch (CurseForge search with category
 chips and pagination),
-`mcversions` (channel tabs, filter, version rows with download/switch/
-delete actions — the desktop panel's "Install from Microsoft Store" row
-is Windows-only sideloading with no Android equivalent, since Android
-Bedrock is a single always-current Play Store app; replaced with an
-honest note instead of a non-functional button, and the list itself is
-empty pending a real version data source rather than seeded with fake
-version numbers).
+`mcversions` (channel tabs, filter, a real version list from the same
+public community version database desktop's `VanillaVersionService.cs`
+reads — but read-only: download/switch/delete are AppX registration +
+Windows-Update-SOAP-API operations with no Android equivalent, since
+Android Bedrock is a single always-current Play Store app, so those
+rows show an honest read-only line instead of non-functional buttons).
 
 **Empty-state placeholders (correct panel/labels, listing logic queued):**
 `bedrockworlds`, `bedrockpacks`, `bedrockbackups`, `bedrockinstances`,

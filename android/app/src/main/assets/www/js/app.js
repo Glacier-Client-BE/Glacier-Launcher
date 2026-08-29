@@ -70,7 +70,9 @@ const App = {
         cfCategory: null,
         cfResults: [],
         cfTotalCount: 0,
-        mcVersions: [], // no real data source yet — see android/README.md
+        mcVersions: [],
+        mcVersionsLoading: false,
+        mcVersionsLoaded: false,
         mcVersionsChannel: "all",
         mcVersionsFilter: "",
         javaModsTab: "loaders",
@@ -127,6 +129,19 @@ const App = {
         this.state.bedrockWorlds.hasAccess = granted;
         if (granted) await this.loadBedrockWorlds();
         if (this.state.openPanel === "bedrockworlds") this.openPanel("bedrockworlds");
+    },
+
+    async loadMcVersions() {
+        this.state.mcVersionsLoading = true;
+        if (this.state.openPanel === "mcversions") this.openPanel("mcversions");
+        try {
+            this.state.mcVersions = await BedrockVersions.fetch();
+        } catch (e) {
+            this.state.mcVersions = [];
+        }
+        this.state.mcVersionsLoading = false;
+        this.state.mcVersionsLoaded = true;
+        if (this.state.openPanel === "mcversions") this.openPanel("mcversions");
     },
 
     newJavaInstance() {
@@ -593,7 +608,11 @@ const App = {
                 });
                 break;
             }
-            case "mcversions": html = mcVersionsPanelHtml(this.state.mcVersionsChannel, this.state.mcVersionsFilter, this.state.mcVersions); break;
+            case "mcversions": {
+                html = mcVersionsPanelHtml(this.state.mcVersionsChannel, this.state.mcVersionsFilter, this.state.mcVersions, this.state.mcVersionsLoading);
+                if (!this.state.mcVersionsLoaded && !this.state.mcVersionsLoading) this.loadMcVersions();
+                break;
+            }
             case "bedrockworlds": {
                 const bw = this.state.bedrockWorlds;
                 html = panelShell({

@@ -442,48 +442,48 @@ function settingsPanelBody(category) {
 
 // ── MC Versions ────────────────────────────────────────────────────────
 // Mirrors Pages/Home.razor's "mcversions" panel structure (channel tabs,
-// filter, version rows with download/switch/delete). The desktop panel's
-// "Install from Microsoft Store" row (VanillaVersionService/
-// StoreInstallService's BedrockUpdater sideload) is Windows-only — Android
-// Bedrock is a single always-current Play Store app with no side-loadable
-// version history, so that row is replaced with an honest note instead of
-// a non-functional button, same treatment as ClientInjectionService.
-function versionRowHtml(v) {
-    const actionsHtml = v.downloaded
-        ? `<div class="version-actions">
-            <button class="icon-btn icon-btn-ghost" title="Delete" data-delete-mcversion="${v.id}"><i class="fa-solid fa-trash"></i></button>
-            ${!v.active ? `<button class="icon-btn mcv-switch-btn" title="Switch to this version" data-switch-mcversion="${v.id}"><i class="fa-solid fa-right-left"></i></button>` : ""}
-        </div>`
-        : `<div class="version-actions"><button class="icon-btn" title="Download" data-download-mcversion="${v.id}"><i class="fa-solid fa-download"></i></button></div>`;
+// filter, version rows) but not its download/switch/delete actions — those
+// are AppX registration + Windows-Update-SOAP-API operations
+// (VanillaVersionService.cs) with no Android equivalent: Bedrock here is a
+// single always-current Play Store app with no side-loadable version
+// history, so instead of non-functional buttons this shows an honest
+// read-only list (mcVersionInfoRowHtml below), same treatment as
+// ClientInjectionService gives Windows-only injection features.
+
+// Real version names/channels come from the same public community DB
+// desktop's VanillaVersionService.cs reads (BedrockVersions.fetch(), in
+// javaedition.js) — but download/switch/delete are AppX-registration +
+// Windows-Update-SOAP-API operations with no Android equivalent (there's no
+// side-loadable version history the way Developer Mode sideload or Store
+// rollback allow), so unlike versionRowHtml (desktop's row, with working
+// download/switch/delete buttons) this renders an info-only row: showing
+// dead action buttons that don't do anything on Android would be worse than
+// the honest read-only list the panel's own info bar already describes.
+function mcVersionInfoRowHtml(v) {
     return `
-    <div class="version-row ${v.active ? "mcv-active-row" : ""}">
+    <div class="version-row">
         <div class="version-meta">
-            <div style="display:flex; align-items:center; gap:6px;">
-                <span class="version-name">Minecraft ${v.id}</span>
-                ${v.active ? `<span class="tag-active">Active</span>` : ""}
-            </div>
-            ${v.downloaded ? `<span class="version-sub">Ready · ${v.size}</span>` : `<span class="version-sub">${v.size}</span>`}
+            <span class="version-name">Minecraft ${escapeHtml(v.id)}</span>
+            <span class="version-sub">${v.channel === "preview" ? "Preview" : "Release"}</span>
         </div>
-        ${actionsHtml}
     </div>`;
 }
 
 // Full panel-overlay markup, not routed through panelShell(): the desktop
 // panel puts the info bar / search / channel tabs BETWEEN .panel-header and
 // .panel-body (siblings, not nested inside it), unlike the other panels.
-function mcVersionsPanelHtml(channel, filter, versions) {
+function mcVersionsPanelHtml(channel, filter, versions, loading) {
     const filtered = versions.filter(v =>
         (channel === "all" || v.channel === channel) &&
         (!filter || v.id.toLowerCase().includes(filter.toLowerCase())));
-    const active = filtered.filter(v => v.active);
-    const rest = filtered.filter(v => !v.active);
 
-    const listHtml = filtered.length === 0
+    const listHtml = loading
+        ? `<div class="versions-loading"><span class="spinner"></span><span>Loading versions…</span></div>`
+        : filtered.length === 0
         ? `<div class="versions-loading"><span style="opacity:0.5;">${
             versions.length === 0 ? "No versions found." : `No results for "${filter}".`
         }</span></div>`
-        : `${active.length > 0 ? `<span class="panel-section-label">Active</span>${active.map(versionRowHtml).join("")}<span class="panel-section-label">All Versions</span>` : ""}
-           ${rest.map(versionRowHtml).join("")}`;
+        : filtered.map(mcVersionInfoRowHtml).join("");
 
     return `
     <div class="panel-overlay" id="panel-mcversions">
@@ -499,9 +499,10 @@ function mcVersionsPanelHtml(channel, filter, versions) {
         </div>
         <div class="mcv-info-bar">
             <i class="fa-solid fa-circle-info"></i>
-            <span>Android Bedrock is a single always-current Play Store app — there's no side-loadable
-            version history the way Windows' Developer Mode sideload or Microsoft Store rollback allow.
-            This list is illustrative of the desktop panel's layout; switching versions isn't possible here.</span>
+            <span>Real Bedrock version history below (same public database the desktop app reads), but
+            Android Bedrock is a single always-current Play Store app — there's no side-loadable install
+            the way Windows' Developer Mode sideload or Microsoft Store rollback allow, so switching or
+            downloading a specific version isn't possible here.</span>
         </div>
         <div class="panel-search-wrap">
             <i class="fa-solid fa-magnifying-glass"></i>

@@ -28,7 +28,14 @@
       overrides-zip-extraction step is what would let Modpack "Install"
       itself go live — instance management was the blocker, not the only
       piece.
-- [ ] Wire a real Bedrock version data source into Android's MC Versions panel.
+- [x] Wire a real Bedrock version data source into Android's MC Versions
+      panel (`BedrockVersions.fetch()` in `javaedition.js`, same public
+      community version-database text file `VanillaVersionService.cs`
+      reads). Download/switch/delete stay unavailable — those are AppX
+      registration + Windows-Update-SOAP-API operations with no Android
+      equivalent — so the panel renders a read-only list
+      (`mcVersionInfoRowHtml`) instead of desktop's dead-if-copied
+      download/switch/delete buttons.
 - [ ] Diff `Components/*.razor` output markup against `panels.js`/`app.js`
       generated HTML for spinners, tooltips, error dialogs, and toggles to
       close the "Unverified" rows in `07_UI_PARITY.md`.
