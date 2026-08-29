@@ -945,12 +945,34 @@ function levelDatEditorHtml(state) {
     </div>`;
 }
 
+// Storage-access guidance. The picker is opened directly inside
+// Android/data/com.mojang.minecraftpe/files/games/com.mojang via
+// EXTRA_INITIAL_URI (see BedrockStorageService.bedrockPickerInitialUri) —
+// that path cannot be navigated to by hand, because Android 11+ blocks
+// /Android in the picker entirely, so telling the user to "go find it"
+// was asking for something the OS forbids.
+//
+// Android 13 closed the subdirectory loophole this relies on, so there the
+// picker still opens in the right place but the grant is refused. Say that
+// plainly instead of letting the user retry something that cannot work.
+function bedrockAccessHint() {
+    return Bridge.bedrockStorageBlockedByPlatform()
+        ? `Android 13 and newer block apps from being granted access to
+           <code>Android/data</code>, where Minecraft keeps its worlds. Tapping below still
+           opens the folder, but the system may refuse the grant — if it does, the only
+           non-root options are Shizuku or copying the <code>com.mojang</code> folder to
+           ordinary storage with a file manager first.`
+        : `Tapping below opens Minecraft's data folder directly — you only need to confirm
+           with "Use this folder". Don't navigate elsewhere first: Android blocks
+           <code>Android/data</code> from being browsed by hand.`;
+}
+
 function bedrockWorldsPanelBody(state) {
     if (!state.hasAccess) {
         return `<div class="empty-state" style="padding:20px 20px 8px;">
             <i class="fa-solid fa-folder-open"></i>
             <span>Grant access to your worlds</span>
-            <small>Android requires a one-time folder permission to read Bedrock's shared storage — pick the folder containing "minecraftWorlds" (usually inside Android/data/com.mojang.minecraftpe/files/games/com.mojang).</small>
+            <small>${bedrockAccessHint()}</small>
             <button class="modal-btn modal-btn-confirm" style="margin-top:12px;" data-grant-bedrock-storage>Grant Access</button>
         </div>`;
     }
@@ -1001,7 +1023,7 @@ function bedrockPacksPanelBody(state) {
         bodyHtml = `<div class="empty-state" style="padding:20px 20px 8px;">
             <i class="fa-solid fa-folder-open"></i>
             <span>Grant access to your packs</span>
-            <small>Same one-time folder permission as Worlds — pick the folder containing "resource_packs"/"behavior_packs" (inside Android/data/com.mojang.minecraftpe/files/games/com.mojang).</small>
+            <small>${bedrockAccessHint()}</small>
             <button class="modal-btn modal-btn-confirm" style="margin-top:12px;" data-grant-bedrock-storage>Grant Access</button>
         </div>`;
     } else if (state.loading) {
@@ -1056,7 +1078,7 @@ function bedrockBackupsPanelBody(state) {
         return `${createRowHtml}<div class="empty-state" style="padding:20px 20px 8px;">
             <i class="fa-solid fa-folder-open"></i>
             <span>Grant access to back up your worlds/packs</span>
-            <small>Same one-time folder permission as Worlds/Packs.</small>
+            <small>${bedrockAccessHint()}</small>
             <button class="modal-btn modal-btn-confirm" style="margin-top:12px;" data-grant-bedrock-storage>Grant Access</button>
         </div>`;
     }
@@ -1084,7 +1106,7 @@ function bedrockScreenshotsPanelBody(state) {
         return `<div class="empty-state" style="padding:28px 20px;">
             <i class="fa-solid fa-folder-open"></i>
             <span>Grant access to your screenshots</span>
-            <small>Same one-time folder permission as Worlds/Packs/Backups.</small>
+            <small>${bedrockAccessHint()}</small>
             <button class="modal-btn modal-btn-confirm" style="margin-top:12px;" data-grant-bedrock-storage>Grant Access</button>
         </div>`;
     }

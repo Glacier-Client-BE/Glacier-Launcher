@@ -83,6 +83,39 @@ best-effort analogue (root-only staging into Minecraft Bedrock's storage)
 rather than pretending to work; the client cards in the UI still render and
 select correctly, but the actual injection step is honestly gated on root.
 
+### Reaching Bedrock's data under Android/data
+
+Bedrock keeps its saves in
+`Android/data/com.mojang.minecraftpe/files/games/com.mojang`. Android 11+
+blocks `/Android` in the SAF picker entirely, so the previous flow — launch
+`ACTION_OPEN_DOCUMENT_TREE` with no initial location and ask the user to
+"pick the folder containing minecraftWorlds" — was asking for something the
+OS does not permit. The folder was unreachable.
+
+The fix is what file managers (MT Manager, FV, Solid Explorer) do: hand the
+picker a pre-built **document** Uri for the target folder as
+`EXTRA_INITIAL_URI`, so it opens *inside* the restricted path with "Use this
+folder" already available. Google blocked selecting `/Android` itself but not
+its subdirectories, which is what makes this work.
+`ActivityResultContracts.OpenDocumentTree` already forwards its input Uri as
+`EXTRA_INITIAL_URI` on API 26+, so this is just a matter of building the
+right document id (`BedrockStorageService.bedrockPickerInitialUri`).
+
+Two related fixes went in alongside it: the persisted grant now takes
+**write** as well as read (the level.dat editor and the backup/pack panels
+open output streams through the same tree, and a read-only grant fails every
+one of them), and a returned tree is validated to actually contain the
+Bedrock folders before being stored — otherwise an unrelated folder is saved
+and the panels stay silently empty forever.
+
+**Android 13+ caveat.** Android 13 closed the subdirectory loophole. There
+the picker still opens in the right place, but the system refuses to return
+a grant. `bedrockStorageBlockedByPlatform()` reports this so the UI can say
+so plainly instead of letting the user retry something that cannot succeed.
+The only remaining non-root options on 13+ are Shizuku (ADB-privileged, not
+implemented here) or copying `com.mojang` to ordinary storage with a file
+manager first.
+
 Also genuinely not portable:
 - **Native Discord Rich Presence, as the desktop app does it** — the desktop
   `DiscordRpcService.cs` uses the DiscordRPC NuGet package, which is an IPC
@@ -291,6 +324,24 @@ build time (both this app's own CurseForge search and
 `app_pojavlauncher`'s own `getCFApiKey()` read the same env var).
 
 ## Mobile-specific adjustments
+
+`css/mobile.css` carries a mobile scale-down pass. `app.css` is the desktop
+stylesheet byte-for-byte, sized for a window with room to spare; a phone in
+forced landscape has roughly 760-900 x 360-420 CSS px. Measured in Chromium
+at 873x393, panel chrome was consuming 137px of a panel's 307px — header 48,
+category row 48, tab bar 41 — leaving 165px of body, about three 46px rows.
+
+After the pass: header 36, categories 33, tabs 33, body 202, rows 37 — about
+5.5 rows, a ~53% gain in usable content. Two fixed heights had to be
+overridden rather than padded (`.vcs-btn`'s `height: 38px` and the 32px
+`.panel-back-btn`), and row height needed `line-height` tightening, not just
+smaller fonts.
+
+Sizes are keyed on `max-height`, not `max-width`: width is comfortable on a
+landscape phone, height is what is scarce. The chrome is scaled down rather
+than the whole page being rescaled, which would shrink text along with it
+and hurt legibility.
+
 
 A few things depart from the desktop app on purpose because "mobile" is a
 genuinely different environment, not because of a shortcut:

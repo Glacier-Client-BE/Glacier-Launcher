@@ -53,48 +53,108 @@
     }
 }
 
-@media (max-height: 480px) {
-    .top-bar { padding: 6px 10px 0; gap: 6px; }
-    .logo-icon { width: 26px; height: 26px; }
+/* ── Mobile scale-down ────────────────────────────────────────────────────
+   app.css is the desktop stylesheet byte-for-byte, sized for a window with
+   room to spare. A phone in forced landscape has roughly 760-900 x 360-420
+   CSS px, and measured against that the chrome was eating 137px of a panel's
+   307px — header 48, category row 48, tab bar 41 — leaving 165px of body,
+   about three 46px rows. Everything below shrinks the fixed chrome and row
+   metrics so the content area roughly doubles, rather than rescaling the
+   whole page (which would shrink text along with it and hurt legibility).
+
+   Keyed on max-height rather than max-width: width is comfortable on a
+   landscape phone, height is what is scarce. 500px covers every common
+   phone-landscape height (360/393/412/480); a tighter tier follows for the
+   shortest devices. */
+@media (max-height: 500px) {
+    /* Top bar / footer — the two fixed strips framing every screen. */
+    .top-bar { padding: 5px 10px 0; gap: 6px; }
+    .logo-icon { width: 24px; height: 24px; }
     .branding-title { font-size: 12px; }
     .branding-sub { display: none; }
     .update-pill { display: none; }
 
-    .edition-tab { padding: 4px 8px; font-size: 11px; }
-    .topbar-client-chip { padding: 4px 8px; }
-    .search-trigger, .notif-bell-btn { width: 30px; height: 30px; }
+    .edition-tab { padding: 3px 8px; font-size: 11px; }
+    .topbar-client-chip { padding: 3px 8px; font-size: 11px; }
+    .search-trigger, .notif-bell-btn { width: 28px; height: 28px; }
 
-    .action-btn { height: 38px; font-size: 12px; }
-    .btn-sq { width: 38px; }
-
-    .footer { padding: 0 10px 8px; gap: 6px; }
-    .avatar { width: 24px; height: 24px; }
+    .footer { padding: 0 10px 6px; gap: 6px; }
+    .avatar { width: 22px; height: 22px; }
     .username { font-size: 12px; }
     .user-handle { font-size: 10px; }
     .footer-right span { display: none; }
+    .news-strip { height: 20px; }
 
-    .news-strip { height: 22px; }
+    /* Home quick actions. */
+    .action-btn { height: 36px; font-size: 12px; }
+    .btn-sq { width: 36px; }
 
-    .panel-overlay { padding-top: 4px; }
-    .panel-header { padding: 8px 12px; }
-    .panel-title { font-size: 14px; }
-    .panel-body { padding: 10px 12px; }
+    /* Panel chrome — the biggest win. Header, the category chip row and the
+       bottom tab bar are pure overhead above the content. */
+    .panel-overlay { padding-top: 2px; }
+    /* Header height is set by its tallest child, the 32px round back/icon
+       buttons, not by its own padding — both have to come down. */
+    .panel-header { padding: 5px 12px; }
+    .panel-title { font-size: 13px; }
+    .panel-back-btn, .panel-icon-btn { width: 26px; height: 26px; font-size: 11px; }
+    .panel-title-underline { margin-top: 2px; }
+    .panel-handle { display: none; }
+    .panel-body { padding: 6px 12px; }
+    .panel-section-label { padding: 3px 4px 1px; font-size: 9px; }
 
-    .panel-tabs { padding: 4px 8px 6px; gap: 1px; }
-    .panel-tab { height: 30px; font-size: 9px; padding: 0 4px; gap: 3px; }
-    .panel-tab i { font-size: 12px; }
-    .panel-tabs-arrow { width: 24px; height: 30px; }
-    .panel-tabs-arrow i { font-size: 11px; }
+    .panel-tabs { padding: 2px 6px 4px; gap: 1px; }
+    .panel-tab { height: 26px; font-size: 9px; padding: 0 4px; gap: 3px; }
+    .panel-tab i { font-size: 11px; }
+    .panel-tabs-arrow { width: 22px; height: 26px; }
+    .panel-tabs-arrow i { font-size: 10px; }
 
-    .setting-row { padding: 8px 0; }
-    .client-card { padding: 10px; }
+    /* Category chip row (Settings' All/Clients/Looks/…, Java mods tabs).
+       .vcs-btn carries an explicit height: 38px, so padding alone does
+       nothing here — the height itself has to be overridden. */
+    #settings-categories { padding: 5px 12px 0; }
+    .vcs-btn { height: 28px; padding: 0 10px; font-size: 11px; }
+    .vcs-btn i { font-size: 11px; }
+
+    /* Rows and cards — measured at 46px each, the single biggest consumer
+       of body height once the chrome is trimmed. */
+    /* Row height is label + hint stacked, so the line boxes matter as much
+       as the font sizes — without tightening line-height the rows stayed at
+       40px even with smaller text. */
+    .setting-row { padding: 5px 0; }
+    .setting-label { font-size: 12px; line-height: 1.15; }
+    .setting-hint { font-size: 9px; line-height: 1.2; }
+    .setting-meta { gap: 1px; }
+    .setting-input { height: 28px; font-size: 12px; padding: 0 8px; }
+    .btn-sm { height: 26px; font-size: 11px; padding: 0 10px; }
+    .toggle { transform: scale(0.85); }
+
+    .client-card { padding: 8px; }
+    .client-card-name { font-size: 12px; }
+    .client-card-sub { font-size: 9px; }
+    .client-card-icon { width: 30px; height: 30px; }
+
+    .version-row { padding: 6px 8px; }
+    .version-icon { width: 30px; height: 30px; }
+    .version-name { font-size: 12px; }
+    .version-sub { font-size: 9px; }
+
+    .ts-chip { padding: 4px 9px; font-size: 11px; }
+    .modal-btn { height: 30px; font-size: 12px; }
+    .empty-state i { font-size: 22px; }
+    .empty-state span { font-size: 12px; }
+    .empty-state small { font-size: 9px; }
 }
 
-/* Very short (compact multitasking / older phones) - trim further. */
-@media (max-height: 360px) {
+/* Shortest devices (and split-screen): trim the optional furniture too. */
+@media (max-height: 380px) {
     .recently-launched { display: none !important; }
-    .status-msg { font-size: 11px; }
-    .action-btn { height: 34px; font-size: 11px; }
+    .status-msg { font-size: 10px; }
+    .action-btn { height: 32px; font-size: 11px; }
+    .btn-sq { width: 32px; }
+    .panel-header { padding: 3px 10px; }
+    #settings-categories { padding: 3px 10px 0; }
+    .setting-row { padding: 5px 0; }
+    .setting-hint { display: none; }
 }
 
 /* Safe-area insets for the chrome, the other half of drawing edge to edge.

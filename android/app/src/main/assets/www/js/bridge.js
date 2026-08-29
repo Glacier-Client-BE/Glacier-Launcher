@@ -58,6 +58,7 @@ const Bridge = (() => {
         // Bedrock shared-storage panels (BedrockStorageService.kt/BedrockBackupService.kt)
         hasBedrockStorageAccess: () => (hasNative ? native.hasBedrockStorageAccess() : false),
         requestBedrockStorageAccess: () => { if (hasNative) native.requestBedrockStorageAccess(); },
+        bedrockStorageBlockedByPlatform: () => (hasNative ? native.bedrockStorageBlockedByPlatform() : false),
         listBedrockWorlds: () => (hasNative ? native.listBedrockWorlds() : "[]"),
         listBedrockPacks: (kind) => (hasNative ? native.listBedrockPacks(kind) : "[]"),
         listBedrockScreenshots: () => (hasNative ? native.listBedrockScreenshots() : "[]"),

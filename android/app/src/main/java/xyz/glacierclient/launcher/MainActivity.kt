@@ -45,22 +45,40 @@ class MainActivity : ComponentActivity() {
     // Must be registered before the activity reaches STARTED — a class-body
     // property initializer runs during construction, ahead of onCreate.
     private val openBedrockStorageTree = registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
-        val granted = uri != null
+        var granted = false
         if (uri != null) {
-            contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            BedrockStorageService.onAccessGranted(this, uri)
+            // WRITE as well as READ: the level.dat editor and the Bedrock
+            // backup/pack panels open output streams through this same tree,
+            // and a read-only persisted grant makes every one of those writes
+            // fail at the ContentResolver.
+            contentResolver.takePersistableUriPermission(
+                uri,
+                Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+            )
+            // The picker will happily hand back any folder the user taps, and
+            // storing an unrelated one would leave the panels permanently
+            // empty with no explanation. Only accept a tree the Bedrock
+            // folders are actually reachable from.
+            if (BedrockStorageService.isUsableBedrockTree(this, uri)) {
+                BedrockStorageService.onAccessGranted(this, uri)
+                granted = true
+            }
         }
         onBedrockStorageResult?.invoke(granted)
         onBedrockStorageResult = null
     }
 
-    // Called by AndroidBridge.requestBedrockStorageAccess() — SAF's tree
-    // picker can't be pre-pointed at games/com.mojang on most OEM file
-    // pickers, so the user picks whatever folder actually contains it
-    // (BedrockStorageService.findWorldsDir walks down from there).
+    // Called by AndroidBridge.requestBedrockStorageAccess(). The picker is
+    // pre-pointed at Android/data/com.mojang.minecraftpe/.../com.mojang,
+    // which is the only way to reach it: /Android cannot be navigated into
+    // by hand in the picker on Android 11+, so launching with null (as this
+    // did) left the folder genuinely unreachable. Passing a document Uri
+    // opens the picker inside the restricted path instead — the same
+    // approach MT Manager and other file managers use. See
+    // BedrockStorageService.bedrockPickerInitialUri.
     fun requestBedrockStorageAccess(onResult: (Boolean) -> Unit) {
         onBedrockStorageResult = onResult
-        openBedrockStorageTree.launch(null)
+        openBedrockStorageTree.launch(BedrockStorageService.bedrockPickerInitialUri())
     }
 
     private var onSkinPngPicked: ((String?) -> Unit)? = null
@@ -438,6 +456,15 @@ private class AndroidBridge(private val activity: MainActivity, private val webV
             }
         }
     }
+
+    /**
+     * Version-aware explanation for the storage-access UI, so a failure that
+     * the OS makes impossible isn't presented as something the user did
+     * wrong. Android 13 closed the Android/data subdirectory loophole the
+     * picker relies on.
+     */
+    @JavascriptInterface
+    fun bedrockStorageBlockedByPlatform(): Boolean = BedrockStorageService.accessBlockedByPlatform()
 
     @JavascriptInterface
     fun listBedrockWorlds(): String = BedrockStorageService.listWorlds(activity)

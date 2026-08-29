@@ -2,6 +2,8 @@ package xyz.glacierclient.launcher.service
 
 import android.content.Context
 import android.net.Uri
+import android.os.Build
+import android.provider.DocumentsContract
 import androidx.core.content.edit
 import androidx.documentfile.provider.DocumentFile
 import org.json.JSONArray
@@ -24,8 +26,52 @@ object BedrockStorageService {
     private const val PREFS = "glacier_settings"
     private const val KEY_TREE_URI = "bedrock_storage_uri"
 
+    /**
+     * Bedrock's save data lives in
+     * Android/data/com.mojang.minecraftpe/files/games/com.mojang, which the
+     * SAF picker will not let a user navigate into by hand on Android 11+ —
+     * /Android is blocked outright. The way file managers (MT Manager,
+     * FV, Solid Explorer) get there is to hand the picker a pre-built
+     * document Uri for the target folder via EXTRA_INITIAL_URI, so it opens
+     * *inside* the restricted path with "Use this folder" already available.
+     * Google blocked selecting /Android itself but not its subdirectories,
+     * which is what makes this work.
+     *
+     * ActivityResultContracts.OpenDocumentTree already forwards its input
+     * Uri as EXTRA_INITIAL_URI on API 26+, so this just has to build the
+     * right document id. Note the ContentResolver requires a *document*
+     * Uri here, not a tree Uri.
+     *
+     * Android 13 (API 33) closed the subdirectory loophole, so on 33+ the
+     * picker still opens at the right place but the system refuses to
+     * return a grant for it — see [accessBlockedByPlatform].
+     */
+    fun bedrockPickerInitialUri(): Uri = DocumentsContract.buildDocumentUri(
+        EXTERNAL_STORAGE_AUTHORITY,
+        "primary:$COM_MOJANG_PATH",
+    )
+
+    /**
+     * True where the platform will not grant a SAF tree under Android/data
+     * at all (Android 13+). Used to explain the failure honestly rather than
+     * letting the user retry a picker that cannot succeed.
+     */
+    fun accessBlockedByPlatform(): Boolean = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
+
     fun onAccessGranted(context: Context, treeUri: Uri) {
         context.getSharedPreferences(PREFS, 0).edit { putString(KEY_TREE_URI, treeUri.toString()) }
+    }
+
+    /**
+     * Whether [treeUri] actually lands somewhere the Bedrock folders can be
+     * found. The picker lets the user grant any folder they like, and an
+     * unrelated grant would otherwise be stored and then silently produce
+     * empty world/pack lists forever.
+     */
+    fun isUsableBedrockTree(context: Context, treeUri: Uri): Boolean {
+        val root = runCatching { DocumentFile.fromTreeUri(context, treeUri) }.getOrNull() ?: return false
+        if (!root.isDirectory) return false
+        return BEDROCK_CHILDREN.any { findChildDir(root, it) != null }
     }
 
     fun hasAccess(context: Context): Boolean {
@@ -40,6 +86,19 @@ object BedrockStorageService {
         val uri = savedTreeUri(context) ?: return null
         return DocumentFile.fromTreeUri(context, uri)
     }
+
+    private const val EXTERNAL_STORAGE_AUTHORITY = "com.android.externalstorage.documents"
+    private const val COM_MOJANG_PATH =
+        "Android/data/com.mojang.minecraftpe/files/games/com.mojang"
+
+    // Any one of these under the granted tree means it points at Bedrock's
+    // data; a world-less fresh install still has at least the pack folders.
+    private val BEDROCK_CHILDREN = listOf(
+        "minecraftWorlds",
+        "resource_packs",
+        "behavior_packs",
+        "skin_packs",
+    )
 
     // The user might pick games/com.mojang itself, one of its child folders
     // directly, or a parent folder above games/ — walk down to find a named
