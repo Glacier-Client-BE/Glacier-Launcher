@@ -22,6 +22,7 @@ import xyz.glacierclient.launcher.service.ClientInjectionService
 import xyz.glacierclient.launcher.service.DiscordRpcService
 import xyz.glacierclient.launcher.service.JavaEditionBridge
 import xyz.glacierclient.launcher.service.JavaInstanceService
+import xyz.glacierclient.launcher.service.LevelDatService
 import xyz.glacierclient.launcher.service.LauncherUpdateService
 import xyz.glacierclient.launcher.service.ModpackInstallService
 import java.io.File
@@ -558,6 +559,16 @@ private class AndroidBridge(private val activity: MainActivity, private val webV
             }
         }
     }
+
+    // level.dat editor (desktop's LevelDatEditorService.cs). Keyed by the
+    // world id listBedrockWorlds() reports, not its folderUri — see
+    // BedrockStorageService.worldDir for why.
+    @JavascriptInterface
+    fun levelDatSummary(worldId: String): String = LevelDatService.summary(activity, worldId)
+
+    @JavascriptInterface
+    fun saveLevelDat(worldId: String, patchJson: String): String =
+        LevelDatService.save(activity, worldId, patchJson)
 
     // ── Java Tools (desktop's JavaInstanceService.cs) ────────────────
     // Each returns the produced path, or "" when there was nothing to do,

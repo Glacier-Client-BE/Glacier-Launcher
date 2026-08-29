@@ -875,12 +875,72 @@ function bedrockWorldRowHtml(w) {
     const iconHtml = w.iconUri
         ? `<img class="version-icon" src="${w.iconUri}" alt="" />`
         : `<div class="version-icon version-icon-placeholder"><i class="fa-solid fa-globe"></i></div>`;
+    const editor = App.state.bedrockWorlds.editing === w.id
+        ? levelDatEditorHtml(App.state.bedrockWorlds.levelDat)
+        : "";
     return `
     <div class="version-row">
         ${iconHtml}
         <div class="version-meta">
             <span class="version-name">${escapeHtml(w.name)}</span>
             <span class="version-sub">${formatBytes(w.sizeBytes)} · ${formatRelativeTime(w.lastPlayed)}</span>
+        </div>
+        <button class="icon-btn" data-edit-leveldat="${escapeHtml(w.id)}" data-tooltip="Edit level.dat">
+            <i class="fa-solid fa-sliders"></i></button>
+    </div>${editor}`;
+}
+
+// The level.dat editor (desktop's LevelDatSummary panel), expanded inline
+// under whichever world row is being edited. Fields and their value sets
+// mirror LevelDatEditorService.cs exactly; the seed is shown but read-only,
+// as it is on desktop — changing it on an existing world doesn't regenerate
+// already-generated chunks, it just desynchronises new ones.
+const LEVELDAT_GAME_TYPES = [["Survival", 0], ["Creative", 1], ["Adventure", 2]];
+const LEVELDAT_DIFFICULTIES = [["Peaceful", 0], ["Easy", 1], ["Normal", 2], ["Hard", 3]];
+
+function levelDatEditorHtml(state) {
+    if (!state) return "";
+    if (state.loading) {
+        return `<div class="versions-loading"><span class="spinner"></span><span>Reading level.dat…</span></div>`;
+    }
+    if (!state.ok) {
+        return `<div class="setting-row"><div class="setting-meta">
+            <span class="setting-hint" style="color:var(--red);">${escapeHtml(state.error || "Couldn't read level.dat.")}</span>
+        </div></div>`;
+    }
+    const chips = (options, current, attr) => options.map(([label, value]) =>
+        `<button class="ts-chip ${value === current ? "selected" : ""}" ${attr}="${value}">${label}</button>`).join("");
+
+    const experimentRows = Object.keys(state.experiments || {}).map(name => `
+        <div class="setting-row">
+            <div class="setting-meta"><span class="setting-label">${escapeHtml(name)}</span></div>
+            <div class="toggle ${state.experiments[name] ? "on" : ""}" data-leveldat-experiment="${escapeHtml(name)}"></div>
+        </div>`).join("");
+
+    return `<div class="leveldat-editor" style="padding:4px 12px 12px;">
+        <div class="setting-row">
+            <div class="setting-meta"><span class="setting-label">Game mode</span></div>
+            <div class="ts-chips">${chips(LEVELDAT_GAME_TYPES, state.gameType, "data-leveldat-gametype")}</div>
+        </div>
+        <div class="setting-row">
+            <div class="setting-meta"><span class="setting-label">Difficulty</span></div>
+            <div class="ts-chips">${chips(LEVELDAT_DIFFICULTIES, state.difficulty, "data-leveldat-difficulty")}</div>
+        </div>
+        <div class="setting-row">
+            <div class="setting-meta"><span class="setting-label">Cheats</span>
+                <span class="setting-hint">commandsEnabled</span></div>
+            <div class="toggle ${state.cheats ? "on" : ""}" data-leveldat-cheats></div>
+        </div>
+        ${state.hasSeed ? `<div class="setting-row">
+            <div class="setting-meta"><span class="setting-label">Seed</span>
+                <span class="setting-hint">Read-only — changing it desynchronises new chunks from existing ones</span></div>
+            <span class="client-card-note">${escapeHtml(String(state.seed))}</span>
+        </div>` : ""}
+        ${experimentRows ? `<div class="panel-section-label">Experiments</div>${experimentRows}` : ""}
+        <div style="display:flex; gap:6px; margin-top:10px;">
+            <button class="modal-btn modal-btn-confirm" data-leveldat-save>Save</button>
+            <button class="btn-sm" data-leveldat-close>Cancel</button>
+            <span class="setting-hint" style="align-self:center;" data-leveldat-status>${escapeHtml(state.status || "")}</span>
         </div>
     </div>`;
 }
@@ -905,7 +965,7 @@ function bedrockWorldsPanelBody(state) {
 
 // ── Bedrock Packs ────────────────────────────────────────────────────────
 // Read half of Pages/Home.razor's "bedrockpacks" panel — real markup
-// (.ts-chip-row kind switcher, .version-row pack rows) fed by
+// (.ts-chips kind switcher, .version-row pack rows) fed by
 // BedrockStorageService.kt's manifest.json reads (see bedrockstorage.js).
 const BEDROCK_PACK_KINDS = [
     { id: "resource", label: "Resource", icon: "fa-solid fa-palette" },
@@ -931,7 +991,7 @@ function bedrockPackRowHtml(p) {
 }
 
 function bedrockPacksPanelBody(state) {
-    const chipsHtml = `<div class="ts-chip-row" style="padding:10px 14px 0;">${BEDROCK_PACK_KINDS.map(k => `
+    const chipsHtml = `<div class="ts-chips" style="padding:10px 14px 0;">${BEDROCK_PACK_KINDS.map(k => `
         <button class="ts-chip ${state.kind === k.id ? "selected" : ""}" data-bedrock-pack-kind="${k.id}">
             <i class="${k.icon}"></i> ${k.label}
         </button>`).join("")}</div>`;

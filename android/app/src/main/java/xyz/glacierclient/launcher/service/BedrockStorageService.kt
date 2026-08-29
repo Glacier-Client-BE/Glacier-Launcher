@@ -148,6 +148,21 @@ object BedrockStorageService {
         return result.toString()
     }
 
+    /**
+     * Resolves a world folder by its id (the folder name listWorlds reports).
+     *
+     * Deliberately keyed by id rather than by the folderUri also present in
+     * that JSON: those are child document Uris, and DocumentFile.fromTreeUri
+     * on one returns the *tree root*, not the child, because it resolves the
+     * tree id and ignores the document segment. Walking down from the root
+     * the same way listWorlds does is the path already known to work.
+     */
+    internal fun worldDir(context: Context, worldId: String): DocumentFile? {
+        val root = rootDocument(context) ?: return null
+        val worldsDir = findChildDir(root, "minecraftWorlds") ?: return null
+        return worldsDir.listFiles().firstOrNull { it.isDirectory && it.name == worldId }
+    }
+
     // Android equivalent of desktop's OpenXxxFolder shortcuts
     // (Process.Start on the real path) — SAF has no "reveal in file
     // manager" primitive, so this hands the folder's own content:// Uri to

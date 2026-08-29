@@ -600,8 +600,18 @@ wiring lands).
    desktop's first-run wizard, including importing an existing Minecraft
    install. Android's analogue is exactly the Bedrock package-context flow
    above.
-2. **LevelDat editor** (`SaveLevelDat`/`ToggleLevelDatCheats`/
-   `CloseLevelDatEditor`) — small NBT read/write once a world is reachable.
+2. ~~**LevelDat editor**~~ — done: `LevelDatService.kt` ports
+   `LevelDatEditorService.cs` (game mode, difficulty, cheats, generator, the
+   experiments toggles, seed read-only), expanded inline under a world row.
+   `BedrockNbt` grew a writer to support it: the whole tag tree is parsed and
+   rewritten so untouched tags survive byte-for-byte, which needed TAG_List's
+   element type and the root compound's name preserved. Verified by a
+   round-trip test over every tag type, including an empty TAG_List.
+
+   One real divergence from desktop: it writes a `level.dat.glacierbak` copy
+   before overwriting, because SAF has no atomic rename to replicate
+   desktop's tmp-then-`File.Move`. Weaker than an atomic swap, but an
+   interrupted write leaves something recoverable.
 3. ~~**Real Discord OAuth**~~ — done: `signInDiscord()`/`notifyDiscordSignInResult()`
    in `MainActivity.kt` run the same authorization-code redirect-interception
    flow built for Microsoft sign-in (`signInMicrosoft()`), and `js/discordauth.js`

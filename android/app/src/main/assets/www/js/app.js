@@ -100,7 +100,9 @@ const App = {
         msAuth: { loading: false, error: null },
         discordAuth: { loading: false, error: null },
         update: { checking: false, available: false, modalOpen: false, installing: false, progress: 0, info: null },
-        bedrockWorlds: { hasAccess: false, loading: false, loaded: false, worlds: [] },
+        // `editing` is the world id whose level.dat editor is expanded (null
+        // when none), `levelDat` its loaded summary — see LevelDatService.kt.
+        bedrockWorlds: { hasAccess: false, loading: false, loaded: false, worlds: [], editing: null, levelDat: null },
         bedrockPacks: { hasAccess: false, loading: false, loaded: false, kind: "resource", packs: [] },
         bedrockBackups: { hasAccess: false, loading: false, loaded: false, creating: false, confirmDeleteName: null, backups: [] },
         bedrockScreenshots: { hasAccess: false, loading: false, loaded: false, screenshots: [] },
@@ -358,6 +360,66 @@ const App = {
     renderSkinLibraryBody() {
         const body = document.getElementById("skinlib-body");
         if (body) body.innerHTML = skinLibraryPanelBody(this.state.skinLibrary);
+    },
+
+    // ── level.dat editor (desktop's LevelDatEditorService.cs) ────────────
+
+    openLevelDatEditor(worldId) {
+        const bw = this.state.bedrockWorlds;
+        // Clicking the open world's own button closes it again.
+        if (bw.editing === worldId) { this.closeLevelDatEditor(); return; }
+        bw.editing = worldId;
+        bw.levelDat = { loading: true };
+        if (this.state.openPanel === "bedrockworlds") this.openPanel("bedrockworlds");
+
+        const result = JSON.parse(Bridge.levelDatSummary(worldId));
+        bw.levelDat = result;
+        if (this.state.openPanel === "bedrockworlds") this.openPanel("bedrockworlds");
+    },
+
+    closeLevelDatEditor() {
+        this.state.bedrockWorlds.editing = null;
+        this.state.bedrockWorlds.levelDat = null;
+        if (this.state.openPanel === "bedrockworlds") this.openPanel("bedrockworlds");
+    },
+
+    // Edits are held in the loaded summary and only written on Save, so a
+    // mis-tap never touches level.dat — matching desktop, where the editor
+    // is a form with its own Save button rather than live-applying.
+    setLevelDatField(key, value) {
+        const ld = this.state.bedrockWorlds.levelDat;
+        if (!ld || !ld.ok) return;
+        ld[key] = value;
+        ld.status = "";
+        if (this.state.openPanel === "bedrockworlds") this.openPanel("bedrockworlds");
+    },
+
+    toggleLevelDatExperiment(name) {
+        const ld = this.state.bedrockWorlds.levelDat;
+        if (!ld || !ld.ok || !ld.experiments) return;
+        ld.experiments[name] = !ld.experiments[name];
+        ld.status = "";
+        if (this.state.openPanel === "bedrockworlds") this.openPanel("bedrockworlds");
+    },
+
+    saveLevelDat() {
+        const bw = this.state.bedrockWorlds;
+        const ld = bw.levelDat;
+        if (!ld || !ld.ok || !bw.editing) return;
+
+        // Only the editable fields go over; the seed is read-only and the
+        // native side ignores anything it isn't asked to change.
+        const patch = {
+            gameType: ld.gameType,
+            difficulty: ld.difficulty,
+            generator: ld.generator,
+            cheats: !!ld.cheats,
+            experiments: ld.experiments || {},
+        };
+        const result = JSON.parse(Bridge.saveLevelDat(bw.editing, JSON.stringify(patch)));
+        ld.status = result.ok ? "Saved." : (result.error || "Couldn't save.");
+        if (this.state.openPanel === "bedrockworlds") this.openPanel("bedrockworlds");
+        if (result.ok) this.loadBedrockWorlds();
     },
 
     // Reports the real outcome in the card's own subtitle rather than a
@@ -1460,6 +1522,20 @@ const App = {
             }
             if (e.target.closest("[data-refresh-java-versions]")) { this.state.javaVersions.list = []; this.loadJavaVersions(); return; }
             if (e.target.closest("[data-refresh-news]")) { this.loadNews(); return; }
+
+            const editLevelDat = e.target.closest("[data-edit-leveldat]");
+            if (editLevelDat) { this.openLevelDatEditor(editLevelDat.dataset.editLeveldat); return; }
+            if (e.target.closest("[data-leveldat-close]")) { this.closeLevelDatEditor(); return; }
+            if (e.target.closest("[data-leveldat-save]")) { this.saveLevelDat(); return; }
+            if (e.target.closest("[data-leveldat-cheats]")) {
+                this.setLevelDatField("cheats", !this.state.bedrockWorlds.levelDat.cheats); return;
+            }
+            const ldGameType = e.target.closest("[data-leveldat-gametype]");
+            if (ldGameType) { this.setLevelDatField("gameType", Number(ldGameType.dataset.leveldatGametype)); return; }
+            const ldDifficulty = e.target.closest("[data-leveldat-difficulty]");
+            if (ldDifficulty) { this.setLevelDatField("difficulty", Number(ldDifficulty.dataset.leveldatDifficulty)); return; }
+            const ldExperiment = e.target.closest("[data-leveldat-experiment]");
+            if (ldExperiment) { this.toggleLevelDatExperiment(ldExperiment.dataset.leveldatExperiment); return; }
 
             const javaTool = e.target.closest("[data-java-tool]");
             if (javaTool) { this.runJavaTool(javaTool.dataset.javaTool); return; }

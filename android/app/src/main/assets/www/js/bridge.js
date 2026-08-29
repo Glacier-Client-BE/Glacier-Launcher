@@ -19,6 +19,10 @@ const Bridge = (() => {
         appVersionName: () => (hasNative ? native.appVersionName() : "0.0.0-dev"),
         openUrl: (url) => { if (hasNative) { native.openUrl(url); } else { window.open(url, "_blank"); } },
 
+        // level.dat editor (LevelDatService.kt).
+        levelDatSummary: (worldId) => (hasNative ? native.levelDatSummary(worldId) : '{"ok":false,"error":"No native bridge."}'),
+        saveLevelDat: (worldId, patchJson) => (hasNative ? native.saveLevelDat(worldId, patchJson) : '{"ok":false,"error":"No native bridge."}'),
+
         // Skin Library "Add PNG" import.
         pickSkinPng: () => { if (hasNative) native.pickSkinPng(); },
 
