@@ -568,10 +568,15 @@ wiring lands).
    above.
 2. **LevelDat editor** (`SaveLevelDat`/`ToggleLevelDatCheats`/
    `CloseLevelDatEditor`) — small NBT read/write once a world is reachable.
-3. **Real Discord OAuth** (`OpenDiscordOAuth`/`SaveDiscordManual`/
-   `DisconnectDiscord`) — currently `openUrl()`-only on Android; Discord's
-   OAuth2 is a public-client flow, the same redirect-interception technique
-   already built for Microsoft sign-in would work here too.
+3. ~~**Real Discord OAuth**~~ — done: `signInDiscord()`/`notifyDiscordSignInResult()`
+   in `MainActivity.kt` run the same authorization-code redirect-interception
+   flow built for Microsoft sign-in (`signInMicrosoft()`), and `js/discordauth.js`
+   mirrors `js/xboxauth.js`'s token-exchange/profile-fetch shape, matching
+   desktop's `OpenDiscordOAuth()`. This is only the `identify`-scope login for
+   the profile switcher's username/avatar (`EffectiveProfile()`/footer parity
+   is wired in `app.js`'s `effectiveProfile()`/`renderFooter()`) — it has
+   nothing to do with Discord Rich Presence, which still has no Android
+   equivalent (see the Rich Presence note above).
 4. **Java multi-instance management** (`NewJavaInstance`/`NewBedrockInstance`/
    `CommitRenameInstance`/instance folders) — this is what actually blocks
    Modpack "Install" and several Java Addons actions from being real instead

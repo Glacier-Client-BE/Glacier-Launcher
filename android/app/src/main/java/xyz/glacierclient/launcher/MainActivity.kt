@@ -133,6 +133,69 @@ private class AndroidBridge(private val activity: ComponentActivity, private val
         }
     }
 
+    // Same OAuth2 authorization-code flow the desktop app's own
+    // OpenDiscordOAuth() (Pages/Home.Panels.cs) uses against a real local
+    // HTTP listener on 127.0.0.1:5000/callback — this is just an "identify"
+    // scope login for the profile switcher's username/avatar, unrelated to
+    // Discord Rich Presence (which rides a local Discord-desktop IPC pipe
+    // that has no Android equivalent, see ClientInjectionService.kt's own
+    // caveat for the same class of limitation). client_id/client_secret
+    // here are the same non-secret-in-practice constants already committed
+    // in plain text in Pages/Home.Panels.cs — porting them here doesn't
+    // change their exposure. A second WebView in a Dialog hosts Discord's
+    // real login page; once navigation reaches the redirect URI, the
+    // "code" query param is pulled out here and handed back to the main
+    // page's JS, which does the token exchange + profile fetch via
+    // fetch() — see js/discordauth.js.
+    @JavascriptInterface
+    fun signInDiscord() {
+        activity.runOnUiThread {
+            val authUrl = Uri.parse("https://discord.com/api/oauth2/authorize")
+                .buildUpon()
+                .appendQueryParameter("client_id", "1482726422094024779")
+                .appendQueryParameter("response_type", "code")
+                .appendQueryParameter("redirect_uri", "http://localhost:5000/callback")
+                .appendQueryParameter("scope", "identify")
+                .build()
+                .toString()
+
+            val dialog = Dialog(activity, android.R.style.Theme_Black_NoTitleBar_Fullscreen)
+            val authWebView = WebView(activity).apply {
+                settings.javaScriptEnabled = true
+                settings.domStorageEnabled = true
+            }
+            dialog.setContentView(authWebView, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+            dialog.setOnCancelListener { notifyDiscordSignInResult(null, "Sign-in was cancelled.") }
+
+            authWebView.webViewClient = object : WebViewClient() {
+                override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
+                    val uri = request.url
+                    if (uri.toString().startsWith("http://localhost:5000/callback")) {
+                        val code = uri.getQueryParameter("code")
+                        val error = uri.getQueryParameter("error_description") ?: uri.getQueryParameter("error")
+                        dialog.dismiss()
+                        if (code != null) notifyDiscordSignInResult(code, null)
+                        else notifyDiscordSignInResult(null, error ?: "Sign-in failed.")
+                        return true
+                    }
+                    return false
+                }
+            }
+            authWebView.loadUrl(authUrl)
+            dialog.show()
+        }
+    }
+
+    private fun notifyDiscordSignInResult(code: String?, error: String?) {
+        activity.runOnUiThread {
+            val js = if (code != null)
+                "window.DiscordAuth && window.DiscordAuth._onCode(${org.json.JSONObject.quote(code)})"
+            else
+                "window.DiscordAuth && window.DiscordAuth._onError(${org.json.JSONObject.quote(error ?: "Sign-in failed.")})"
+            webView.evaluateJavascript(js, null)
+        }
+    }
+
     @JavascriptInterface
     fun isRootAvailable(): Boolean = ClientInjectionService.isRootAvailable()
 

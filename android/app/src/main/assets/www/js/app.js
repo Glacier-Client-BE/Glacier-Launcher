@@ -23,6 +23,11 @@ const DEFAULT_SETTINGS = {
     javaUuid: "",
     javaAccessToken: "",
     javaSkinUrl: "",
+    discordLoggedIn: false,
+    discordUsername: "",
+    discordAvatar: "",
+    discordUserId: "",
+    discordAccessToken: "",
     profileDisplayMode: "auto",
     savedServers: [],
     curseForgeApiKeyOverride: "",
@@ -55,6 +60,7 @@ const App = {
         // instead of downloaded PNG bytes. See loadSkins()/saveSkins().
         skinLibrary: { skins: [], username: "", busy: false, error: null },
         msAuth: { loading: false, error: null },
+        discordAuth: { loading: false, error: null },
         news: {
             loading: false, posts: [], releases: [],
             fallbackItems: [
@@ -219,16 +225,48 @@ const App = {
         }
     },
 
+    // Mirrors Pages/Home.razor.cs's EffectiveProfile(): "auto" prefers Xbox,
+    // falling back to Discord, falling back to no signed-in profile.
+    effectiveProfile() {
+        const s = this.state.settings;
+        switch (s.profileDisplayMode) {
+            case "xbox":    return s.xboxGamertag ? "xbox" : "none";
+            case "discord": return s.discordLoggedIn ? "discord" : "none";
+            default:
+                if (s.xboxGamertag) return "xbox";
+                if (s.discordLoggedIn) return "discord";
+                return "none";
+        }
+    },
+
     // ── Footer (real markup: .footer / .footer-profile-area / .footer-right) ──
     renderFooter() {
         const s = this.state.settings;
-        document.getElementById("footer-username").textContent = s.xboxGamertag || s.username || "Not signed in";
-        document.getElementById("footer-handle").textContent = s.xboxGamertag ? "Xbox Live" : "Local profile";
+        const which = this.effectiveProfile();
+        const avatar = document.querySelector("#footer-profile .avatar");
+        if (avatar) avatar.classList.remove("xbox-connected", "discord-connected");
+        if (which === "xbox") {
+            document.getElementById("footer-username").textContent = s.xboxGamertag;
+            document.getElementById("footer-handle").textContent = "Xbox Live";
+            if (avatar) { avatar.src = s.xboxGamerPictureUrl || "images/icon.png"; avatar.classList.add("xbox-connected"); }
+        } else if (which === "discord") {
+            document.getElementById("footer-username").textContent = s.discordUsername;
+            document.getElementById("footer-handle").textContent = "Discord";
+            if (avatar) { avatar.src = s.discordAvatar || "images/icon.png"; avatar.classList.add("discord-connected"); }
+        } else {
+            document.getElementById("footer-username").textContent = s.username || "Not signed in";
+            document.getElementById("footer-handle").textContent = "Local profile";
+            if (avatar) avatar.src = "images/icon.png";
+        }
         document.getElementById("rpc-toggle").classList.toggle("rpc-active", !!s.discordRichPresence);
 
         const xboxBtn = document.getElementById("xbox-connect-btn");
-        if (s.xboxGamertag) {
+        if (s.xboxGamertag && xboxBtn) {
             xboxBtn.outerHTML = `<div class="xbox-connected-pill" id="xbox-connect-btn"><i class="fa-solid fa-gamepad"></i><span>${s.xboxGamertag}</span></div>`;
+        }
+        const discordBtn = document.getElementById("discord-connect-btn");
+        if (s.discordLoggedIn && discordBtn) {
+            discordBtn.outerHTML = `<div class="discord-connected-pill" id="discord-connect-btn"><i class="fa-brands fa-discord"></i><span>${s.discordUsername}</span></div>`;
         }
     },
 
@@ -270,6 +308,34 @@ const App = {
         if (this.state.openPanel === "javaprofile") this.openPanel("javaprofile");
     },
 
+    async signInWithDiscord() {
+        if (this.state.discordAuth.loading) return;
+        this.state.discordAuth.loading = true;
+        this.state.discordAuth.error = null;
+        this.renderFooter();
+        try {
+            const { profile, accessToken } = await DiscordAuth.begin();
+            const s = this.state.settings;
+            s.discordLoggedIn = true;
+            s.discordUsername = profile.username;
+            s.discordAvatar = profile.avatarUrl;
+            s.discordUserId = profile.userId;
+            s.discordAccessToken = accessToken;
+            this.saveSettings();
+        } catch (e) {
+            this.state.discordAuth.error = e.message;
+        }
+        this.state.discordAuth.loading = false;
+        this.renderFooter();
+    },
+
+    signOutDiscord() {
+        const s = this.state.settings;
+        s.discordLoggedIn = false; s.discordUsername = ""; s.discordAvatar = ""; s.discordUserId = ""; s.discordAccessToken = "";
+        this.saveSettings();
+        this.renderFooter();
+    },
+
     // ── Global search (real markup: .search-overlay/.search-modal) ──────
     openSearch() {
         this.state.search = { query: "", selIdx: 0, edition: this.state.edition };
@@ -302,7 +368,7 @@ const App = {
         if (r.panel) this.openPanel(r.panel);
         else if (r.action === "launch") { if (this.state.edition === "bedrock") Bridge.launchBedrock(); else Bridge.launchJavaEdition(); }
         else if (r.action === "xbox") { if (this.state.settings.xboxGamertag) this.signOutMicrosoft(); else this.signInWithMicrosoft(); }
-        else if (r.action === "discord") Bridge.openUrl("https://discord.com/login");
+        else if (r.action === "discord") { if (this.state.settings.discordLoggedIn) this.signOutDiscord(); else this.signInWithDiscord(); }
     },
 
     // ── Notifications bell (real markup: .notif-bell-wrap/.notif-panel) ──
@@ -653,7 +719,14 @@ const App = {
                 return;
             }
             if (e.target.closest("#discord-connect-btn")) {
-                Bridge.openUrl("https://discord.com/login");
+                if (this.state.settings.discordLoggedIn) this.signOutDiscord();
+                else this.signInWithDiscord();
+                return;
+            }
+            if (e.target.closest("#footer-profile") && !e.target.closest("#rpc-toggle")) {
+                const which = this.effectiveProfile();
+                if (which === "discord") { if (this.state.settings.discordLoggedIn) this.signOutDiscord(); }
+                else if (which === "xbox") { if (this.state.settings.xboxGamertag) this.signOutMicrosoft(); }
                 return;
             }
 

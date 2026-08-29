@@ -19,8 +19,14 @@
 - [ ] Build a generic SAF file-picker bridge method in `AndroidBridge`, then
       use it for: custom `.so` picker, Skin Library "Add PNG", Theme Studio
       wallpaper picker.
-- [ ] Implement real Discord OAuth on Android reusing the Xbox
-      redirect-interception pattern already in `MainActivity.kt`.
+- [x] Implement real Discord OAuth on Android reusing the Xbox
+      redirect-interception pattern already in `MainActivity.kt`. (Note:
+      Discord Rich Presence itself stays a documented gap — it rides local
+      IPC to Discord desktop with no Android equivalent; the safe path
+      considered, a per-user Gateway self-presence connection, would require
+      harvesting each user's raw Discord account token, which risks their
+      account and was rejected. This item is the `identify`-scope login
+      only, same as desktop's `DiscordToken`/`OpenDiscordOAuth`.)
 - [ ] Wire Java Profile skin-viewer UI to the already-working sign-in flow.
 - [ ] Split `panels.js` and `app.js` by concern (Bedrock/Java/Settings/state/router).
 - [ ] Add a `localStorage`-backed TTL cache for CurseForge/Modrinth/News
