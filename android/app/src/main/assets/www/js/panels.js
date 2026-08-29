@@ -697,6 +697,47 @@ function javaScreenshotsPanelBody() {
     return emptyState("No screenshots yet", "Press F2 in-game to capture one — they'll show up here once wired to shared storage.", "fa-solid fa-image");
 }
 
+// ── Launcher update modal ────────────────────────────────────────────────
+// Same markup/classes as Pages/Home.razor's LAUNCHER UPDATE MODAL block.
+function updateModalHtml(u, currentVersion) {
+    if (!u.modalOpen || !u.info) return "";
+    const changelogHtml = u.info.changelog
+        ? `<div class="update-changelog">
+               <span class="update-changelog-label">What's new</span>
+               <div class="update-changelog-body">${escapeHtml(u.info.changelog).replace(/\n/g, "<br>")}</div>
+           </div>`
+        : "";
+    const bodyBottom = u.installing
+        ? `<div class="update-progress-wrap">
+               <div class="update-progress-bar"><div class="update-progress-fill" style="width:${u.progress}%"></div></div>
+               <span class="update-progress-pct">${u.progress}%</span>
+           </div>
+           <p class="modal-desc" style="margin-top:6px;">Downloading update — you'll be asked to confirm the install once it's done.</p>`
+        : `<div class="modal-btn-row" style="margin-top:14px;">
+               <button class="modal-btn modal-btn-cancel" data-skip-update>Skip</button>
+               <button class="modal-btn modal-btn-cancel" data-close-update>Later</button>
+               <button class="modal-btn modal-btn-confirm" data-install-update><i class="fa-solid fa-download"></i> Install</button>
+           </div>`;
+    return `
+    <div class="modal-overlay" data-close-update-backdrop>
+        <div class="modal-box update-modal">
+            <div class="modal-header">
+                <span class="modal-title"><i class="fa-solid fa-rocket" style="color:var(--accent);margin-right:8px;"></i>Update Available</span>
+                <button class="modal-close-btn" data-close-update><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="modal-body">
+                <div class="update-version-row">
+                    <div class="update-version-chip current"><span class="uvc-label">Current</span><span class="uvc-tag">v${currentVersion}</span></div>
+                    <i class="fa-solid fa-arrow-right" style="color:var(--text-dim); font-size:12px;"></i>
+                    <div class="update-version-chip next"><span class="uvc-label">Latest</span><span class="uvc-tag">v${u.info.tag}</span></div>
+                </div>
+                ${changelogHtml}
+                ${bodyBottom}
+            </div>
+        </div>
+    </div>`;
+}
+
 // ── News & Updates ─────────────────────────────────────────────────────
 // Real data: GitHub's public releases API for this repo (same as
 // AutoUpdateService.cs) and the Glacier news feed (same as

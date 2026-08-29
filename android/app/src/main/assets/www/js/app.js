@@ -14,6 +14,7 @@ const DEFAULT_SETTINGS = {
     showRecentlyLaunched: true,
     recentlyLaunched: [],
     checkUpdatesOnStartup: true,
+    skippedLauncherVersion: "",
     xboxGamertag: "",
     xboxXuid: "",
     xboxGamerPictureUrl: "",
@@ -33,6 +34,33 @@ const DEFAULT_SETTINGS = {
     curseForgeApiKeyOverride: "",
     activeThemeId: "",
 };
+
+// Wraps a settings object in a Proxy that debounce-persists to the native
+// SharedPreferences-backed config file (see AndroidBridge.saveSettingsJson,
+// "glacier_settings" in MainActivity.kt) on every property write, so the
+// config file always reflects current state without every call site having
+// to remember an explicit save — the desktop app gets the same guarantee
+// for free from SettingsService.Save() being a single json-file writer
+// (Models/LauncherSettings.cs) called from one place. Debounced (150ms)
+// so a rapid burst of writes (e.g. dragging the theme color picker) only
+// hits disk once client code settles.
+function autoSavingSettings(target, persist) {
+    let timer = null;
+    return new Proxy(target, {
+        set(obj, prop, value) {
+            obj[prop] = value;
+            clearTimeout(timer);
+            timer = setTimeout(persist, 150);
+            return true;
+        },
+        deleteProperty(obj, prop) {
+            delete obj[prop];
+            clearTimeout(timer);
+            timer = setTimeout(persist, 150);
+            return true;
+        },
+    });
+}
 
 const App = {
     state: {
@@ -61,6 +89,7 @@ const App = {
         skinLibrary: { skins: [], username: "", busy: false, error: null },
         msAuth: { loading: false, error: null },
         discordAuth: { loading: false, error: null },
+        update: { checking: false, available: false, modalOpen: false, installing: false, progress: 0, info: null },
         news: {
             loading: false, posts: [], releases: [],
             fallbackItems: [
@@ -72,6 +101,7 @@ const App = {
 
     init() {
         try { this.state.settings = { ...DEFAULT_SETTINGS, ...JSON.parse(Bridge.getSettingsJson() || "{}") }; } catch (e) {}
+        this.state.settings = autoSavingSettings(this.state.settings, () => this.saveSettings());
         this.loadThemes();
         document.getElementById("version-pill").textContent = `v${Bridge.appVersionName()}`;
         this.renderTopBar();
@@ -84,6 +114,8 @@ const App = {
 
         const active = this.state.themes.find(t => t.id === this.state.settings.activeThemeId);
         if (active) ThemeEngine.apply(active);
+
+        if (this.state.settings.checkUpdatesOnStartup) this.checkForUpdate(false);
     },
 
     saveSettings() {
@@ -336,6 +368,77 @@ const App = {
         this.renderFooter();
     },
 
+    // ── Launcher self-update (mirrors AutoUpdateService.cs / Home.Panels.cs's
+    // RunStartupChecksAsync/ManualUpdateCheck) ──────────────────────────────
+    renderUpdatePill() {
+        const pill = document.getElementById("update-pill");
+        if (!pill) return;
+        if (this.state.update.available) {
+            pill.innerHTML = `<i class="fa-solid fa-arrow-up"></i><span>Update</span>`;
+        } else {
+            pill.innerHTML = `<span id="version-pill">v${Bridge.appVersionName ? Bridge.appVersionName() : "0.0.0"}</span>`;
+        }
+    },
+
+    renderUpdateModal() {
+        document.getElementById("update-root").innerHTML = updateModalHtml(this.state.update, Bridge.appVersionName ? Bridge.appVersionName() : "0.0.0");
+    },
+
+    async checkForUpdate(manual) {
+        if (this.state.update.checking) return;
+        this.state.update.checking = true;
+        try {
+            const info = await LauncherUpdate.check();
+            if (info && info.tag !== this.state.settings.skippedLauncherVersion) {
+                this.state.update.available = true;
+                this.state.update.info = info;
+                if (manual) this.openUpdateModal();
+            } else if (manual) {
+                this.state.update.available = false;
+            }
+        } catch (e) {
+            // Offline / rate-limited — same silent-fallback behavior as
+            // AutoUpdateService's startup check catch block.
+        }
+        this.state.update.checking = false;
+        this.renderUpdatePill();
+    },
+
+    openUpdateModal() { this.state.update.modalOpen = true; this.renderUpdateModal(); },
+    closeUpdateModal() { this.state.update.modalOpen = false; this.renderUpdateModal(); },
+
+    skipUpdate() {
+        if (!this.state.update.info) return;
+        this.state.settings.skippedLauncherVersion = this.state.update.info.tag;
+        this.saveSettings();
+        this.state.update.available = false;
+        this.state.update.modalOpen = false;
+        this.renderUpdatePill();
+        this.renderUpdateModal();
+    },
+
+    async installUpdate() {
+        if (!this.state.update.info) return;
+        this.state.update.installing = true;
+        this.state.update.progress = 0;
+        this.renderUpdateModal();
+        try {
+            await LauncherUpdate.install(this.state.update.info, (pct) => {
+                this.state.update.progress = pct;
+                this.renderUpdateModal();
+            });
+            // The system install dialog is now on top of the WebView — close
+            // our own modal underneath it rather than leaving a stale 100%
+            // progress bar around for whenever the user returns.
+            this.state.update.installing = false;
+            this.state.update.modalOpen = false;
+            this.renderUpdateModal();
+        } catch (e) {
+            this.state.update.installing = false;
+            this.renderUpdateModal();
+        }
+    },
+
     // ── Global search (real markup: .search-overlay/.search-modal) ──────
     openSearch() {
         this.state.search = { query: "", selIdx: 0, edition: this.state.edition };
@@ -530,7 +633,7 @@ const App = {
         const openJava = document.getElementById("open-java-edition");
         if (openJava) openJava.addEventListener("click", () => Bridge.launchJavaEdition());
         const resetBtn = document.getElementById("reset-settings");
-        if (resetBtn) resetBtn.addEventListener("click", () => { this.state.settings = { ...DEFAULT_SETTINGS }; this.saveSettings(); this.openPanel("settings"); this.renderFooter(); this.renderHome(); });
+        if (resetBtn) resetBtn.addEventListener("click", () => { this.state.settings = autoSavingSettings({ ...DEFAULT_SETTINGS }, () => this.saveSettings()); this.saveSettings(); this.openPanel("settings"); this.renderFooter(); this.renderHome(); });
         const clearHistory = document.getElementById("clear-recent-history");
         if (clearHistory) clearHistory.addEventListener("click", () => { s.recentlyLaunched = []; this.saveSettings(); this.renderHome(); });
 
@@ -704,6 +807,11 @@ const App = {
             this.renderFooter();
         });
 
+        document.getElementById("update-pill").addEventListener("click", () => {
+            if (this.state.update.available) this.openUpdateModal();
+            else this.checkForUpdate(true);
+        });
+
         document.getElementById("search-trigger-btn").addEventListener("click", () => this.openSearch());
         document.getElementById("notif-bell-btn").addEventListener("click", () => this.toggleNotifPanel());
 
@@ -723,6 +831,11 @@ const App = {
                 else this.signInWithDiscord();
                 return;
             }
+            if (e.target.closest("[data-skip-update]")) { this.skipUpdate(); return; }
+            if (e.target.closest("[data-install-update]")) { this.installUpdate(); return; }
+            if (e.target.closest("[data-close-update]")) { this.closeUpdateModal(); return; }
+            if (e.target.matches("[data-close-update-backdrop]")) { this.closeUpdateModal(); return; }
+
             if (e.target.closest("#footer-profile") && !e.target.closest("#rpc-toggle")) {
                 const which = this.effectiveProfile();
                 if (which === "discord") { if (this.state.settings.discordLoggedIn) this.signOutDiscord(); }

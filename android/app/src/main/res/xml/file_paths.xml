@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Exposes getExternalFilesDir(DIRECTORY_DOWNLOADS) (where
+     LauncherUpdateService.kt saves the downloaded update APK) to the
+     FileProvider declared in AndroidManifest.xml. -->
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+    <external-files-path name="downloads" path="Download/" />
+</paths>

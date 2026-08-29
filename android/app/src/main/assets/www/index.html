@@ -30,7 +30,7 @@
                         <span class="branding-title">Glacier Launcher</span>
                         <span class="branding-sub">Glacier Productions</span>
                     </div>
-                    <button class="update-pill"><span id="version-pill">v0.0.0-dev</span></button>
+                    <button class="update-pill" id="update-pill" data-tooltip="Launcher update available — click to update"><span id="version-pill">v0.0.0-dev</span></button>
                 </div>
                 <div class="top-bar-spacer"></div>
                 <div class="edition-switcher" data-tooltip="Switch Minecraft edition">
@@ -108,6 +108,9 @@
 
             <!-- Global search (real markup: .search-overlay > .search-modal) -->
             <div id="search-root"></div>
+
+            <!-- Launcher update modal (real markup: .modal-overlay > .update-modal, see Pages/Home.razor) -->
+            <div id="update-root"></div>
         </div>
     </div>
 
@@ -115,6 +118,7 @@
     <script src="js/curseforge.js"></script>
     <script src="js/modrinth.js"></script>
     <script src="js/javaedition.js"></script>
+    <script src="js/updater.js"></script>
     <script src="js/skinlibrary.js"></script>
     <script src="js/xboxauth.js"></script>
     <script src="js/discordauth.js"></script>

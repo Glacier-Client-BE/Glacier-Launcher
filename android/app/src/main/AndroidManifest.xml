@@ -19,6 +19,13 @@
         tools:replace="android:maxSdkVersion" />
     <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE"
         tools:ignore="ScopedStorage" />
+    <!-- Self-update: Android has no equivalent of the desktop app's silent
+         exe-swap-and-relaunch (AutoUpdateService.cs) — a foreground app can
+         never install its own APK without the user confirming the system
+         package-installer dialog. This permission plus the FileProvider
+         below are what let LauncherUpdateService.kt hand a downloaded APK
+         to that dialog instead of failing to open it at all. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
     <application
         android:name=".GlacierApp"
@@ -51,6 +58,20 @@
                - android:process: force the app's real default main process
                  instead of inheriting Pojav's own ":launcher" secondary
                  process, since this is one merged app now, not two. -->
+
+        <!-- Hands a downloaded update APK (see LauncherUpdateService.kt) to
+             the system package installer as a content:// Uri instead of a
+             raw file:// path, which Android has refused for security
+             reasons since API 24. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
 
         <activity
             android:name=".MainActivity"

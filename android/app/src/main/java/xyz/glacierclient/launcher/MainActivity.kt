@@ -17,6 +17,7 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import xyz.glacierclient.launcher.service.ClientInjectionService
 import xyz.glacierclient.launcher.service.JavaEditionBridge
+import xyz.glacierclient.launcher.service.LauncherUpdateService
 
 /**
  * Hosts a single full-screen WebView loading assets/www/index.html — the same
@@ -239,6 +240,31 @@ private class AndroidBridge(private val activity: ComponentActivity, private val
 
     @JavascriptInterface
     fun appVersionName(): String = BuildConfig.VERSION_NAME
+
+    // Downloads the update APK named by js/updater.js's GitHub-releases check
+    // and hands it to the system package installer — see
+    // LauncherUpdateService.kt for why Android can't silently self-replace
+    // the way AutoUpdateService.cs's exe swap does.
+    @JavascriptInterface
+    fun downloadAndInstallUpdate(url: String, tag: String) {
+        activity.runOnUiThread {
+            LauncherUpdateService.downloadAndInstall(
+                context = activity,
+                url = url,
+                tag = tag,
+                onProgress = { pct ->
+                    activity.runOnUiThread {
+                        webView.evaluateJavascript("window.LauncherUpdate && window.LauncherUpdate._onProgress($pct)", null)
+                    }
+                },
+                onError = { message ->
+                    activity.runOnUiThread {
+                        webView.evaluateJavascript("window.LauncherUpdate && window.LauncherUpdate._onError(${org.json.JSONObject.quote(message)})", null)
+                    }
+                },
+            )
+        }
+    }
 
     @JavascriptInterface
     fun openUrl(url: String) {
