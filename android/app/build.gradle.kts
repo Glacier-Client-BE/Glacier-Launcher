@@ -11,7 +11,27 @@ android {
         applicationId = "xyz.glacierclient.launcher"
         minSdk = 26
         targetSdk = 34
-        versionCode = 1
+        // Derived from the same GLACIER_VERSION the release workflow computes,
+        // rather than a literal 1. Android compares versionCode (never
+        // versionName) to decide whether an APK is an upgrade, so a constant 1
+        // makes every release look like the same build to the package
+        // installer that LauncherUpdateService.kt hands the downloaded APK to —
+        // an in-app update can be declined as "already installed" by installers
+        // that treat an equal versionCode as a no-op.
+        //
+        // major*1_000_000 + minor*1_000 + patch stays strictly increasing for
+        // any version whose minor and patch are under 1000. Non-release builds
+        // (GLACIER_VERSION unset, or a "pr-…"/"branch-…" value) fall back to 1,
+        // which is fine for a local install and never reaches users.
+        versionCode = Regex("""^(\d+)\.(\d+)\.(\d+)""")
+            .find(System.getenv("GLACIER_VERSION") ?: "")
+            ?.destructured
+            ?.let { (major, minor, patch) ->
+                major.toInt() * 1_000_000 + minor.toInt() * 1_000 + patch.toInt()
+            }
+            // Floored at 1: the local-dev default "0.0.0-dev" parses to 0, and
+            // Android wants a positive versionCode.
+            ?.coerceAtLeast(1) ?: 1
         versionName = System.getenv("GLACIER_VERSION") ?: "0.0.0-dev"
         // The merged-in Java Edition runtime (androidx.constraintlayout,
         // viewpager2, preference, bytehook, htmlcleaner, ...) pushes total

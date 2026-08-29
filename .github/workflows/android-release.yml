@@ -44,6 +44,19 @@ jobs:
             exit 0
           fi
 
+          # The comment above says manual runs off a non-main ref only build,
+          # but nothing actually enforced it: workflow_dispatch on any branch
+          # fell through to the tagging logic below, so a branch whose HEAD
+          # commit happened to start with "hotfix:"/"update:" would cut a real
+          # tag and GitHub Release straight off that branch. Releases come
+          # from main only.
+          if [ "${{ github.ref }}" != "refs/heads/main" ]; then
+            echo "SKIP_RELEASE=true" >> "$GITHUB_OUTPUT"
+            echo "NEXT_VERSION=branch-$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+            echo "Manual run off ${{ github.ref }} — build only, no release."
+            exit 0
+          fi
+
           # Same scheme as the desktop launcher's release workflow:
           # "hotfix:" bumps patch, "update:" bumps minor, anything else -> just build (no release).
           existing_tag=$(git tag --points-at HEAD | grep '^android-v' | head -n1 || true)
@@ -114,7 +127,19 @@ jobs:
         id: keystore
         env:
           KS_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-        run: echo "present=$([ -n \"$KS_B64\" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+        # Note the unescaped quotes: `$(... [ -n \"$KS_B64\" ] ...)` tested the
+        # literal two-character string `""` rather than the variable, which is
+        # never empty, so this reported present=true even with no keystore
+        # secret set — the decode step below then wrote an empty file and the
+        # release build was handed a bogus keystore path. Only :app's own
+        # four-way hasSigningConfig check in build.gradle.kts kept that from
+        # failing the build outright.
+        run: |
+          if [ -n "$KS_B64" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Decode release keystore
         if: steps.versioning.outputs.SKIP != 'true' && steps.keystore.outputs.present == 'true'

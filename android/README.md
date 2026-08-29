@@ -269,9 +269,22 @@ actions like launching the Java Edition app no-op).
   there's nothing separate left to build),
 - uploads the APK as a build artifact on every push to `main` touching
   `android/**`,
-- and — on commits prefixed `hotfix:`/`update:` — tags and publishes a
-  GitHub Release with it attached, mirroring the desktop launcher's
-  `release.yml` versioning scheme.
+- and — on commits prefixed `hotfix:`/`update:`, **on `main` only** — tags
+  and publishes a GitHub Release with it attached, mirroring the desktop
+  launcher's `release.yml` versioning scheme.
+
+The `main`-only guard is explicit. The versioning step only ever special-cased
+`pull_request`, so a `workflow_dispatch` run on any branch fell through to the
+tagging logic — a branch whose HEAD commit happened to start with `hotfix:` or
+`update:` would cut a real tag and Release straight off that branch, contrary
+to what the step's own comment claimed.
+
+`versionCode` is derived from the same `GLACIER_VERSION` the workflow computes
+(`major*1_000_000 + minor*1_000 + patch`) rather than being a hardcoded `1`.
+Android compares `versionCode`, never `versionName`, to decide whether an APK
+is an upgrade, so a constant `1` made every release look like the same build
+to the package installer `LauncherUpdateService.kt` hands the downloaded APK
+to.
 
 A CurseForge API key is read from the `CURSEFORGE_API_KEY` repo secret at
 build time (both this app's own CurseForge search and
