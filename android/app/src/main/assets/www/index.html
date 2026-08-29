@@ -55,6 +55,16 @@
                         <span class="notif-bell-badge" id="notif-bell-badge" style="display:none;"></span>
                     </button>
                 </div>
+
+                <!-- Desktop's .window-controls also has minimize/maximize/fullscreen
+                     buttons — genuinely inapplicable here (no windowing on Android),
+                     same intentional omission as the top-bar drag-zone. Close is the
+                     one control that still means something: exit the app. -->
+                <div class="window-controls">
+                    <button class="wnd-btn close-btn" id="app-close-btn" data-tooltip="Close">
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>
+                </div>
             </div>
 
             <!-- ── ONBOARDING WIZARD (real markup from Pages/Home.razor) ── -->

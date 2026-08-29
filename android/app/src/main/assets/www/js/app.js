@@ -970,14 +970,28 @@ const App = {
         if (id === "settings") this.bindSettingsEvents();
     },
 
+    // Not routed through panelShell(): desktop's Settings panel puts the
+    // category switcher as a sibling of .panel-body (not nested inside it,
+    // per Pages/Home.razor), and the body itself carries a real
+    // ".settings-body" class alongside ".panel-body" — app.css's
+    // ".panel-body.settings-body { gap: 12px; }" compound-class rule (and
+    // its padding) never applied when this was previously built as one
+    // panelShell() body with only an id="settings-body" (ids don't match
+    // class selectors), which is what left the panel looking unpadded.
     settingsPanelHtml(category) {
-        return panelShell({
-            id: "settings", title: "Settings",
-            body: `<div class="versions-client-switcher" id="settings-categories">${SETTINGS_CATEGORIES(this.state.edition).map(c =>
+        return `
+        <div class="panel-overlay" id="panel-settings">
+            <div class="panel-handle"></div>
+            <div class="panel-header">
+                <div class="panel-title-wrap"><span class="panel-title">Settings</span><div class="panel-title-underline"></div></div>
+                <div class="panel-header-actions"><button class="panel-back-btn" data-close-panel data-tooltip="Back"><i class="fa-solid fa-chevron-down"></i></button></div>
+            </div>
+            <div class="versions-client-switcher" id="settings-categories">${SETTINGS_CATEGORIES(this.state.edition).map(c =>
                 `<button class="vcs-btn ${c.id === category ? "active" : ""}" data-settings-category="${c.id}"><i class="${c.icon}"></i> ${c.label}</button>`).join("")}
-            </div><div id="settings-body">${settingsPanelBody(category)}</div>`,
-            activeTabId: "settings",
-        });
+            </div>
+            <div class="panel-body settings-body" id="settings-body">${settingsPanelBody(category)}</div>
+            ${renderPanelTabs("settings")}
+        </div>`;
     },
 
     bindSettingsEvents() {
@@ -1009,10 +1023,10 @@ const App = {
         if (clearHistory) clearHistory.addEventListener("click", () => { s.recentlyLaunched = []; this.saveSettings(); this.renderHome(); });
 
         document.querySelectorAll("[data-settings-category]").forEach(el => el.addEventListener("click", () => {
-            document.getElementById("panel-settings").querySelector(".panel-body").innerHTML =
-                `<div class="versions-client-switcher" id="settings-categories">${SETTINGS_CATEGORIES(this.state.edition).map(c =>
-                    `<button class="vcs-btn ${c.id === el.dataset.settingsCategory ? "active" : ""}" data-settings-category="${c.id}"><i class="${c.icon}"></i> ${c.label}</button>`).join("")}
-                </div><div id="settings-body">${settingsPanelBody(el.dataset.settingsCategory)}</div>`;
+            const category = el.dataset.settingsCategory;
+            document.getElementById("settings-categories").innerHTML = SETTINGS_CATEGORIES(this.state.edition).map(c =>
+                `<button class="vcs-btn ${c.id === category ? "active" : ""}" data-settings-category="${c.id}"><i class="${c.icon}"></i> ${c.label}</button>`).join("");
+            document.getElementById("settings-body").innerHTML = settingsPanelBody(category);
             this.bindSettingsEvents();
         }));
     },
@@ -1207,6 +1221,7 @@ const App = {
 
         document.getElementById("search-trigger-btn").addEventListener("click", () => this.openSearch());
         document.getElementById("notif-bell-btn").addEventListener("click", () => this.toggleNotifPanel());
+        document.getElementById("app-close-btn").addEventListener("click", () => Bridge.closeApp());
 
         document.body.addEventListener("click", (e) => {
             const openBtn = e.target.closest("[data-open-panel]");

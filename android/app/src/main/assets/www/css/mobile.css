@@ -6,6 +6,43 @@
    letterboxed. Values below are scaled-down versions of app.css's own
    numbers, not new sizes invented from scratch. */
 
+/* app.css's .window-bg uses background-size:cover, sized against a
+   resizable desktop window whose aspect ratio stays reasonably close to
+   bg.jpg's own (1280x720, 16:9). A phone forced into landscape is
+   noticeably wider/shorter than that (~19.5:9 on most modern screens), so
+   cover scales the image up far more aggressively to fill the width,
+   cropping most of its height — reads as "zoomed"/stretched compared to
+   desktop's much gentler crop. `contain` guarantees the image is shown at
+   its real proportions with zero cropping or distortion, letterboxed with
+   the app's own dark chrome color instead of a jarring raw black gap. */
+.window-bg {
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-color: #23272A;
+}
+
+/* app.css's home action-btn "grow" effect (icon -> icon+label, width
+   expansion) is pure :hover — real on a desktop mouse, but a touchscreen
+   never enters :hover at all (tapping only ever fires :active, briefly).
+   (hover: none) targets touch/stylus input specifically (won't fire on a
+   Bluetooth mouse plugged into the phone, which does support real hover),
+   duplicating the same :hover rules under :active so tapping still gives
+   the same tactile feedback instead of the button just sitting static. */
+@media (hover: none) {
+    .action-btn.hover-grow:active:not(:disabled) > .btn-label { display: inline; }
+    .action-btn.hover-grow:active:not(:disabled) > i { display: none; }
+    .action-btn.hover-grow:active:not(:disabled) {
+        width: 134px;
+        padding: 0 18px;
+        flex-shrink: 1;
+    }
+    .compact .action-btn.hover-grow:active:not(:disabled) { width: 120px; }
+    .action-btn.hover-grow:not(.launch-btn):active:not(:disabled) {
+        background: var(--accent);
+        box-shadow: 0 0 20px var(--accent-glow), 0 4px 14px rgba(0, 0, 0, 0.35);
+    }
+}
+
 @media (max-height: 480px) {
     .top-bar { padding: 6px 10px 0; gap: 6px; }
     .logo-icon { width: 26px; height: 26px; }

@@ -438,4 +438,12 @@ private class AndroidBridge(private val activity: MainActivity, private val webV
             runCatching { activity.startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url))) }
         }
     }
+
+    // Desktop's .window-controls close button — the minimize/maximize/
+    // fullscreen ones alongside it have no Android equivalent (no
+    // windowing) and aren't ported; close still means something: exit.
+    @JavascriptInterface
+    fun closeApp() {
+        activity.runOnUiThread { activity.finishAffinity() }
+    }
 }

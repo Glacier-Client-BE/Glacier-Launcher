@@ -1,5 +1,39 @@
 # TODO — Prioritized Task List
 
+## Critical fixes found from real device testing (this pass)
+- [x] **`Bridge` wrapper only forwarded 11 of 28 native methods** — every
+      Discord login, self-update, Bedrock SAF panel (Worlds/Packs/Backups/
+      Screenshots), Java instance management, modpack install, and custom
+      DLL picker call site called a `Bridge.xxx()` that didn't exist on the
+      wrapper object at all, throwing a hard `TypeError` (not a silent
+      no-op — worse than the earlier `window.X` bug). Fixed by adding every
+      missing native method to `bridge.js`; cross-checked every `Bridge.`
+      call site in the codebase against the wrapper afterward to confirm
+      completeness.
+- [x] Java Edition crash on real device (`Theme.AppCompat` `IllegalStateException`),
+      stray launcher icon investigation, edge-to-edge black bar, and
+      panel-tab mobile sizing — see the `force-appcompat-theme` manifest
+      patch, `windowLayoutInDisplayCutoutMode`, and `mobile.css` tab tweaks.
+- [x] Settings panel had no padding — `settingsPanelHtml()` nested the
+      category switcher inside `.panel-body` and gave the body only an
+      `id="settings-body"` instead of desktop's real sibling structure and
+      `class="panel-body settings-body"`, so the compound-class CSS rule
+      that supplies its padding/gap never matched. Rebuilt to mirror
+      `Pages/Home.razor`'s actual DOM.
+- [x] Home action buttons' `.hover-grow` effect never fired on a
+      touchscreen (`:hover` doesn't exist there) — added an `(hover: none)`
+      media-query duplicate of the same rules under `:active` in
+      `mobile.css` so tapping gives the same expand feedback.
+- [x] `.window-bg` used `background-size: cover`, which crops far more
+      aggressively on a phone's much wider/shorter forced-landscape aspect
+      ratio than on a resizable desktop window — read as "stretched"/zoomed.
+      Switched to `contain` + a matching dark `background-color` fallback
+      in `mobile.css` so the image is never cropped or distorted.
+- [x] Added desktop's `.window-controls` close button (`Bridge.closeApp()`
+      → `activity.finishAffinity()`) — minimize/maximize/fullscreen have no
+      Android equivalent and stay omitted, same as the top-bar drag-zone.
+
+
 ## High
 - [x] Bedrock **Worlds** panel: pure-Kotlin little-endian NBT reader
       (`BedrockNbt.kt`) + SAF-backed storage service (`BedrockStorageService.kt`)
