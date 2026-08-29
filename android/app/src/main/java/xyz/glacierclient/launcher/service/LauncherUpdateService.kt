@@ -10,7 +10,6 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import androidx.core.content.FileProvider
-import androidx.webkit.WebViewCompat
 import java.io.File
 
 /**
