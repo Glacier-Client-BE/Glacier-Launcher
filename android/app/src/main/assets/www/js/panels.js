@@ -442,6 +442,27 @@ function discordRpcTokenRow() {
     </div>`;
 }
 
+// Where Glacier keeps everything (GlacierStorage.kt). Pojav's own default
+// was this app's private Android/data sandbox, which Android 11+ hides from
+// file managers, so worlds and mods were effectively unreachable. They now
+// live in games/Glacier — but writing outside the sandbox needs All Files
+// Access on Android 11+, and without it the launcher stays on the old
+// private folder rather than breaking Java Edition with an unwritable root.
+// So the row shows the path actually in use and offers the toggle only when
+// it would change something.
+function glacierStorageRow() {
+    const path = Bridge.glacierStoragePath();
+    const shared = Bridge.glacierStorageIsShared();
+    const control = shared
+        ? `<span class="client-card-note">Shared folder</span>`
+        : `<button class="btn-sm" id="grant-all-files">Grant access</button>`;
+    const hint = shared
+        ? `Worlds, mods, instances, exports and this launcher's config all live here.`
+        : `Currently in this app's private folder, which file managers can't open.
+           Granting all-files access moves everything to <code>games/Glacier</code> on the next launch.`;
+    return settingRow("Storage folder", `${escapeHtml(path)}<br>${hint}`, control);
+}
+
 function settingsPanelBody(category) {
     const s = App.state.settings;
     const cat = (id) => category === "all" || category === id;
@@ -515,6 +536,7 @@ function settingsPanelBody(category) {
         ${settingRow("CurseForge API key", "", `<input class="setting-input" id="setting-cf-key" type="text" value="${s.curseForgeApiKeyOverride || ""}" />`)}
         </div>
         <div class="settings-section"><span class="panel-section-label">Backup</span>
+        ${glacierStorageRow()}
         ${settingRow("Reset to defaults", "", `<button class="btn-sm" style="color:var(--red);" id="reset-settings">Reset</button>`)}
         </div>
         <div class="settings-section"><span class="panel-section-label">About</span>

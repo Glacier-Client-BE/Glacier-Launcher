@@ -20,6 +20,7 @@ import xyz.glacierclient.launcher.service.BedrockBackupService
 import xyz.glacierclient.launcher.service.BedrockStorageService
 import xyz.glacierclient.launcher.service.ClientInjectionService
 import xyz.glacierclient.launcher.service.DiscordRpcService
+import xyz.glacierclient.launcher.service.GlacierStorage
 import xyz.glacierclient.launcher.service.JavaEditionBridge
 import xyz.glacierclient.launcher.service.JavaInstanceService
 import xyz.glacierclient.launcher.service.LevelDatService
@@ -398,13 +399,40 @@ private class AndroidBridge(private val activity: MainActivity, private val webV
         }
     }
 
+    /**
+     * SharedPreferences is authoritative, but falls back to the copy in the
+     * Glacier folder when empty — SharedPreferences is wiped by an uninstall
+     * or "clear data" while shared storage survives, so settings persist
+     * across a reinstall instead of silently resetting.
+     */
     @JavascriptInterface
-    fun getSettingsJson(): String = prefs.getString("settings_json", "{}") ?: "{}"
+    fun getSettingsJson(): String {
+        val stored = prefs.getString("settings_json", null)
+        if (!stored.isNullOrBlank() && stored != "{}") return stored
+        return GlacierStorage.readMirroredSettings(activity) ?: "{}"
+    }
 
     @JavascriptInterface
     fun saveSettingsJson(json: String) {
         prefs.edit { putString("settings_json", json) }
+        GlacierStorage.writeMirroredSettings(activity, json)
     }
+
+    // ── Glacier storage folder ───────────────────────────────────────
+
+    /** Absolute path of the folder everything lives in, for display. */
+    @JavascriptInterface
+    fun glacierStoragePath(): String = GlacierStorage.preferredRoot(activity).absolutePath
+
+    /**
+     * False when we're still confined to the app-private sandbox because
+     * All Files Access hasn't been granted — the UI offers the toggle then.
+     */
+    @JavascriptInterface
+    fun glacierStorageIsShared(): Boolean = GlacierStorage.canUseSharedStorage()
+
+    @JavascriptInterface
+    fun requestAllFilesAccess(): Boolean = GlacierStorage.requestAllFilesAccess(activity)
 
     @JavascriptInterface
     fun curseForgeApiKey(): String =

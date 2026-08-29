@@ -93,14 +93,13 @@
     .news-strip { height: 20px; }
 
     /* Home quick actions — the primary controls on the home screen, and the
-       main thing a thumb has to hit. Scaled up 2.5x from the 36px they were
-       (which was a straight shrink of the desktop 48px and far too small a
-       touch target); 90px still leaves room in a 393px-tall viewport once
-       the ~36px top bar and ~30px footer are accounted for, and six of them
-       plus gaps fit well inside the narrowest landscape width. */
-    .action-btn { height: 90px; font-size: 15px; border-radius: 16px; }
-    .btn-sq { width: 90px; }
-    .action-btn i { font-size: 32px; }
+       main thing a thumb has to hit. 36px was a straight shrink of the
+       desktop 48px and too small a target; 90px overshot. 46px sits just
+       under the desktop size and comfortably above the ~44px minimum
+       recommended for touch. */
+    .action-btn { height: 46px; font-size: 13px; border-radius: 12px; }
+    .btn-sq { width: 46px; }
+    .action-btn i { font-size: 18px; }
 
     /* Panel chrome — the biggest win. Header, the category chip row and the
        bottom tab bar are pure overhead above the content. */
@@ -176,11 +175,10 @@
 @media (max-height: 380px) {
     .recently-launched { display: none !important; }
     .status-msg { font-size: 10px; }
-    /* Still the primary touch target on the shortest devices — trimmed from
-       90px, not returned to icon size. */
-    .action-btn { height: 74px; font-size: 13px; }
-    .btn-sq { width: 74px; }
-    .action-btn i { font-size: 26px; }
+    /* Still a real touch target on the shortest devices, just tighter. */
+    .action-btn { height: 40px; font-size: 12px; }
+    .btn-sq { width: 40px; }
+    .action-btn i { font-size: 16px; }
     .panel-header { padding: 3px 10px; }
     #settings-categories { padding: 3px 10px 0; }
     .setting-row { padding: 5px 0; }

@@ -2,7 +2,6 @@ package xyz.glacierclient.launcher.service
 
 import android.content.Context
 import android.content.Intent
-import android.os.Environment
 import net.kdt.pojavlaunch.Tools
 import net.kdt.pojavlaunch.prefs.LauncherPreferences
 import net.kdt.pojavlaunch.value.launcherprofiles.LauncherProfiles
@@ -18,11 +17,12 @@ import java.io.File
  * another Activity in this same package, launched by explicit class
  * reference like any other in-process Activity.
  *
- * Mods/Glacier-client jars are shared through Pojav's own external storage
- * layout (getExternalStorageDirectory()/games/PojavLauncher/.minecraft/mods)
- * rather than app-private storage, since that directory is what Pojav's
- * Tools.java actually reads from — see android/pojavlauncher/.../Tools.java
- * DIR_GAME_HOME.
+ * Mods/Glacier-client jars go into the game's own .minecraft/mods folder
+ * under Tools.DIR_GAME_HOME, which is what Pojav's Tools.java actually
+ * reads from. That root is Glacier's own games/Glacier folder now (see
+ * service/GlacierStorage.kt and the redirect in scripts/rebrand-pojav.sh),
+ * so it is always read from the constant rather than written out as a
+ * literal path.
  */
 object JavaEditionBridge {
 
@@ -143,8 +143,14 @@ object JavaEditionBridge {
         }
     }
 
-    private fun pojavModsDir(): File =
-        File(Environment.getExternalStorageDirectory(), "games/PojavLauncher/.minecraft/mods")
+    // Derived from Tools.DIR_GAME_HOME rather than a hardcoded
+    // "games/PojavLauncher" path: the storage root is now Glacier's own
+    // folder (GlacierStorage / the redirect in rebrand-pojav.sh) and falls
+    // back to the app-private directory without All Files Access, so any
+    // literal path here would point at a directory the game never reads.
+    private fun gameDir(): File = File(Tools.DIR_GAME_HOME ?: "", ".minecraft")
+
+    private fun pojavModsDir(): File = File(gameDir(), "mods")
 
     /** Copies an installed Glacier client / mod jar into Pojav's shared mods folder. */
     fun installModJar(sourceJar: File): Boolean = try {
@@ -157,7 +163,7 @@ object JavaEditionBridge {
 
     fun listScreenshots(): List<File> {
         // Standard Java Edition path: Minecraft itself (not Pojav) writes here.
-        val dir = File(Environment.getExternalStorageDirectory(), "games/PojavLauncher/.minecraft/screenshots")
+        val dir = File(gameDir(), "screenshots")
         return dir.listFiles { f -> f.extension.equals("png", ignoreCase = true) }
             ?.sortedByDescending { it.lastModified() }
             ?: emptyList()

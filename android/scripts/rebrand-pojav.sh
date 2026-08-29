@@ -62,6 +62,12 @@ python3 "$SCRIPT_DIR/patch_pojav_gradle.py" app_pojavlauncher/src/main/AndroidMa
 # real AppTheme. Point them back at their own theme explicitly.
 python3 "$SCRIPT_DIR/patch_pojav_gradle.py" app_pojavlauncher/src/main/AndroidManifest.xml force-appcompat-theme
 
+# Pojav keeps game data in this app's private Android/data sandbox on SDK
+# 29+ (unreachable to file managers on Android 11+) and in a
+# PojavLauncher-named folder below that. Point both at games/Glacier — see
+# the patch's own docstring and android/app/.../service/GlacierStorage.kt.
+python3 "$SCRIPT_DIR/patch_pojav_gradle.py" app_pojavlauncher/src/main/java/net/kdt/pojavlaunch/Tools.java redirect-storage-root
+
 # GamepadMapperAdapter.java references 7 drawables (stick_left/right(+click),
 # dpad_up/down/left/right) that never existed anywhere in Pojav's own git
 # history — a real, pre-existing bug in upstream's final "Discontinued"

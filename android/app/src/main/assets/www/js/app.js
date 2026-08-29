@@ -717,6 +717,9 @@ const App = {
     // game Activity closed." Sessions under 10s are dropped as probably a
     // launch that immediately failed/bounced rather than real play.
     onResumeFromGame() {
+        // Also fires after returning from the All Files Access settings
+        // screen, so refresh Settings to pick up a newly granted permission.
+        if (this.state.openPanel === "settings") this.openPanel("settings");
         const start = this.state.pendingSessionStart;
         if (!start) return;
         this.state.pendingSessionStart = null;
@@ -1148,6 +1151,12 @@ const App = {
         if (cfKeyInput) cfKeyInput.addEventListener("change", (e) => { s.curseForgeApiKeyOverride = e.target.value; this.saveSettings(); });
         const openJava = document.getElementById("open-java-edition");
         if (openJava) openJava.addEventListener("click", () => this.launchJava());
+        const grantFiles = document.getElementById("grant-all-files");
+        if (grantFiles) grantFiles.addEventListener("click", () => {
+            // Opens a system settings screen; the result only shows up when
+            // the user comes back, so re-render the panel on resume.
+            Bridge.requestAllFilesAccess();
+        });
         const resetBtn = document.getElementById("reset-settings");
         if (resetBtn) resetBtn.addEventListener("click", () => { this.state.settings = autoSavingSettings({ ...DEFAULT_SETTINGS }, () => this.saveSettings()); this.saveSettings(); this.openPanel("settings"); this.renderFooter(); this.renderHome(); });
         const clearHistory = document.getElementById("clear-recent-history");

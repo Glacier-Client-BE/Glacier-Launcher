@@ -175,6 +175,64 @@ def force_appcompat_theme(path: str) -> None:
     open(path, "w").write(text)
 
 
+def redirect_storage_root(path: str) -> None:
+    """Points Pojav's storage root at Glacier's own visible folder.
+
+    Upstream getPojavStorageRoot returns getExternalFilesDir(null) on SDK
+    29+, i.e. this app's private Android/data sandbox — precisely the
+    directory Android 11+ stops file managers from browsing, so every world,
+    mod and config landed somewhere the user cannot reach. Below 29 it used
+    a PojavLauncher-named folder, which is also wrong for a rebranded app.
+
+    Both become /storage/emulated/0/games/Glacier, with a fallback to the
+    old app-private directory when All Files Access is not held: picking the
+    shared folder unconditionally would leave the storage root unwritable on
+    Android 11+, and Pojav treats an unwritable root as "no storage", which
+    breaks Java Edition outright.
+
+    This logic is duplicated (not shared) with GlacierStorage.preferredRoot
+    because app_pojavlauncher is a dependency of :app and cannot reference
+    it. The two must stay in step — if they disagree, the launcher UI and the
+    game runtime read different directories.
+    """
+    text = open(path).read()
+
+    if "games/Glacier" in text:
+        return  # already patched by an earlier run; rebrand-pojav.sh is idempotent
+
+    original = """    private static File getPojavStorageRoot(Context ctx) {
+        if(SDK_INT >= 29) {
+            return ctx.getExternalFilesDir(null);
+        }else{
+            return new File(Environment.getExternalStorageDirectory(),"games/PojavLauncher");
+        }
+    }"""
+
+    replacement = """    private static File getPojavStorageRoot(Context ctx) {
+        // Glacier: keep game data in one visible, launcher-branded folder
+        // instead of this app's unreachable Android/data sandbox. Kept in
+        // step with GlacierStorage.preferredRoot() on the app side.
+        if(SDK_INT < 30 || Environment.isExternalStorageManager()) {
+            File shared = new File(Environment.getExternalStorageDirectory(), "games/Glacier");
+            if(shared.isDirectory() || shared.mkdirs()) return shared;
+        }
+        // No All Files Access: fall back to the private directory rather
+        // than handing back a root we cannot write to.
+        if(SDK_INT >= 29) {
+            return ctx.getExternalFilesDir(null);
+        }else{
+            return new File(Environment.getExternalStorageDirectory(),"games/Glacier");
+        }
+    }"""
+
+    if original not in text:
+        raise SystemExit(
+            "redirect_storage_root: getPojavStorageRoot does not match the expected "
+            "upstream body in " + path + " — Pojav's source changed, update the patch."
+        )
+    open(path, "w").write(text.replace(original, replacement))
+
+
 def drop_localized_app_names(res_dir: str) -> None:
     """Removes app_name/app_short_name from every localized values-*/strings.xml.
 
@@ -327,6 +385,7 @@ ACTIONS = {
     "add-missing-gamepad-drawables": add_missing_gamepad_drawables,
     "fix-nonfinal-resid-switch": fix_nonfinal_resid_switch,
     "drop-localized-app-names": drop_localized_app_names,
+    "redirect-storage-root": redirect_storage_root,
 }
 
 if __name__ == "__main__":

@@ -39,6 +39,11 @@ const Bridge = (() => {
         customBackgroundUrl: () => (hasNative ? native.customBackgroundUrl() : ""),
         resetWallpaper: () => { if (hasNative) native.resetWallpaper(); },
 
+        // Glacier storage folder (GlacierStorage.kt).
+        glacierStoragePath: () => (hasNative ? native.glacierStoragePath() : "/storage/emulated/0/games/Glacier"),
+        glacierStorageIsShared: () => (hasNative ? native.glacierStorageIsShared() : true),
+        requestAllFilesAccess: () => (hasNative ? native.requestAllFilesAccess() : false),
+
         // Discord Rich Presence (DiscordRpcService.kt). Opt-in and off by
         // default: Android has no Discord desktop client to speak the real
         // RPC pipe to, so presence rides a Gateway WebSocket authenticated

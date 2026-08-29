@@ -83,6 +83,51 @@ best-effort analogue (root-only staging into Minecraft Bedrock's storage)
 rather than pretending to work; the client cards in the UI still render and
 select correctly, but the actual injection step is honestly gated on root.
 
+### Glacier storage — where everything lives
+
+Pojav's `Tools.getPojavStorageRoot` returns `getExternalFilesDir(null)` on
+SDK 29+, i.e. this app's private
+`Android/data/xyz.glacierclient.launcher/files` sandbox — precisely the
+directory Android 11+ hides from file managers. Every Java Edition world,
+mod and config was therefore somewhere the user could not reach, and below
+SDK 29 it sat in a `PojavLauncher`-named folder, wrong for a rebranded app.
+
+Everything now lives in one visible, launcher-branded folder:
+
+    /storage/emulated/0/games/Glacier
+      .minecraft/     worlds, mods, resourcepacks, screenshots…
+      instances/      per-instance game directories (JavaInstanceService)
+      exports/        exported modpacks
+      config/         launcher settings mirror
+
+**The permission trade-off.** Writing outside the sandbox needs All Files
+Access on Android 11+, which is a settings toggle the user can decline —
+there is no runtime dialog for `MANAGE_EXTERNAL_STORAGE`. Choosing the
+shared folder unconditionally would leave the storage root unwritable, and
+Pojav treats an unwritable root as "no storage", which breaks Java Edition
+outright. So both `GlacierStorage.preferredRoot` and the patched
+`getPojavStorageRoot` **fall back to the old private directory** when the
+permission isn't held, and Settings shows the path actually in use with a
+"Grant access" button when it would change something. A working launcher in
+a hidden folder beats a branded folder and a broken one.
+
+That decision is duplicated rather than shared, because `app_pojavlauncher`
+is a dependency of `:app` and cannot reference `GlacierStorage`. **The two
+must stay in step** — if they disagree, the launcher UI and the game runtime
+read different directories.
+
+Existing data is migrated once on first launch, before
+`PojavApplication.onCreate` caches the storage constants. It uses
+`File.renameTo` rather than a recursive copy (same volume, so it is a
+directory relink instead of moving gigabytes of worlds on the main thread)
+and only into an empty destination, so a populated `games/Glacier` is never
+merged over.
+
+The launcher's settings are mirrored to `config/settings.json`.
+SharedPreferences stays authoritative at runtime, but is read back from the
+mirror when empty — SharedPreferences is wiped by an uninstall or "clear
+data" while shared storage survives, so settings persist across a reinstall.
+
 ### Reaching Bedrock's data under Android/data
 
 Bedrock keeps its saves in
