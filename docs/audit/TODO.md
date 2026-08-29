@@ -1,0 +1,47 @@
+# TODO — Prioritized Task List
+
+## High
+- [ ] Implement pure-Kotlin LevelDB + little-endian NBT readers for Bedrock
+      world/pack/backup/instance/screenshot listing (unblocks 5 Android panels).
+- [ ] Build a Java multi-instance management model on Android (unblocks
+      Modpack Install + several disabled Java Addons actions).
+- [ ] Wire a real Bedrock version data source into Android's MC Versions panel.
+- [ ] Diff `Components/*.razor` output markup against `panels.js`/`app.js`
+      generated HTML for spinners, tooltips, error dialogs, and toggles to
+      close the "Unverified" rows in `07_UI_PARITY.md`.
+- [ ] Add a shared `js/apiClient.js` wrapper (Android) and `ApiClientBase`
+      (Windows) to remove duplicated fetch/HTTP boilerplate — see
+      `05_REFACTOR_PLAN.md`.
+
+## Medium
+- [ ] Implement non-root Bedrock client injection via package-context +
+      JNI `dlopen()` (`BedrockGamePackageManager.kt` + `NativeLoader` shim).
+- [ ] Build a generic SAF file-picker bridge method in `AndroidBridge`, then
+      use it for: custom `.so` picker, Skin Library "Add PNG", Theme Studio
+      wallpaper picker.
+- [ ] Implement real Discord OAuth on Android reusing the Xbox
+      redirect-interception pattern already in `MainActivity.kt`.
+- [ ] Wire Java Profile skin-viewer UI to the already-working sign-in flow.
+- [ ] Split `panels.js` and `app.js` by concern (Bedrock/Java/Settings/state/router).
+- [ ] Add a `localStorage`-backed TTL cache for CurseForge/Modrinth/News
+      fetches on Android.
+- [ ] Add settings schema versioning + migration to `JsonStore`/`LauncherSettings` (Windows).
+- [ ] Extract `IThirdPartyClient` interface for Flarial/Latite/OderSo/LeviLamina services (Windows).
+- [ ] Update `ClientInjectionService.kt` doc comment and in-app Settings →
+      Clients copy to reflect the researched non-root path, once the
+      injection work itself lands (content change, not a standalone fix).
+
+## Low
+- [ ] Port onboarding wizard to Android.
+- [ ] Port announcement banner to Android.
+- [ ] Add localization/string-table support to Android (currently hard-coded English).
+- [ ] Add LevelDat editor to Android (depends on world-listing work above).
+- [ ] Add SAF folder-open shortcuts to Android (replaces desktop's Explorer shortcuts).
+- [ ] Add a Logs panel capture pipeline + mclo.gs sharing to Android.
+- [ ] Add lightweight session-timer service for Android Stats panel.
+- [ ] Audit `Home.razor`'s `StateHasChanged()` call sites for over-broad re-renders (Windows).
+- [ ] Cache rendered panel HTML strings in `panels.js`, invalidate only on
+      underlying data change, to reduce panel-switch jank.
+- [ ] Verify search-input debounce exists on both platforms' CurseForge/Modrinth search.
+- [ ] Confirm skin texture caching exists to avoid re-fetching from Mojang CDN each panel open.
+</content>
