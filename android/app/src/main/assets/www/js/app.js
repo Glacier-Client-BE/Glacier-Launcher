@@ -91,6 +91,7 @@ const App = {
         discordAuth: { loading: false, error: null },
         update: { checking: false, available: false, modalOpen: false, installing: false, progress: 0, info: null },
         bedrockWorlds: { hasAccess: false, loading: false, loaded: false, worlds: [] },
+        javaInstances: { instances: [], renamingId: null, renameValue: "", confirmDeleteId: null },
         news: {
             loading: false, posts: [], releases: [],
             fallbackItems: [
@@ -126,6 +127,51 @@ const App = {
         this.state.bedrockWorlds.hasAccess = granted;
         if (granted) await this.loadBedrockWorlds();
         if (this.state.openPanel === "bedrockworlds") this.openPanel("bedrockworlds");
+    },
+
+    newJavaInstance() {
+        const created = JavaInstances.create("New Instance", "");
+        this.state.javaInstances.instances = JavaInstances.list();
+        if (this.state.openPanel === "javaprofile") this.openPanel("javaprofile");
+        return created;
+    },
+
+    switchJavaInstance(id) {
+        if (!JavaInstances.setActive(id)) return;
+        this.state.javaInstances.instances = JavaInstances.list();
+        if (this.state.openPanel === "javaprofile") this.openPanel("javaprofile");
+    },
+
+    beginRenameInstance(id, name) {
+        this.state.javaInstances.renamingId = id;
+        this.state.javaInstances.renameValue = name;
+        if (this.state.openPanel === "javaprofile") this.openPanel("javaprofile");
+    },
+
+    commitRenameInstance(id) {
+        const input = document.querySelector("[data-rename-instance-input]");
+        const newName = input ? input.value : this.state.javaInstances.renameValue;
+        JavaInstances.rename(id, newName);
+        this.state.javaInstances.renamingId = null;
+        this.state.javaInstances.instances = JavaInstances.list();
+        if (this.state.openPanel === "javaprofile") this.openPanel("javaprofile");
+    },
+
+    confirmDeleteInstance(id) {
+        this.state.javaInstances.confirmDeleteId = id;
+        if (this.state.openPanel === "javaprofile") this.openPanel("javaprofile");
+    },
+
+    cancelDeleteInstance() {
+        this.state.javaInstances.confirmDeleteId = null;
+        if (this.state.openPanel === "javaprofile") this.openPanel("javaprofile");
+    },
+
+    deleteJavaInstance(id) {
+        JavaInstances.delete(id);
+        this.state.javaInstances.confirmDeleteId = null;
+        this.state.javaInstances.instances = JavaInstances.list();
+        if (this.state.openPanel === "javaprofile") this.openPanel("javaprofile");
     },
 
     async loadBedrockWorlds() {
@@ -585,7 +631,11 @@ const App = {
                 if (jv.list.length === 0 && !jv.loading) this.loadJavaVersions();
                 break;
             }
-            case "javaprofile": html = panelShell({ id, title: "Profile", body: javaProfilePanelBody(), activeTabId: id }); break;
+            case "javaprofile": {
+                this.state.javaInstances.instances = JavaInstances.list();
+                html = panelShell({ id, title: "Profile", body: javaProfilePanelBody(), activeTabId: id });
+                break;
+            }
             case "javascreenshots": html = panelShell({ id, title: "Screenshots", headerActions: `<button class="panel-icon-btn" data-tooltip="Refresh"><i class="fa-solid fa-rotate"></i></button>`, body: javaScreenshotsPanelBody(), activeTabId: id }); break;
             case "news": {
                 html = newsPanelHtml(this.state.news);
@@ -863,6 +913,20 @@ const App = {
                 else this.signInWithDiscord();
                 return;
             }
+            const newInstanceBtn = e.target.closest("[data-new-instance]");
+            if (newInstanceBtn) { this.newJavaInstance(); return; }
+            const switchInstanceBtn = e.target.closest("[data-switch-instance]");
+            if (switchInstanceBtn) { this.switchJavaInstance(switchInstanceBtn.dataset.switchInstance); return; }
+            const renameInstanceBtn = e.target.closest("[data-rename-instance]");
+            if (renameInstanceBtn) { this.beginRenameInstance(renameInstanceBtn.dataset.renameInstance, renameInstanceBtn.dataset.renameInstanceName); return; }
+            const commitRenameBtn = e.target.closest("[data-commit-rename-instance]");
+            if (commitRenameBtn) { this.commitRenameInstance(commitRenameBtn.dataset.commitRenameInstance); return; }
+            const confirmDeleteInstanceBtn = e.target.closest("[data-confirm-delete-instance]");
+            if (confirmDeleteInstanceBtn) { this.confirmDeleteInstance(confirmDeleteInstanceBtn.dataset.confirmDeleteInstance); return; }
+            if (e.target.closest("[data-cancel-delete-instance]")) { this.cancelDeleteInstance(); return; }
+            const deleteInstanceBtn = e.target.closest("[data-delete-instance]");
+            if (deleteInstanceBtn) { this.deleteJavaInstance(deleteInstanceBtn.dataset.deleteInstance); return; }
+
             if (e.target.closest("[data-grant-bedrock-storage]")) { this.requestBedrockStorageAccess(); return; }
             if (e.target.closest("[data-refresh-bedrock-worlds]")) { this.loadBedrockWorlds(); return; }
             if (e.target.closest("[data-skip-update]")) { this.skipUpdate(); return; }

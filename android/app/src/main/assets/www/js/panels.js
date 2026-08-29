@@ -651,9 +651,45 @@ function javaVersionsPanelHtml(filter, showSnapshots, showHistorical, versions, 
 // Microsoft/Xbox sign-in this app doesn't have wired yet, so the honest
 // "not signed in" branch — the desktop panel's own gate when JavaUuid is
 // empty — is also this app's true current state, not a shortcut.
+function instanceRowHtml(inst, state) {
+    if (state.renamingId === inst.id) {
+        return `
+        <div class="instance-row ${inst.isActive ? "active" : ""}">
+            <input class="setting-input instance-rename" value="${escapeHtml(state.renameValue)}" data-rename-instance-input />
+            <button class="vcs-btn" data-commit-rename-instance="${inst.id}"><i class="fa-solid fa-check"></i></button>
+        </div>`;
+    }
+    const confirming = state.confirmDeleteId === inst.id;
+    return `
+    <div class="instance-row ${inst.isActive ? "active" : ""}">
+        <button class="instance-name-btn" data-switch-instance="${inst.id}">
+            <i class="fa-solid ${inst.isActive ? "fa-circle-check" : "fa-regular fa-circle"}"></i>
+            <span>${escapeHtml(inst.name)}</span>
+        </button>
+        <button class="instance-icon-btn" data-rename-instance="${inst.id}" data-rename-instance-name="${escapeHtml(inst.name)}" data-tooltip="Rename"><i class="fa-solid fa-pen"></i></button>
+        ${confirming
+            ? `<button class="instance-icon-btn instance-del" data-delete-instance="${inst.id}" data-tooltip="Confirm delete"><i class="fa-solid fa-check"></i></button>
+               <button class="instance-icon-btn" data-cancel-delete-instance data-tooltip="Cancel"><i class="fa-solid fa-xmark"></i></button>`
+            : `<button class="instance-icon-btn instance-del" data-confirm-delete-instance="${inst.id}" data-tooltip="Delete"><i class="fa-solid fa-trash"></i></button>`}
+    </div>`;
+}
+
+function javaInstancesCardHtml(state) {
+    return `
+    <div class="instance-card">
+        <div class="instance-card-head">
+            <span><i class="fa-solid fa-cubes-stacked"></i> Instances</span>
+            <div style="flex:1"></div>
+            <button class="btn-sm" data-new-instance><i class="fa-solid fa-plus"></i> New</button>
+        </div>
+        ${state.instances.map(inst => instanceRowHtml(inst, state)).join("")}
+    </div>`;
+}
+
 function javaProfilePanelBody() {
     const s = App.state.settings;
     const auth = App.state.msAuth;
+    const instancesCard = javaInstancesCardHtml(App.state.javaInstances);
 
     if (auth.loading) {
         return `<div class="skin-empty"><span class="spinner"></span><span style="margin-top:10px;">Signing in…</span></div>`;
@@ -667,7 +703,8 @@ function javaProfilePanelBody() {
             <button class="vcs-btn" id="profile-signin-btn">
                 <i class="fa-brands fa-xbox"></i>&nbsp;Sign in
             </button>
-        </div>`;
+        </div>
+        ${instancesCard}`;
     }
 
     return `<div class="profile-actions" style="flex-direction:column; align-items:stretch; gap:10px;">
@@ -689,7 +726,8 @@ function javaProfilePanelBody() {
             <button class="skin-btn" data-open-panel="skinlibrary"><i class="fa-solid fa-shirt"></i> Skin library</button>
             <button class="skin-btn skin-btn-ghost" id="profile-signout-btn"><i class="fa-solid fa-right-from-bracket"></i> Sign out</button>
         </div>
-    </div>`;
+    </div>
+    ${instancesCard}`;
 }
 
 // ── Java Screenshots ──────────────────────────────────────────────────────
@@ -955,9 +993,11 @@ function bareOverlayHtml(id, title, headerActions, body) {
 // Mirrors Components/ModpacksPanel.razor: CurseForge/Modrinth source tabs,
 // search, and a real result list (icon/author/downloads/summary) using the
 // same CurseForge/Modrinth clients the Addons panel already uses. Install
-// is disabled — ModpackInstallService.cs unpacks a modpack into a brand
-// new Java instance, and this app has no instance-management model yet
-// (see JavaEditionBridge); nothing to wire the button to truthfully.
+// is still disabled — JavaInstanceService.kt now gives Android a real
+// instance-management model (see the "javaprofile" panel's Instances card),
+// so the actual remaining gap is porting ModpackInstallService.cs itself:
+// downloading the pack's mod files/overrides zip and extracting it into a
+// new instance's directory. Nothing to wire the button to truthfully yet.
 function formatDownloads(count) {
     if (count >= 1_000_000) return `${(count / 1_000_000).toFixed(1)}M downloads`;
     if (count >= 1_000) return `${(count / 1_000).toFixed(1)}K downloads`;
@@ -978,7 +1018,7 @@ function modpackRowHtml(pack) {
             <span class="version-sub">${escapeHtml(pack.author)} · ${formatDownloads(pack.downloads)}</span>
             <span class="modpack-summary">${escapeHtml(truncate(pack.summary, 90))}</span>
         </div>
-        <button class="vcs-btn" disabled data-tooltip="Modpack install needs per-instance management this app doesn't have yet"><i class="fa-solid fa-download"></i>&nbsp;Install</button>
+        <button class="vcs-btn" disabled data-tooltip="Modpack install needs a mod-download/extraction step this app doesn't have yet"><i class="fa-solid fa-download"></i>&nbsp;Install</button>
     </div>`;
 }
 

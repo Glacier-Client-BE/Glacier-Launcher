@@ -19,6 +19,7 @@ import androidx.core.view.WindowInsetsControllerCompat
 import xyz.glacierclient.launcher.service.BedrockStorageService
 import xyz.glacierclient.launcher.service.ClientInjectionService
 import xyz.glacierclient.launcher.service.JavaEditionBridge
+import xyz.glacierclient.launcher.service.JavaInstanceService
 import xyz.glacierclient.launcher.service.LauncherUpdateService
 
 /**
@@ -307,6 +308,24 @@ private class AndroidBridge(private val activity: MainActivity, private val webV
 
     @JavascriptInterface
     fun listBedrockWorlds(): String = BedrockStorageService.listWorlds(activity)
+
+    // Java multi-instance management (Home.Panels.cs's Modpack "Install" and
+    // several Java Addons actions are disabled on Android for lack of this —
+    // see JavaInstanceService.kt for how it reuses Pojav's own profile system).
+    @JavascriptInterface
+    fun listJavaInstances(): String = JavaInstanceService.list()
+
+    @JavascriptInterface
+    fun createJavaInstance(name: String, versionId: String): String = JavaInstanceService.create(name, versionId)
+
+    @JavascriptInterface
+    fun renameJavaInstance(id: String, newName: String): Boolean = JavaInstanceService.rename(id, newName)
+
+    @JavascriptInterface
+    fun deleteJavaInstance(id: String): Boolean = JavaInstanceService.delete(id)
+
+    @JavascriptInterface
+    fun setActiveJavaInstance(id: String): Boolean = JavaInstanceService.setActive(id)
 
     @JavascriptInterface
     fun openUrl(url: String) {

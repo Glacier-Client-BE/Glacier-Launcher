@@ -12,8 +12,22 @@
       pattern applied to different folders (`resource_packs`/`behavior_packs`
       have JSON `manifest.json`, backups/screenshots are plain files) — real
       remaining work, not blocked on anything above.
-- [ ] Build a Java multi-instance management model on Android (unblocks
-      Modpack Install + several disabled Java Addons actions).
+- [x] Build a Java multi-instance management model on Android
+      (`JavaInstanceService.kt`) — built directly on the vendored Pojav
+      library's own `LauncherProfiles`/`MinecraftProfile` multi-profile
+      system (a real `launcher_profiles.json`) instead of a parallel one,
+      since Pojav's `MainActivity` already reads
+      `LauncherProfiles.getCurrentProfile().gameDir` at launch — so creating
+      a profile per instance and switching
+      `LauncherPreferences.PREF_KEY_CURRENT_PROFILE` is a real, working
+      instance switch with zero changes to Pojav's own launch code, and the
+      existing `Bridge.launchJavaEdition()` call sites automatically launch
+      whichever instance is active. Wired into a real Instances card
+      (create/switch/rename/delete-with-confirm) in the "javaprofile" panel.
+      Still open: porting `ModpackInstallService.cs`'s actual mod-download +
+      overrides-zip-extraction step is what would let Modpack "Install"
+      itself go live — instance management was the blocker, not the only
+      piece.
 - [ ] Wire a real Bedrock version data source into Android's MC Versions panel.
 - [ ] Diff `Components/*.razor` output markup against `panels.js`/`app.js`
       generated HTML for spinners, tooltips, error dialogs, and toggles to
