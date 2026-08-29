@@ -84,14 +84,41 @@ function clientCardHtml({ id, name, iconHtml, statusHtml, desc, actionsHtml, err
     </div>`;
 }
 
+function customDllCardHtml(s) {
+    const hasFile = !!s.customDllPath;
+    const fileName = hasFile ? s.customDllPath.split("/").pop() : "";
+    const actionsHtml = hasFile
+        ? `<button class="icon-btn icon-btn-ghost" data-tooltip="Clear" data-clear-custom-dll><i class="fa-solid fa-xmark"></i></button>`
+        : `<button class="icon-btn icon-btn-ghost" data-tooltip="Pick a .so file" data-pick-custom-dll><i class="fa-solid fa-file-import"></i></button>`;
+    return `
+    <div class="client-card">
+        <div class="client-card-header">
+            <div class="client-card-icon client-card-icon-img"><i class="fa-solid fa-file-code" style="color:var(--accent);"></i></div>
+            <div class="client-card-meta">
+                <span class="client-card-name">Custom Client (.so)</span>
+                <span class="client-card-sub">${hasFile ? escapeHtml(fileName) : "No file selected"}</span>
+            </div>
+            <div class="client-card-actions">${actionsHtml}</div>
+        </div>
+        <p class="client-card-desc">Same idea as desktop's custom-DLL slot, staged for
+        ClientInjectionService's root-based fallback — pick any .so file, then use "Stage for injection"
+        below. Requires root; the real non-root technique (package-context + dlopen) isn't built yet.</p>
+        ${hasFile ? `<div class="modal-btn-row" style="margin-top:8px;">
+            <button class="modal-btn modal-btn-confirm" data-stage-custom-dll><i class="fa-solid fa-upload"></i> Stage for injection</button>
+        </div>` : ""}
+    </div>`;
+}
+
 function clientsPanelBody() {
     // Flarial/Latite/OderSo/LeviLamina are Windows DLL-injected clients (or,
     // for LeviLamina, a native mod loader injected the same way). A real
     // non-root Android equivalent exists (package-context + dlopen, same as
     // other Android Bedrock launchers — see ClientInjectionService.kt's doc
     // comment and android/README.md's gap analysis) but hasn't been built
-    // and verified on a device in this pass, so this panel only offers the
-    // one client that's actually wired up: unmodified Minecraft Bedrock.
+    // and verified on a device in this pass. The one real injection path
+    // that does exist today (root-based file staging) had no way to pick a
+    // file at all until customDllCardHtml — everything else stays
+    // unwired since there's no client binary to stage for them yet.
     return `
     ${clientCardHtml({
         id: "vanilla", name: "Vanilla",
@@ -100,6 +127,7 @@ function clientsPanelBody() {
         desc: "Pure stock Minecraft Bedrock — the only client this app can launch on Android.",
         actionsHtml: "",
     })}
+    ${customDllCardHtml(App.state.settings)}
     <div class="mcv-info-bar">
         <i class="fa-solid fa-circle-info"></i>
         <span>Flarial, Latite, OderSo and LeviLamina aren't wired up yet — not because Android can't do it without root, but because the real technique (re-hosting the installed Minecraft app's own code) is real engineering work this build hasn't shipped. See Settings for details.</span>

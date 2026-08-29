@@ -32,6 +32,7 @@ const DEFAULT_SETTINGS = {
     profileDisplayMode: "auto",
     savedServers: [],
     curseForgeApiKeyOverride: "",
+    customDllPath: "",
     activeThemeId: "",
 };
 
@@ -129,6 +130,33 @@ const App = {
         this.state.bedrockWorlds.hasAccess = granted;
         if (granted) await this.loadBedrockWorlds();
         if (this.state.openPanel === "bedrockworlds") this.openPanel("bedrockworlds");
+    },
+
+    async pickCustomDll() {
+        try {
+            const path = await CustomDllPicker.pick();
+            if (path) {
+                this.state.settings.customDllPath = path;
+                this.saveSettings();
+            }
+        } catch (e) { /* cancelled or no native bridge */ }
+        if (this.state.openPanel === "clients") this.openPanel("clients");
+    },
+
+    clearCustomDll() {
+        this.state.settings.customDllPath = "";
+        this.saveSettings();
+        if (this.state.openPanel === "clients") this.openPanel("clients");
+    },
+
+    stageCustomDllInjection() {
+        const path = this.state.settings.customDllPath;
+        if (!path || !Bridge.attemptInject) return;
+        const message = Bridge.attemptInject(path);
+        this.state.settings.selectedClient = "Custom DLL";
+        this.saveSettings();
+        alert(message);
+        if (this.state.openPanel === "clients") this.openPanel("clients");
     },
 
     async loadMcVersions() {
@@ -946,6 +974,9 @@ const App = {
             const deleteInstanceBtn = e.target.closest("[data-delete-instance]");
             if (deleteInstanceBtn) { this.deleteJavaInstance(deleteInstanceBtn.dataset.deleteInstance); return; }
 
+            if (e.target.closest("[data-pick-custom-dll]")) { this.pickCustomDll(); return; }
+            if (e.target.closest("[data-clear-custom-dll]")) { this.clearCustomDll(); return; }
+            if (e.target.closest("[data-stage-custom-dll]")) { this.stageCustomDllInjection(); return; }
             if (e.target.closest("[data-grant-bedrock-storage]")) { this.requestBedrockStorageAccess(); return; }
             if (e.target.closest("[data-refresh-bedrock-worlds]")) { this.loadBedrockWorlds(); return; }
             if (e.target.closest("[data-skip-update]")) { this.skipUpdate(); return; }

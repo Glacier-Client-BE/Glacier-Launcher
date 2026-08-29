@@ -46,9 +46,18 @@
 ## Medium
 - [ ] Implement non-root Bedrock client injection via package-context +
       JNI `dlopen()` (`BedrockGamePackageManager.kt` + `NativeLoader` shim).
-- [ ] Build a generic SAF file-picker bridge method in `AndroidBridge`, then
-      use it for: custom `.so` picker, Skin Library "Add PNG", Theme Studio
-      wallpaper picker.
+- [x] Custom `.so` picker for Bedrock (`pickCustomDllFile()` in
+      `MainActivity.kt` + `js/customdll.js`) — SAF `ACTION_OPEN_DOCUMENT`,
+      staged into app-private storage since `ClientInjectionService`'s root
+      shell command needs a real path, not a `content://` Uri. Wired into a
+      new Custom Client card in the "clients" panel with a "Stage for
+      injection" action using the already-existing root-based
+      `attemptInject`. Still root-only — the non-root package-context+dlopen
+      technique remains unbuilt. The picker itself is written narrowly
+      (single-file, not a generic bridge method) — reusing it for Skin
+      Library "Add PNG"/Theme Studio wallpaper picker is still open and
+      would want a shared `pickDocument(mimeTypes)` bridge method instead of
+      copy-pasting this one.
 - [x] Implement real Discord OAuth on Android reusing the Xbox
       redirect-interception pattern already in `MainActivity.kt`. (Note:
       Discord Rich Presence itself stays a documented gap — it rides local

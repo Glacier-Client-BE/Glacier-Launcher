@@ -21,6 +21,7 @@ import xyz.glacierclient.launcher.service.ClientInjectionService
 import xyz.glacierclient.launcher.service.JavaEditionBridge
 import xyz.glacierclient.launcher.service.JavaInstanceService
 import xyz.glacierclient.launcher.service.LauncherUpdateService
+import java.io.File
 
 /**
  * Hosts a single full-screen WebView loading assets/www/index.html — the same
@@ -56,6 +57,39 @@ class MainActivity : ComponentActivity() {
         onBedrockStorageResult = onResult
         openBedrockStorageTree.launch(null)
     }
+
+    private var onCustomDllPicked: ((String?) -> Unit)? = null
+
+    // Mirrors desktop's PickDllFile (Pages/Home.Settings.cs) — a plain
+    // OpenFileDialog there, SAF's single-document picker here. The picked
+    // file only ever exists as a content:// Uri, not a real filesystem path,
+    // so this copies it into app-private storage (filesDir) and hands back
+    // that real path — ClientInjectionService.attemptInject's root shell
+    // command needs an actual path, same as it already does for the
+    // (still-manual, no UI yet before this) staging fallback.
+    private val openCustomDllDocument = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        val staged = uri?.let { stageCustomDll(it) }
+        onCustomDllPicked?.invoke(staged)
+        onCustomDllPicked = null
+    }
+
+    fun requestCustomDllFile(onResult: (String?) -> Unit) {
+        onCustomDllPicked = onResult
+        // "*/*": .so isn't a recognized MIME type on Android's own database,
+        // so a narrower filter would silently hide valid files on many OEMs.
+        openCustomDllDocument.launch(arrayOf("*/*"))
+    }
+
+    private fun stageCustomDll(uri: Uri): String? = runCatching {
+        val name = contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+            val idx = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+            if (cursor.moveToFirst() && idx >= 0) cursor.getString(idx) else null
+        } ?: "custom_client.so"
+        val stagingDir = File(filesDir, "custom_dll").apply { mkdirs() }
+        val dest = File(stagingDir, name)
+        contentResolver.openInputStream(uri)?.use { input -> dest.outputStream().use { output -> input.copyTo(output) } }
+        dest.absolutePath
+    }.getOrNull()
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -326,6 +360,25 @@ private class AndroidBridge(private val activity: MainActivity, private val webV
 
     @JavascriptInterface
     fun setActiveJavaInstance(id: String): Boolean = JavaInstanceService.setActive(id)
+
+    // Custom Bedrock client .so picker — mirrors desktop's PickDllFile/
+    // CopyDllPath/ClearCustomDll (Home.Settings.cs/Home.Clients.cs). The
+    // staged path is only usable via ClientInjectionService's existing
+    // root-based staging fallback (see its own doc comment); this doesn't
+    // change what injection can actually do, only lets a user reach it with
+    // a real file instead of no picker existing at all.
+    @JavascriptInterface
+    fun pickCustomDllFile() {
+        activity.runOnUiThread {
+            activity.requestCustomDllFile { path ->
+                val js = if (path != null)
+                    "window.CustomDllPicker && window.CustomDllPicker._onPicked(${org.json.JSONObject.quote(path)})"
+                else
+                    "window.CustomDllPicker && window.CustomDllPicker._onPicked(null)"
+                webView.evaluateJavascript(js, null)
+            }
+        }
+    }
 
     @JavascriptInterface
     fun openUrl(url: String) {
