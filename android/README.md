@@ -337,6 +337,19 @@ overridden rather than padded (`.vcs-btn`'s `height: 38px` and the 32px
 `.panel-back-btn`), and row height needed `line-height` tightening, not just
 smaller fonts.
 
+The home screen's quick-action buttons are 90px (74px on the shortest
+devices), 2.5x the 36px they were — that had been a straight shrink of the
+desktop 48px and far too small a touch target for the primary controls.
+
+Card radii are set explicitly rather than by overriding `--r-md`, because
+`ThemeEngine.setThemeVars` writes `--r-sm`/`--r-md` **inline on the root
+element** for a custom theme, and an inline style beats any stylesheet rule.
+
+The version pill stays visible on mobile. It is not decoration: it shows the
+running version and becomes the "Update" button once a release is found
+(`renderUpdatePill` / `checkForUpdate` / `LauncherUpdateService`), so hiding
+it removed the only entry point to the in-app updater.
+
 Sizes are keyed on `max-height`, not `max-width`: width is comfortable on a
 landscape phone, height is what is scarce. The chrome is scaled down rather
 than the whole page being rescaled, which would shrink text along with it

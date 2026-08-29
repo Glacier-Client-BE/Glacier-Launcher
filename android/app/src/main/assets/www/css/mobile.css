@@ -70,9 +70,16 @@
     /* Top bar / footer — the two fixed strips framing every screen. */
     .top-bar { padding: 5px 10px 0; gap: 6px; }
     .logo-icon { width: 24px; height: 24px; }
-    .branding-title { font-size: 12px; }
-    .branding-sub { display: none; }
-    .update-pill { display: none; }
+    .branding-title { font-size: 11px; line-height: 1.2; }
+    /* Both lines stay on mobile: "Glacier Productions" over "Glacier
+       Launcher" in grey (--text-dim, from app.css). */
+    .branding-sub { font-size: 9px; line-height: 1.2; }
+    /* The version pill is real UI, not decoration — it shows the running
+       version and becomes the "Update" button once a release is found
+       (App.renderUpdatePill / checkForUpdate). Hiding it on mobile removed
+       the only entry point to the in-app updater, so it is sized down
+       rather than dropped. */
+    .update-pill { height: 17px; padding: 0 7px; margin-left: 6px; font-size: 9px; }
 
     .edition-tab { padding: 3px 8px; font-size: 11px; }
     .topbar-client-chip { padding: 3px 8px; font-size: 11px; }
@@ -85,9 +92,15 @@
     .footer-right span { display: none; }
     .news-strip { height: 20px; }
 
-    /* Home quick actions. */
-    .action-btn { height: 36px; font-size: 12px; }
-    .btn-sq { width: 36px; }
+    /* Home quick actions — the primary controls on the home screen, and the
+       main thing a thumb has to hit. Scaled up 2.5x from the 36px they were
+       (which was a straight shrink of the desktop 48px and far too small a
+       touch target); 90px still leaves room in a 393px-tall viewport once
+       the ~36px top bar and ~30px footer are accounted for, and six of them
+       plus gaps fit well inside the narrowest landscape width. */
+    .action-btn { height: 90px; font-size: 15px; border-radius: 16px; }
+    .btn-sq { width: 90px; }
+    .action-btn i { font-size: 32px; }
 
     /* Panel chrome — the biggest win. Header, the category chip row and the
        bottom tab bar are pure overhead above the content. */
@@ -128,7 +141,21 @@
     .btn-sm { height: 26px; font-size: 11px; padding: 0 10px; }
     .toggle { transform: scale(0.85); }
 
-    .client-card { padding: 8px; }
+    /* Cards read as over-rounded once they are mobile-sized: .client-card
+       takes var(--r-md), 18px by default, against only 8px of padding. Set
+       explicitly rather than by overriding --r-md, because ThemeEngine
+       writes --r-sm/--r-md inline on the root element for a custom theme
+       (theme.js setThemeVars), and an inline style beats any stylesheet
+       rule here. */
+    .client-card { padding: 8px; border-radius: 10px; }
+    /* The category chips and bottom tab pills take var(--r-sm) (12px) on a
+       28px-tall control, which reads as a lozenge at mobile size. */
+    .vcs-btn { border-radius: 8px; }
+    .panel-tab { border-radius: 8px; }
+    .ts-chip { border-radius: 8px; }
+    .version-row { border-radius: 10px; }
+    .setting-input, .btn-sm { border-radius: 8px; }
+    .empty-state, .settings-section { border-radius: 10px; }
     .client-card-name { font-size: 12px; }
     .client-card-sub { font-size: 9px; }
     .client-card-icon { width: 30px; height: 30px; }
@@ -149,8 +176,11 @@
 @media (max-height: 380px) {
     .recently-launched { display: none !important; }
     .status-msg { font-size: 10px; }
-    .action-btn { height: 32px; font-size: 11px; }
-    .btn-sq { width: 32px; }
+    /* Still the primary touch target on the shortest devices — trimmed from
+       90px, not returned to icon size. */
+    .action-btn { height: 74px; font-size: 13px; }
+    .btn-sq { width: 74px; }
+    .action-btn i { font-size: 26px; }
     .panel-header { padding: 3px 10px; }
     #settings-categories { padding: 3px 10px 0; }
     .setting-row { padding: 5px 0; }
