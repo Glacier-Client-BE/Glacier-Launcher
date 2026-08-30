@@ -99,5 +99,27 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- MSAL's own redirect-capture activity (MicrosoftAuth.kt) — MSAL
+             requires this declared explicitly (it is NOT auto-merged from
+             the msal library's manifest on all AGP/MSAL version
+             combinations). android:host/pathPrefix must stay in sync with
+             the "redirect_uri" in res/raw/msal_config.json, which itself
+             needs the app's real release/debug signing certificate
+             signature hash substituted in by the project owner — see that
+             file's redirect_uri and MicrosoftAuth.AZURE_CLIENT_ID. -->
+        <activity
+            android:name="com.microsoft.identity.client.BrowserTabActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="msauth"
+                    android:host="xyz.glacierclient.launcher"
+                    android:path="/YOUR_SIGNATURE_HASH_HERE" />
+            </intent-filter>
+        </activity>
     </application>
 </manifest>

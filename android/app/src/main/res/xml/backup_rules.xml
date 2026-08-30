@@ -7,8 +7,12 @@
      backup/restore: a backup is copied off-device (Google Drive by
      default) and can be restored onto any device, which would hand that
      token to whatever restores it — a materially different, and worse,
-     exposure than the token merely living in this app's own sandbox. -->
+     exposure than the token merely living in this app's own sandbox.
+     "msAccountData" is MicrosoftAuth.kt's equivalent file for the
+     alternative Xbox/Microsoft-account path (XSTS token + user hash) and
+     is excluded for the identical reason. -->
 <full-backup-content>
     <include domain="sharedpref" path="." />
     <exclude domain="sharedpref" path="accountData.xml" />
+    <exclude domain="sharedpref" path="msAccountData.xml" />
 </full-backup-content>

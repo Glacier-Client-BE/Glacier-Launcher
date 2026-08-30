@@ -157,4 +157,17 @@ dependencies {
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
     implementation("com.auroraoss:gplayapi:3.4.2")
+
+    // MicrosoftAuth.kt: Microsoft's own official MSAL Android library, the
+    // alternative Xbox/Microsoft-account ownership-verification path
+    // alongside GPlayAPI's Google-account one. Public artifact on
+    // mavenCentral (no extra repository needed).
+    implementation("com.microsoft.identity.client:msal:5.4.0")
+
+    // ShizukuExecutor.kt: Shizuku's official, open-source client API +
+    // ContentProvider that exposes privileged (adb shell / rooted-manager)
+    // execution without granting this app root itself. Both artifacts are
+    // published to mavenCentral.
+    implementation("dev.rikka.shizuku:api:13.1.5")
+    implementation("dev.rikka.shizuku:provider:13.1.5")
 }

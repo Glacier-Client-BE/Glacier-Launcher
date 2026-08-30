@@ -8,9 +8,11 @@
     <cloud-backup>
         <include domain="sharedpref" path="." />
         <exclude domain="sharedpref" path="accountData.xml" />
+        <exclude domain="sharedpref" path="msAccountData.xml" />
     </cloud-backup>
     <device-transfer>
         <include domain="sharedpref" path="." />
         <exclude domain="sharedpref" path="accountData.xml" />
+        <exclude domain="sharedpref" path="msAccountData.xml" />
     </device-transfer>
 </data-extraction-rules>

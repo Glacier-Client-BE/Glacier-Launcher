@@ -352,6 +352,61 @@ private class AndroidBridge(private val activity: MainActivity, private val webV
         }
     }
 
+    // Alternative Microsoft/Xbox sign-in path (MicrosoftAuth.kt), separate
+    // from signInMicrosoft() above — that one drives the legacy WebView
+    // code-flow and hands the raw code back to js/xboxauth.js to finish the
+    // exchange itself; this one uses Microsoft's official MSAL library end
+    // to end (including the XBL/XSTS exchange) natively in Kotlin and only
+    // reports the final owned/not-owned/error result to JS. Both remain
+    // available; which one runs is a UI choice, not something this bridge
+    // decides.
+    @JavascriptInterface
+    fun signInMicrosoftMsal() {
+        // MicrosoftAuth.signIn() must start its interactive prompt on the
+        // main thread (it needs the Activity) but then awaits network I/O,
+        // so it can't run inside kotlinx.coroutines.runBlocking on the main
+        // thread the way the synchronous checkOwnership() call below does.
+        // GlobalScope is deliberately avoided elsewhere in this class, so a
+        // plain background Thread + runBlocking(Dispatchers.Main) hop is
+        // used instead of pulling in the lifecycle-runtime-ktx dependency
+        // just for this one call.
+        Thread {
+            val obj = org.json.JSONObject()
+            try {
+                val session = kotlinx.coroutines.runBlocking {
+                    xyz.glacierclient.launcher.utils.MicrosoftAuth.signIn(activity)
+                }
+                obj.put("status", "signed_in")
+                obj.put("userHash", session.userHash)
+            } catch (e: Exception) {
+                obj.put("status", "error")
+                obj.put("message", e.message ?: "Microsoft sign-in failed.")
+            }
+            activity.runOnUiThread {
+                webView.evaluateJavascript(
+                    "window.MicrosoftAuth && window.MicrosoftAuth._onMsalResult($obj)",
+                    null,
+                )
+            }
+        }.start()
+    }
+
+    @JavascriptInterface
+    fun checkMicrosoftMinecraftOwnership(): String {
+        return try {
+            val owned = xyz.glacierclient.launcher.utils.MicrosoftAuth.checkMinecraftEntitlement(activity)
+            org.json.JSONObject().put("status", if (owned) "owned" else "not_owned").toString()
+        } catch (e: Exception) {
+            org.json.JSONObject().put("status", "error").put("message", e.message ?: "unknown").toString()
+        }
+    }
+
+    @JavascriptInterface
+    fun isMicrosoftSignedIn(): Boolean = xyz.glacierclient.launcher.utils.MicrosoftAuth.isSignedIn(activity)
+
+    @JavascriptInterface
+    fun signOutMicrosoft() = xyz.glacierclient.launcher.utils.MicrosoftAuth.signOut(activity)
+
     private fun notifySignInResult(code: String?, error: String?) {
         activity.runOnUiThread {
             val js = if (code != null)
