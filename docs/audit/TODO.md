@@ -379,3 +379,47 @@ features this bug affected.
       already covers (a Google account AAS/master token stored in this
       app), just framed as "check ownership" instead of "download an APK."
 </content>
+
+## Follow-up pass (2026-08-30, separate session)
+- [x] Full gap-list survey (Windows `Services/*.cs` vs Android `service/*.kt`
+      + wwwroot JS bridge call sites) turned up one remaining real, portable
+      gap after everything above: `Services/ServerPingService.cs` (Bedrock
+      RakNet unconnected-ping over UDP, Java Server List Ping over TCP) had
+      no Android equivalent — the Servers panel's saved/suggested rows never
+      showed the `.server-ping`/`.ping-dot` online/offline/player-count
+      badge that `app.css` already styles for it (that CSS was dead code on
+      Android). Added `ServerPingService.kt` (plain blocking sockets, same
+      two wire protocols, same always-resolves-to-offline-on-any-failure
+      contract as the Windows service) behind `Bridge.pingServer(host,
+      port)`, wired into `panels.js`/`app.js`: pings every saved + suggested
+      server when the Servers panel opens, staggered via `setTimeout` since
+      this app's native bridge has no async-callback mechanism to avoid each
+      ping blocking the JS thread outright.
+
+      Every other Windows `Services/*.cs` file was confirmed already ported
+      (by name/functionality, not always 1:1 file naming) or genuinely
+      Windows-only with no Android surface to add: `FlarialService`/
+      `LeviLaminaService`/`LeviLaminaModsService`/`LunarBadlionService`/
+      `OderSoServices` (desktop-only third-party client injectors, no
+      Android equivalent exists — `ClientInjectionService.kt`'s root-based
+      injection is the closest analogue and is already wired);
+      `GameConsoleService`/`GameLauncher`/`JavaGameLauncher` (WebView2
+      console window + Windows process launching — Pojav's embedded JVM has
+      no spawnable process to attach a console to); `JsonStore`/
+      `HttpFactory`/`GitHubApiCache`/`LauncherUtilityService` (internal
+      Windows plumbing, not user-facing features to port);
+      `StoreInstallService` (Microsoft Store-specific); `NbtIo`/
+      `LevelDatEditorService`/`BedrockWorldService`/`BedrockInstanceService`
+      (superseded by `BedrockNbt.kt`/`LevelDatService.kt`/
+      `BedrockStorageService.kt`'s own SAF-based design, not a 1:1 class
+      match but the same functionality); `JavaInstallService`/
+      `JavaVersionService`/`JavaRuntimeDownloadService`/`JavaModAnalyzer`/
+      `JavaModLoaderService` (Pojav's bundled JVM + `JavaInstanceService.kt`/
+      `ModpackInstallService.kt` already cover instance/mod-loader
+      management for what's portable — mod-loader *installation* itself is
+      the one already-documented gap above, unchanged this pass).
+      `DiscordRpcService`, `LocalizationService`, and the `Stats`-panel
+      session-length tracking were re-confirmed as the already-documented
+      gaps/approximations above (Rich Presence has no Android IPC
+      equivalent; localization is a whole-app undertaking; Stats uses the
+      `onResume()`-based approximate timer) — no change to those verdicts.
