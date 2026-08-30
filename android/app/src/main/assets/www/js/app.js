@@ -113,7 +113,7 @@ const App = {
         logs: { files: [], loaded: false, openPath: null, content: "", sharing: false, shareUrl: "" },
         // Side-loaded Bedrock build management (BedrockVersionService.kt) —
         // Android-only, no desktop equivalent (see that class's doc comment).
-        bedrockVersions: { builds: [], loaded: false, importing: false, statusMessage: "" },
+        bedrockVersions: { builds: [], loaded: false, importing: false, statusMessage: "", showUrlInput: false },
         news: {
             loading: false, posts: [], releases: [],
             fallbackItems: [
@@ -524,6 +524,29 @@ const App = {
         v.importing = false;
         v.statusMessage = "Couldn't read that file as an APK.";
         if (this.state.openPanel === "mcversions") this.openPanel("mcversions");
+    },
+
+    openBedrockApkUrlInput() {
+        this.state.bedrockVersions.showUrlInput = true;
+        if (this.state.openPanel === "mcversions") this.openPanel("mcversions");
+        document.getElementById("bedrock-apk-url-input")?.focus();
+    },
+
+    cancelBedrockApkUrlInput() {
+        this.state.bedrockVersions.showUrlInput = false;
+        if (this.state.openPanel === "mcversions") this.openPanel("mcversions");
+    },
+
+    confirmBedrockApkUrl() {
+        const input = document.getElementById("bedrock-apk-url-input");
+        const url = input ? input.value.trim() : "";
+        if (!url) return;
+        const v = this.state.bedrockVersions;
+        v.importing = true;
+        v.showUrlInput = false;
+        v.statusMessage = "Downloading…";
+        if (this.state.openPanel === "mcversions") this.openPanel("mcversions");
+        Bridge.downloadBedrockApk(url);
     },
 
     installBedrockApkBuild(fileName) {
@@ -1582,6 +1605,9 @@ const App = {
 
             if (e.target.closest("[data-backup-bedrock-apk]")) { this.backupCurrentBedrockApk(); return; }
             if (e.target.closest("[data-import-bedrock-apk]")) { this.importBedrockApk(); return; }
+            if (e.target.closest("[data-open-bedrock-apk-url]")) { this.openBedrockApkUrlInput(); return; }
+            if (e.target.closest("[data-confirm-bedrock-apk-url]")) { this.confirmBedrockApkUrl(); return; }
+            if (e.target.closest("[data-cancel-bedrock-apk-url]")) { this.cancelBedrockApkUrlInput(); return; }
             const installBedrockApkBtn = e.target.closest("[data-install-bedrock-apk]");
             if (installBedrockApkBtn) { this.installBedrockApkBuild(installBedrockApkBtn.dataset.installBedrockApk); return; }
             const deleteBedrockApkBtn = e.target.closest("[data-delete-bedrock-apk]");

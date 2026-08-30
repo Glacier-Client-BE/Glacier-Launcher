@@ -637,6 +637,14 @@ function bedrockBuildRowHtml(b) {
 }
 
 function bedrockBuildManagerHtml(state) {
+    const urlRow = state.showUrlInput
+        ? `<div class="instance-row">
+            <input class="setting-input" id="bedrock-apk-url-input" placeholder="https://example.com/bedrock-1.20.0.apk" style="flex:1;" />
+            <button class="instance-icon-btn" data-confirm-bedrock-apk-url data-tooltip="Download"><i class="fa-solid fa-check"></i></button>
+            <button class="instance-icon-btn" data-cancel-bedrock-apk-url data-tooltip="Cancel"><i class="fa-solid fa-xmark"></i></button>
+        </div>`
+        : "";
+
     return `
     <div class="instance-card">
         <div class="instance-card-head">
@@ -645,13 +653,17 @@ function bedrockBuildManagerHtml(state) {
             <button class="btn-sm" data-backup-bedrock-apk data-tooltip="Back up the currently-installed Bedrock APK">
                 <i class="fa-solid fa-shield-halved"></i> Backup now
             </button>
+            <button class="btn-sm" data-open-bedrock-apk-url ${state.importing ? "disabled" : ""} data-tooltip="Download an APK from a direct URL — a mirror you trust, or your own host">
+                <i class="fa-solid fa-link"></i> From URL
+            </button>
             <button class="btn-sm" data-import-bedrock-apk ${state.importing ? "disabled" : ""}>
                 ${state.importing ? `<span class="spinner"></span>` : `<i class="fa-solid fa-plus"></i>`} Import APK
             </button>
         </div>
+        ${urlRow}
         ${state.statusMessage ? `<div style="font-size:11px; color:var(--text-dim); padding:4px 2px;">${escapeHtml(state.statusMessage)}</div>` : ""}
         ${state.builds.length === 0
-            ? `<div class="stats-empty">No local builds imported yet — import a Bedrock APK to install it directly, bypassing Play Store's always-current version.</div>`
+            ? `<div class="stats-empty">No local builds imported yet — import a Bedrock APK, or fetch one from a URL, to install it directly instead of Play Store's always-current version.</div>`
             : state.builds.map(bedrockBuildRowHtml).join("")}
     </div>`;
 }

@@ -573,6 +573,26 @@ private class AndroidBridge(private val activity: MainActivity, private val webV
     @JavascriptInterface
     fun listBedrockApkBuilds(): String = BedrockVersionService.listBuilds(activity)
 
+    /**
+     * Downloads an APK the user points at by URL (a mirror they trust, or
+     * their own host) instead of picking a file already on the device — a
+     * plain HTTP fetch, not a Play Store API call, so no account is
+     * involved. Runs off the UI thread since it's blocking network I/O.
+     */
+    @JavascriptInterface
+    fun downloadBedrockApk(url: String) {
+        Thread {
+            val json = BedrockVersionService.downloadApk(activity, url)
+            activity.runOnUiThread {
+                val js = if (json != null)
+                    "window.BedrockVersionManager && window.BedrockVersionManager._onImported(${org.json.JSONObject.quote(json)})"
+                else
+                    "window.BedrockVersionManager && window.BedrockVersionManager._onImportFailed()"
+                webView.evaluateJavascript(js, null)
+            }
+        }.start()
+    }
+
     /** Manual "Backup now" — install() also does this automatically before replacing Bedrock. */
     @JavascriptInterface
     fun backupCurrentBedrockApk(): String = BedrockVersionService.backupCurrentApk(activity) ?: ""

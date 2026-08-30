@@ -75,6 +75,7 @@ const Bridge = (() => {
         // Side-loaded Bedrock build management (BedrockVersionService.kt)
         pickBedrockApkFile: () => { if (hasNative) native.pickBedrockApkFile(); },
         listBedrockApkBuilds: () => (hasNative ? native.listBedrockApkBuilds() : "[]"),
+        downloadBedrockApk: (url) => { if (hasNative) native.downloadBedrockApk(url); },
         backupCurrentBedrockApk: () => (hasNative ? native.backupCurrentBedrockApk() : ""),
         installBedrockApkBuild: (fileName) => (hasNative ? native.installBedrockApkBuild(fileName) : '{"success":false,"message":"No native bridge (browser preview)."}'),
         deleteBedrockApkBuild: (fileName) => (hasNative ? native.deleteBedrockApkBuild(fileName) : false),

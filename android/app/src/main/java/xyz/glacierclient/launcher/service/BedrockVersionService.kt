@@ -8,6 +8,8 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.DataOutputStream
 import java.io.File
+import java.net.HttpURLConnection
+import java.net.URL
 
 /**
  * Android-only alternative to desktop's Windows-Store-based Bedrock version
@@ -80,6 +82,49 @@ object BedrockVersionService {
 
     fun deleteBuild(context: Context, fileName: String): Boolean =
         File(buildsDir(context), fileName).let { it.isFile && it.delete() }
+
+    /**
+     * Downloads an APK from a direct URL the user supplies (a mirror they
+     * trust, or their own host) and imports it the same way a SAF-picked
+     * file would be — this is a plain HTTP download, not a Play Store API
+     * call, so no account of any kind is involved. Deliberately does not
+     * hardcode any specific mirror site: this app has no verified, currently
+     * working public API for historical Bedrock builds to point at, and
+     * guessing one in would risk shipping a scraper for a site that changes
+     * or disappears without notice — same "verify before implementing"
+     * standard the rest of this codebase holds to. Must run off the main
+     * thread (blocking network I/O).
+     */
+    fun downloadApk(context: Context, urlString: String): String? {
+        val url = try { URL(urlString) } catch (e: Exception) { return null }
+        if (url.protocol != "http" && url.protocol != "https") return null
+
+        val name = url.path.substringAfterLast('/').ifBlank { "download.apk" }
+            .let { if (it.endsWith(".apk", ignoreCase = true)) it else "$it.apk" }
+        val staging = File(context.cacheDir, "bedrock_download").apply { mkdirs() }
+        val dest = File(staging, name)
+
+        return try {
+            (url.openConnection() as HttpURLConnection).apply {
+                connectTimeout = 15_000
+                readTimeout = 30_000
+                instanceFollowRedirects = true
+            }.use { connection ->
+                if (connection.responseCode != HttpURLConnection.HTTP_OK) return null
+                connection.inputStream.use { input ->
+                    dest.outputStream().use { output -> input.copyTo(output) }
+                }
+            }
+            importApk(context, dest, name).also { dest.delete() }
+        } catch (e: Exception) {
+            dest.delete()
+            null
+        }
+    }
+
+    // HttpURLConnection has no AutoCloseable of its own — disconnect() is the equivalent.
+    private inline fun <T> HttpURLConnection.use(block: (HttpURLConnection) -> T): T =
+        try { block(this) } finally { disconnect() }
 
     /**
      * Backs up the currently-installed Bedrock APK into the builds folder —
