@@ -3,6 +3,64 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
+// Release signing comes from CI secrets / local env vars, never committed
+// to the repo. Set ANDROID_KEYSTORE_PATH/ANDROID_KEYSTORE_PASSWORD/
+// ANDROID_KEY_ALIAS/ANDROID_KEY_PASSWORD to sign; if unset, release builds
+// stay unsigned (installable for local testing via `adb install -r`, but
+// not upgradeable in place and not suitable for distribution) rather than
+// failing the build. See android/README.md for how to generate a keystore
+// and where those secrets live in CI.
+//
+// Read up here, before the `android {}` block, rather than down by
+// signingConfigs where they used to live: defaultConfig's manifestPlaceholders
+// (below) needs hasSigningConfig/computeMsalSignatureHash() too, and a
+// Kotlin script can't reference a val that's declared later in the file.
+val ksPath = System.getenv("ANDROID_KEYSTORE_PATH")
+val ksPassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
+val ksKeyAlias = System.getenv("ANDROID_KEY_ALIAS")
+val ksKeyPassword = System.getenv("ANDROID_KEY_PASSWORD")
+val hasSigningConfig = !ksPath.isNullOrBlank() && !ksPassword.isNullOrBlank() &&
+    !ksKeyAlias.isNullOrBlank() && !ksKeyPassword.isNullOrBlank()
+
+// MSAL's Android redirect_uri is msauth://<package>/<base64 SHA-1 of the
+// signing cert>, per Microsoft's own documented public MSAL Android
+// redirect URI format (https://learn.microsoft.com/en-us/entra/identity-platform/msal-android-single-sign-on-across-devices).
+// Both res/raw/msal_config.json (generateMsalConfig below) and
+// AndroidManifest.xml's BrowserTabActivity intent-filter need this exact
+// same hash — it used to be a literal "YOUR_SIGNATURE_HASH_HERE" hardcoded
+// into the manifest, out of sync with whatever generateMsalConfig computed
+// for the JSON side, so a signed build's redirect URI never actually
+// matched what the manifest declared it could handle. One function, used
+// by both.
+val placeholderSignatureHash = "YOUR_SIGNATURE_HASH_HERE"
+
+fun computeMsalSignatureHash(): String {
+    if (!hasSigningConfig) return placeholderSignatureHash
+    // java.io.File(...), not Gradle's file(...) helper: this is a plain
+    // top-level function, not a script-block lambda, so it has no implicit
+    // Project receiver for file(...) to resolve against — ksPath is already
+    // an absolute path (from an env var), so a plain java.io.File needs no
+    // project-relative resolution anyway.
+    //
+    // Modern `keytool -genkeypair` defaults to PKCS12; older keystores may
+    // still be JKS. Try both rather than guessing.
+    val keyStore = try {
+        java.security.KeyStore.getInstance("PKCS12").apply {
+            java.io.File(ksPath!!).inputStream().use { load(it, ksPassword!!.toCharArray()) }
+        }
+    } catch (e: Exception) {
+        java.security.KeyStore.getInstance("JKS").apply {
+            java.io.File(ksPath!!).inputStream().use { load(it, ksPassword!!.toCharArray()) }
+        }
+    }
+    val cert = keyStore.getCertificate(ksKeyAlias)
+        ?: throw org.gradle.api.GradleException(
+            "computeMsalSignatureHash: alias '$ksKeyAlias' not found in keystore $ksPath"
+        )
+    val sha1 = java.security.MessageDigest.getInstance("SHA-1").digest(cert.encoded)
+    return java.util.Base64.getEncoder().encodeToString(sha1)
+}
+
 android {
     namespace = "xyz.glacierclient.launcher"
     compileSdk = 34
@@ -83,21 +141,13 @@ android {
             }
             ?: "PLAY_LICENSING_PUBLIC_KEY_PLACEHOLDER"
         buildConfigField("String", "PLAY_LICENSING_PUBLIC_KEY", "\"$playLicensingKey\"")
-    }
 
-    // Release signing comes from CI secrets / local env vars, never committed
-    // to the repo. Set ANDROID_KEYSTORE_PATH/ANDROID_KEYSTORE_PASSWORD/
-    // ANDROID_KEY_ALIAS/ANDROID_KEY_PASSWORD to sign; if unset, release builds
-    // stay unsigned (installable for local testing via `adb install -r`, but
-    // not upgradeable in place and not suitable for distribution) rather than
-    // failing the build. See android/README.md for how to generate a keystore
-    // and where those secrets live in CI.
-    val ksPath = System.getenv("ANDROID_KEYSTORE_PATH")
-    val ksPassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
-    val ksKeyAlias = System.getenv("ANDROID_KEY_ALIAS")
-    val ksKeyPassword = System.getenv("ANDROID_KEY_PASSWORD")
-    val hasSigningConfig = !ksPath.isNullOrBlank() && !ksPassword.isNullOrBlank() &&
-        !ksKeyAlias.isNullOrBlank() && !ksKeyPassword.isNullOrBlank()
+        // AndroidManifest.xml's BrowserTabActivity intent-filter reads this
+        // as ${msalSignatureHash} — see computeMsalSignatureHash() above for
+        // why it has to be computed once and shared with generateMsalConfig's
+        // JSON output rather than hardcoded separately in the manifest.
+        manifestPlaceholders["msalSignatureHash"] = computeMsalSignatureHash()
+    }
 
     signingConfigs {
         if (hasSigningConfig) {
@@ -142,6 +192,68 @@ android {
     kotlinOptions {
         jvmTarget = "17"
     }
+}
+
+// Generates res/raw/msal_config.json (MicrosoftAuth.kt) from CI secrets /
+// local signing env vars, overwriting the committed placeholder at build
+// time — same idea as CURSEFORGE_API_KEY's buildConfigField default, just
+// targeting a resource file instead of a BuildConfig constant, since MSAL
+// reads its client config from a raw JSON resource, not code.
+//
+// Shares computeMsalSignatureHash() (top of file) with defaultConfig's
+// msalSignatureHash manifestPlaceholders entry, so the JSON's redirect_uri
+// and the manifest's BrowserTabActivity intent-filter path can never drift
+// out of sync with each other again.
+//
+// A build only works against the real Azure app registration if BOTH the
+// client_id and the redirect signature hash match what's registered there:
+//  - if a release keystore is configured (hasSigningConfig above), compute
+//    the real hash from it and bake in the real AZURE_CLIENT_ID.
+//  - otherwise (local/dev/PR/debug-signed builds) the redirect URI can
+//    never match Azure's registered one anyway, so client_id is left as
+//    the placeholder too — never let a real client ID leak into a config
+//    that can't complete sign-in, and never mislead a debug build into
+//    thinking it's fully configured.
+val generateMsalConfig = tasks.register("generateMsalConfig") {
+    val outputFile = layout.projectDirectory.file("src/main/res/raw/msal_config.json").asFile
+    val placeholderClientId = "00000000-0000-0000-0000-000000000000"
+
+    inputs.property("hasSigningConfig", hasSigningConfig)
+    inputs.property("azureClientIdSet", !System.getenv("AZURE_CLIENT_ID").isNullOrBlank())
+    outputs.file(outputFile)
+
+    doLast {
+        val signatureHash = computeMsalSignatureHash()
+        val clientId = if (hasSigningConfig) {
+            System.getenv("AZURE_CLIENT_ID")?.takeIf { it.isNotBlank() } ?: placeholderClientId
+        } else {
+            placeholderClientId
+        }
+
+        val json = """
+            {
+              "client_id": "$clientId",
+              "authorization_user_agent": "DEFAULT",
+              "redirect_uri": "msauth://xyz.glacierclient.launcher/$signatureHash",
+              "account_mode": "SINGLE",
+              "broker_redirect_uri_registered": false,
+              "authorities": [
+                {
+                  "type": "AAD",
+                  "audience": {
+                    "type": "AzureADandPersonalMicrosoftAccount",
+                    "tenant_id": "consumers"
+                  }
+                }
+              ]
+            }
+        """.trimIndent()
+        outputFile.writeText(json + "\n")
+    }
+}
+
+tasks.named("preBuild") {
+    dependsOn(generateMsalConfig)
 }
 
 dependencies {

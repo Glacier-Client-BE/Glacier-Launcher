@@ -753,30 +753,32 @@ private class AndroidBridge(private val activity: MainActivity, private val webV
 
     @JavascriptInterface
     fun migrateBedrockAppStorageToSaf(deleteSource: Boolean) {
-        activity.requestMigrationDestination { treeUri ->
-            if (treeUri == null) {
-                webView.evaluateJavascript(
-                    "window.BedrockStorageMigration && window.BedrockStorageMigration._onDone(${org.json.JSONObject.quote("{\"success\":false,\"message\":\"No destination folder was chosen.\"}")})",
-                    null,
-                )
-                return@requestMigrationDestination
-            }
-            Thread {
-                val json = BedrockStorageMigrationService.migrateAppStorageToSaf(activity, treeUri, deleteSource) { percent ->
+        activity.runOnUiThread {
+            activity.requestMigrationDestination { treeUri ->
+                if (treeUri == null) {
+                    webView.evaluateJavascript(
+                        "window.BedrockStorageMigration && window.BedrockStorageMigration._onDone(${org.json.JSONObject.quote("{\"success\":false,\"message\":\"No destination folder was chosen.\"}")})",
+                        null,
+                    )
+                    return@requestMigrationDestination
+                }
+                Thread {
+                    val json = BedrockStorageMigrationService.migrateAppStorageToSaf(activity, treeUri, deleteSource) { percent ->
+                        activity.runOnUiThread {
+                            webView.evaluateJavascript(
+                                "window.BedrockStorageMigration && window.BedrockStorageMigration._onProgress($percent)",
+                                null,
+                            )
+                        }
+                    }
                     activity.runOnUiThread {
                         webView.evaluateJavascript(
-                            "window.BedrockStorageMigration && window.BedrockStorageMigration._onProgress($percent)",
+                            "window.BedrockStorageMigration && window.BedrockStorageMigration._onDone(${org.json.JSONObject.quote(json)})",
                             null,
                         )
                     }
-                }
-                activity.runOnUiThread {
-                    webView.evaluateJavascript(
-                        "window.BedrockStorageMigration && window.BedrockStorageMigration._onDone(${org.json.JSONObject.quote(json)})",
-                        null,
-                    )
-                }
-            }.start()
+                }.start()
+            }
         }
     }
 
