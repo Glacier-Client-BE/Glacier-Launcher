@@ -163,6 +163,13 @@
       own version-install flow before launching.
 - [ ] Implement non-root Bedrock client injection via package-context +
       JNI `dlopen()` (`BedrockGamePackageManager.kt` + `NativeLoader` shim).
+      Skipped this pass: real native-injection code (mismatched-UID cross-
+      process memory access, native library loading into another app's
+      process) is exactly the class of change this environment can't safely
+      ship blind — no device/emulator here to verify it doesn't crash or
+      brick the target app, same reasoning already applied to Bedrock
+      Backups restore above. Landing this untested is worse than leaving the
+      documented root-only path in place.
 - [x] Custom `.so` picker for Bedrock (`pickCustomDllFile()` in
       `MainActivity.kt` + `js/customdll.js`) — SAF `ACTION_OPEN_DOCUMENT`,
       staged into app-private storage since `ClientInjectionService`'s root
@@ -197,6 +204,11 @@
       `AndroidBridge` or settings for the 3D model to show, so desktop's
       cape-cycling pill is left out rather than faked.
 - [ ] Split `panels.js` and `app.js` by concern (Bedrock/Java/Settings/state/router).
+      Skipped this pass: a pure mechanical split across two ~1900-line files
+      with dozens of cross-references is exactly where a silent typo/missing-
+      export slips through without a build+run to catch it — no Gradle/
+      emulator available here. Leaving both files intact rather than risk an
+      unverifiable refactor across the whole UI.
 - [x] Add a `localStorage`-backed TTL cache for CurseForge/Modrinth/News
       fetches on Android (`js/httpcache.js`'s `HttpCache.fetch(key, ttlMs,
       fetcher)`, wired into `CurseForge.search()`/`Modrinth.search()` at a
@@ -208,10 +220,15 @@
       NOT applied to `AnnouncementFeed` — already documented above as a
       silent-fail-only, no-cache contract on purpose.
 - [ ] Add settings schema versioning + migration to `JsonStore`/`LauncherSettings` (Windows).
+      Skipped: explicitly a Windows-side `Services/*.cs` change, not Android.
 - [ ] Extract `IThirdPartyClient` interface for Flarial/Latite/OderSo/LeviLamina services (Windows).
+      Skipped: explicitly a Windows-side refactor (those four clients have no
+      Android equivalent at all — desktop-only third-party injectors).
 - [ ] Update `ClientInjectionService.kt` doc comment and in-app Settings →
       Clients copy to reflect the researched non-root path, once the
       injection work itself lands (content change, not a standalone fix).
+      Still blocked: the non-root injection item above wasn't landed this
+      pass either, so there's nothing new to document yet.
 
 ## Low
 - [x] Port onboarding wizard to Android (`onboardingModalHtml` in
@@ -228,7 +245,17 @@
       Real `.announcement-banner` markup, dismiss persisted per-id in
       settings the same way desktop does.
 - [ ] Add localization/string-table support to Android (currently hard-coded English).
+      Skipped this pass: genuinely portable but a whole-app undertaking on
+      its own (every user-facing string in `panels.js`/`app.js`/`index.html`
+      would need extracting into a string table plus a locale-switch
+      mechanism) — too large to fold into this gap-closing pass alongside
+      everything else without shortcutting it into a half-done stub.
 - [ ] Add LevelDat editor to Android (depends on world-listing work above).
+      Skipped this pass: an NBT *write* path (vs. `BedrockNbt.kt`'s existing
+      read-only parser) risks corrupting a real world file with no
+      device/emulator here to verify round-trip correctness — same
+      read-vs-write risk asymmetry already called out for Bedrock Backups
+      restore above, so left as a real follow-up rather than shipped blind.
 - [x] Add SAF folder-open shortcuts to Android (`BedrockStorageService.folderUri()`
       + `MainActivity.kt`'s `openBedrockFolder()`) — Worlds/Packs/Screenshots
       panel headers now have a real "Open folder" button (best-effort: not
@@ -268,8 +295,16 @@ worth specifically re-testing Microsoft/Discord sign-in and the update
 flow once a device is available, since those are the highest-value
 features this bug affected.
 - [ ] Audit `Home.razor`'s `StateHasChanged()` call sites for over-broad re-renders (Windows).
+      Skipped: explicitly a Windows-side (`Home.razor`) profiling pass, not Android.
 - [ ] Cache rendered panel HTML strings in `panels.js`, invalidate only on
       underlying data change, to reduce panel-switch jank.
+      Skipped this pass: a correct cache needs a real invalidation key per
+      panel (settings changes, instance list changes, live network fetches
+      landing async, etc.) threaded through every one of ~25 panel bodies —
+      getting that wrong produces a worse bug (a panel silently showing
+      stale data) than the jank it fixes, and there's no device here to feel
+      whether the jank is even still noticeable after it. Left as a real,
+      scoped follow-up rather than a half-verified perf change.
 - [x] Verify search-input debounce exists on both platforms' CurseForge/Modrinth search.
       Confirmed: `Pages/Home.razor.cs` cancels/re-arms `_cfDebounceCts`/
       `_mrDebounceCts` per keystroke; Android's `app.js` does the same with
