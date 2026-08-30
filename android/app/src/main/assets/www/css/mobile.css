@@ -62,28 +62,36 @@
    metrics so the content area roughly doubles, rather than rescaling the
    whole page (which would shrink text along with it and hurt legibility).
 
-   Keyed on max-height rather than max-width: width is comfortable on a
-   landscape phone, height is what is scarce. 500px covers every common
-   phone-landscape height (360/393/412/480); a tighter tier follows for the
-   shortest devices. */
-@media (max-height: 500px) {
+   Keyed on both max-height and max-width now, not height alone: a normal
+   phone in forced landscape is height-scarce, but a foldable's cover
+   screen, a split-screen window, or the same phone held in an unexpectedly
+   narrow multi-window slice can be width-scarce instead (or both at once).
+   500px covers every common phone-landscape height (360/393/412/480) and
+   the equivalent narrow-width cases; a tighter tier follows for the
+   shortest/narrowest devices. */
+@media (max-height: 500px), (max-width: 500px) {
     /* ── Fluid sizing ─────────────────────────────────────────────────────
        Every numeric value below (and the former @media (max-height: 380px)
-       tier, folded in here) is expressed as `clamp(MIN, OFFSET + COEFF*1dvh,
+       tier, folded in here) is expressed as `clamp(MIN, OFFSET + COEFF*1dvmin,
        MAX)` rather than a single fixed number: a straight-line fit between a
-       MIN value at the shortest realistic phone-landscape height and a MAX
-       value at this block's own 360-500px window (or, for the handful of
-       properties that used to get a THIRD hardcoded number in the old
-       380px-tier, a lower anchor down at 320px so short devices and
-       split-screen still land on the same one continuous line instead of a
-       second snap-point). dvh, not vh, so an on-screen keyboard or a browser
-       chrome bar resizing the viewport doesn't jerk these sizes around.
-       value(H) = MIN + (MAX-MIN)/(H_max-H_min)*(H-H_min), pre-solved into
-       OFFSET/COEFF (calc() can't divide a length by a length at runtime) —
-       so retuning only means picking new (height, value) anchors and
-       resolving this one line, not touching individual rules. MAX anchors
-       are mostly the pre-existing 500px-tier numbers (already shrunk once
-       from app.css's desktop sizes); MIN anchors run smaller for
+       MIN value at the smallest realistic size and a MAX value at this
+       block's own 360-500px window (or, for the handful of properties that
+       used to get a THIRD hardcoded number in the old 380px-tier, a lower
+       anchor down at 320px so the smallest devices and split-screen still
+       land on the same one continuous line instead of a second snap-point).
+       dvmin is 1% of whichever viewport dimension — width or height — is
+       currently smaller, so the same one formula tracks height on a
+       short-but-wide phone in landscape and width on a narrow-but-tall
+       window (a foldable's cover/inner screen, split-screen multitasking, a
+       small phone) without needing two separate axis-specific formulas; the
+       "d" (dynamic, as opposed to plain vmin) keeps an on-screen keyboard or
+       a browser chrome bar resizing the viewport from jerking these sizes
+       around. value(D) = MIN + (MAX-MIN)/(D_max-D_min)*(D-D_min), pre-solved
+       into OFFSET/COEFF (calc() can't divide a length by a length at
+       runtime) — so retuning only means picking new (dimension, value)
+       anchors and resolving this one line, not touching individual rules.
+       MAX anchors are mostly the pre-existing 500px-tier numbers (already
+       shrunk once from app.css's desktop sizes); MIN anchors run smaller for
        decorative/text metrics and larger, toward a comfortable touch
        target, for anything tappable — buttons, tabs, inputs — matching how
        .panel-tab below was sized up past its old fixed value rather than
@@ -91,56 +99,56 @@
     /* Top bar / footer — the two fixed strips framing every screen. */
     .top-bar {
         padding:
-            clamp(4px, calc(1.43px + 0.71dvh), 5px)
-            clamp(8px, calc(2.86px + 1.43dvh), 10px)
+            clamp(4px, calc(1.43px + 0.71dvmin), 5px)
+            clamp(8px, calc(2.86px + 1.43dvmin), 10px)
             0;
-        gap: clamp(5px, calc(2.43px + 0.71dvh), 6px);
+        gap: clamp(5px, calc(2.43px + 0.71dvmin), 6px);
     }
     .logo-icon {
-        width: clamp(20px, calc(9.71px + 2.86dvh), 24px);
-        height: clamp(20px, calc(9.71px + 2.86dvh), 24px);
+        width: clamp(20px, calc(9.71px + 2.86dvmin), 24px);
+        height: clamp(20px, calc(9.71px + 2.86dvmin), 24px);
     }
-    .branding-title { font-size: clamp(10px, calc(7.43px + 0.71dvh), 11px); line-height: 1.2; }
+    .branding-title { font-size: clamp(10px, calc(7.43px + 0.71dvmin), 11px); line-height: 1.2; }
     /* Both lines stay on mobile: "Glacier Productions" over "Glacier
        Launcher" in grey (--text-dim, from app.css). */
-    .branding-sub { font-size: clamp(8px, calc(5.43px + 0.71dvh), 9px); line-height: 1.2; }
+    .branding-sub { font-size: clamp(8px, calc(5.43px + 0.71dvmin), 9px); line-height: 1.2; }
     /* The version pill is real UI, not decoration — it shows the running
        version and becomes the "Update" button once a release is found
        (App.renderUpdatePill / checkForUpdate). Hiding it on mobile removed
        the only entry point to the in-app updater, so it is sized down
        rather than dropped. */
     .update-pill {
-        height: clamp(15px, calc(9.86px + 1.43dvh), 17px);
-        padding: 0 clamp(6px, calc(3.43px + 0.71dvh), 7px);
-        margin-left: clamp(5px, calc(2.43px + 0.71dvh), 6px);
-        font-size: clamp(8px, calc(5.43px + 0.71dvh), 9px);
+        height: clamp(15px, calc(9.86px + 1.43dvmin), 17px);
+        padding: 0 clamp(6px, calc(3.43px + 0.71dvmin), 7px);
+        margin-left: clamp(5px, calc(2.43px + 0.71dvmin), 6px);
+        font-size: clamp(8px, calc(5.43px + 0.71dvmin), 9px);
     }
 
     .edition-tab {
-        padding: clamp(2px, calc(-0.57px + 0.71dvh), 3px) clamp(6px, calc(0.86px + 1.43dvh), 8px);
-        font-size: clamp(10px, calc(7.43px + 0.71dvh), 11px);
+        padding: clamp(2px, calc(-0.57px + 0.71dvmin), 3px) clamp(6px, calc(0.86px + 1.43dvmin), 8px);
+        font-size: clamp(10px, calc(7.43px + 0.71dvmin), 11px);
     }
     .topbar-client-chip {
-        padding: clamp(2px, calc(-0.57px + 0.71dvh), 3px) clamp(6px, calc(0.86px + 1.43dvh), 8px);
-        font-size: clamp(10px, calc(7.43px + 0.71dvh), 11px);
+        padding: clamp(2px, calc(-0.57px + 0.71dvmin), 3px) clamp(6px, calc(0.86px + 1.43dvmin), 8px);
+        font-size: clamp(10px, calc(7.43px + 0.71dvmin), 11px);
     }
     .search-trigger, .notif-bell-btn {
-        width: clamp(26px, calc(20.86px + 1.43dvh), 28px);
-        height: clamp(26px, calc(20.86px + 1.43dvh), 28px);
+        width: clamp(26px, calc(20.86px + 1.43dvmin), 28px);
+        height: clamp(26px, calc(20.86px + 1.43dvmin), 28px);
     }
 
     .footer {
-        padding: 0 clamp(8px, calc(2.86px + 1.43dvh), 10px) clamp(5px, calc(2.43px + 0.71dvh), 6px);
-        gap: clamp(5px, calc(2.43px + 0.71dvh), 6px);
+        padding: 0 clamp(8px, calc(2.86px + 1.43dvmin), 10px) clamp(5px, calc(2.43px + 0.71dvmin), 6px);
+        gap: clamp(5px, calc(2.43px + 0.71dvmin), 6px);
     }
     .avatar {
-        width: clamp(20px, calc(14.86px + 1.43dvh), 22px);
-        height: clamp(20px, calc(14.86px + 1.43dvh), 22px);
+        width: clamp(20px, calc(14.86px + 1.43dvmin), 22px);
+        height: clamp(20px, calc(14.86px + 1.43dvmin), 22px);
     }
-    .username { font-size: clamp(11px, calc(8.43px + 0.71dvh), 12px); }
-    .user-handle { font-size: clamp(9px, calc(6.43px + 0.71dvh), 10px); }
+    .username { font-size: clamp(11px, calc(8.43px + 0.71dvmin), 12px); }
+    .user-handle { font-size: clamp(9px, calc(6.43px + 0.71dvmin), 10px); }
     .footer-right span { display: none; }
-    .news-strip { height: clamp(18px, calc(12.86px + 1.43dvh), 20px); }
+    .news-strip { height: clamp(18px, calc(12.86px + 1.43dvmin), 20px); }
 
     /* Home quick actions — the primary controls on the home screen, and the
        main thing a thumb has to hit. 36px was a straight shrink of the
@@ -150,12 +158,12 @@
        the shortest devices (was the old 380px-tier override), still a real
        target, just tighter. */
     .action-btn {
-        height: clamp(40px, calc(29.33px + 3.33dvh), 46px);
-        font-size: clamp(12px, calc(10.22px + 0.56dvh), 13px);
-        border-radius: clamp(10px, calc(4.86px + 1.43dvh), 12px);
+        height: clamp(40px, calc(29.33px + 3.33dvmin), 46px);
+        font-size: clamp(12px, calc(10.22px + 0.56dvmin), 13px);
+        border-radius: clamp(10px, calc(4.86px + 1.43dvmin), 12px);
     }
-    .btn-sq { width: clamp(40px, calc(29.33px + 3.33dvh), 46px); }
-    .action-btn i { font-size: clamp(16px, calc(12.44px + 1.11dvh), 18px); }
+    .btn-sq { width: clamp(40px, calc(29.33px + 3.33dvmin), 46px); }
+    .action-btn i { font-size: clamp(16px, calc(12.44px + 1.11dvmin), 18px); }
 
     /* Panel chrome — the biggest win. Header, the category chip row and the
        bottom tab bar are pure overhead above the content. */
@@ -166,25 +174,25 @@
        its own further 380px-tier override. */
     .panel-header {
         padding:
-            clamp(3px, calc(-0.56px + 1.11dvh), 5px)
-            clamp(10px, calc(6.44px + 1.11dvh), 12px);
+            clamp(3px, calc(-0.56px + 1.11dvmin), 5px)
+            clamp(10px, calc(6.44px + 1.11dvmin), 12px);
     }
-    .panel-title { font-size: clamp(12px, calc(9.43px + 0.71dvh), 13px); }
+    .panel-title { font-size: clamp(12px, calc(9.43px + 0.71dvmin), 13px); }
     .panel-back-btn, .panel-icon-btn {
-        width: clamp(24px, calc(18.86px + 1.43dvh), 26px);
-        height: clamp(24px, calc(18.86px + 1.43dvh), 26px);
-        font-size: clamp(10px, calc(7.43px + 0.71dvh), 11px);
+        width: clamp(24px, calc(18.86px + 1.43dvmin), 26px);
+        height: clamp(24px, calc(18.86px + 1.43dvmin), 26px);
+        font-size: clamp(10px, calc(7.43px + 0.71dvmin), 11px);
     }
-    .panel-title-underline { margin-top: clamp(1px, calc(-1.57px + 0.71dvh), 2px); }
+    .panel-title-underline { margin-top: clamp(1px, calc(-1.57px + 0.71dvmin), 2px); }
     .panel-handle { display: none; }
     .panel-body {
         padding:
-            clamp(4px, calc(-1.14px + 1.43dvh), 6px)
-            clamp(10px, calc(4.86px + 1.43dvh), 12px);
+            clamp(4px, calc(-1.14px + 1.43dvmin), 6px)
+            clamp(10px, calc(4.86px + 1.43dvmin), 12px);
     }
     .panel-section-label {
-        padding: clamp(2px, calc(-0.57px + 0.71dvh), 3px) clamp(3px, calc(0.43px + 0.71dvh), 4px) 1px;
-        font-size: clamp(8px, calc(5.43px + 0.71dvh), 9px);
+        padding: clamp(2px, calc(-0.57px + 0.71dvmin), 3px) clamp(3px, calc(0.43px + 0.71dvmin), 4px) 1px;
+        font-size: clamp(8px, calc(5.43px + 0.71dvmin), 9px);
     }
 
     /* Bottom tab bar — the row of panel-switching buttons a thumb rests on
@@ -193,35 +201,37 @@
        tap or read. Sized up past even the desktop numbers instead of just
        restoring them, and — rather than snapping between this block's one
        fixed size and the shortest-device tier below — expressed as
-       `clamp(MIN, OFFSET + COEFF*1dvh, MAX)`: a straight-line fit between
-       "36px/12px at a 360px-tall screen" and "44px/14px at this block's own
-       500px ceiling" (dvh over vh so an on-screen keyboard or a browser
-       chrome bar resizing the viewport doesn't resize the tab bar with it).
-       Every phone height in between gets its own point on that line rather
-       than jumping at a breakpoint — OFFSET/COEFF below are that line's
+       `clamp(MIN, OFFSET + COEFF*1dvmin, MAX)`: a straight-line fit between
+       "36px/12px at a 360px minimum dimension" and "44px/14px at this
+       block's own 500px ceiling" (dvmin, 1% of whichever of width/height is
+       smaller, so a narrow window shrinks the tab bar the same way a short
+       one does, and an on-screen keyboard or a browser chrome bar resizing
+       the viewport doesn't resize the tab bar with it). Every phone
+       height/width in between gets its own point on that line rather than
+       jumping at a breakpoint — OFFSET/COEFF below are that line's
        y-intercept/slope pre-solved (not a runtime division — CSS calc()
        can't divide a length by a length), so nothing here needs touching
-       to retune, just the two (height, value) anchor pairs in this comment
+       to retune, just the two (dimension, value) anchor pairs in this comment
        if the target range ever changes. */
     .panel-tabs {
         padding:
-            clamp(4px, calc(-6.29px + 2.86dvh), 8px)
-            clamp(10px, calc(-0.29px + 2.86dvh), 14px)
-            clamp(6px, calc(-4.29px + 2.86dvh), 10px);
+            clamp(4px, calc(-6.29px + 2.86dvmin), 8px)
+            clamp(10px, calc(-0.29px + 2.86dvmin), 14px)
+            clamp(6px, calc(-4.29px + 2.86dvmin), 10px);
         gap: 2px;
     }
     .panel-tab {
-        height: clamp(36px, calc(15.43px + 5.71dvh), 44px);
-        font-size: clamp(12px, calc(6.86px + 1.43dvh), 14px);
-        padding: 0 clamp(8px, calc(-2.29px + 2.86dvh), 12px);
-        gap: clamp(4px, calc(-1.14px + 1.43dvh), 6px);
+        height: clamp(36px, calc(15.43px + 5.71dvmin), 44px);
+        font-size: clamp(12px, calc(6.86px + 1.43dvmin), 14px);
+        padding: 0 clamp(8px, calc(-2.29px + 2.86dvmin), 12px);
+        gap: clamp(4px, calc(-1.14px + 1.43dvmin), 6px);
     }
-    .panel-tab i { font-size: clamp(13px, calc(7.86px + 1.43dvh), 15px); }
+    .panel-tab i { font-size: clamp(13px, calc(7.86px + 1.43dvmin), 15px); }
     .panel-tabs-arrow {
-        width: clamp(28px, calc(12.57px + 4.29dvh), 34px);
-        height: clamp(36px, calc(15.43px + 5.71dvh), 44px);
+        width: clamp(28px, calc(12.57px + 4.29dvmin), 34px);
+        height: clamp(36px, calc(15.43px + 5.71dvmin), 44px);
     }
-    .panel-tabs-arrow i { font-size: clamp(12px, calc(6.86px + 1.43dvh), 14px); }
+    .panel-tabs-arrow i { font-size: clamp(12px, calc(6.86px + 1.43dvmin), 14px); }
 
     /* Category chip row (Settings' All/Clients/Looks/…, Java mods tabs).
        .vcs-btn carries an explicit height: 38px, so padding alone does
@@ -229,16 +239,16 @@
        to 320px like the panel header, matching its old 380px-tier override. */
     #settings-categories {
         padding:
-            clamp(3px, calc(-0.56px + 1.11dvh), 5px)
-            clamp(10px, calc(6.44px + 1.11dvh), 12px)
+            clamp(3px, calc(-0.56px + 1.11dvmin), 5px)
+            clamp(10px, calc(6.44px + 1.11dvmin), 12px)
             0;
     }
     .vcs-btn {
-        height: clamp(26px, calc(20.86px + 1.43dvh), 28px);
-        padding: 0 clamp(8px, calc(2.86px + 1.43dvh), 10px);
-        font-size: clamp(10px, calc(7.43px + 0.71dvh), 11px);
+        height: clamp(26px, calc(20.86px + 1.43dvmin), 28px);
+        padding: 0 clamp(8px, calc(2.86px + 1.43dvmin), 10px);
+        font-size: clamp(10px, calc(7.43px + 0.71dvmin), 11px);
     }
-    .vcs-btn i { font-size: clamp(10px, calc(7.43px + 0.71dvh), 11px); }
+    .vcs-btn i { font-size: clamp(10px, calc(7.43px + 0.71dvmin), 11px); }
 
     /* Rows and cards — measured at 46px each, the single biggest consumer
        of body height once the chrome is trimmed. */
@@ -247,20 +257,20 @@
        40px even with smaller text. Unchanged across every tier (5px was
        already the floor), so it stays a flat value. */
     .setting-row { padding: 5px 0; }
-    .setting-label { font-size: clamp(11px, calc(8.43px + 0.71dvh), 12px); line-height: 1.15; }
+    .setting-label { font-size: clamp(11px, calc(8.43px + 0.71dvmin), 12px); line-height: 1.15; }
     /* Also unchanged across tiers below 500px — only the 380px tier turns
        this off entirely (see below), it never got a second size. */
     .setting-hint { font-size: 9px; line-height: 1.2; }
     .setting-meta { gap: 1px; }
     .setting-input {
-        height: clamp(26px, calc(20.86px + 1.43dvh), 28px);
-        font-size: clamp(11px, calc(8.43px + 0.71dvh), 12px);
-        padding: 0 clamp(7px, calc(4.43px + 0.71dvh), 8px);
+        height: clamp(26px, calc(20.86px + 1.43dvmin), 28px);
+        font-size: clamp(11px, calc(8.43px + 0.71dvmin), 12px);
+        padding: 0 clamp(7px, calc(4.43px + 0.71dvmin), 8px);
     }
     .btn-sm {
-        height: clamp(24px, calc(18.86px + 1.43dvh), 26px);
-        font-size: clamp(10px, calc(7.43px + 0.71dvh), 11px);
-        padding: 0 clamp(8px, calc(2.86px + 1.43dvh), 10px);
+        height: clamp(24px, calc(18.86px + 1.43dvmin), 26px);
+        font-size: clamp(10px, calc(7.43px + 0.71dvmin), 11px);
+        padding: 0 clamp(8px, calc(2.86px + 1.43dvmin), 10px);
     }
     .toggle { transform: scale(0.85); }
 
@@ -270,7 +280,7 @@
        writes --r-sm/--r-md inline on the root element for a custom theme
        (theme.js setThemeVars), and an inline style beats any stylesheet
        rule here. */
-    .client-card { padding: clamp(7px, calc(4.43px + 0.71dvh), 8px); border-radius: clamp(9px, calc(6.43px + 0.71dvh), 10px); }
+    .client-card { padding: clamp(7px, calc(4.43px + 0.71dvmin), 8px); border-radius: clamp(9px, calc(6.43px + 0.71dvmin), 10px); }
     /* The category chips and bottom tab pills take var(--r-sm) (12px) on a
        28px-tall control, which reads as a lozenge at mobile size. Border
        radii are decorative rather than a scale a thumb interacts with
@@ -281,11 +291,11 @@
     .version-row { border-radius: 10px; }
     .setting-input, .btn-sm { border-radius: 8px; }
     .empty-state, .settings-section { border-radius: 10px; }
-    .client-card-name { font-size: clamp(11px, calc(8.43px + 0.71dvh), 12px); }
+    .client-card-name { font-size: clamp(11px, calc(8.43px + 0.71dvmin), 12px); }
     .client-card-sub { font-size: 9px; }
     .client-card-icon {
-        width: clamp(26px, calc(15.71px + 2.86dvh), 30px);
-        height: clamp(26px, calc(15.71px + 2.86dvh), 30px);
+        width: clamp(26px, calc(15.71px + 2.86dvmin), 30px);
+        height: clamp(26px, calc(15.71px + 2.86dvmin), 30px);
     }
 
     /* Every other var(--r-md) (18px) surface below has the same problem as
@@ -313,28 +323,28 @@
 
     .version-row {
         padding:
-            clamp(5px, calc(2.43px + 0.71dvh), 6px)
-            clamp(7px, calc(4.43px + 0.71dvh), 8px);
+            clamp(5px, calc(2.43px + 0.71dvmin), 6px)
+            clamp(7px, calc(4.43px + 0.71dvmin), 8px);
     }
     .version-icon {
-        width: clamp(26px, calc(15.71px + 2.86dvh), 30px);
-        height: clamp(26px, calc(15.71px + 2.86dvh), 30px);
+        width: clamp(26px, calc(15.71px + 2.86dvmin), 30px);
+        height: clamp(26px, calc(15.71px + 2.86dvmin), 30px);
     }
-    .version-name { font-size: clamp(11px, calc(8.43px + 0.71dvh), 12px); }
+    .version-name { font-size: clamp(11px, calc(8.43px + 0.71dvmin), 12px); }
     .version-sub { font-size: 9px; }
 
     .ts-chip {
         padding:
-            clamp(3px, calc(0.43px + 0.71dvh), 4px)
-            clamp(8px, calc(5.43px + 0.71dvh), 9px);
-        font-size: clamp(10px, calc(7.43px + 0.71dvh), 11px);
+            clamp(3px, calc(0.43px + 0.71dvmin), 4px)
+            clamp(8px, calc(5.43px + 0.71dvmin), 9px);
+        font-size: clamp(10px, calc(7.43px + 0.71dvmin), 11px);
     }
     .modal-btn {
-        height: clamp(27px, calc(19.29px + 2.14dvh), 30px);
-        font-size: clamp(11px, calc(8.43px + 0.71dvh), 12px);
+        height: clamp(27px, calc(19.29px + 2.14dvmin), 30px);
+        font-size: clamp(11px, calc(8.43px + 0.71dvmin), 12px);
     }
-    .empty-state i { font-size: clamp(20px, calc(14.86px + 1.43dvh), 22px); }
-    .empty-state span { font-size: clamp(11px, calc(8.43px + 0.71dvh), 12px); }
+    .empty-state i { font-size: clamp(20px, calc(14.86px + 1.43dvmin), 22px); }
+    .empty-state span { font-size: clamp(11px, calc(8.43px + 0.71dvmin), 12px); }
     .empty-state small { font-size: 9px; }
     /* .status-msg only ever had a single hardcoded size, and only at the
        shortest heights below — kept flat rather than invented a second
