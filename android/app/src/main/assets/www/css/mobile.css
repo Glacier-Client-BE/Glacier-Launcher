@@ -67,52 +67,125 @@
    phone-landscape height (360/393/412/480); a tighter tier follows for the
    shortest devices. */
 @media (max-height: 500px) {
+    /* ── Fluid sizing ─────────────────────────────────────────────────────
+       Every numeric value below (and the former @media (max-height: 380px)
+       tier, folded in here) is expressed as `clamp(MIN, OFFSET + COEFF*1dvh,
+       MAX)` rather than a single fixed number: a straight-line fit between a
+       MIN value at the shortest realistic phone-landscape height and a MAX
+       value at this block's own 360-500px window (or, for the handful of
+       properties that used to get a THIRD hardcoded number in the old
+       380px-tier, a lower anchor down at 320px so short devices and
+       split-screen still land on the same one continuous line instead of a
+       second snap-point). dvh, not vh, so an on-screen keyboard or a browser
+       chrome bar resizing the viewport doesn't jerk these sizes around.
+       value(H) = MIN + (MAX-MIN)/(H_max-H_min)*(H-H_min), pre-solved into
+       OFFSET/COEFF (calc() can't divide a length by a length at runtime) —
+       so retuning only means picking new (height, value) anchors and
+       resolving this one line, not touching individual rules. MAX anchors
+       are mostly the pre-existing 500px-tier numbers (already shrunk once
+       from app.css's desktop sizes); MIN anchors run smaller for
+       decorative/text metrics and larger, toward a comfortable touch
+       target, for anything tappable — buttons, tabs, inputs — matching how
+       .panel-tab below was sized up past its old fixed value rather than
+       just re-deriving it. */
     /* Top bar / footer — the two fixed strips framing every screen. */
-    .top-bar { padding: 5px 10px 0; gap: 6px; }
-    .logo-icon { width: 24px; height: 24px; }
-    .branding-title { font-size: 11px; line-height: 1.2; }
+    .top-bar {
+        padding:
+            clamp(4px, calc(1.43px + 0.71dvh), 5px)
+            clamp(8px, calc(2.86px + 1.43dvh), 10px)
+            0;
+        gap: clamp(5px, calc(2.43px + 0.71dvh), 6px);
+    }
+    .logo-icon {
+        width: clamp(20px, calc(9.71px + 2.86dvh), 24px);
+        height: clamp(20px, calc(9.71px + 2.86dvh), 24px);
+    }
+    .branding-title { font-size: clamp(10px, calc(7.43px + 0.71dvh), 11px); line-height: 1.2; }
     /* Both lines stay on mobile: "Glacier Productions" over "Glacier
        Launcher" in grey (--text-dim, from app.css). */
-    .branding-sub { font-size: 9px; line-height: 1.2; }
+    .branding-sub { font-size: clamp(8px, calc(5.43px + 0.71dvh), 9px); line-height: 1.2; }
     /* The version pill is real UI, not decoration — it shows the running
        version and becomes the "Update" button once a release is found
        (App.renderUpdatePill / checkForUpdate). Hiding it on mobile removed
        the only entry point to the in-app updater, so it is sized down
        rather than dropped. */
-    .update-pill { height: 17px; padding: 0 7px; margin-left: 6px; font-size: 9px; }
+    .update-pill {
+        height: clamp(15px, calc(9.86px + 1.43dvh), 17px);
+        padding: 0 clamp(6px, calc(3.43px + 0.71dvh), 7px);
+        margin-left: clamp(5px, calc(2.43px + 0.71dvh), 6px);
+        font-size: clamp(8px, calc(5.43px + 0.71dvh), 9px);
+    }
 
-    .edition-tab { padding: 3px 8px; font-size: 11px; }
-    .topbar-client-chip { padding: 3px 8px; font-size: 11px; }
-    .search-trigger, .notif-bell-btn { width: 28px; height: 28px; }
+    .edition-tab {
+        padding: clamp(2px, calc(-0.57px + 0.71dvh), 3px) clamp(6px, calc(0.86px + 1.43dvh), 8px);
+        font-size: clamp(10px, calc(7.43px + 0.71dvh), 11px);
+    }
+    .topbar-client-chip {
+        padding: clamp(2px, calc(-0.57px + 0.71dvh), 3px) clamp(6px, calc(0.86px + 1.43dvh), 8px);
+        font-size: clamp(10px, calc(7.43px + 0.71dvh), 11px);
+    }
+    .search-trigger, .notif-bell-btn {
+        width: clamp(26px, calc(20.86px + 1.43dvh), 28px);
+        height: clamp(26px, calc(20.86px + 1.43dvh), 28px);
+    }
 
-    .footer { padding: 0 10px 6px; gap: 6px; }
-    .avatar { width: 22px; height: 22px; }
-    .username { font-size: 12px; }
-    .user-handle { font-size: 10px; }
+    .footer {
+        padding: 0 clamp(8px, calc(2.86px + 1.43dvh), 10px) clamp(5px, calc(2.43px + 0.71dvh), 6px);
+        gap: clamp(5px, calc(2.43px + 0.71dvh), 6px);
+    }
+    .avatar {
+        width: clamp(20px, calc(14.86px + 1.43dvh), 22px);
+        height: clamp(20px, calc(14.86px + 1.43dvh), 22px);
+    }
+    .username { font-size: clamp(11px, calc(8.43px + 0.71dvh), 12px); }
+    .user-handle { font-size: clamp(9px, calc(6.43px + 0.71dvh), 10px); }
     .footer-right span { display: none; }
-    .news-strip { height: 20px; }
+    .news-strip { height: clamp(18px, calc(12.86px + 1.43dvh), 20px); }
 
     /* Home quick actions — the primary controls on the home screen, and the
        main thing a thumb has to hit. 36px was a straight shrink of the
-       desktop 48px and too small a target; 90px overshot. 46px sits just
-       under the desktop size and comfortably above the ~44px minimum
-       recommended for touch. */
-    .action-btn { height: 46px; font-size: 13px; border-radius: 12px; }
-    .btn-sq { width: 46px; }
-    .action-btn i { font-size: 18px; }
+       desktop 48px and too small a target; 90px overshot. 46px (at this
+       block's own ceiling) sits just under the desktop size and comfortably
+       above the ~44px minimum recommended for touch; 40px is the floor for
+       the shortest devices (was the old 380px-tier override), still a real
+       target, just tighter. */
+    .action-btn {
+        height: clamp(40px, calc(29.33px + 3.33dvh), 46px);
+        font-size: clamp(12px, calc(10.22px + 0.56dvh), 13px);
+        border-radius: clamp(10px, calc(4.86px + 1.43dvh), 12px);
+    }
+    .btn-sq { width: clamp(40px, calc(29.33px + 3.33dvh), 46px); }
+    .action-btn i { font-size: clamp(16px, calc(12.44px + 1.11dvh), 18px); }
 
     /* Panel chrome — the biggest win. Header, the category chip row and the
        bottom tab bar are pure overhead above the content. */
     .panel-overlay { padding-top: 2px; }
-    /* Header height is set by its tallest child, the 32px round back/icon
-       buttons, not by its own padding — both have to come down. */
-    .panel-header { padding: 5px 12px; }
-    .panel-title { font-size: 13px; }
-    .panel-back-btn, .panel-icon-btn { width: 26px; height: 26px; font-size: 11px; }
-    .panel-title-underline { margin-top: 2px; }
+    /* Header height is set by its tallest child, the round back/icon
+       buttons, not by its own padding — both have to come down. Anchored
+       down to 320px like the action buttons above since this used to carry
+       its own further 380px-tier override. */
+    .panel-header {
+        padding:
+            clamp(3px, calc(-0.56px + 1.11dvh), 5px)
+            clamp(10px, calc(6.44px + 1.11dvh), 12px);
+    }
+    .panel-title { font-size: clamp(12px, calc(9.43px + 0.71dvh), 13px); }
+    .panel-back-btn, .panel-icon-btn {
+        width: clamp(24px, calc(18.86px + 1.43dvh), 26px);
+        height: clamp(24px, calc(18.86px + 1.43dvh), 26px);
+        font-size: clamp(10px, calc(7.43px + 0.71dvh), 11px);
+    }
+    .panel-title-underline { margin-top: clamp(1px, calc(-1.57px + 0.71dvh), 2px); }
     .panel-handle { display: none; }
-    .panel-body { padding: 6px 12px; }
-    .panel-section-label { padding: 3px 4px 1px; font-size: 9px; }
+    .panel-body {
+        padding:
+            clamp(4px, calc(-1.14px + 1.43dvh), 6px)
+            clamp(10px, calc(4.86px + 1.43dvh), 12px);
+    }
+    .panel-section-label {
+        padding: clamp(2px, calc(-0.57px + 0.71dvh), 3px) clamp(3px, calc(0.43px + 0.71dvh), 4px) 1px;
+        font-size: clamp(8px, calc(5.43px + 0.71dvh), 9px);
+    }
 
     /* Bottom tab bar — the row of panel-switching buttons a thumb rests on
        most, and the previous 26px/9px shrink (a straight fraction of
@@ -152,22 +225,43 @@
 
     /* Category chip row (Settings' All/Clients/Looks/…, Java mods tabs).
        .vcs-btn carries an explicit height: 38px, so padding alone does
-       nothing here — the height itself has to be overridden. */
-    #settings-categories { padding: 5px 12px 0; }
-    .vcs-btn { height: 28px; padding: 0 10px; font-size: 11px; }
-    .vcs-btn i { font-size: 11px; }
+       nothing here — the height itself has to be overridden. Anchored down
+       to 320px like the panel header, matching its old 380px-tier override. */
+    #settings-categories {
+        padding:
+            clamp(3px, calc(-0.56px + 1.11dvh), 5px)
+            clamp(10px, calc(6.44px + 1.11dvh), 12px)
+            0;
+    }
+    .vcs-btn {
+        height: clamp(26px, calc(20.86px + 1.43dvh), 28px);
+        padding: 0 clamp(8px, calc(2.86px + 1.43dvh), 10px);
+        font-size: clamp(10px, calc(7.43px + 0.71dvh), 11px);
+    }
+    .vcs-btn i { font-size: clamp(10px, calc(7.43px + 0.71dvh), 11px); }
 
     /* Rows and cards — measured at 46px each, the single biggest consumer
        of body height once the chrome is trimmed. */
     /* Row height is label + hint stacked, so the line boxes matter as much
        as the font sizes — without tightening line-height the rows stayed at
-       40px even with smaller text. */
+       40px even with smaller text. Unchanged across every tier (5px was
+       already the floor), so it stays a flat value. */
     .setting-row { padding: 5px 0; }
-    .setting-label { font-size: 12px; line-height: 1.15; }
+    .setting-label { font-size: clamp(11px, calc(8.43px + 0.71dvh), 12px); line-height: 1.15; }
+    /* Also unchanged across tiers below 500px — only the 380px tier turns
+       this off entirely (see below), it never got a second size. */
     .setting-hint { font-size: 9px; line-height: 1.2; }
     .setting-meta { gap: 1px; }
-    .setting-input { height: 28px; font-size: 12px; padding: 0 8px; }
-    .btn-sm { height: 26px; font-size: 11px; padding: 0 10px; }
+    .setting-input {
+        height: clamp(26px, calc(20.86px + 1.43dvh), 28px);
+        font-size: clamp(11px, calc(8.43px + 0.71dvh), 12px);
+        padding: 0 clamp(7px, calc(4.43px + 0.71dvh), 8px);
+    }
+    .btn-sm {
+        height: clamp(24px, calc(18.86px + 1.43dvh), 26px);
+        font-size: clamp(10px, calc(7.43px + 0.71dvh), 11px);
+        padding: 0 clamp(8px, calc(2.86px + 1.43dvh), 10px);
+    }
     .toggle { transform: scale(0.85); }
 
     /* Cards read as over-rounded once they are mobile-sized: .client-card
@@ -176,18 +270,23 @@
        writes --r-sm/--r-md inline on the root element for a custom theme
        (theme.js setThemeVars), and an inline style beats any stylesheet
        rule here. */
-    .client-card { padding: 8px; border-radius: 10px; }
+    .client-card { padding: clamp(7px, calc(4.43px + 0.71dvh), 8px); border-radius: clamp(9px, calc(6.43px + 0.71dvh), 10px); }
     /* The category chips and bottom tab pills take var(--r-sm) (12px) on a
-       28px-tall control, which reads as a lozenge at mobile size. */
+       28px-tall control, which reads as a lozenge at mobile size. Border
+       radii are decorative rather than a scale a thumb interacts with
+       directly, so these stay flat rather than fluid. */
     .vcs-btn { border-radius: 8px; }
     .panel-tab { border-radius: 8px; }
     .ts-chip { border-radius: 8px; }
     .version-row { border-radius: 10px; }
     .setting-input, .btn-sm { border-radius: 8px; }
     .empty-state, .settings-section { border-radius: 10px; }
-    .client-card-name { font-size: 12px; }
+    .client-card-name { font-size: clamp(11px, calc(8.43px + 0.71dvh), 12px); }
     .client-card-sub { font-size: 9px; }
-    .client-card-icon { width: 30px; height: 30px; }
+    .client-card-icon {
+        width: clamp(26px, calc(15.71px + 2.86dvh), 30px);
+        height: clamp(26px, calc(15.71px + 2.86dvh), 30px);
+    }
 
     /* Every other var(--r-md) (18px) surface below has the same problem as
        .client-card above: 18px was sized for a resizable desktop window,
@@ -212,29 +311,45 @@
     .ts-color-editor { border-radius: 12px; }
     .credits-link-btn { border-radius: 8px; }
 
-    .version-row { padding: 6px 8px; }
-    .version-icon { width: 30px; height: 30px; }
-    .version-name { font-size: 12px; }
+    .version-row {
+        padding:
+            clamp(5px, calc(2.43px + 0.71dvh), 6px)
+            clamp(7px, calc(4.43px + 0.71dvh), 8px);
+    }
+    .version-icon {
+        width: clamp(26px, calc(15.71px + 2.86dvh), 30px);
+        height: clamp(26px, calc(15.71px + 2.86dvh), 30px);
+    }
+    .version-name { font-size: clamp(11px, calc(8.43px + 0.71dvh), 12px); }
     .version-sub { font-size: 9px; }
 
-    .ts-chip { padding: 4px 9px; font-size: 11px; }
-    .modal-btn { height: 30px; font-size: 12px; }
-    .empty-state i { font-size: 22px; }
-    .empty-state span { font-size: 12px; }
+    .ts-chip {
+        padding:
+            clamp(3px, calc(0.43px + 0.71dvh), 4px)
+            clamp(8px, calc(5.43px + 0.71dvh), 9px);
+        font-size: clamp(10px, calc(7.43px + 0.71dvh), 11px);
+    }
+    .modal-btn {
+        height: clamp(27px, calc(19.29px + 2.14dvh), 30px);
+        font-size: clamp(11px, calc(8.43px + 0.71dvh), 12px);
+    }
+    .empty-state i { font-size: clamp(20px, calc(14.86px + 1.43dvh), 22px); }
+    .empty-state span { font-size: clamp(11px, calc(8.43px + 0.71dvh), 12px); }
     .empty-state small { font-size: 9px; }
+    /* .status-msg only ever had a single hardcoded size, and only at the
+       shortest heights below — kept flat rather than invented a second
+       anchor for a value that never actually varied. */
+    .status-msg { font-size: 10px; }
 }
 
-/* Shortest devices (and split-screen): trim the optional furniture too. */
+/* Shortest devices (and split-screen): only the boolean toggles remain here
+   — every numeric override that used to live in this tier (action-btn,
+   panel-header, #settings-categories, …) got folded into the single fluid
+   clamp() formula for that property above instead of being a second
+   hardcoded snap-point, so this block is now just display:none rules with
+   no fluid equivalent. */
 @media (max-height: 380px) {
     .recently-launched { display: none !important; }
-    .status-msg { font-size: 10px; }
-    /* Still a real touch target on the shortest devices, just tighter. */
-    .action-btn { height: 40px; font-size: 12px; }
-    .btn-sq { width: 40px; }
-    .action-btn i { font-size: 16px; }
-    .panel-header { padding: 3px 10px; }
-    #settings-categories { padding: 3px 10px 0; }
-    .setting-row { padding: 5px 0; }
     .setting-hint { display: none; }
 }
 
