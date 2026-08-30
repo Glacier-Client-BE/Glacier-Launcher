@@ -239,6 +239,36 @@ function creditCardHtml(name, sub, iconHtml, links) {
     </div>`;
 }
 
+// Compact row for a single third-party library credit — deliberately
+// lighter than creditCardHtml's client cards (no big icon slot, just
+// name/license/link) since this list is long and every entry here is a
+// real Gradle dependency this app ships, not a curated few.
+function libraryRowHtml(name, license, url) {
+    return `
+    <div class="credits-oss-row">
+        <i class="fa-solid fa-cube" style="color:var(--accent);"></i>
+        <span><strong>${escapeHtml(name)}</strong> — ${escapeHtml(license)}</span>
+        <button class="btn-sm" data-open-url="${url}"><i class="fa-solid fa-arrow-up-right-from-square"></i></button>
+    </div>`;
+}
+
+// Every third-party library this Android build actually links against, per
+// android/app/build.gradle.kts + settings.gradle.kts (app_pojavlauncher).
+// Kept as a static list (not a generated OSS-Licenses-plugin screen,
+// per-project convention here of hand-written credits over a
+// codegen'd page — see the "Clients"/"Launcher" sections above) so it's
+// reviewed and updated by hand alongside build.gradle.kts.
+const OSS_LIBRARIES = [
+    { name: "AndroidX (core-ktx, activity-ktx, appcompat, documentfile)", license: "Apache License 2.0", url: "https://developer.android.com/jetpack/androidx" },
+    { name: "OkHttp", license: "Apache License 2.0", url: "https://square.github.io/okhttp/" },
+    { name: "kotlinx.coroutines", license: "Apache License 2.0", url: "https://github.com/Kotlin/kotlinx.coroutines" },
+    { name: "GPlayApi (Aurora Store)", license: "GNU GPL v3.0", url: "https://gitlab.com/AuroraOSS/gplayapi" },
+    { name: "MSAL for Android (Microsoft Authentication Library)", license: "MIT License", url: "https://github.com/AzureAD/microsoft-authentication-library-for-android" },
+    { name: "Shizuku (API + Provider)", license: "Apache License 2.0", url: "https://github.com/RikkaApps/Shizuku" },
+    { name: "PojavLauncher (Java Edition runtime, vendored)", license: "GNU GPL v3.0", url: "https://github.com/PojavLauncherTeam/PojavLauncher" },
+    { name: "Font Awesome (icons)", license: "CC BY 4.0 / SIL OFL 1.1 / MIT", url: "https://fontawesome.com/license/free" },
+];
+
 function creditsPanelBody() {
     return `
     <span class="panel-section-label">Launcher</span>
@@ -271,7 +301,9 @@ function creditsPanelBody() {
         <i class="fa-solid fa-code-branch" style="color:var(--accent);"></i>
         <span>Glacier Launcher is open source. Contributions and forks are welcome.</span>
         <button class="btn-sm" data-open-url="https://github.com/Glacier-Client-BE/Glacier-Launcher"><i class="fa-brands fa-github"></i> View</button>
-    </div>`;
+    </div>
+    <span class="panel-section-label">Libraries & Licenses</span>
+    ${OSS_LIBRARIES.map(l => libraryRowHtml(l.name, l.license, l.url)).join("")}`;
 }
 
 // Shared row template for any paginated content search result (CurseForge,
