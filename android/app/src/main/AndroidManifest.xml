@@ -132,7 +132,7 @@
                 <data
                     android:scheme="msauth"
                     android:host="xyz.glacierclient.launcher"
-                    android:path="/YOUR_SIGNATURE_HASH_HERE" />
+                    android:path="/${msalSignatureHash}" />
             </intent-filter>
         </activity>
     </application>
