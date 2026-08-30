@@ -130,4 +130,66 @@ object LevelDatService {
 
     private fun error(message: String): String =
         JSONObject().put("ok", false).put("error", message).toString()
+
+    // ── Generic tag access ──────────────────────────────────────────────
+    //
+    // summary()/save() above only expose the fixed field set desktop's own
+    // editor does. This pair reaches any tag by dot path (BedrockNbt.getPath/
+    // setPath) for a fuller NBT browser/editor UI, encoded through
+    // BedrockNbt.tagToJson so every tag type — not just the ones summary()
+    // happens to special-case — survives the round trip intact.
+
+    /** The whole level.dat tree as {"type","value"} JSON (see BedrockNbt.tagToJson), or a tag at [path] when given. */
+    fun readTag(context: Context, worldId: String, path: String): String {
+        val file = levelDat(context, worldId) ?: return error("This world has no level.dat.")
+        return try {
+            val bytes = context.contentResolver.openInputStream(file.uri)?.use { it.readBytes() }
+                ?: return error("Couldn't read level.dat.")
+            val root = BedrockNbt.parseLevelDat(bytes)
+            val value = if (path.isBlank()) root else BedrockNbt.getPath(root, path)
+                ?: return error("No tag at \"$path\".")
+            JSONObject().put("ok", true).put("tag", BedrockNbt.tagToJson(value)).toString()
+        } catch (e: Exception) {
+            error("Couldn't read tag: ${e.message}")
+        }
+    }
+
+    /**
+     * Overwrites the tag at [path] (dot-separated, e.g. "experiments.data_driven_items")
+     * with [tagJson] (a BedrockNbt.tagToJson-shaped {"type","value"} object) and rewrites
+     * level.dat. The path's parent must already exist as a compound — this edits an
+     * existing tree, it doesn't build new nesting, same "don't invent structure the game
+     * never had" caution save() already takes with experiment toggles.
+     */
+    fun writeTag(context: Context, worldId: String, path: String, tagJson: String): String {
+        if (path.isBlank()) return error("No tag path given.")
+        val dir = worldDir(context, worldId) ?: return error("Couldn't open the world folder.")
+        val file = dir.findFile("level.dat")?.takeIf { it.isFile }
+            ?: return error("This world has no level.dat.")
+
+        return try {
+            val original = context.contentResolver.openInputStream(file.uri)?.use { it.readBytes() }
+                ?: return error("Couldn't read level.dat.")
+            val version = BedrockNbt.levelDatVersion(original)
+            val root = BedrockNbt.parseLevelDat(original)
+            val value = BedrockNbt.jsonToTag(JSONObject(tagJson))
+
+            if (!BedrockNbt.setPath(root, path, value)) {
+                return error("No such tag path: \"$path\".")
+            }
+
+            val encoded = BedrockNbt.writeLevelDat(root, version)
+
+            val backup = dir.findFile(BACKUP_NAME) ?: dir.createFile("application/octet-stream", BACKUP_NAME)
+            if (backup != null) {
+                context.contentResolver.openOutputStream(backup.uri, "wt")?.use { it.write(original) }
+            }
+            context.contentResolver.openOutputStream(file.uri, "wt")?.use { it.write(encoded) }
+                ?: return error("Couldn't open level.dat for writing.")
+
+            JSONObject().put("ok", true).toString()
+        } catch (e: Exception) {
+            error("Couldn't write tag: ${e.message}")
+        }
+    }
 }

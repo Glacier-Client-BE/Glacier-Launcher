@@ -223,4 +223,114 @@ object BedrockNbt {
         buf.get(bytes)
         return bytes.toString(Charsets.UTF_8)
     }
+
+    // ── Generic tag access ──────────────────────────────────────────────
+    //
+    // LevelDatService only ever reads/writes a fixed handful of known keys
+    // (GameType, Difficulty, …). A fuller editor needs to reach *any* tag by
+    // path without every caller having to know NBT's tag-id scheme, so this
+    // adds a path-addressed get/set plus a JSON encoding that round-trips
+    // every tag type readPayload can produce — including the ones a naive
+    // "just call org.json on it" approach would mangle (Long as a JS-unsafe
+    // integer, ByteArray/IntArray/LongArray as opaque blobs, a byte losing
+    // the fact that it's 1-byte-wide once it's just "a number"). Each tag
+    // becomes {"type": <nbt type name>, "value": …}, with numeric bytes
+    // reported as an actual 0/255 range int (not a signed Kotlin Byte) and
+    // longs as decimal strings so JS's Number precision cannot silently
+    // corrupt a world seed or timestamp.
+
+    private fun typeName(id: Int): String = when (id) {
+        1 -> "byte"; 2 -> "short"; 3 -> "int"; 4 -> "long"; 5 -> "float"; 6 -> "double"
+        7 -> "byteArray"; 8 -> "string"; 9 -> "list"; 10 -> "compound"; 11 -> "intArray"; 12 -> "longArray"
+        else -> "unknown"
+    }
+
+    /** A dot-separated path into a Compound tree, e.g. "experiments.data_driven_items". List indices aren't addressable — lists are edited as whole values. */
+    fun getPath(root: Compound, path: String): Any? {
+        if (path.isBlank()) return root
+        var current: Any? = root
+        for (segment in path.split('.')) {
+            current = (current as? Compound)?.entries()?.get(segment) ?: return null
+        }
+        return current
+    }
+
+    /** Sets [path]'s final segment on its parent compound, creating no intermediate compounds — every segment but the last must already exist. Returns false if the path doesn't resolve to an existing parent compound. */
+    fun setPath(root: Compound, path: String, value: Any?): Boolean {
+        val segments = path.split('.')
+        if (segments.isEmpty()) return false
+        var parent: Compound = root
+        for (segment in segments.dropLast(1)) {
+            parent = parent.getCompound(segment) ?: return false
+        }
+        parent.set(segments.last(), value)
+        return true
+    }
+
+    /** Encodes any tag value (as produced by [readPayload]/[getPath]) into the {"type","value"} JSON form described above. */
+    fun tagToJson(value: Any?): org.json.JSONObject {
+        val obj = org.json.JSONObject()
+        return when (value) {
+            is Byte -> obj.put("type", "byte").put("value", value.toInt() and 0xFF)
+            is Short -> obj.put("type", "short").put("value", value.toInt())
+            is Int -> obj.put("type", "int").put("value", value)
+            is Long -> obj.put("type", "long").put("value", value.toString())
+            is Float -> obj.put("type", "float").put("value", value.toDouble())
+            is Double -> obj.put("type", "double").put("value", value)
+            is String -> obj.put("type", "string").put("value", value)
+            is ByteArray -> obj.put("type", "byteArray").put("value", org.json.JSONArray(value.map { it.toInt() and 0xFF }))
+            is IntArray -> obj.put("type", "intArray").put("value", org.json.JSONArray(value.toList()))
+            is LongArray -> obj.put("type", "longArray").put("value", org.json.JSONArray(value.map { it.toString() }))
+            is NbtList -> obj.put("type", "list").put("elementType", typeName(value.elementType))
+                .put("value", org.json.JSONArray(value.items.map { tagToJson(it) }))
+            is Compound -> {
+                val fields = org.json.JSONObject()
+                for ((key, v) in value.entries()) fields.put(key, tagToJson(v))
+                obj.put("type", "compound").put("value", fields)
+            }
+            null -> obj.put("type", "null").put("value", org.json.JSONObject.NULL)
+            else -> throw IllegalArgumentException("Cannot encode NBT value of type ${value.javaClass}")
+        }
+    }
+
+    /** Inverse of [tagToJson] — decodes a {"type","value"} object back into a raw tag value ready for [Compound.set]. */
+    fun jsonToTag(json: org.json.JSONObject): Any? = when (json.optString("type")) {
+        "byte" -> json.getInt("value").toByte()
+        "short" -> json.getInt("value").toShort()
+        "int" -> json.getInt("value")
+        "long" -> json.getString("value").toLong()
+        "float" -> json.getDouble("value").toFloat()
+        "double" -> json.getDouble("value")
+        "string" -> json.getString("value")
+        "byteArray" -> {
+            val arr = json.getJSONArray("value")
+            ByteArray(arr.length()) { i -> arr.getInt(i).toByte() }
+        }
+        "intArray" -> {
+            val arr = json.getJSONArray("value")
+            IntArray(arr.length()) { i -> arr.getInt(i) }
+        }
+        "longArray" -> {
+            val arr = json.getJSONArray("value")
+            LongArray(arr.length()) { i -> arr.getString(i).toLong() }
+        }
+        "list" -> {
+            val elementType = reverseTypeName(json.optString("elementType"))
+            val arr = json.getJSONArray("value")
+            NbtList(elementType, (0 until arr.length()).map { i -> jsonToTag(arr.getJSONObject(i)) })
+        }
+        "compound" -> {
+            val fields = json.getJSONObject("value")
+            val compound = Compound()
+            for (key in fields.keys()) compound.put(key, jsonToTag(fields.getJSONObject(key)))
+            compound
+        }
+        else -> null
+    }
+
+    private fun reverseTypeName(name: String): Int = when (name) {
+        "byte" -> 1; "short" -> 2; "int" -> 3; "long" -> 4; "float" -> 5; "double" -> 6
+        "byteArray" -> 7; "string" -> 8; "list" -> 9; "compound" -> 10; "intArray" -> 11; "longArray" -> 12
+        else -> 8 // an unrecognised element type defaults to string rather than throwing on an empty list
+    }
 }

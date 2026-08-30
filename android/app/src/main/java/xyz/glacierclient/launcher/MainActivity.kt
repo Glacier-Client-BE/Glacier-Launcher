@@ -552,6 +552,12 @@ private class AndroidBridge(private val activity: MainActivity, private val webV
     @JavascriptInterface
     fun listBedrockScreenshots(): String = BedrockStorageService.listScreenshots(activity)
 
+    // Recursive world file listing (BedrockStorageService.listWorldFiles) —
+    // for a future world-inspector panel; db/ itself is listed as opaque
+    // files, not parsed (Bedrock's LevelDB store, see BedrockNbt's doc).
+    @JavascriptInterface
+    fun listBedrockWorldFiles(worldId: String): String = BedrockStorageService.listWorldFiles(activity, worldId)
+
     @JavascriptInterface
     fun openBedrockFolder(name: String) {
         activity.runOnUiThread {
@@ -812,6 +818,17 @@ private class AndroidBridge(private val activity: MainActivity, private val webV
     @JavascriptInterface
     fun saveLevelDat(worldId: String, patchJson: String): String =
         LevelDatService.save(activity, worldId, patchJson)
+
+    // Generic level.dat tag access (LevelDatService.readTag/writeTag) — a
+    // fuller NBT editor's reach-any-tag path, beyond summary()/save()'s
+    // fixed field set. path is dot-separated ("experiments.some_toggle");
+    // empty reads the whole tree.
+    @JavascriptInterface
+    fun readLevelDatTag(worldId: String, path: String): String = LevelDatService.readTag(activity, worldId, path)
+
+    @JavascriptInterface
+    fun writeLevelDatTag(worldId: String, path: String, tagJson: String): String =
+        LevelDatService.writeTag(activity, worldId, path, tagJson)
 
     // Java asset folders (desktop's Open*Folder shortcuts). Java data is a
     // real path under Pojav's storage, not behind SAF — see

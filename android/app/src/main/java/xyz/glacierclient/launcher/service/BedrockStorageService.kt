@@ -164,6 +164,49 @@ object BedrockStorageService {
         return result.toString()
     }
 
+    /**
+     * Lists everything on disk under one world folder — including its db/
+     * LevelDB store (as opaque files: this doesn't parse LevelDB's format,
+     * see the class doc) — for a future world-inspector UI to browse.
+     * Bedrock has no Java-style separate region/structure files to single
+     * out; a world folder is level.dat/levelname.txt/world_icon.jpeg plus
+     * the db/ key-value store, so a generic recursive listing is the
+     * accurate shape rather than special-casing file kinds Bedrock doesn't
+     * actually have.
+     */
+    fun listWorldFiles(context: Context, worldId: String): String {
+        val dir = worldDir(context, worldId) ?: return "[]"
+        val result = JSONArray()
+        collectWorldFiles(dir, "", result)
+        return result.toString()
+    }
+
+    private fun collectWorldFiles(dir: DocumentFile, relativePath: String, out: JSONArray) {
+        for (child in dir.listFiles()) {
+            val name = child.name ?: continue
+            val childPath = if (relativePath.isEmpty()) name else "$relativePath/$name"
+            if (child.isDirectory) {
+                out.put(
+                    JSONObject().apply {
+                        put("path", childPath)
+                        put("isDirectory", true)
+                        put("sizeBytes", 0L)
+                    },
+                )
+                collectWorldFiles(child, childPath, out)
+            } else if (child.isFile) {
+                out.put(
+                    JSONObject().apply {
+                        put("path", childPath)
+                        put("isDirectory", false)
+                        put("sizeBytes", child.length())
+                        put("modifiedAt", child.lastModified())
+                    },
+                )
+            }
+        }
+    }
+
     private fun readText(context: Context, uri: Uri): String? =
         runCatching { context.contentResolver.openInputStream(uri)?.use { it.readBytes().toString(Charsets.UTF_8) } }
             .getOrNull()
