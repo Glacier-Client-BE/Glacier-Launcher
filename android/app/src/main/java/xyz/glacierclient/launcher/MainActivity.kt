@@ -552,6 +552,24 @@ private class AndroidBridge(private val activity: MainActivity, private val webV
     @JavascriptInterface
     fun deleteBedrockBackup(fileName: String): Boolean = BedrockBackupService.deleteBackup(activity, fileName)
 
+    // Per-world backups (BedrockBackupService's worlds/<id> half) — scoped
+    // to one world instead of every managed folder, see that class's doc
+    // comment on why "instance" maps to "world" on Android's single-install
+    // Bedrock rather than LeviLaunchroid's multi-instance concept.
+    @JavascriptInterface
+    fun listBedrockWorldBackups(worldId: String): String = BedrockBackupService.listWorldBackups(activity, worldId)
+
+    @JavascriptInterface
+    fun createBedrockWorldBackup(worldId: String): String = BedrockBackupService.createWorldBackup(activity, worldId)
+
+    @JavascriptInterface
+    fun deleteBedrockWorldBackup(worldId: String, fileName: String): Boolean =
+        BedrockBackupService.deleteWorldBackup(activity, worldId, fileName)
+
+    @JavascriptInterface
+    fun restoreBedrockWorldBackup(worldId: String, fileName: String): String =
+        BedrockBackupService.restoreWorldBackup(activity, worldId, fileName)
+
     // Side-loaded Bedrock build management (BedrockVersionService.kt) — the
     // Android-only alternative to desktop's Windows-Store version switching,
     // see that class's doc comment for why (no Android equivalent exists,
