@@ -1,9 +1,15 @@
 package xyz.glacierclient.launcher.service
 
+import android.app.Activity
 import android.content.Context
 import android.content.Intent
+import net.kdt.pojavlaunch.R
 import net.kdt.pojavlaunch.Tools
 import net.kdt.pojavlaunch.prefs.LauncherPreferences
+import net.kdt.pojavlaunch.progresskeeper.ProgressKeeper
+import net.kdt.pojavlaunch.tasks.AsyncAssetManager
+import net.kdt.pojavlaunch.tasks.AsyncMinecraftDownloader
+import net.kdt.pojavlaunch.tasks.MinecraftDownloader
 import net.kdt.pojavlaunch.value.launcherprofiles.LauncherProfiles
 import net.kdt.pojavlaunch.value.launcherprofiles.MinecraftProfile
 import java.io.File
@@ -45,16 +51,69 @@ object JavaEditionBridge {
         // guaranteed crash on a fresh install — see ensureCurrentProfile().
         if (!ensureCurrentProfile(context, versionId)) return false
 
-        val intent = Intent(context, net.kdt.pojavlaunch.MainActivity::class.java).apply {
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            if (!versionId.isNullOrBlank()) putExtra(net.kdt.pojavlaunch.MainActivity.INTENT_MINECRAFT_VERSION, versionId)
-        }
         return try {
-                context.startActivity(intent)
+            // TestStorageActivity is the only thing that normally runs
+            // AsyncAssetManager's unpack calls (default control layout,
+            // options.txt, the bundled JRE-adjacent component jars), and
+            // Glacier's launch-straight-into-the-game flow never touches
+            // that activity (its own launcher intent-filter was stripped —
+            // see rebrand-pojav.sh — precisely so it doesn't show as a
+            // second home-screen icon). Left uncalled, MainActivity's first
+            // frame throws trying to read controlmap/default.json, which
+            // never existed. Both calls are cheap no-ops once a version
+            // file on disk already matches the bundled one, so it's safe to
+            // run on every launch rather than only the first.
+            AsyncAssetManager.unpackComponents(context)
+            AsyncAssetManager.unpackSingleFiles(context)
+            ProgressKeeper.waitUntilDone {
+                if (versionId.isNullOrBlank()) {
+                    startMainActivity(context, null)
+                } else {
+                    downloadThenLaunch(context, versionId)
+                }
+            }
             true
         } catch (e: Exception) {
             false
         }
+    }
+
+    private fun startMainActivity(context: Context, versionId: String?) {
+        val intent = Intent(context, net.kdt.pojavlaunch.MainActivity::class.java).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            if (!versionId.isNullOrBlank()) putExtra(net.kdt.pojavlaunch.MainActivity.INTENT_MINECRAFT_VERSION, versionId)
+        }
+        context.startActivity(intent)
+    }
+
+    /**
+     * A version picked in our Java Versions panel is one Mojang's manifest
+     * lists as installable, not one already downloaded — the panel lists
+     * every released version, same as the vendored version-picker Glacier
+     * doesn't use. Launching net.kdt.pojavlaunch.MainActivity straight away
+     * (the old behavior here) crashed in its very first frame reading a
+     * version JSON that had never been fetched. LauncherActivity's own
+     * mLaunchGameListener does exactly this same
+     * download-then-start-MainActivity sequence before ever touching
+     * MainActivity, so this mirrors it instead of reinventing it.
+     */
+    private fun downloadThenLaunch(context: Context, versionId: String) {
+        val normalizedVersionId = AsyncMinecraftDownloader.normalizeVersionId(versionId)
+        val mcVersion = AsyncMinecraftDownloader.getListedVersion(normalizedVersionId)
+        MinecraftDownloader().start(
+            context as? Activity,
+            mcVersion,
+            normalizedVersionId,
+            object : AsyncMinecraftDownloader.DoneListener {
+                override fun onDownloadDone() {
+                    ProgressKeeper.waitUntilDone { startMainActivity(context, normalizedVersionId) }
+                }
+
+                override fun onDownloadFailed(throwable: Throwable) {
+                    Tools.showErrorRemote(context.getString(R.string.mc_download_failed), throwable)
+                }
+            },
+        )
     }
 
     /**
