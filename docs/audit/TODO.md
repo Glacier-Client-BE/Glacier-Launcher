@@ -109,9 +109,21 @@
 - [ ] Diff `Components/*.razor` output markup against `panels.js`/`app.js`
       generated HTML for spinners, tooltips, error dialogs, and toggles to
       close the "Unverified" rows in `07_UI_PARITY.md`.
-- [ ] Add a shared `js/apiClient.js` wrapper (Android) and `ApiClientBase`
-      (Windows) to remove duplicated fetch/HTTP boilerplate — see
-      `05_REFACTOR_PLAN.md`.
+- [x] Add a shared `js/apiClient.js` wrapper (Android) to remove duplicated
+      fetch/HTTP boilerplate — see `05_REFACTOR_PLAN.md`. `ApiClient.getJson`/
+      `getText` (one `fetch` -> `if (!res.ok) throw` -> parse, matching the
+      exact pattern every call site already used) now backs
+      `CurseForge.search()`, `Modrinth.search()`/`getLatestFile()`,
+      `MojangVersions.fetchManifest()`, `BedrockVersions.fetch()`,
+      `GlacierClient.fetchManifest()`, and `NewsFeed.fetchPosts()`/
+      `fetchReleases()`. Deliberately NOT applied to `xboxauth.js` or
+      `skinlibrary.js`: both map specific failure cases to specific user-
+      facing messages (Xbox's `XErr` codes, Mojang's 204/404 "no such
+      player", a network-exception vs HTTP-error distinction) that a generic
+      `getJson()` would flatten into a worse, less actionable error — not
+      duplicated boilerplate, real per-endpoint behavior worth keeping.
+      `ApiClientBase` (Windows) is a separate change to `Services/*.cs` on
+      the desktop side and out of scope for this Android-focused pass.
 
 ## Medium
 - [x] Modrinth-only modpack install (`ModpackInstallService.kt` +

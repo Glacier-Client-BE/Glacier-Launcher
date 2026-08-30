@@ -20,9 +20,7 @@ const Modrinth = {
             url.searchParams.set("offset", offset);
             if (query) url.searchParams.set("query", query);
             if (facetType) url.searchParams.set("facets", `[["project_type:${facetType}"]]`);
-            const res = await fetch(url);
-            if (!res.ok) throw new Error(`Modrinth returned ${res.status}`);
-            return res.json(); // { hits: [...], total_hits }
+            return ApiClient.getJson(url); // { hits: [...], total_hits }
         });
     },
 
@@ -31,9 +29,7 @@ const Modrinth = {
     // if none is flagged primary), used to resolve a project id to a
     // downloadable .mrpack URL for ModpackInstall (js/modpackinstall.js).
     async getLatestFile(projectId) {
-        const res = await fetch(`${this.BASE_URL}/project/${projectId}/version?limit=1`);
-        if (!res.ok) throw new Error(`Modrinth returned ${res.status}`);
-        const versions = await res.json();
+        const versions = await ApiClient.getJson(`${this.BASE_URL}/project/${projectId}/version?limit=1`);
         for (const ver of versions) {
             if (!Array.isArray(ver.files) || ver.files.length === 0) continue;
             const primary = ver.files.find(f => f.primary) || ver.files[0];

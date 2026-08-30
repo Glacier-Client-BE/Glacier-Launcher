@@ -17,9 +17,7 @@ const MojangVersions = {
     },
 
     async fetchManifest() {
-        const res = await fetch(this.MANIFEST_URL);
-        if (!res.ok) throw new Error(`Mojang manifest returned ${res.status}`);
-        return res.json(); // { latest: {release, snapshot}, versions: [{id, type, url, releaseTime}] }
+        return ApiClient.getJson(this.MANIFEST_URL); // { latest: {release, snapshot}, versions: [{id, type, url, releaseTime}] }
     },
 };
 
@@ -45,9 +43,7 @@ const BedrockVersions = {
     },
 
     async fetch() {
-        const res = await fetch(this.DB_URL);
-        if (!res.ok) throw new Error(`Version database returned ${res.status}`);
-        const text = await res.text();
+        const text = await ApiClient.getText(this.DB_URL);
 
         const seen = new Map();
         for (const rawLine of text.split("\n")) {
@@ -79,9 +75,7 @@ const GlacierClient = {
     MANIFEST_URL: "https://cdn.glacierclient.xyz/versions.json",
 
     async fetchManifest() {
-        const res = await fetch(this.MANIFEST_URL);
-        if (!res.ok) throw new Error(`Glacier manifest returned ${res.status}`);
-        return res.json(); // { latestRelease, versions: [{id, name, tag, url, sha256, fabric, forge, changelog}] }
+        return ApiClient.getJson(this.MANIFEST_URL); // { latestRelease, versions: [{id, name, tag, url, sha256, fabric, forge, changelog}] }
     },
 };
 
@@ -95,18 +89,12 @@ const NewsFeed = {
     RELEASES_URL: "https://api.github.com/repos/Glacier-Client-BE/Glacier-Launcher/releases?per_page=12",
 
     async fetchPosts() {
-        return HttpCache.fetch("news.posts", 10 * 60 * 1000, async () => {
-            const res = await fetch(this.NEWS_URL);
-            if (!res.ok) throw new Error(`news.json returned ${res.status}`);
-            return res.json(); // [{title, subtitle, url, icon}]
-        });
+        return HttpCache.fetch("news.posts", 10 * 60 * 1000, () => ApiClient.getJson(this.NEWS_URL)); // [{title, subtitle, url, icon}]
     },
 
     async fetchReleases() {
         return HttpCache.fetch("news.releases", 10 * 60 * 1000, async () => {
-            const res = await fetch(this.RELEASES_URL);
-            if (!res.ok) throw new Error(`GitHub releases returned ${res.status}`);
-            const data = await res.json();
+            const data = await ApiClient.getJson(this.RELEASES_URL);
             return data.map(r => ({ tag: r.tag_name, publishedAt: r.published_at, body: r.body || "" }));
         });
     },

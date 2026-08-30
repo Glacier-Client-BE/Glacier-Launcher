@@ -53,9 +53,7 @@ const CurseForge = {
             url.searchParams.set("pageSize", pageSize);
             url.searchParams.set("sortField", 2);
             url.searchParams.set("sortOrder", "desc");
-            const res = await fetch(url, { headers: { "x-api-key": Bridge.curseForgeApiKey() } });
-            if (!res.ok) throw new Error(`CurseForge returned ${res.status}`);
-            return res.json();
+            return ApiClient.getJson(url, { headers: { "x-api-key": Bridge.curseForgeApiKey() } });
         });
     },
 };
