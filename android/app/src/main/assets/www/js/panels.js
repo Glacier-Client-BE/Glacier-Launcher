@@ -800,10 +800,35 @@ function javaVersionsPanelHtml(filter, showSnapshots, showHistorical, versions, 
 // ── Java Profile ───────────────────────────────────────────────────────
 // Mirrors Pages/Home.razor's "javaprofile" panel. Sign-in itself is real
 // (MainActivity.kt's signInMicrosoft() + js/xboxauth.js — same OAuth2/XBL/
-// XSTS flow as desktop's LiveAuthService.cs); a live 3D SkinViewer preview
-// (desktop mirrors Mojang's skin into a rotating model) is the one piece
-// not ported — this shows the flat skin PNG desktop's own header avatar
-// uses instead of building a WebGL renderer for it.
+// XSTS flow as desktop's LiveAuthService.cs). The 3D skin preview (desktop's
+// Components/SkinViewer.razor, backed by skinview3d) is now ported too, via
+// js/skinviewer.js's GlacierSkin (same vendored-bundle-first load strategy) —
+// 2D static render <-> 3D interactive toggle, Steve/Alex model switch. Cape
+// display is left out: Android has no cape/wardrobe data anywhere in
+// AndroidBridge or settings for the 3D model to show.
+const SKIN_VIEWER_CANVAS_ID = "java-profile-skin-canvas";
+
+function skinViewerHtml(s) {
+    const uuid = (s.javaUuid || "").replace(/-/g, "");
+    const mode = s.skinViewerMode === "3d" ? "3d" : "2d";
+    const model = s.skinViewerModel === "slim" ? "slim" : "default";
+    const bodyUrl = `https://mc-heads.net/body/${uuid}/right`;
+    const stage = mode === "3d"
+        ? `<canvas id="${SKIN_VIEWER_CANVAS_ID}" class="skin-canvas"></canvas>`
+        : `<img class="skin-body" src="${bodyUrl}" alt="${escapeHtml(s.javaUsername || "Player")} skin"
+             onerror="this.onerror=null;this.src='https://crafatar.com/renders/body/${uuid}?overlay&scale=10';" />`;
+    return `
+    <div class="skin-viewer">
+        <div class="skin-stage">${stage}</div>
+        <div class="skin-pills">
+            <button class="skin-pill ${mode === "2d" ? "active" : ""}" data-skin-viewer-mode="2d">2D</button>
+            <button class="skin-pill ${mode === "3d" ? "active" : ""}" data-skin-viewer-mode="3d">3D</button>
+            <span class="skin-pill-sep"></span>
+            <button class="skin-pill ${model === "default" ? "active" : ""}" data-skin-viewer-model="default" data-tooltip="Classic model">Steve</button>
+            <button class="skin-pill ${model === "slim" ? "active" : ""}" data-skin-viewer-model="slim" data-tooltip="Slim model">Alex</button>
+        </div>
+    </div>`;
+}
 function instanceRowHtml(inst, state) {
     if (state.renamingId === inst.id) {
         return `
@@ -861,10 +886,8 @@ function javaProfilePanelBody() {
     }
 
     return `<div class="profile-actions" style="flex-direction:column; align-items:stretch; gap:10px;">
+        ${skinViewerHtml(s)}
         <div style="display:flex; align-items:center; gap:12px;">
-            ${s.javaSkinUrl
-                ? `<img src="${escapeHtml(s.javaSkinUrl)}" style="width:48px;height:48px;image-rendering:pixelated;border-radius:8px;" alt="" />`
-                : `<i class="fa-solid fa-user-astronaut" style="font-size:32px;color:var(--accent);"></i>`}
             <div>
                 <div style="font-weight:600;">${escapeHtml(s.javaUsername)}</div>
                 <div style="font-size:11px;color:var(--text-dim);">${escapeHtml(s.xboxGamertag || "")}${s.xboxGamerscore ? ` · ${escapeHtml(s.xboxGamerscore)}G` : ""}</div>

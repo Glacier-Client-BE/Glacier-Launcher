@@ -27,6 +27,8 @@ const DEFAULT_SETTINGS = {
     javaUuid: "",
     javaAccessToken: "",
     javaSkinUrl: "",
+    skinViewerMode: "2d",
+    skinViewerModel: "default",
     discordLoggedIn: false,
     discordUsername: "",
     discordAvatar: "",
@@ -328,6 +330,42 @@ const App = {
         this.state.javaInstances.confirmDeleteId = null;
         this.state.javaInstances.instances = JavaInstances.list();
         if (this.state.openPanel === "javaprofile") this.openPanel("javaprofile");
+    },
+
+    // Java Profile's 3D skin preview (js/skinviewer.js's GlacierSkin, ports
+    // Components/SkinViewer.razor's mode/model toggle — see panels.js's
+    // skinViewerHtml()). Persisted like desktop persists SkinViewerMode/Model
+    // to SettingsService so the choice survives a panel close/reopen.
+    setSkinViewerMode(mode) {
+        if (this.state.settings.skinViewerMode === mode) return;
+        this.state.settings.skinViewerMode = mode;
+        if (mode !== "3d") GlacierSkin.dispose(SKIN_VIEWER_CANVAS_ID);
+        if (this.state.openPanel === "javaprofile") this.openPanel("javaprofile");
+    },
+
+    setSkinViewerModel(model) {
+        if (this.state.settings.skinViewerModel === model) return;
+        this.state.settings.skinViewerModel = model;
+        const s = this.state.settings;
+        if (s.skinViewerMode === "3d") {
+            const uuid = (s.javaUuid || "").replace(/-/g, "");
+            GlacierSkin.setModel(SKIN_VIEWER_CANVAS_ID, `https://mc-heads.net/skin/${uuid}`, model)
+                .then(ok => { if (!ok && this.state.openPanel === "javaprofile") this.openPanel("javaprofile"); });
+        } else if (this.state.openPanel === "javaprofile") {
+            this.openPanel("javaprofile");
+        }
+    },
+
+    // Called after the Java Profile panel re-renders while skinViewerMode is
+    // "3d" — the canvas element is fresh (innerHTML was just replaced) so the
+    // viewer needs a real (re-)init, same as desktop's OnAfterRenderAsync
+    // driving Init3d() whenever _need3dInit is set.
+    initSkinViewerIfNeeded() {
+        const s = this.state.settings;
+        if (s.skinViewerMode !== "3d" || !s.javaUsername) return;
+        const uuid = (s.javaUuid || "").replace(/-/g, "");
+        GlacierSkin.render(SKIN_VIEWER_CANVAS_ID, `https://mc-heads.net/skin/${uuid}`, s.skinViewerModel)
+            .then(ok => { if (!ok) { s.skinViewerMode = "2d"; if (this.state.openPanel === "javaprofile") this.openPanel("javaprofile"); } });
     },
 
     async loadBedrockWorlds() {
@@ -1179,6 +1217,7 @@ const App = {
             if (activeTab === "modrinth") this.runMrSearch(true);
         }
         if (id === "settings") this.bindSettingsEvents();
+        if (id === "javaprofile") this.initSkinViewerIfNeeded();
     },
 
     // Not routed through panelShell(): desktop's Settings panel puts the
@@ -1466,6 +1505,10 @@ const App = {
             if (e.target.closest("[data-cancel-delete-instance]")) { this.cancelDeleteInstance(); return; }
             const deleteInstanceBtn = e.target.closest("[data-delete-instance]");
             if (deleteInstanceBtn) { this.deleteJavaInstance(deleteInstanceBtn.dataset.deleteInstance); return; }
+            const skinModeBtn = e.target.closest("[data-skin-viewer-mode]");
+            if (skinModeBtn) { this.setSkinViewerMode(skinModeBtn.dataset.skinViewerMode); return; }
+            const skinModelBtn = e.target.closest("[data-skin-viewer-model]");
+            if (skinModelBtn) { this.setSkinViewerModel(skinModelBtn.dataset.skinViewerModel); return; }
 
             if (e.target.closest("[data-refresh-logs]")) { this.loadLogs(); return; }
             const openLogBtn = e.target.closest("[data-open-log]");

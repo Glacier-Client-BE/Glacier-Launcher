@@ -151,7 +151,19 @@
       harvesting each user's raw Discord account token, which risks their
       account and was rejected. This item is the `identify`-scope login
       only, same as desktop's `DiscordToken`/`OpenDiscordOAuth`.)
-- [ ] Wire Java Profile skin-viewer UI to the already-working sign-in flow.
+- [x] Wire Java Profile skin-viewer UI to the already-working sign-in flow
+      (`js/skinviewer.js`'s `GlacierSkin`, a direct port of `wwwroot/js/
+      interop.js`'s `window.glacierSkin` — same vendored-bundle-first/CDN-
+      fallback `skinview3d` load, same visibilitychange/IntersectionObserver
+      render-pause). `panels.js`'s `skinViewerHtml()` renders the real
+      `.skin-viewer`/`.skin-stage`/`.skin-pills` markup from `Components/
+      SkinViewer.razor` — 2D static body render (mc-heads, crafatar fallback)
+      by default, 3D interactive canvas + Steve/Alex model pills, persisted
+      via new `skinViewerMode`/`skinViewerModel` settings the same way
+      desktop persists `SkinViewerMode`/`SkinViewerModel`. Cape display is
+      NOT ported: Android has no cape/wardrobe data anywhere in
+      `AndroidBridge` or settings for the 3D model to show, so desktop's
+      cape-cycling pill is left out rather than faked.
 - [ ] Split `panels.js` and `app.js` by concern (Bedrock/Java/Settings/state/router).
 - [x] Add a `localStorage`-backed TTL cache for CurseForge/Modrinth/News
       fetches on Android (`js/httpcache.js`'s `HttpCache.fetch(key, ttlMs,
