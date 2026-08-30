@@ -114,11 +114,41 @@
     .panel-body { padding: 6px 12px; }
     .panel-section-label { padding: 3px 4px 1px; font-size: 9px; }
 
-    .panel-tabs { padding: 2px 6px 4px; gap: 1px; }
-    .panel-tab { height: 26px; font-size: 9px; padding: 0 4px; gap: 3px; }
-    .panel-tab i { font-size: 11px; }
-    .panel-tabs-arrow { width: 22px; height: 26px; }
-    .panel-tabs-arrow i { font-size: 10px; }
+    /* Bottom tab bar — the row of panel-switching buttons a thumb rests on
+       most, and the previous 26px/9px shrink (a straight fraction of
+       app.css's own 32px/11px) read as genuinely too small to comfortably
+       tap or read. Sized up past even the desktop numbers instead of just
+       restoring them, and — rather than snapping between this block's one
+       fixed size and the shortest-device tier below — expressed as
+       `clamp(MIN, OFFSET + COEFF*1dvh, MAX)`: a straight-line fit between
+       "36px/12px at a 360px-tall screen" and "44px/14px at this block's own
+       500px ceiling" (dvh over vh so an on-screen keyboard or a browser
+       chrome bar resizing the viewport doesn't resize the tab bar with it).
+       Every phone height in between gets its own point on that line rather
+       than jumping at a breakpoint — OFFSET/COEFF below are that line's
+       y-intercept/slope pre-solved (not a runtime division — CSS calc()
+       can't divide a length by a length), so nothing here needs touching
+       to retune, just the two (height, value) anchor pairs in this comment
+       if the target range ever changes. */
+    .panel-tabs {
+        padding:
+            clamp(4px, calc(-6.29px + 2.86dvh), 8px)
+            clamp(10px, calc(-0.29px + 2.86dvh), 14px)
+            clamp(6px, calc(-4.29px + 2.86dvh), 10px);
+        gap: 2px;
+    }
+    .panel-tab {
+        height: clamp(36px, calc(15.43px + 5.71dvh), 44px);
+        font-size: clamp(12px, calc(6.86px + 1.43dvh), 14px);
+        padding: 0 clamp(8px, calc(-2.29px + 2.86dvh), 12px);
+        gap: clamp(4px, calc(-1.14px + 1.43dvh), 6px);
+    }
+    .panel-tab i { font-size: clamp(13px, calc(7.86px + 1.43dvh), 15px); }
+    .panel-tabs-arrow {
+        width: clamp(28px, calc(12.57px + 4.29dvh), 34px);
+        height: clamp(36px, calc(15.43px + 5.71dvh), 44px);
+    }
+    .panel-tabs-arrow i { font-size: clamp(12px, calc(6.86px + 1.43dvh), 14px); }
 
     /* Category chip row (Settings' All/Clients/Looks/…, Java mods tabs).
        .vcs-btn carries an explicit height: 38px, so padding alone does
