@@ -63,6 +63,26 @@ android {
             "CURSEFORGE_API_KEY",
             "\"${System.getenv("CURSEFORGE_API_KEY") ?: ""}\"",
         )
+
+        // PlayLicensing.kt: the Base64 RSA public key from *this app's own*
+        // Play Console listing (Play Console -> Setup -> App integrity ->
+        // Play licensing -> "LICENSING & IN-APP BILLING" public key), used
+        // to verify signed license-check responses from the Play Store's
+        // ILicensingService. Glacier isn't published yet, so there is no
+        // real key to bake in — PLAY_LICENSING_PUBLIC_KEY_PLACEHOLDER below
+        // is intentionally not a fake-looking real key. Once published, set
+        // the PLAY_LICENSING_PUBLIC_KEY env var (CI secret, same pattern as
+        // CURSEFORGE_API_KEY) or a local.properties entry, and
+        // PlayLicensing.checkLicense() will pick it up automatically.
+        val playLicensingKey = System.getenv("PLAY_LICENSING_PUBLIC_KEY")
+            ?: project.rootProject.file("local.properties").let { f ->
+                if (f.exists()) {
+                    val props = java.util.Properties().apply { load(f.inputStream()) }
+                    props.getProperty("playLicensingPublicKey")
+                } else null
+            }
+            ?: "PLAY_LICENSING_PUBLIC_KEY_PLACEHOLDER"
+        buildConfigField("String", "PLAY_LICENSING_PUBLIC_KEY", "\"$playLicensingKey\"")
     }
 
     // Release signing comes from CI secrets / local env vars, never committed
@@ -101,6 +121,8 @@ android {
 
     buildFeatures {
         buildConfig = true
+        // ILicensingService.aidl / ILicenseResultListener.aidl (PlayLicensing.kt).
+        aidl = true
     }
 
     // app_pojavlauncher both compiles libbytehook.so from its own jni/

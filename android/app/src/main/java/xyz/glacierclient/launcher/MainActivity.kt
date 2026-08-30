@@ -407,6 +407,35 @@ private class AndroidBridge(private val activity: MainActivity, private val webV
     @JavascriptInterface
     fun signOutMicrosoft() = xyz.glacierclient.launcher.utils.MicrosoftAuth.signOut(activity)
 
+    // Official Play Licensing (LVL-equivalent) check for GLACIER LAUNCHER
+    // ITSELF — separate concern from checkPlayStoreOwnership() below, which
+    // checks Minecraft Bedrock ownership. See PlayLicensing.kt's doc
+    // comment for why these must not be conflated.
+    @JavascriptInterface
+    fun checkAppLicensing() {
+        Thread {
+            val obj = org.json.JSONObject()
+            try {
+                val result = kotlinx.coroutines.runBlocking {
+                    xyz.glacierclient.launcher.utils.PlayLicensing.checkLicense(activity)
+                }
+                when (result) {
+                    is xyz.glacierclient.launcher.utils.PlayLicensing.LicenseResult.Licensed -> obj.put("status", "licensed")
+                    is xyz.glacierclient.launcher.utils.PlayLicensing.LicenseResult.NotLicensed -> obj.put("status", "not_licensed")
+                    is xyz.glacierclient.launcher.utils.PlayLicensing.LicenseResult.Error -> obj.put("status", "error").put("message", result.message)
+                }
+            } catch (e: Exception) {
+                obj.put("status", "error").put("message", e.message ?: "unknown")
+            }
+            activity.runOnUiThread {
+                webView.evaluateJavascript(
+                    "window.PlayLicensing && window.PlayLicensing._onResult($obj)",
+                    null,
+                )
+            }
+        }.start()
+    }
+
     private fun notifySignInResult(code: String?, error: String?) {
         activity.runOnUiThread {
             val js = if (code != null)
