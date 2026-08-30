@@ -143,7 +143,20 @@ const POPULAR_SERVERS = [
     { name: "Galaxite", address: "play.galaxite.net", port: 19132, icon: "fa-solid fa-star", color: "#9b51e0" },
 ];
 
+// Live status badge for one server row (desktop's RenderServerStatus in
+// Home.Panels.cs): "Pinging…" while in flight, then players/latency or
+// "Offline". `status` is undefined (not started), null (in flight), or the
+// pingServer() JSON result — see App.pingAllServers().
+function serverStatusHtml(status) {
+    if (status === undefined) return "";
+    if (status === null) return `<span class="server-ping checking">Pinging…</span>`;
+    return status.online
+        ? `<span class="server-ping online"><span class="ping-dot"></span>${status.playersOnline.toLocaleString()}/${status.playersMax.toLocaleString()} · ${status.latencyMs} ms</span>`
+        : `<span class="server-ping offline"><span class="ping-dot"></span>Offline</span>`;
+}
+
 function serverRowHtml(s, saved) {
+    const status = App.state.serverStatus[`${s.address}:${s.port}`];
     return `
     <div class="server-row">
         <div class="server-icon" style="background:${s.color || "var(--accent)"};">
@@ -152,6 +165,7 @@ function serverRowHtml(s, saved) {
         <div class="server-meta">
             <span class="server-name">${s.name}</span>
             <span class="server-sub">${s.address}:${s.port}</span>
+            ${serverStatusHtml(status)}
         </div>
         <div class="version-actions">
             ${saved ? `<button class="icon-btn icon-btn-ghost" data-tooltip="Edit" data-edit-server="${s.address}"><i class="fa-solid fa-pen"></i></button>

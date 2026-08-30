@@ -28,6 +28,7 @@ import xyz.glacierclient.launcher.service.LevelDatService
 import xyz.glacierclient.launcher.service.LauncherUpdateService
 import xyz.glacierclient.launcher.service.LogService
 import xyz.glacierclient.launcher.service.ModpackInstallService
+import xyz.glacierclient.launcher.service.ServerPingService
 import xyz.glacierclient.launcher.utils.PlayStoreValidator
 import java.io.File
 
@@ -862,6 +863,14 @@ private class AndroidBridge(private val activity: MainActivity, private val webV
     @JavascriptInterface
     fun writeLevelDatTag(worldId: String, path: String, tagJson: String): String =
         LevelDatService.writeTag(activity, worldId, path, tagJson)
+
+    // Live server status (desktop's ServerPingService.cs / Home.Panels.cs's
+    // PingAllServersAsync). Runs directly on the JS-bridge thread (blocking
+    // socket I/O, short timeout) — same pattern as every other blocking
+    // native call in this bridge; the JS side is what fans this out over
+    // every saved/suggested server without blocking the UI.
+    @JavascriptInterface
+    fun pingServer(host: String, port: Int): String = ServerPingService.ping(host, port)
 
     // Java asset folders (desktop's Open*Folder shortcuts). Java data is a
     // real path under Pojav's storage, not behind SAF — see

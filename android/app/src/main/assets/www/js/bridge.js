@@ -26,6 +26,11 @@ const Bridge = (() => {
         // Skin Library "Add PNG" import.
         pickSkinPng: () => { if (hasNative) native.pickSkinPng(); },
 
+        // Live server status (ServerPingService.kt / desktop's ServerPingService.cs).
+        pingServer: (host, port) => (hasNative
+            ? native.pingServer(host, port)
+            : '{"online":false,"playersOnline":0,"playersMax":0,"motd":"","version":"","latencyMs":0}'),
+
         // Java Tools (desktop's JavaInstanceService.cs). Each returns the
         // produced path, or "" when there was nothing to do.
         listJavaAssetFolders: () => (hasNative ? native.listJavaAssetFolders() : "[]"),

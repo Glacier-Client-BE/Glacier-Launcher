@@ -88,6 +88,10 @@ const App = {
         glacier: { loading: false, latest: null, error: null },
         javaVersions: { list: [], loading: false, error: null, filter: "", showSnapshots: false, showHistorical: false },
         downloads: [], // session-scoped, see downloadRowHtml()/downloadsPanelHtml() in panels.js
+        // Live server status keyed by "address:port" (desktop's _serverStatus
+        // in Home.Panels.cs). Absent = not started, null = ping in flight,
+        // else the pingServer() JSON result. See pingAllServers().
+        serverStatus: {},
         modpacks: { source: "mr", query: "", results: [], searching: false, searched: false, error: null, installingId: null },
         themes: [], // loaded from localStorage on init — see loadThemes()/saveThemes()
         selectedThemeId: null,
@@ -1142,6 +1146,40 @@ const App = {
     },
 
     // ── Panel routing ────────────────────────────────────────────────────
+    // Live server status (desktop's PingAllServersAsync in Home.Panels.cs).
+    // Each ping is a blocking native call (Bridge.pingServer → a plain
+    // socket with a short timeout, see ServerPingService.kt) — there's no
+    // async bridge-callback mechanism in this app to avoid that, so pings
+    // are staggered with setTimeout instead of fired in a tight loop, which
+    // lets the WebView repaint the "Pinging…" badges between each blocking
+    // call rather than freezing until every server responds or times out.
+    pingAllServers() {
+        const saved = this.state.settings.savedServers || [];
+        const suggestions = POPULAR_SERVERS.filter(p => !saved.some(s => s.address === p.address));
+        const targets = [...saved, ...suggestions];
+        targets.forEach(s => { this.state.serverStatus[`${s.address}:${s.port}`] = null; });
+        this.refreshServersPanel();
+
+        targets.forEach((s, i) => {
+            setTimeout(() => {
+                if (this.state.openPanel !== "servers") return; // panel closed, don't bother
+                let result;
+                try { result = JSON.parse(Bridge.pingServer(s.address, s.port)); }
+                catch { result = { online: false, playersOnline: 0, playersMax: 0, motd: "", version: "", latencyMs: 0 }; }
+                this.state.serverStatus[`${s.address}:${s.port}`] = result;
+                this.refreshServersPanel();
+            }, i * 20);
+        });
+    },
+
+    // Re-renders just the Servers panel body in place, without recursing
+    // back into pingAllServers() the way a full openPanel("servers") would.
+    refreshServersPanel() {
+        if (this.state.openPanel !== "servers") return;
+        const body = document.querySelector("#panel-servers .panel-body");
+        if (body) body.innerHTML = serversPanelBody();
+    },
+
     openPanel(id) {
         this.state.openPanel = id;
         document.getElementById("main-content").classList.add("panel-open");
@@ -1151,7 +1189,7 @@ const App = {
         switch (id) {
             case "clients": html = panelShell({ id, title: "Clients", headerActions: `<button class="panel-icon-btn" data-open-panel="mcversions"><i class="fa-solid fa-clock-rotate-left"></i><span>Versions</span></button>`, body: clientsPanelBody(), activeTabId: id }); break;
             case "settings": html = this.settingsPanelHtml("all"); break;
-            case "servers": html = panelShell({ id, title: "Servers", headerActions: `<button class="panel-icon-btn" data-open-server-modal data-tooltip="Add server"><i class="fa-solid fa-plus"></i><span>Add</span></button>`, body: serversPanelBody(), activeTabId: id }); break;
+            case "servers": html = panelShell({ id, title: "Servers", headerActions: `<button class="panel-icon-btn" data-open-server-modal data-tooltip="Add server"><i class="fa-solid fa-plus"></i><span>Add</span></button>`, body: serversPanelBody(), activeTabId: id }); this.pingAllServers(); break;
             case "credits": html = panelShell({ id, title: "Credits", body: creditsPanelBody(), activeTabId: id }); break;
             case "addons": {
                 this.state.cfCategory = (this.state.edition === "java" ? CurseForge.javaCategories : CurseForge.bedrockCategories)[0].classId;
