@@ -17,6 +17,7 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import xyz.glacierclient.launcher.service.BedrockBackupService
+import xyz.glacierclient.launcher.service.BedrockStorageMigrationService
 import xyz.glacierclient.launcher.service.BedrockStorageService
 import xyz.glacierclient.launcher.service.BedrockVersionService
 import xyz.glacierclient.launcher.service.ClientInjectionService
@@ -43,6 +44,28 @@ class MainActivity : ComponentActivity() {
     private lateinit var insetsController: WindowInsetsControllerCompat
     private lateinit var webView: WebView
     private var onBedrockStorageResult: ((Boolean) -> Unit)? = null
+    private var onMigrationDestResult: ((Uri?) -> Unit)? = null
+
+    // A second, unrestricted OpenDocumentTree — openBedrockStorageTree below
+    // only accepts a folder that already looks like Bedrock's own com.mojang
+    // tree (isUsableBedrockTree), which a fresh migration *destination*
+    // never will. No initial-Uri hint either: unlike the Bedrock picker this
+    // one is meant to be pointed at ordinary, freely-browsable storage.
+    private val openMigrationDestinationTree = registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+        if (uri != null) {
+            contentResolver.takePersistableUriPermission(
+                uri,
+                Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+            )
+        }
+        onMigrationDestResult?.invoke(uri)
+        onMigrationDestResult = null
+    }
+
+    fun requestMigrationDestination(onResult: (Uri?) -> Unit) {
+        onMigrationDestResult = onResult
+        openMigrationDestinationTree.launch(null)
+    }
 
     // Must be registered before the activity reaches STARTED — a class-body
     // property initializer runs during construction, ahead of onCreate.
@@ -569,6 +592,64 @@ private class AndroidBridge(private val activity: MainActivity, private val webV
     @JavascriptInterface
     fun restoreBedrockWorldBackup(worldId: String, fileName: String): String =
         BedrockBackupService.restoreWorldBackup(activity, worldId, fileName)
+
+    // Bedrock storage migration (BedrockStorageMigrationService) — see that
+    // class's doc comment: the one-way-out for a SAF grant that Android
+    // 13+'s platform restriction means can never be re-granted once lost.
+    // Both directions can move real amounts of data, so they run off the UI
+    // thread with progress reported back through a JS callback, the same
+    // shape downloadBedrockApk already uses for a long-running transfer.
+    @JavascriptInterface
+    fun bedrockMigrationHasAppData(): Boolean = BedrockStorageMigrationService.hasMigratedAppData(activity)
+
+    @JavascriptInterface
+    fun migrateBedrockToAppStorage(deleteSource: Boolean) {
+        Thread {
+            val json = BedrockStorageMigrationService.migrateToAppStorage(activity, deleteSource) { percent ->
+                activity.runOnUiThread {
+                    webView.evaluateJavascript(
+                        "window.BedrockStorageMigration && window.BedrockStorageMigration._onProgress($percent)",
+                        null,
+                    )
+                }
+            }
+            activity.runOnUiThread {
+                webView.evaluateJavascript(
+                    "window.BedrockStorageMigration && window.BedrockStorageMigration._onDone(${org.json.JSONObject.quote(json)})",
+                    null,
+                )
+            }
+        }.start()
+    }
+
+    @JavascriptInterface
+    fun migrateBedrockAppStorageToSaf(deleteSource: Boolean) {
+        activity.requestMigrationDestination { treeUri ->
+            if (treeUri == null) {
+                webView.evaluateJavascript(
+                    "window.BedrockStorageMigration && window.BedrockStorageMigration._onDone(${org.json.JSONObject.quote("{\"success\":false,\"message\":\"No destination folder was chosen.\"}")})",
+                    null,
+                )
+                return@requestMigrationDestination
+            }
+            Thread {
+                val json = BedrockStorageMigrationService.migrateAppStorageToSaf(activity, treeUri, deleteSource) { percent ->
+                    activity.runOnUiThread {
+                        webView.evaluateJavascript(
+                            "window.BedrockStorageMigration && window.BedrockStorageMigration._onProgress($percent)",
+                            null,
+                        )
+                    }
+                }
+                activity.runOnUiThread {
+                    webView.evaluateJavascript(
+                        "window.BedrockStorageMigration && window.BedrockStorageMigration._onDone(${org.json.JSONObject.quote(json)})",
+                        null,
+                    )
+                }
+            }.start()
+        }
+    }
 
     // Side-loaded Bedrock build management (BedrockVersionService.kt) — the
     // Android-only alternative to desktop's Windows-Store version switching,
