@@ -162,34 +162,34 @@ implemented here) or copying `com.mojang` to ordinary storage with a file
 manager first.
 
 Also genuinely not portable:
-- **Native Discord Rich Presence, as the desktop app does it** — the desktop
-  `DiscordRpcService.cs` uses the DiscordRPC NuGet package, which is an IPC
-  pipe to a local Discord *desktop* client. There is no Discord desktop
-  client on Android and the Game SDK doesn't run on mobile, so that exact
-  protocol has no endpoint here and cannot be ported.
-
-  Presence *is* implemented now, by the only route that works on-device —
-  see `service/DiscordRpcService.kt`. The research, so it isn't repeated:
+- **Discord Rich Presence** — the desktop `DiscordRpcService.cs` uses the
+  DiscordRPC NuGet package, an IPC pipe to a local Discord *desktop*
+  client that doesn't exist on Android, and the Game SDK doesn't run on
+  mobile either, so that protocol has no endpoint here. The only route that
+  works on-device at all is a Gateway WebSocket authenticated with the
+  user's own account token — deliberately **not implemented**, and not
+  planned:
 
   | Approach | Verdict |
   | --- | --- |
   | RPC IPC pipe (what desktop uses) | Impossible — no Discord desktop client on Android |
   | Discord OAuth (`identify`, already implemented) | Cannot set presence. No OAuth scope or bot token can set a *user's* presence |
   | Bot account | Bots have their own presence; they cannot set a user's |
-  | **Gateway WebSocket + user account token** | **Works. This is what we do — and what every Android RPC app does** |
+  | Gateway WebSocket + user account token | Works, but is self-botting — see below |
   | Companion PC app (e.g. AndroRPC) | ToS-safe, but needs a PC running alongside — pointless for a phone launcher |
 
-  The catch is unavoidable and worth being blunt about: driving the Gateway
-  with a user account token is **self-botting, which Discord's Terms of
-  Service prohibit, and accounts have been terminated for it.** So presence
-  is opt-in, **off by default**, never acquires a token by itself, and the
-  settings row that collects one says so plainly. `discordRpcHasToken()`
-  reports only whether a token is stored — the token is full account
-  credentials and is never handed back out to page scripts.
-
-  The presence payloads mirror `DiscordRpcService.cs` exactly (same
-  application id, asset keys, and Details/State wording) so a user running
-  both desktop and Android sees one consistent presence.
+  A Gateway-token build of this existed briefly and was removed: driving
+  the Gateway with a raw account token is self-botting, which Discord's
+  Terms of Service prohibit and accounts have been terminated for, and that
+  token is a skeleton key to the whole account (DMs, servers, any payment
+  method on file) — a leak of it from anywhere in this app (a log line, a
+  crash report, a WebView bridge bug — this codebase has hit exactly that
+  bug shape twice in one session) is a full account compromise, not a
+  presence outage. That risk profile doesn't change based on how carefully
+  the token is stored afterward, or how many people end up running the
+  build it ships in, so it isn't coming back in this form. The Discord
+  OAuth `identify` login (real, scoped, already implemented) still covers
+  the profile-switcher's username/avatar.
 - **System tray** — no desktop shell concept on Android; omitted.
 
 Real, working code here: the Glacier Client card states, CurseForge mod
@@ -496,7 +496,7 @@ views sharing one bottom "panel-tabs" bar. Status, kept honest on purpose:
 top bar (branding, edition switcher, client chip), quick-actions dock
 (Launch/Settings/Clients/Addons/Servers/MC Versions for Bedrock;
 Launchers/Mods/Versions/Profile/Screenshots for Java), footer
-(profile/RPC toggle/Xbox/Discord row), news ticker, `clients` (all six
+(profile/Xbox/Discord row), news ticker, `clients` (all six
 cards), `servers` (saved + "Popular" suggestions), `credits`, `settings`
 (category filter + sections — Java Edition section links into the built-in
 Java Edition runtime's own settings instead of duplicating them), `clients`
@@ -728,9 +728,9 @@ wiring lands).
    desktop's `OpenDiscordOAuth()`. This is only the `identify`-scope login for
    the profile switcher's username/avatar (`EffectiveProfile()`/footer parity
    is wired in `app.js`'s `effectiveProfile()`/`renderFooter()`) — it has
-   nothing to do with Discord Rich Presence — presence cannot be driven by
-   an OAuth session at all, and is implemented separately via the Gateway
-   (see the Rich Presence note above).
+   nothing to do with Discord Rich Presence, which no OAuth session can
+   drive at all (see the Rich Presence note above for why that stays
+   unimplemented).
 4. **Java multi-instance management** (`NewJavaInstance`/`NewBedrockInstance`/
    `CommitRenameInstance`/instance folders) — this is what actually blocks
    Modpack "Install" and several Java Addons actions from being real instead

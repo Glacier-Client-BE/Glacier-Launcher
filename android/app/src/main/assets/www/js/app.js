@@ -4,10 +4,6 @@
 
 const DEFAULT_SETTINGS = {
     selectedClient: "Vanilla",
-    // Off by default to match DiscordRpcService.kt: presence needs a user
-    // account token the user must supply deliberately (ToS/ban risk), so a
-    // default-on toggle would claim to be doing something it isn't.
-    discordRichPresence: false,
     username: "",
     closeAfterLaunch: false,
     accentColor: "#7289da",
@@ -393,6 +389,13 @@ const App = {
         if (this.state.openPanel === "mcversions") this.openPanel("mcversions");
     },
 
+    backupCurrentBedrockApk() {
+        const v = this.state.bedrockVersions;
+        const json = Bridge.backupCurrentBedrockApk();
+        v.statusMessage = json ? "Backed up the currently-installed build." : "Nothing to back up — Bedrock isn't installed, or this version is already backed up.";
+        this.loadBedrockApkBuilds();
+    },
+
     importBedrockApk() {
         this.state.bedrockVersions.importing = true;
         this.state.bedrockVersions.statusMessage = "";
@@ -704,8 +707,6 @@ const App = {
             document.getElementById("footer-handle").textContent = "Local profile";
             if (avatar) avatar.src = "images/icon.png";
         }
-        document.getElementById("rpc-toggle").classList.toggle("rpc-active", !!s.discordRichPresence);
-
         const xboxBtn = document.getElementById("xbox-connect-btn");
         if (s.xboxGamertag && xboxBtn) {
             xboxBtn.outerHTML = `<div class="xbox-connected-pill" id="xbox-connect-btn"><i class="fa-solid fa-gamepad"></i><span>${s.xboxGamertag}</span></div>`;
@@ -786,26 +787,12 @@ const App = {
     // approximated per MainActivity.kt's onResume() doc comment) ──────────
     launchJava() {
         this.recordLaunchStart();
-        // No version id: launchJavaEdition() lets Pojav resolve the profile's
-        // own last-used version, so presence reports the menu state. The
-        // versioned launch path below sets the real version instead.
-        Bridge.discordRpcSetJava("", "");
         Bridge.launchJavaEdition();
     },
 
     launchBedrockGame() {
         this.recordLaunchStart();
-        // selectedClient holds exactly the names DiscordRpcService.cs's
-        // SetInGamePresence() switches on. Bedrock is launched as an
-        // installed app here, so its version tag isn't ours to know.
-        Bridge.discordRpcSetBedrock("", this.state.settings.selectedClient);
         Bridge.launchBedrock();
-    },
-
-    // Pushes the current enabled-state to the native service. Called on the
-    // toggle and once at startup so the two stay in step.
-    applyDiscordRpcSetting() {
-        Bridge.discordRpcConfigure(!!this.state.settings.discordRichPresence, "");
     },
 
     recordLaunchStart() {
@@ -823,9 +810,6 @@ const App = {
         const start = this.state.pendingSessionStart;
         if (!start) return;
         this.state.pendingSessionStart = null;
-        // Back to the launcher, so back to the idle presence — same
-        // transition the desktop app makes when the game exits.
-        Bridge.discordRpcSetIdle();
         const durationSeconds = Math.round((Date.now() - start) / 1000);
         if (durationSeconds < 10) return;
 
@@ -1229,10 +1213,6 @@ const App = {
         body.querySelectorAll("[data-toggle-setting]").forEach(el => el.addEventListener("click", () => {
             const key = el.dataset.toggleSetting;
             s[key] = !s[key];
-            // Rich Presence lives natively (DiscordRpcService.kt), so the
-            // flag alone does nothing — the native side has to connect or
-            // disconnect. Passing "" keeps the stored token.
-            if (key === "discordRichPresence") this.applyDiscordRpcSetting();
             this.saveSettings();
             this.openPanel("settings"); // re-render with current category preserved via active tab class already set server-side isn't tracked; acceptable re-open to "all"
         }));
@@ -1244,14 +1224,6 @@ const App = {
         }));
         const usernameInput = document.getElementById("setting-username");
         if (usernameInput) usernameInput.addEventListener("change", (e) => { s.username = e.target.value; this.saveSettings(); this.renderFooter(); });
-        const discordToken = document.getElementById("setting-discord-token");
-        if (discordToken) discordToken.addEventListener("change", (e) => {
-            const token = e.target.value.trim();
-            if (!token) return;                 // empty submit keeps the stored token
-            e.target.value = "";                // never leave credentials sitting in the DOM
-            Bridge.discordRpcConfigure(!!s.discordRichPresence, token);
-            e.target.placeholder = "Token saved — type to replace";
-        });
         const cfKeyInput = document.getElementById("setting-cf-key");
         if (cfKeyInput) cfKeyInput.addEventListener("change", (e) => { s.curseForgeApiKeyOverride = e.target.value; this.saveSettings(); });
         const openJava = document.getElementById("open-java-edition");
@@ -1455,14 +1427,6 @@ const App = {
     bindGlobalEvents() {
         document.getElementById("edition-bedrock").addEventListener("click", () => this.setEdition("bedrock"));
         document.getElementById("edition-java").addEventListener("click", () => this.setEdition("java"));
-        document.getElementById("rpc-toggle").addEventListener("click", () => {
-            this.state.settings.discordRichPresence = !this.state.settings.discordRichPresence;
-            // Same as the Settings toggle: the flag is only the UI half,
-            // the native service has to connect/disconnect (DiscordRpcService.kt).
-            this.applyDiscordRpcSetting();
-            this.saveSettings();
-            this.renderFooter();
-        });
 
         document.getElementById("update-pill").addEventListener("click", () => {
             if (this.state.update.available) this.openUpdateModal();
@@ -1510,6 +1474,7 @@ const App = {
             if (e.target.closest("[data-share-log]")) { this.shareLog(); return; }
             if (e.target.closest("[data-copy-log-share]")) { this.copyLogShareUrl(); return; }
 
+            if (e.target.closest("[data-backup-bedrock-apk]")) { this.backupCurrentBedrockApk(); return; }
             if (e.target.closest("[data-import-bedrock-apk]")) { this.importBedrockApk(); return; }
             const installBedrockApkBtn = e.target.closest("[data-install-bedrock-apk]");
             if (installBedrockApkBtn) { this.installBedrockApkBuild(installBedrockApkBtn.dataset.installBedrockApk); return; }
@@ -1549,7 +1514,7 @@ const App = {
             if (e.target.closest("[data-close-update]")) { this.closeUpdateModal(); return; }
             if (e.target.matches("[data-close-update-backdrop]")) { this.closeUpdateModal(); return; }
 
-            if (e.target.closest("#footer-profile") && !e.target.closest("#rpc-toggle")) {
+            if (e.target.closest("#footer-profile")) {
                 const which = this.effectiveProfile();
                 if (which === "discord") { if (this.state.settings.discordLoggedIn) this.signOutDiscord(); }
                 else if (which === "xbox") { if (this.state.settings.xboxGamertag) this.signOutMicrosoft(); }
@@ -1633,7 +1598,6 @@ const App = {
             if (launchJavaVer) {
                 const versionId = launchJavaVer.dataset.launchJavaVersion;
                 this.recordLaunchStart();
-                Bridge.discordRpcSetJava(versionId, "");
                 Bridge.launchJavaEditionVersion(versionId);
                 return;
             }

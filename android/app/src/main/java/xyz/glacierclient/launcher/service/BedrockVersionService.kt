@@ -82,15 +82,41 @@ object BedrockVersionService {
         File(buildsDir(context), fileName).let { it.isFile && it.delete() }
 
     /**
+     * Backs up the currently-installed Bedrock APK into the builds folder —
+     * same idea as LiteLDev/LeviLaunchroid's own build management, and the
+     * reason to have it here specifically: the root install path below
+     * replaces Bedrock in place, and a bad or incompatible imported build
+     * would otherwise leave no way back to what Play Store had installed.
+     * `sourceDir` is the base APK only — a device that received split
+     * config APKs from Play (density/ABI/language splits) won't have those
+     * captured, same "best-effort, not every device" caveat the rest of
+     * this app's SAF-dependent features already carry.
+     * Returns null when Bedrock isn't installed, or a backup for this exact
+     * version already exists (no point overwriting an identical copy).
+     */
+    fun backupCurrentApk(context: Context): String? = try {
+        val info = context.packageManager.getPackageInfo(BEDROCK_PACKAGE, 0)
+        val appInfo = context.packageManager.getApplicationInfo(BEDROCK_PACKAGE, 0)
+        val dest = File(buildsDir(context), "backup-${info.versionName}.apk")
+        if (!dest.exists()) File(appInfo.sourceDir).copyTo(dest)
+        buildToJson(context, dest, info).toString()
+    } catch (e: Exception) {
+        null
+    }
+
+    /**
      * Installs [fileName] via the real PackageInstaller. Root, when
      * available, additionally passes `-d` so a genuine downgrade can
      * succeed (see class doc) — without root this simply opens Android's
      * own install confirmation, which is honest about rejecting a
-     * downgrade rather than pretending to force one.
+     * downgrade rather than pretending to force one. Backs up whatever
+     * Bedrock build is currently installed first (see backupCurrentApk)
+     * so a bad import always has a way back.
      */
     fun install(context: Context, fileName: String): InstallResult {
         val apk = File(buildsDir(context), fileName)
         if (!apk.isFile) return InstallResult(false, "That build is no longer on disk.")
+        backupCurrentApk(context)
 
         if (ClientInjectionService.isRootAvailable()) {
             return try {

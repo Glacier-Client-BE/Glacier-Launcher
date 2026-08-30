@@ -79,7 +79,10 @@
       downgrade needs root (`pm install -d`, root-only
       `INSTALL_ALLOW_DOWNGRADE`); without root, Android's own installer
       honestly rejects a downgrade rather than this app pretending to force
-      one.
+      one. Also backs up whatever Bedrock build is currently installed
+      before replacing it (`backupCurrentApk()`, plus a manual "Backup now"
+      button) — same idea as LiteLDev/LeviLaunchroid's own build
+      management, so a bad import always has a way back.
 - [x] Bedrock **Packs** panel: reused the SAF grant from Worlds
       (`BedrockStorageService.listPacks()`, same manifest.json "header.name"
       read as `Services/BedrockPackService.cs`) across all 6 kinds

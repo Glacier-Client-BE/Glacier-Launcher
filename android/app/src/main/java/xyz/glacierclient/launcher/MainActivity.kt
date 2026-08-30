@@ -20,7 +20,6 @@ import xyz.glacierclient.launcher.service.BedrockBackupService
 import xyz.glacierclient.launcher.service.BedrockStorageService
 import xyz.glacierclient.launcher.service.BedrockVersionService
 import xyz.glacierclient.launcher.service.ClientInjectionService
-import xyz.glacierclient.launcher.service.DiscordRpcService
 import xyz.glacierclient.launcher.service.GlacierStorage
 import xyz.glacierclient.launcher.service.JavaEditionBridge
 import xyz.glacierclient.launcher.service.JavaInstanceService
@@ -252,11 +251,6 @@ class MainActivity : ComponentActivity() {
             loadUrl("file:///android_asset/www/index.html")
         }
         setContentView(webView)
-
-        // Reconnects presence across app restarts. No-ops unless the user
-        // has explicitly turned it on AND stored a token — see
-        // DiscordRpcService's doc comment for why it is opt-in.
-        DiscordRpcService.startIfEnabled(this)
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
@@ -579,6 +573,10 @@ private class AndroidBridge(private val activity: MainActivity, private val webV
     @JavascriptInterface
     fun listBedrockApkBuilds(): String = BedrockVersionService.listBuilds(activity)
 
+    /** Manual "Backup now" — install() also does this automatically before replacing Bedrock. */
+    @JavascriptInterface
+    fun backupCurrentBedrockApk(): String = BedrockVersionService.backupCurrentApk(activity) ?: ""
+
     @JavascriptInterface
     fun installBedrockApkBuild(fileName: String): String {
         val result = BedrockVersionService.install(activity, fileName)
@@ -729,47 +727,6 @@ private class AndroidBridge(private val activity: MainActivity, private val webV
 
     @JavascriptInterface
     fun duplicateJavaInstance(id: String): String = JavaInstanceService.duplicate(id) ?: ""
-
-    // ── Discord Rich Presence ────────────────────────────────────────
-    //
-    // The desktop app's DiscordRpcService.cs uses a local IPC pipe to the
-    // Discord desktop client, which does not exist on Android; the only
-    // on-device route is a Gateway WebSocket authenticated with the user's
-    // own account token, which is self-botting. Hence opt-in, off by
-    // default, and the token is never fetched automatically. See
-    // DiscordRpcService.kt.
-
-    @JavascriptInterface
-    fun discordRpcEnabled(): Boolean = DiscordRpcService.isEnabled(activity)
-
-    /**
-     * True once a token has been stored. Deliberately reports only whether
-     * one exists rather than returning it: the token is full account
-     * credentials, and there is no reason to hand it back out into the
-     * WebView's DOM where any page script could read it.
-     */
-    @JavascriptInterface
-    fun discordRpcHasToken(): Boolean = DiscordRpcService.savedToken(activity).isNotBlank()
-
-    /** Blank [token] keeps the stored one, so re-enabling needs no re-paste. */
-    @JavascriptInterface
-    fun discordRpcConfigure(enabled: Boolean, token: String) {
-        DiscordRpcService.configure(activity, enabled, token)
-    }
-
-    @JavascriptInterface
-    fun discordRpcStatus(): String = DiscordRpcService.statusJson()
-
-    @JavascriptInterface
-    fun discordRpcSetIdle() = DiscordRpcService.setIdlePresence()
-
-    @JavascriptInterface
-    fun discordRpcSetBedrock(versionTag: String, clientName: String) =
-        DiscordRpcService.setBedrockPresence(versionTag, clientName)
-
-    @JavascriptInterface
-    fun discordRpcSetJava(versionId: String, variant: String) =
-        DiscordRpcService.setJavaPresence(versionId, variant)
 
     @JavascriptInterface
     fun openUrl(url: String) {

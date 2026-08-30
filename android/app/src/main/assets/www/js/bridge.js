@@ -44,21 +44,6 @@ const Bridge = (() => {
         glacierStorageIsShared: () => (hasNative ? native.glacierStorageIsShared() : true),
         requestAllFilesAccess: () => (hasNative ? native.requestAllFilesAccess() : false),
 
-        // Discord Rich Presence (DiscordRpcService.kt). Opt-in and off by
-        // default: Android has no Discord desktop client to speak the real
-        // RPC pipe to, so presence rides a Gateway WebSocket authenticated
-        // with the user's own account token, which Discord's ToS treats as
-        // self-botting. discordRpcHasToken() reports only *whether* a token
-        // is stored — the token itself is deliberately never handed back
-        // out to page scripts.
-        discordRpcEnabled: () => (hasNative ? native.discordRpcEnabled() : false),
-        discordRpcHasToken: () => (hasNative ? native.discordRpcHasToken() : false),
-        discordRpcConfigure: (enabled, token) => { if (hasNative) native.discordRpcConfigure(enabled, token || ""); },
-        discordRpcStatus: () => (hasNative ? native.discordRpcStatus() : '{"connected":false,"error":""}'),
-        discordRpcSetIdle: () => { if (hasNative) native.discordRpcSetIdle(); },
-        discordRpcSetBedrock: (versionTag, clientName) => { if (hasNative) native.discordRpcSetBedrock(versionTag || "", clientName || ""); },
-        discordRpcSetJava: (versionId, variant) => { if (hasNative) native.discordRpcSetJava(versionId || "", variant || ""); },
-
         // Self-update (LauncherUpdateService.kt)
         downloadAndInstallUpdate: (url, tag) => { if (hasNative) native.downloadAndInstallUpdate(url, tag); },
 
@@ -90,6 +75,7 @@ const Bridge = (() => {
         // Side-loaded Bedrock build management (BedrockVersionService.kt)
         pickBedrockApkFile: () => { if (hasNative) native.pickBedrockApkFile(); },
         listBedrockApkBuilds: () => (hasNative ? native.listBedrockApkBuilds() : "[]"),
+        backupCurrentBedrockApk: () => (hasNative ? native.backupCurrentBedrockApk() : ""),
         installBedrockApkBuild: (fileName) => (hasNative ? native.installBedrockApkBuild(fileName) : '{"success":false,"message":"No native bridge (browser preview)."}'),
         deleteBedrockApkBuild: (fileName) => (hasNative ? native.deleteBedrockApkBuild(fileName) : false),
 
