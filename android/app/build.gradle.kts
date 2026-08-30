@@ -36,15 +36,21 @@ val placeholderSignatureHash = "YOUR_SIGNATURE_HASH_HERE"
 
 fun computeMsalSignatureHash(): String {
     if (!hasSigningConfig) return placeholderSignatureHash
+    // java.io.File(...), not Gradle's file(...) helper: this is a plain
+    // top-level function, not a script-block lambda, so it has no implicit
+    // Project receiver for file(...) to resolve against — ksPath is already
+    // an absolute path (from an env var), so a plain java.io.File needs no
+    // project-relative resolution anyway.
+    //
     // Modern `keytool -genkeypair` defaults to PKCS12; older keystores may
     // still be JKS. Try both rather than guessing.
     val keyStore = try {
         java.security.KeyStore.getInstance("PKCS12").apply {
-            file(ksPath!!).inputStream().use { load(it, ksPassword!!.toCharArray()) }
+            java.io.File(ksPath!!).inputStream().use { load(it, ksPassword!!.toCharArray()) }
         }
     } catch (e: Exception) {
         java.security.KeyStore.getInstance("JKS").apply {
-            file(ksPath!!).inputStream().use { load(it, ksPassword!!.toCharArray()) }
+            java.io.File(ksPath!!).inputStream().use { load(it, ksPassword!!.toCharArray()) }
         }
     }
     val cert = keyStore.getCertificate(ksKeyAlias)
