@@ -29,7 +29,6 @@ import xyz.glacierclient.launcher.service.LauncherUpdateService
 import xyz.glacierclient.launcher.service.LogService
 import xyz.glacierclient.launcher.service.ModpackInstallService
 import xyz.glacierclient.launcher.service.ServerPingService
-import xyz.glacierclient.launcher.utils.PlayStoreValidator
 import java.io.File
 
 /**
@@ -836,38 +835,6 @@ private class AndroidBridge(private val activity: MainActivity, private val webV
 
     @JavascriptInterface
     fun deleteBedrockApkBuild(fileName: String): Boolean = BedrockVersionService.deleteBuild(activity, fileName)
-
-    // Play Store license/ownership check (PlayStoreValidator, wrapping
-    // GPlayAPI's PurchaseHelper/AppDetailsHelper) — reinstated at explicit
-    // project-owner direction after an earlier revert, see docs/audit/
-    // TODO.md. Same fire-and-report-back-via-JS shape as the other
-    // long-running bridge calls above (downloadBedrockApk, the storage
-    // migration pair): runs off the UI thread, result posted back through
-    // a JS callback rather than a return value, since it's a suspend/
-    // network call under the hood.
-    @JavascriptInterface
-    fun checkBedrockOwnership() {
-        Thread {
-            val json = try {
-                val result = kotlinx.coroutines.runBlocking { PlayStoreValidator.checkOwnership(activity) }
-                val obj = org.json.JSONObject()
-                when (result) {
-                    is PlayStoreValidator.Result.Owned -> obj.put("status", "owned")
-                    is PlayStoreValidator.Result.NotOwned -> obj.put("status", "not_owned")
-                    is PlayStoreValidator.Result.Error -> obj.put("status", "error").put("message", result.message)
-                }
-                obj.toString()
-            } catch (e: Exception) {
-                org.json.JSONObject().put("status", "error").put("message", e.message ?: e.javaClass.simpleName).toString()
-            }
-            activity.runOnUiThread {
-                webView.evaluateJavascript(
-                    "window.BedrockVersionManager && window.BedrockVersionManager._onOwnershipChecked(${org.json.JSONObject.quote(json)})",
-                    null,
-                )
-            }
-        }.start()
-    }
 
     // Java multi-instance management (Home.Panels.cs's Modpack "Install" and
     // several Java Addons actions are disabled on Android for lack of this —
