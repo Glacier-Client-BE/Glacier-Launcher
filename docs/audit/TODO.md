@@ -333,4 +333,19 @@ features this bug affected.
       (WebView2 on Windows, Android's WebView here) honoring Mojang's cache
       headers. Android already matches desktop's actual behavior, so
       nothing to add.
+- [x] Android: per-world Bedrock backups (`BedrockBackupService`'s worlds/<id>
+      half), Bedrock storage migration to/from app storage
+      (`BedrockStorageMigrationService`, new), and generic level.dat NBT tag
+      read/write (`BedrockNbt.getPath/setPath/tagToJson/jsonToTag`,
+      `LevelDatService.readTag/writeTag`) plus a recursive world-file
+      listing (`BedrockStorageService.listWorldFiles`) — architectural ideas
+      from LeviLaunchroid's InstanceBackupManager/StorageMigrationManager,
+      reimplemented fresh for this codebase's SAF/DocumentFile model, no
+      LevelDB parsing added (out of scope, see BedrockNbt's doc comment).
+      **A fourth requested feature, "Play Store license validation" via
+      GPlayAPI/PurchaseHelper, was refused and not implemented** — it's the
+      exact same rejected mechanism the entry above this one already covers
+      (a Google account AAS/master token stored in this app), just framed
+      as "check ownership" instead of "download an APK." The verdict is
+      unchanged by the framing: don't reintroduce it under any name.
 </content>
