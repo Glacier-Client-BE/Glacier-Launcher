@@ -1,3 +1,10 @@
+import java.io.File
+import java.security.KeyStore
+import java.security.MessageDigest
+import java.util.Base64
+import java.util.Properties
+import org.gradle.api.GradleException
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -36,29 +43,38 @@ val placeholderSignatureHash = "YOUR_SIGNATURE_HASH_HERE"
 
 fun computeMsalSignatureHash(): String {
     if (!hasSigningConfig) return placeholderSignatureHash
-    // java.io.File(...), not Gradle's file(...) helper: this is a plain
-    // top-level function, not a script-block lambda, so it has no implicit
-    // Project receiver for file(...) to resolve against — ksPath is already
-    // an absolute path (from an env var), so a plain java.io.File needs no
+    // File(...), not Gradle's file(...) helper: this is a plain top-level
+    // function, not a script-block lambda, so it has no implicit Project
+    // receiver for file(...) to resolve against — ksPath is already an
+    // absolute path (from an env var), so a plain java.io.File needs no
     // project-relative resolution anyway.
+    //
+    // These are imported at the top of the file rather than referenced by
+    // qualified name (java.security.KeyStore etc.) inline: AGP registers a
+    // Project extension named "java" (JavaPluginExtension), and a bare
+    // `java` identifier inside this script resolves to that extension
+    // rather than the java.* root package — so `java.security.KeyStore`
+    // doesn't compile here even though `import java.security.KeyStore` +
+    // plain `KeyStore` does. Same reason this file's other `java.util.*`
+    // references (below, in defaultConfig) needed the same treatment.
     //
     // Modern `keytool -genkeypair` defaults to PKCS12; older keystores may
     // still be JKS. Try both rather than guessing.
     val keyStore = try {
-        java.security.KeyStore.getInstance("PKCS12").apply {
-            java.io.File(ksPath!!).inputStream().use { load(it, ksPassword!!.toCharArray()) }
+        KeyStore.getInstance("PKCS12").apply {
+            File(ksPath!!).inputStream().use { load(it, ksPassword!!.toCharArray()) }
         }
     } catch (e: Exception) {
-        java.security.KeyStore.getInstance("JKS").apply {
-            java.io.File(ksPath!!).inputStream().use { load(it, ksPassword!!.toCharArray()) }
+        KeyStore.getInstance("JKS").apply {
+            File(ksPath!!).inputStream().use { load(it, ksPassword!!.toCharArray()) }
         }
     }
     val cert = keyStore.getCertificate(ksKeyAlias)
-        ?: throw org.gradle.api.GradleException(
+        ?: throw GradleException(
             "computeMsalSignatureHash: alias '$ksKeyAlias' not found in keystore $ksPath"
         )
-    val sha1 = java.security.MessageDigest.getInstance("SHA-1").digest(cert.encoded)
-    return java.util.Base64.getEncoder().encodeToString(sha1)
+    val sha1 = MessageDigest.getInstance("SHA-1").digest(cert.encoded)
+    return Base64.getEncoder().encodeToString(sha1)
 }
 
 android {
@@ -135,7 +151,7 @@ android {
         val playLicensingKey = System.getenv("PLAY_LICENSING_PUBLIC_KEY")
             ?: project.rootProject.file("local.properties").let { f ->
                 if (f.exists()) {
-                    val props = java.util.Properties().apply { load(f.inputStream()) }
+                    val props = Properties().apply { load(f.inputStream()) }
                     props.getProperty("playLicensingPublicKey")
                 } else null
             }
