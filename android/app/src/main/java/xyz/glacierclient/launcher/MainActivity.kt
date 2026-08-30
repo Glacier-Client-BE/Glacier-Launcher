@@ -18,6 +18,7 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import xyz.glacierclient.launcher.service.BedrockBackupService
 import xyz.glacierclient.launcher.service.BedrockStorageService
+import xyz.glacierclient.launcher.service.BedrockVersionService
 import xyz.glacierclient.launcher.service.ClientInjectionService
 import xyz.glacierclient.launcher.service.DiscordRpcService
 import xyz.glacierclient.launcher.service.GlacierStorage
@@ -148,6 +149,36 @@ class MainActivity : ComponentActivity() {
         onWallpaperPicked = onResult
         openWallpaperDocument.launch(arrayOf("image/*"))
     }
+
+    private var onBedrockApkPicked: ((String?) -> Unit)? = null
+
+    // Same content:// staging problem as the DLL/wallpaper pickers above —
+    // BedrockVersionService.importApk needs a real file path to read the
+    // APK's manifest and to copy it into the builds folder.
+    private val openBedrockApkDocument = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        val staged = uri?.let { stageBedrockApk(it) }
+        onBedrockApkPicked?.invoke(staged)
+        onBedrockApkPicked = null
+    }
+
+    fun requestBedrockApkFile(onResult: (String?) -> Unit) {
+        onBedrockApkPicked = onResult
+        openBedrockApkDocument.launch(arrayOf("application/vnd.android.package-archive"))
+    }
+
+    private fun stageBedrockApk(uri: Uri): String? = runCatching {
+        var name = "build.apk"
+        contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+            val nameIdx = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+            if (cursor.moveToFirst() && nameIdx >= 0) name = cursor.getString(nameIdx) ?: name
+        }
+        val staging = File(cacheDir, "bedrock_import").apply { mkdirs() }
+        val dest = File(staging, name)
+        contentResolver.openInputStream(uri)?.use { input ->
+            dest.outputStream().use { output -> input.copyTo(output) }
+        } ?: return@runCatching null
+        BedrockVersionService.importApk(this, dest, name)?.also { dest.delete() }
+    }.getOrNull()
 
     /**
      * Copies the picked image to filesDir/wallpaper/custom-bg.<ext>,
@@ -526,6 +557,36 @@ private class AndroidBridge(private val activity: MainActivity, private val webV
 
     @JavascriptInterface
     fun deleteBedrockBackup(fileName: String): Boolean = BedrockBackupService.deleteBackup(activity, fileName)
+
+    // Side-loaded Bedrock build management (BedrockVersionService.kt) — the
+    // Android-only alternative to desktop's Windows-Store version switching,
+    // see that class's doc comment for why (no Android equivalent exists,
+    // and the one considered unofficial-API alternative needs a Google
+    // account master token, rejected as too high-risk to ship).
+    @JavascriptInterface
+    fun pickBedrockApkFile() {
+        activity.runOnUiThread {
+            activity.requestBedrockApkFile { json ->
+                val js = if (json != null)
+                    "window.BedrockVersionManager && window.BedrockVersionManager._onImported(${org.json.JSONObject.quote(json)})"
+                else
+                    "window.BedrockVersionManager && window.BedrockVersionManager._onImportFailed()"
+                webView.evaluateJavascript(js, null)
+            }
+        }
+    }
+
+    @JavascriptInterface
+    fun listBedrockApkBuilds(): String = BedrockVersionService.listBuilds(activity)
+
+    @JavascriptInterface
+    fun installBedrockApkBuild(fileName: String): String {
+        val result = BedrockVersionService.install(activity, fileName)
+        return org.json.JSONObject().put("success", result.success).put("message", result.message).toString()
+    }
+
+    @JavascriptInterface
+    fun deleteBedrockApkBuild(fileName: String): Boolean = BedrockVersionService.deleteBuild(activity, fileName)
 
     // Java multi-instance management (Home.Panels.cs's Modpack "Install" and
     // several Java Addons actions are disabled on Android for lack of this —

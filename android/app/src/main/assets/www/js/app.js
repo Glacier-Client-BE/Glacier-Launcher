@@ -112,6 +112,9 @@ const App = {
         javaInstances: { instances: [], renamingId: null, renameValue: "", confirmDeleteId: null },
         // Mirrors Components/LogsPanel.razor's own field set.
         logs: { files: [], loaded: false, openPath: null, content: "", sharing: false, shareUrl: "" },
+        // Side-loaded Bedrock build management (BedrockVersionService.kt) —
+        // Android-only, no desktop equivalent (see that class's doc comment).
+        bedrockVersions: { builds: [], loaded: false, importing: false, statusMessage: "" },
         news: {
             loading: false, posts: [], releases: [],
             fallbackItems: [
@@ -379,6 +382,60 @@ const App = {
 
     copyLogShareUrl() {
         navigator.clipboard?.writeText(this.state.logs.shareUrl).catch(() => {});
+    },
+
+    // ── Side-loaded Bedrock build management (BedrockVersionService.kt) ──
+
+    loadBedrockApkBuilds() {
+        const v = this.state.bedrockVersions;
+        try { v.builds = JSON.parse(Bridge.listBedrockApkBuilds() || "[]"); } catch (e) { v.builds = []; }
+        v.loaded = true;
+        if (this.state.openPanel === "mcversions") this.openPanel("mcversions");
+    },
+
+    importBedrockApk() {
+        this.state.bedrockVersions.importing = true;
+        this.state.bedrockVersions.statusMessage = "";
+        if (this.state.openPanel === "mcversions") this.openPanel("mcversions");
+        Bridge.pickBedrockApkFile();
+    },
+
+    // Called from native (MainActivity.kt's pickBedrockApkFile) once the SAF
+    // picker + import finish. window.BedrockVersionManager is what the
+    // native callback invokes, same pattern as window.Theme/window.CustomDllPicker.
+    _onBedrockApkImported(json) {
+        const v = this.state.bedrockVersions;
+        v.importing = false;
+        try {
+            const build = JSON.parse(json);
+            v.statusMessage = build.matchesInstalledPackage
+                ? `Imported ${build.versionName}.`
+                : `Imported, but its package (${build.packageName}) doesn't match Bedrock's — installing it will add a separate app, not replace Bedrock.`;
+        } catch (e) {}
+        this.loadBedrockApkBuilds();
+    },
+
+    _onBedrockApkImportFailed() {
+        const v = this.state.bedrockVersions;
+        v.importing = false;
+        v.statusMessage = "Couldn't read that file as an APK.";
+        if (this.state.openPanel === "mcversions") this.openPanel("mcversions");
+    },
+
+    installBedrockApkBuild(fileName) {
+        const v = this.state.bedrockVersions;
+        try {
+            const result = JSON.parse(Bridge.installBedrockApkBuild(fileName));
+            v.statusMessage = result.message;
+        } catch (e) {
+            v.statusMessage = "Install failed.";
+        }
+        if (this.state.openPanel === "mcversions") this.openPanel("mcversions");
+    },
+
+    deleteBedrockApkBuild(fileName) {
+        Bridge.deleteBedrockApkBuild(fileName);
+        this.loadBedrockApkBuilds();
     },
 
     saveSettings() {
@@ -1002,8 +1059,9 @@ const App = {
                 break;
             }
             case "mcversions": {
-                html = mcVersionsPanelHtml(this.state.mcVersionsChannel, this.state.mcVersionsFilter, this.state.mcVersions, this.state.mcVersionsLoading);
+                html = mcVersionsPanelHtml(this.state.mcVersionsChannel, this.state.mcVersionsFilter, this.state.mcVersions, this.state.mcVersionsLoading, this.state.bedrockVersions);
                 if (!this.state.mcVersionsLoaded && !this.state.mcVersionsLoading) this.loadMcVersions();
+                if (this.state.edition === "bedrock" && !this.state.bedrockVersions.loaded) this.loadBedrockApkBuilds();
                 break;
             }
             case "bedrockworlds": {
@@ -1452,6 +1510,12 @@ const App = {
             if (e.target.closest("[data-share-log]")) { this.shareLog(); return; }
             if (e.target.closest("[data-copy-log-share]")) { this.copyLogShareUrl(); return; }
 
+            if (e.target.closest("[data-import-bedrock-apk]")) { this.importBedrockApk(); return; }
+            const installBedrockApkBtn = e.target.closest("[data-install-bedrock-apk]");
+            if (installBedrockApkBtn) { this.installBedrockApkBuild(installBedrockApkBtn.dataset.installBedrockApk); return; }
+            const deleteBedrockApkBtn = e.target.closest("[data-delete-bedrock-apk]");
+            if (deleteBedrockApkBtn) { this.deleteBedrockApkBuild(deleteBedrockApkBtn.dataset.deleteBedrockApk); return; }
+
             const installModpackBtn = e.target.closest("[data-install-modpack]");
             if (installModpackBtn) { this.installModpack(installModpackBtn.dataset.installModpack, installModpackBtn.dataset.installModpackName); return; }
             if (e.target.closest("[data-pick-custom-dll]")) { this.pickCustomDll(); return; }
@@ -1864,5 +1928,12 @@ const App = {
 // via window.App.onResumeFromGame() for the Stats session-timer, which
 // needs an explicit assignment.
 window.App = App;
+
+// MainActivity.kt's pickBedrockApkFile() calls back via
+// window.BedrockVersionManager, same reasoning as window.App above.
+window.BedrockVersionManager = {
+    _onImported: (json) => App._onBedrockApkImported(json),
+    _onImportFailed: () => App._onBedrockApkImportFailed(),
+};
 
 document.addEventListener("DOMContentLoaded", () => App.init());

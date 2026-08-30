@@ -590,23 +590,22 @@ function settingsPanelBody(category) {
 
 // ── MC Versions ────────────────────────────────────────────────────────
 // Mirrors Pages/Home.razor's "mcversions" panel structure (channel tabs,
-// filter, version rows) but not its download/switch/delete actions — those
-// are AppX registration + Windows-Update-SOAP-API operations
-// (VanillaVersionService.cs) with no Android equivalent: Bedrock here is a
-// single always-current Play Store app with no side-loadable version
-// history, so instead of non-functional buttons this shows an honest
-// read-only list (mcVersionInfoRowHtml below), same treatment as
-// ClientInjectionService gives Windows-only injection features.
+// filter, version rows), but not its download/switch/delete buttons acting
+// on THIS list — those are AppX registration + Windows-Update-SOAP-API
+// operations (VanillaVersionService.cs) with no Android equivalent at all.
+// What Android has instead is real, just a different mechanism: import your
+// own Bedrock APK and install it directly (bedrockBuildManagerHtml above,
+// BedrockVersionService.kt) — a real PackageInstaller flow, same one
+// LauncherUpdateService.kt already uses for self-updates. This list stays
+// read-only info (mcVersionInfoRowHtml below) since it has no file behind
+// each entry to install, only version metadata from the community DB.
 
 // Real version names/channels come from the same public community DB
 // desktop's VanillaVersionService.cs reads (BedrockVersions.fetch(), in
-// javaedition.js) — but download/switch/delete are AppX-registration +
-// Windows-Update-SOAP-API operations with no Android equivalent (there's no
-// side-loadable version history the way Developer Mode sideload or Store
-// rollback allow), so unlike versionRowHtml (desktop's row, with working
-// download/switch/delete buttons) this renders an info-only row: showing
-// dead action buttons that don't do anything on Android would be worse than
-// the honest read-only list the panel's own info bar already describes.
+// javaedition.js) — this list itself has no APK behind each entry (just
+// metadata), so it stays an info-only row rather than a fake download
+// button; bedrockBuildManagerHtml above is where an actual installable APK
+// (the user's own) gets managed.
 function mcVersionInfoRowHtml(v) {
     return `
     <div class="version-row">
@@ -617,10 +616,44 @@ function mcVersionInfoRowHtml(v) {
     </div>`;
 }
 
+// Android-only: manages side-loaded Bedrock APKs (BedrockVersionService.kt)
+// — no desktop equivalent markup to mirror, since desktop's version
+// switching is a Windows Store AppX operation. Kept visually consistent
+// with the existing .instance-card pattern (Java Instances, same panel
+// family) rather than inventing a new card style.
+function bedrockBuildRowHtml(b) {
+    return `
+    <div class="instance-row">
+        <div style="display:flex; flex-direction:column; flex:1; min-width:0;">
+            <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(b.versionName)} <span style="color:var(--text-dim); font-size:11px;">(${b.versionCode})</span></span>
+            ${!b.matchesInstalledPackage ? `<span style="color:var(--yellow); font-size:10px;"><i class="fa-solid fa-triangle-exclamation"></i> Package: ${escapeHtml(b.packageName)} — won't replace Bedrock</span>` : ""}
+        </div>
+        <button class="instance-icon-btn" data-install-bedrock-apk="${escapeHtml(b.fileName)}" data-tooltip="Install"><i class="fa-solid fa-download"></i></button>
+        <button class="instance-icon-btn instance-del" data-delete-bedrock-apk="${escapeHtml(b.fileName)}" data-tooltip="Delete"><i class="fa-solid fa-trash"></i></button>
+    </div>`;
+}
+
+function bedrockBuildManagerHtml(state) {
+    return `
+    <div class="instance-card">
+        <div class="instance-card-head">
+            <span><i class="fa-solid fa-box-open"></i> Local builds</span>
+            <div style="flex:1"></div>
+            <button class="btn-sm" data-import-bedrock-apk ${state.importing ? "disabled" : ""}>
+                ${state.importing ? `<span class="spinner"></span>` : `<i class="fa-solid fa-plus"></i>`} Import APK
+            </button>
+        </div>
+        ${state.statusMessage ? `<div style="font-size:11px; color:var(--text-dim); padding:4px 2px;">${escapeHtml(state.statusMessage)}</div>` : ""}
+        ${state.builds.length === 0
+            ? `<div class="stats-empty">No local builds imported yet — import a Bedrock APK to install it directly, bypassing Play Store's always-current version.</div>`
+            : state.builds.map(bedrockBuildRowHtml).join("")}
+    </div>`;
+}
+
 // Full panel-overlay markup, not routed through panelShell(): the desktop
 // panel puts the info bar / search / channel tabs BETWEEN .panel-header and
 // .panel-body (siblings, not nested inside it), unlike the other panels.
-function mcVersionsPanelHtml(channel, filter, versions, loading) {
+function mcVersionsPanelHtml(channel, filter, versions, loading, bedrockVersions) {
     const filtered = versions.filter(v =>
         (channel === "all" || v.channel === channel) &&
         (!filter || v.id.toLowerCase().includes(filter.toLowerCase())));
@@ -647,11 +680,12 @@ function mcVersionsPanelHtml(channel, filter, versions, loading) {
         </div>
         <div class="mcv-info-bar">
             <i class="fa-solid fa-circle-info"></i>
-            <span>Real Bedrock version history below (same public database the desktop app reads), but
-            Android Bedrock is a single always-current Play Store app — there's no side-loadable install
-            the way Windows' Developer Mode sideload or Microsoft Store rollback allow, so switching or
-            downloading a specific version isn't possible here.</span>
+            <span>Play Store keeps Bedrock always current with no built-in rollback — import your own
+            APK below to install a specific build instead (a real downgrade needs root; without it,
+            Android's own installer only accepts an equal-or-newer version). The read-only list further
+            down is the same public version-history database the desktop app reads.</span>
         </div>
+        ${bedrockBuildManagerHtml(bedrockVersions)}
         <div class="panel-search-wrap">
             <i class="fa-solid fa-magnifying-glass"></i>
             <input class="panel-search-input" id="mcv-filter-input" placeholder="Filter Minecraft versions..." value="${filter}" />

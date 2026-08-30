@@ -65,11 +65,21 @@
 - [x] Wire a real Bedrock version data source into Android's MC Versions
       panel (`BedrockVersions.fetch()` in `javaedition.js`, same public
       community version-database text file `VanillaVersionService.cs`
-      reads). Download/switch/delete stay unavailable — those are AppX
-      registration + Windows-Update-SOAP-API operations with no Android
-      equivalent — so the panel renders a read-only list
-      (`mcVersionInfoRowHtml`) instead of desktop's dead-if-copied
-      download/switch/delete buttons.
+      reads). The list itself stays read-only (`mcVersionInfoRowHtml`) —
+      it's metadata, not an installable file per entry.
+- [x] Android-only Bedrock version management (`BedrockVersionService.kt` +
+      `bedrockBuildManagerHtml` in `panels.js`) — desktop's AppX
+      registration + Windows-Update-SOAP-API switching has no Android
+      equivalent, and the one alternative considered (an unofficial Google
+      Play client library) was rejected: it needs a Google account
+      master/AAS token, a full-account-compromise blast radius that isn't
+      worth what it buys. Instead: import your own Bedrock APK (SAF picker)
+      and install it via the same real `PackageInstaller` flow
+      `LauncherUpdateService.kt` already uses for self-updates. A true
+      downgrade needs root (`pm install -d`, root-only
+      `INSTALL_ALLOW_DOWNGRADE`); without root, Android's own installer
+      honestly rejects a downgrade rather than this app pretending to force
+      one.
 - [x] Bedrock **Packs** panel: reused the SAF grant from Worlds
       (`BedrockStorageService.listPacks()`, same manifest.json "header.name"
       read as `Services/BedrockPackService.cs`) across all 6 kinds

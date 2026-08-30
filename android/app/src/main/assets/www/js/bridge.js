@@ -87,6 +87,12 @@ const Bridge = (() => {
         // Custom Bedrock client .so picker
         pickCustomDllFile: () => { if (hasNative) native.pickCustomDllFile(); },
 
+        // Side-loaded Bedrock build management (BedrockVersionService.kt)
+        pickBedrockApkFile: () => { if (hasNative) native.pickBedrockApkFile(); },
+        listBedrockApkBuilds: () => (hasNative ? native.listBedrockApkBuilds() : "[]"),
+        installBedrockApkBuild: (fileName) => (hasNative ? native.installBedrockApkBuild(fileName) : '{"success":false,"message":"No native bridge (browser preview)."}'),
+        deleteBedrockApkBuild: (fileName) => (hasNative ? native.deleteBedrockApkBuild(fileName) : false),
+
         // Logs & Crashes panel (LogService.kt)
         listJavaLogs: () => (hasNative ? native.listJavaLogs() : "[]"),
         readJavaLog: (path) => (hasNative ? native.readJavaLog(path) : "No native bridge (browser preview)."),
