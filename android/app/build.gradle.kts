@@ -306,7 +306,17 @@ dependencies {
     // Public artifacts, no extra repository needed.
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
-    implementation("com.microsoft.identity.client:msal:5.4.0")
+    // msal's transitive com.microsoft.identity:common pulls in
+    // com.microsoft.device.display:display-mask (Surface Duo dual-screen/
+    // fold-aware layout support) from Microsoft's own Maven feed, which
+    // isn't in any repository this project's settings.gradle.kts declares
+    // (google/mavenCentral/jitpack) — leaving the dependency graph
+    // unresolvable. This app has no foldable-specific UI, so the dep is
+    // dropped rather than adding a fourth, Microsoft-specific repository
+    // just to resolve a feature this app never uses.
+    implementation("com.microsoft.identity.client:msal:5.4.0") {
+        exclude(group = "com.microsoft.device.display", module = "display-mask")
+    }
 
     // ShizukuExecutor.kt: Shizuku's official, open-source client API +
     // ContentProvider that exposes privileged (adb shell / rooted-manager)
