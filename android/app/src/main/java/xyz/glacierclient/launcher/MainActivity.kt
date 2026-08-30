@@ -41,6 +41,11 @@ import java.io.File
  * checks, launching other installed apps, and settings persistence, since
  * WebView's own localStorage isn't guaranteed durable across app updates).
  */
+// Arbitrary app-chosen request code Shizuku echoes back in its permission
+// result callback (ShizukuExecutor doesn't itself register a listener —
+// see MainActivity.onCreate for where the result is wired to JS).
+private const val SHIZUKU_PERMISSION_REQUEST_CODE = 7001
+
 class MainActivity : ComponentActivity() {
 
     private lateinit var insetsController: WindowInsetsControllerCompat
@@ -258,6 +263,22 @@ class MainActivity : ComponentActivity() {
         insetsController = WindowInsetsControllerCompat(window, window.decorView).apply {
             hide(WindowInsetsCompat.Type.systemBars())
             systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        }
+
+        // Reports Shizuku permission grant/denial back to JS the same
+        // fire-and-forget way the sign-in dialogs above report their
+        // results — registered once here (not per-request) since Shizuku
+        // delivers this via a static listener, not a per-call callback.
+        rikka.shizuku.Shizuku.addRequestPermissionResultListener { requestCode, grantResult ->
+            if (requestCode == SHIZUKU_PERMISSION_REQUEST_CODE) {
+                val granted = grantResult == android.content.pm.PackageManager.PERMISSION_GRANTED
+                runOnUiThread {
+                    webView.evaluateJavascript(
+                        "window.Shizuku && window.Shizuku._onPermissionResult($granted)",
+                        null,
+                    )
+                }
+            }
         }
 
         webView = WebView(this).apply {
@@ -514,7 +535,24 @@ private class AndroidBridge(private val activity: MainActivity, private val webV
 
     @JavascriptInterface
     fun attemptInject(path: String): String =
-        ClientInjectionService.attemptInject(path).message
+        kotlinx.coroutines.runBlocking { ClientInjectionService.attemptInject(path) }.message
+
+    // Shizuku wiring (ShizukuExecutor.kt) — surfaced separately from
+    // attemptInject() above so the UI can show "Shizuku available, tap to
+    // grant permission" before a root-less user ever hits the injection
+    // button, rather than only finding out via an inject failure message.
+    @JavascriptInterface
+    fun isShizukuAvailable(): Boolean = xyz.glacierclient.launcher.utils.ShizukuExecutor.isShizukuAvailable()
+
+    @JavascriptInterface
+    fun hasShizukuPermission(): Boolean = xyz.glacierclient.launcher.utils.ShizukuExecutor.hasPermission()
+
+    @JavascriptInterface
+    fun requestShizukuPermission() {
+        activity.runOnUiThread {
+            xyz.glacierclient.launcher.utils.ShizukuExecutor.requestPermission(SHIZUKU_PERMISSION_REQUEST_CODE)
+        }
+    }
 
     @JavascriptInterface
     fun launchJavaEdition() {

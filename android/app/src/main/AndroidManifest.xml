@@ -108,6 +108,20 @@
              needs the app's real release/debug signing certificate
              signature hash substituted in by the project owner — see that
              file's redirect_uri and MicrosoftAuth.AZURE_CLIENT_ID. -->
+        <!-- Shizuku's own official provider (dev.rikka.shizuku:provider) —
+             lets the Shizuku Manager app/service discover and grant this
+             app permission (ShizukuExecutor.kt). No android:name override
+             needed; the library manifest supplies it, this entry only
+             needs to exist so manifest merging doesn't drop it under some
+             AGP/library version combinations. -->
+        <provider
+            android:name="rikka.shizuku.ShizukuProvider"
+            android:authorities="${applicationId}.shizuku"
+            android:multiprocess="false"
+            android:enabled="true"
+            android:exported="true"
+            android:permission="android.permission.INTERACT_ACROSS_USERS_FULL" />
+
         <activity
             android:name="com.microsoft.identity.client.BrowserTabActivity"
             android:exported="true">

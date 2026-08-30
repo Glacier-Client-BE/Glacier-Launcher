@@ -1,5 +1,6 @@
 package xyz.glacierclient.launcher.service
 
+import xyz.glacierclient.launcher.utils.ShizukuExecutor
 import java.io.DataOutputStream
 
 /**
@@ -46,17 +47,32 @@ object ClientInjectionService {
 
     /**
      * Attempts to stage [nativeLibPath] for the Minecraft Bedrock package.
-     * Returns immediately with a descriptive failure on non-rooted devices
-     * instead of pretending to succeed.
+     * Root (via `su`) is tried first, as it always has been; when root
+     * isn't available this now falls back to Shizuku (ShizukuExecutor.kt)
+     * — a non-root privileged-execution path via Shizuku's Manager app
+     * (adb-started) or a rooted Shizuku instance — before finally
+     * reporting failure. Root is never skipped in favor of Shizuku when
+     * both are present; Shizuku is strictly the fallback.
      */
-    fun attemptInject(nativeLibPath: String, targetPackage: String = "com.mojang.minecraftpe"): InjectionResult {
+    suspend fun attemptInject(nativeLibPath: String, targetPackage: String = "com.mojang.minecraftpe"): InjectionResult {
         if (!isRootAvailable()) {
+            if (ShizukuExecutor.isShizukuAvailable() && ShizukuExecutor.hasPermission()) {
+                val (success, message) = ShizukuExecutor.attemptInjectViaShizuku(nativeLibPath, targetPackage)
+                return InjectionResult(success, message)
+            }
+            val shizukuHint = when {
+                !ShizukuExecutor.isShizukuAvailable() ->
+                    "Shizuku isn't running either — install it and start it via ADB (no root needed) or root."
+                else ->
+                    "Shizuku is running but hasn't granted this app permission yet — call " +
+                        "ShizukuExecutor.requestPermission() from the UI first."
+            }
             return InjectionResult(
                 success = false,
-                message = "This build only supports the root-based staging fallback. The real " +
-                    "non-root technique (package-context + dlopen, same as other Android Bedrock " +
-                    "launchers) isn't implemented yet — see android/README.md. Install Magisk/root " +
-                    "to use this fallback instead.",
+                message = "This build only supports the root-based staging fallback and Shizuku " +
+                    "(no root granted). The real non-root technique (package-context + dlopen, " +
+                    "same as other Android Bedrock launchers) isn't implemented yet — see " +
+                    "android/README.md. $shizukuHint",
             )
         }
         return try {
