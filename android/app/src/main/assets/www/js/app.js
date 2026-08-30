@@ -1252,7 +1252,8 @@ const App = {
             return;
         }
         const loadMoreId = `${cfg.resultsId}-load-more`;
-        resultsEl.innerHTML = results.map(item => contentResultRowHtml(cfg.mapResult(item))).join("") +
+        const renderItem = cfg.renderItem || (item => contentResultRowHtml(cfg.mapResult(item)));
+        resultsEl.innerHTML = results.map(renderItem).join("") +
             (results.length < total
                 ? `<button class="btn-sm" id="${loadMoreId}" style="width:100%;margin-top:8px;"><i class="fa-solid fa-angles-down"></i> Load more (${results.length} / ${total})</button>`
                 : "");
@@ -1269,6 +1270,7 @@ const App = {
                 return { items: res.data, total: res.pagination ? res.pagination.totalCount : res.data.length };
             },
             mapResult: mod => ({ name: mod.name, summary: mod.summary }),
+            renderItem: curseForgeCardHtml,
         });
     },
 

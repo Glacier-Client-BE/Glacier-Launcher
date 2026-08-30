@@ -237,6 +237,47 @@ function contentResultRowHtml({ name, summary }) {
     </div>`;
 }
 
+// Same >=1M/>=1K/plain-count formatting as Home.razor.cs's FormatDownloads().
+function formatDownloads(count) {
+    count = Number(count) || 0;
+    if (count >= 1_000_000) return `${(count / 1_000_000).toFixed(1)}M downloads`;
+    if (count >= 1_000) return `${(count / 1_000).toFixed(1)}K downloads`;
+    return `${count} downloads`;
+}
+
+// Real CurseForge result card — mirrors Home.razor's cfResults @foreach
+// (thumbnail, author, download count, category tag, clamped summary,
+// download button) instead of the generic server-row list item other
+// search sources use. Kept as a distinct template (not routed through
+// contentResultRowHtml/App.renderPagedResults' generic mapResult) because
+// desktop's CurseForge card carries fields — thumbnail, author, category —
+// that plain title/summary can't express.
+function curseForgeCardHtml(mod) {
+    const thumb = mod.logo?.thumbnailUrl || mod.thumbnailUrl || "";
+    const category = (mod.categories && mod.categories[0]?.name) || "";
+    const icon = thumb
+        ? `<img src="${escapeHtml(thumb)}" style="width:100%;height:100%;object-fit:cover;border-radius:4px;" alt="" />`
+        : `<i class="fa-solid fa-cube" style="font-size:18px; color:var(--accent);"></i>`;
+    return `
+    <div class="client-card" style="margin-bottom:6px;">
+        <div class="client-card-header">
+            <div class="client-card-icon" style="padding:3px; border-radius:6px; overflow:hidden;">${icon}</div>
+            <div class="client-card-meta" style="min-width:0;">
+                <span class="client-card-name" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(mod.name)}</span>
+                <span class="client-card-sub" style="display:flex; gap:8px; align-items:center;">
+                    <span style="opacity:0.6;">${escapeHtml(mod.authors?.[0]?.name || "")}</span>
+                    <span style="opacity:0.4;">${formatDownloads(mod.downloadCount)}</span>
+                    ${category ? `<span class="tag-uptodate" style="font-size:9px; padding:1px 5px;">${escapeHtml(category)}</span>` : ""}
+                </span>
+            </div>
+            <div class="client-card-actions">
+                <button class="icon-btn" data-tooltip="Download & Install" data-cf-download="${mod.id}"><i class="fa-solid fa-download"></i></button>
+            </div>
+        </div>
+        <p class="client-card-desc" style="display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">${escapeHtml(mod.summary || "")}</p>
+    </div>`;
+}
+
 // Shared shell for a category-switcher + search-input + results-list panel
 // body — CurseForge and Modrinth search are the same layout with different
 // category lists/attributes/placeholders/result containers.
