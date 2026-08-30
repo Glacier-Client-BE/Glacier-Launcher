@@ -1,4 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Governs Android's legacy full-data backup (pre-API 31 auto cloud
+     backup, and "adb backup"). "accountData" is the SharedPreferences file
+     GPlayAPI.getAuthData reads/writes (accountEmail/accountToken — a
+     Google account AAS/master token, see docs/audit/TODO.md on why this
+     exists and what it risks). It must never be swept into Android's
+     backup/restore: a backup is copied off-device (Google Drive by
+     default) and can be restored onto any device, which would hand that
+     token to whatever restores it — a materially different, and worse,
+     exposure than the token merely living in this app's own sandbox. -->
 <full-backup-content>
     <include domain="sharedpref" path="." />
+    <exclude domain="sharedpref" path="accountData.xml" />
 </full-backup-content>

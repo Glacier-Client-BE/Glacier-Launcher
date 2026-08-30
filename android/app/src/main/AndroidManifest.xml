@@ -30,13 +30,15 @@
     <application
         android:name=".GlacierApp"
         android:allowBackup="true"
+        android:fullBackupContent="@xml/backup_rules"
+        android:dataExtractionRules="@xml/data_extraction_rules"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:theme="@style/Theme.Glacier"
         android:process="${applicationId}"
         android:supportsRtl="true"
-        tools:replace="android:name,android:icon,android:roundIcon,android:label,android:theme,android:process">
+        tools:replace="android:name,android:icon,android:roundIcon,android:label,android:theme,android:process,android:fullBackupContent,android:dataExtractionRules">
         <!-- tools:replace above resolves real conflicts with the merged-in
              app_pojavlauncher library's own <application> attributes (see
              android/README.md's "Single-APK distribution" section):
