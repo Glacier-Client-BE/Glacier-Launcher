@@ -10,15 +10,20 @@ const Modrinth = {
         { label: "Shaders", icon: "fa-solid fa-droplet", facet: "shader" },
     ],
 
+    // Same 5-minute TTL cache as CurseForge.search() — see HttpCache in
+    // js/httpcache.js.
     async search(facetType, query, offset = 0, limit = 20) {
-        const url = new URL(`${this.BASE_URL}/search`);
-        url.searchParams.set("limit", limit);
-        url.searchParams.set("offset", offset);
-        if (query) url.searchParams.set("query", query);
-        if (facetType) url.searchParams.set("facets", `[["project_type:${facetType}"]]`);
-        const res = await fetch(url);
-        if (!res.ok) throw new Error(`Modrinth returned ${res.status}`);
-        return res.json(); // { hits: [...], total_hits }
+        const key = `mr.search.${facetType || ""}.${offset}.${limit}.${query || ""}`;
+        return HttpCache.fetch(key, 5 * 60 * 1000, async () => {
+            const url = new URL(`${this.BASE_URL}/search`);
+            url.searchParams.set("limit", limit);
+            url.searchParams.set("offset", offset);
+            if (query) url.searchParams.set("query", query);
+            if (facetType) url.searchParams.set("facets", `[["project_type:${facetType}"]]`);
+            const res = await fetch(url);
+            if (!res.ok) throw new Error(`Modrinth returned ${res.status}`);
+            return res.json(); // { hits: [...], total_hits }
+        });
     },
 
     // Mirrors ModrinthService.cs's GetLatestVersionAsync/GetModpackFileAsync

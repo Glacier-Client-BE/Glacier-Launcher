@@ -86,22 +86,29 @@ const GlacierClient = {
 };
 
 // Mirrors NewsService.cs / AutoUpdateService.cs — same public endpoints,
-// no auth needed for either.
+// no auth needed for either. Both go through HttpCache (js/httpcache.js)
+// with a 10-minute TTL, same spirit as NewsService.cs's on-disk cache: a
+// flaky connection or a re-open of the News panel falls back to the last
+// good response instead of an empty list or a hard error.
 const NewsFeed = {
     NEWS_URL: "https://glacierclient.xyz/news.json",
     RELEASES_URL: "https://api.github.com/repos/Glacier-Client-BE/Glacier-Launcher/releases?per_page=12",
 
     async fetchPosts() {
-        const res = await fetch(this.NEWS_URL);
-        if (!res.ok) throw new Error(`news.json returned ${res.status}`);
-        return res.json(); // [{title, subtitle, url, icon}]
+        return HttpCache.fetch("news.posts", 10 * 60 * 1000, async () => {
+            const res = await fetch(this.NEWS_URL);
+            if (!res.ok) throw new Error(`news.json returned ${res.status}`);
+            return res.json(); // [{title, subtitle, url, icon}]
+        });
     },
 
     async fetchReleases() {
-        const res = await fetch(this.RELEASES_URL);
-        if (!res.ok) throw new Error(`GitHub releases returned ${res.status}`);
-        const data = await res.json();
-        return data.map(r => ({ tag: r.tag_name, publishedAt: r.published_at, body: r.body || "" }));
+        return HttpCache.fetch("news.releases", 10 * 60 * 1000, async () => {
+            const res = await fetch(this.RELEASES_URL);
+            if (!res.ok) throw new Error(`GitHub releases returned ${res.status}`);
+            const data = await res.json();
+            return data.map(r => ({ tag: r.tag_name, publishedAt: r.published_at, body: r.body || "" }));
+        });
     },
 };
 

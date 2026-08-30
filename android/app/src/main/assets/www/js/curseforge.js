@@ -38,17 +38,24 @@ const CurseForge = {
         return !!Bridge.curseForgeApiKey();
     },
 
+    // Cached for 5 minutes per (gameId, classId, query, index) combination —
+    // long enough that switching tabs/re-opening a panel or a load-more
+    // click on an unchanged query doesn't re-hit CurseForge's rate-limited
+    // API, short enough that a fresh search still sees new listings soon.
     async search(gameId, classId, query, index = 0, pageSize = 20) {
-        const url = new URL(`${this.BASE_URL}/v1/mods/search`);
-        url.searchParams.set("gameId", gameId);
-        url.searchParams.set("classId", classId);
-        url.searchParams.set("searchFilter", query || "");
-        url.searchParams.set("index", index);
-        url.searchParams.set("pageSize", pageSize);
-        url.searchParams.set("sortField", 2);
-        url.searchParams.set("sortOrder", "desc");
-        const res = await fetch(url, { headers: { "x-api-key": Bridge.curseForgeApiKey() } });
-        if (!res.ok) throw new Error(`CurseForge returned ${res.status}`);
-        return res.json();
+        const key = `cf.search.${gameId}.${classId}.${index}.${pageSize}.${query || ""}`;
+        return HttpCache.fetch(key, 5 * 60 * 1000, async () => {
+            const url = new URL(`${this.BASE_URL}/v1/mods/search`);
+            url.searchParams.set("gameId", gameId);
+            url.searchParams.set("classId", classId);
+            url.searchParams.set("searchFilter", query || "");
+            url.searchParams.set("index", index);
+            url.searchParams.set("pageSize", pageSize);
+            url.searchParams.set("sortField", 2);
+            url.searchParams.set("sortOrder", "desc");
+            const res = await fetch(url, { headers: { "x-api-key": Bridge.curseForgeApiKey() } });
+            if (!res.ok) throw new Error(`CurseForge returned ${res.status}`);
+            return res.json();
+        });
     },
 };
