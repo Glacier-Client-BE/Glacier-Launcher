@@ -82,7 +82,22 @@
       one. Also backs up whatever Bedrock build is currently installed
       before replacing it (`backupCurrentApk()`, plus a manual "Backup now"
       button) — same idea as LiteLDev/LeviLaunchroid's own build
-      management, so a bad import always has a way back.
+      management, so a bad import always has a way back. A "download from a
+      direct URL" path was added too (`downloadApk()` in the same class) for
+      fetching a build from a mirror/host the user points it at — a plain
+      HTTP GET, still no credentials of any kind.
+
+      **Do not add a Google Play purchase/GPlayAPI-based fetch path here.**
+      This was tried once this session (`utils/GPlayAPI.kt`, wrapping Aurora
+      Store's `PurchaseHelper`/`AuthHelper` with an AAS token) and reverted
+      immediately: it's the exact mechanism rejected above, just a concrete
+      implementation of it — it needs a Google account's AAS/master token
+      stored in this app, which is full-account-compromise blast radius
+      (email, payment methods, everything), not scoped to "download one
+      APK." That verdict doesn't change based on which library implements
+      it or how it's framed (a "mirror," a "second path alongside the
+      existing one," etc.) — the credential is the same credential either
+      way. If this shows up again, revert it the same way.
 - [x] Bedrock **Packs** panel: reused the SAF grant from Worlds
       (`BedrockStorageService.listPacks()`, same manifest.json "header.name"
       read as `Services/BedrockPackService.cs`) across all 6 kinds
