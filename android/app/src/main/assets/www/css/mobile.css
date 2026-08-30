@@ -159,6 +159,29 @@
     .client-card-sub { font-size: 9px; }
     .client-card-icon { width: 30px; height: 30px; }
 
+    /* Every other var(--r-md) (18px) surface below has the same problem as
+       .client-card above: 18px was sized for a resizable desktop window,
+       and reads as an over-rounded "bubble" once the row itself shrinks to
+       ~40-46px tall on a phone. Bring them all down to the same 10-12px
+       band real Android/iOS list rows and cards use, instead of leaving
+       Settings (and every other panel built from these same shared
+       classes) the only thing fixed. Small chips/pills keep 8px, matching
+       .vcs-btn/.panel-tab above. */
+    .setting-row,
+    .server-row,
+    .credits-card,
+    .stats-card,
+    .modpack-row,
+    .skinlib-card,
+    .ts-color-cell,
+    .update-version-chip,
+    .update-changelog { border-radius: 10px; }
+    .modal-box,
+    .search-modal,
+    .sort-menu,
+    .ts-color-editor { border-radius: 12px; }
+    .credits-link-btn { border-radius: 8px; }
+
     .version-row { padding: 6px 8px; }
     .version-icon { width: 30px; height: 30px; }
     .version-name { font-size: 12px; }
