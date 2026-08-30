@@ -140,8 +140,16 @@
       only, same as desktop's `DiscordToken`/`OpenDiscordOAuth`.)
 - [ ] Wire Java Profile skin-viewer UI to the already-working sign-in flow.
 - [ ] Split `panels.js` and `app.js` by concern (Bedrock/Java/Settings/state/router).
-- [ ] Add a `localStorage`-backed TTL cache for CurseForge/Modrinth/News
-      fetches on Android.
+- [x] Add a `localStorage`-backed TTL cache for CurseForge/Modrinth/News
+      fetches on Android (`js/httpcache.js`'s `HttpCache.fetch(key, ttlMs,
+      fetcher)`, wired into `CurseForge.search()`/`Modrinth.search()` at a
+      5-minute TTL and `NewsFeed.fetchPosts()`/`fetchReleases()` at 10
+      minutes). Same intent as `NewsService.cs`'s on-disk cache: avoids
+      re-hitting CurseForge's/Modrinth's rate-limited search APIs on every
+      panel re-open or unchanged load-more click, and falls back to the
+      last-good response (any age) when a fresh fetch throws. Deliberately
+      NOT applied to `AnnouncementFeed` — already documented above as a
+      silent-fail-only, no-cache contract on purpose.
 - [ ] Add settings schema versioning + migration to `JsonStore`/`LauncherSettings` (Windows).
 - [ ] Extract `IThirdPartyClient` interface for Flarial/Latite/OderSo/LeviLamina services (Windows).
 - [ ] Update `ClientInjectionService.kt` doc comment and in-app Settings →
@@ -205,6 +213,17 @@ features this bug affected.
 - [ ] Audit `Home.razor`'s `StateHasChanged()` call sites for over-broad re-renders (Windows).
 - [ ] Cache rendered panel HTML strings in `panels.js`, invalidate only on
       underlying data change, to reduce panel-switch jank.
-- [ ] Verify search-input debounce exists on both platforms' CurseForge/Modrinth search.
-- [ ] Confirm skin texture caching exists to avoid re-fetching from Mojang CDN each panel open.
+- [x] Verify search-input debounce exists on both platforms' CurseForge/Modrinth search.
+      Confirmed: `Pages/Home.razor.cs` cancels/re-arms `_cfDebounceCts`/
+      `_mrDebounceCts` per keystroke; Android's `app.js` does the same with
+      plain `setTimeout`/`clearTimeout` (`cfDebounce`/`mrDebounce`, both
+      350ms) in its input-change handler. No change needed.
+- [x] Confirm skin texture caching exists to avoid re-fetching from Mojang CDN each panel open.
+      Neither platform has an explicit skin-texture cache — `Services/
+      SkinService.cs`/`SkinLibraryService.cs` and `js/skinlibrary.js` both
+      just point an `<img>`/element at Mojang's `textures.minecraft.net`
+      URL directly and rely on the platform's own HTTP image cache
+      (WebView2 on Windows, Android's WebView here) honoring Mojang's cache
+      headers. Android already matches desktop's actual behavior, so
+      nothing to add.
 </content>
