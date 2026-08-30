@@ -26,13 +26,13 @@ import kotlin.coroutines.resume
  * against the same public AIDL/Binder contract the Play Store app exposes,
  * not a copy of anyone's proprietary code).
  *
- * IMPORTANT — this answers a DIFFERENT question than PlayStoreValidator.kt:
- *   - PlayStoreValidator (GPlayApi/PurchaseHelper): does the signed-in
- *     Google account own com.mojang.minecraftpe (Bedrock)?
- *   - PlayLicensing (this file): was THIS app — Glacier Launcher itself —
- *     legitimately obtained through the Play Store (vs. sideloaded/pirated)?
- * They are independent checks against independent targets; do not conflate
- * them, and do not remove PlayStoreValidator in favor of this.
+ * This answers a narrow, specific question: was THIS app — Glacier
+ * Launcher itself — legitimately obtained through the Play Store (vs.
+ * sideloaded/pirated)? It says nothing about Bedrock ownership; a
+ * Google-account/Play-purchase check for that (GPlayApi/PurchaseHelper,
+ * needing a stored account AAS/master token) was tried and reverted, see
+ * docs/audit/TODO.md and MicrosoftAuth.kt's doc comment for the
+ * credential-free alternative that replaced it.
  *
  * Requires com.android.vending (the Play Store app) to be installed and
  * signed in, and — for a real result — Glacier's own BuildConfig.

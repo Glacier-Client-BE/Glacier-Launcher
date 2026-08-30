@@ -24,11 +24,13 @@ import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
 /**
- * Alternative, Microsoft/Xbox-account path for proving Minecraft Bedrock
- * ownership, sitting ALONGSIDE (never replacing) the Google-account path in
- * GPlayAPI.kt/PlayStoreValidator.kt. A user picks whichever account type
- * they actually own Bedrock through — Play Store purchase (GPlayAPI) or a
- * Microsoft account with Bedrock/Xbox entitlement (this file).
+ * Proves Minecraft Bedrock ownership via a Microsoft/Xbox account's own
+ * Bedrock/Xbox entitlement — a real, scoped OAuth login, not a stored
+ * account credential. (A Google-account/Play-purchase alternative using
+ * Aurora Store's GPlayApi client was tried and reverted: it needed a full
+ * Google account AAS/master token stored client-side, a far bigger blast
+ * radius than what it bought — see docs/audit/TODO.md. This MSAL path
+ * needs no such credential, so it's the one that stayed.)
  *
  * The MainActivity.signInMicrosoft() WebView flow already committed in this
  * repo drives Microsoft's legacy oauth20_authorize.srf code flow and hands
@@ -46,11 +48,10 @@ import kotlin.coroutines.resumeWithException
  * The resulting XSTS user hash + token (and MSAL's own refresh token,
  * which MSAL persists in its own encrypted cache — this object additionally
  * mirrors the XSTS token pair into a private SharedPreferences file so the
- * rest of the app can check "is a Microsoft account signed in" the same
- * synchronous way GPlayAPI.getAuthDataOrNull() does for Google accounts)
- * lives in "msAccountData", which — like GPlayAPI's "accountData" — is
- * excluded from Android backup/device-transfer in backup_rules.xml and
- * data_extraction_rules.xml so it can never leave the device via a cloud
+ * rest of the app can check "is a Microsoft account signed in" synchronously)
+ * lives in "msAccountData", which is excluded from Android backup/
+ * device-transfer in backup_rules.xml and data_extraction_rules.xml so it
+ * can never leave the device via a cloud
  * backup or "transfer to new phone" restore.
  */
 object MicrosoftAuth {
@@ -179,9 +180,8 @@ object MicrosoftAuth {
     }
 
     /**
-     * Full entitlement check against Minecraft Services (equivalent purpose
-     * to PlayStoreValidator.checkOwnership, but for the Microsoft-account
-     * path): login_with_xbox -> mcToken -> GET /entitlements/mcstore.
+     * Full entitlement check against Minecraft Services:
+     * login_with_xbox -> mcToken -> GET /entitlements/mcstore.
      */
     @WorkerThread
     fun checkMinecraftEntitlement(context: Context): Boolean {

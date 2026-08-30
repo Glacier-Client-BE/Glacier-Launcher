@@ -171,19 +171,13 @@ dependencies {
     // (JavaEditionBridge.kt), not a second app the user has to install.
     implementation(project(":app_pojavlauncher"))
 
-    // Downloader.kt (utils/) and GPlayAPI.kt (utils/): a Play Store
-    // purchase-based APK fetch path alongside BedrockVersionService's
-    // manual-APK one. GPlayAPI wraps Aurora Store's GPlayApi client
-    // (PurchaseHelper/AuthHelper), which needs OkHttp for HTTP and
-    // kotlinx-coroutines for its suspend functions.
+    // MicrosoftAuth.kt: Microsoft's own official MSAL Android library and
+    // OkHttp/kotlinx-coroutines for its XSTS token exchange and suspend
+    // functions — a real, scoped OAuth login used to verify Bedrock
+    // ownership through the account's own Xbox/Minecraft entitlement.
+    // Public artifacts, no extra repository needed.
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
-    implementation("com.auroraoss:gplayapi:3.4.2")
-
-    // MicrosoftAuth.kt: Microsoft's own official MSAL Android library, the
-    // alternative Xbox/Microsoft-account ownership-verification path
-    // alongside GPlayAPI's Google-account one. Public artifact on
-    // mavenCentral (no extra repository needed).
     implementation("com.microsoft.identity.client:msal:5.4.0")
 
     // ShizukuExecutor.kt: Shizuku's official, open-source client API +
