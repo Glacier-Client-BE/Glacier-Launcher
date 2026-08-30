@@ -170,7 +170,13 @@
       every device has a file manager that handles
       `vnd.android.document/directory`, same as desktop's own shortcut
       failing quietly with no Explorer-equivalent registered).
-- [ ] Add a Logs panel capture pipeline + mclo.gs sharing to Android.
+- [x] Add a Logs panel capture pipeline + mclo.gs sharing to Android
+      (`service/LogService.kt` lists/reads the active instance's `logs/` +
+      `crash-reports/` — same dirs `JavaInstanceService.kt` already resolves
+      for everything else — `js/logs.js` ports `LogService.cs`'s exact
+      redaction patterns and mclo.gs upload, real markup/CSS from
+      `Components/LogsPanel.razor`, reachable from the Java Profile panel
+      and global search same as desktop).
 - [x] Add lightweight session-timer service for Android Stats panel —
       `MainActivity.kt`'s `onResume()` is the closest signal Android gives
       for "the launched game Activity closed" (there's no real callback),

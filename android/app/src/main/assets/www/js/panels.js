@@ -754,11 +754,12 @@ function javaVersionsPanelHtml(filter, showSnapshots, showHistorical, versions, 
 }
 
 // ── Java Profile ───────────────────────────────────────────────────────
-// Mirrors Pages/Home.razor's "javaprofile" panel. The full signed-in view
-// (SkinViewer 3D preview, cape wardrobe, playtime stats) needs a real
-// Microsoft/Xbox sign-in this app doesn't have wired yet, so the honest
-// "not signed in" branch — the desktop panel's own gate when JavaUuid is
-// empty — is also this app's true current state, not a shortcut.
+// Mirrors Pages/Home.razor's "javaprofile" panel. Sign-in itself is real
+// (MainActivity.kt's signInMicrosoft() + js/xboxauth.js — same OAuth2/XBL/
+// XSTS flow as desktop's LiveAuthService.cs); a live 3D SkinViewer preview
+// (desktop mirrors Mojang's skin into a rotating model) is the one piece
+// not ported — this shows the flat skin PNG desktop's own header avatar
+// uses instead of building a WebGL renderer for it.
 function instanceRowHtml(inst, state) {
     if (state.renamingId === inst.id) {
         return `
@@ -833,6 +834,10 @@ function javaProfilePanelBody() {
         <div class="profile-actions">
             <button class="skin-btn" data-open-panel="skinlibrary"><i class="fa-solid fa-shirt"></i> Skin library</button>
             <button class="skin-btn skin-btn-ghost" id="profile-signout-btn"><i class="fa-solid fa-right-from-bracket"></i> Sign out</button>
+        </div>
+        <div class="profile-actions">
+            <button class="skin-btn skin-btn-ghost" data-open-panel="stats"><i class="fa-solid fa-chart-simple"></i> Statistics</button>
+            <button class="skin-btn skin-btn-ghost" data-open-panel="logs"><i class="fa-solid fa-file-lines"></i> Logs</button>
         </div>
     </div>
     ${instancesCard}`;
@@ -1372,12 +1377,55 @@ function statsPanelBody(sessions) {
 }
 
 // ── Logs & Crashes ─────────────────────────────────────────────────────
-// Mirrors Components/LogsPanel.razor. Listing real log/crash files needs
-// Storage Access Framework wiring to the built-in Java Edition runtime's
-// shared storage (queued); mclo.gs sharing (a real public paste API) has
-// nothing to share until then.
-function logsPanelBody() {
-    return `<div class="stats-empty">No logs or crash reports found for the active instance yet.</div>`;
+// Mirrors Components/LogsPanel.razor — real listing/reading via
+// LogService.kt (plain java.io.File under the active instance's own game
+// dir, same one JavaInstanceService.kt already resolves for everything
+// else), redaction + the mclo.gs upload itself in js/logs.js.
+function formatLogSize(bytes) {
+    if (bytes <= 0) return "0 B";
+    const units = ["B", "KB", "MB", "GB"];
+    let v = bytes, i = 0;
+    while (v >= 1024 && i < units.length - 1) { v /= 1024; i++; }
+    return `${Math.round(v * 10) / 10} ${units[i]}`;
+}
+
+function logsPanelBody(state) {
+    if (state.files.length === 0) {
+        return `<div class="stats-empty">No logs or crash reports found for the active instance yet.</div>`;
+    }
+
+    const list = `<div class="logs-file-list">
+        ${state.files.map(f => `
+        <button class="logs-file ${f.path === state.openPath ? "active" : ""} ${f.isCrash ? "crash" : ""}" data-open-log="${escapeHtml(f.path)}">
+            <i class="${f.isCrash ? "fa-solid fa-triangle-exclamation" : "fa-solid fa-file-lines"}"></i>
+            <span class="logs-file-name">${escapeHtml(f.name)}</span>
+            <span class="logs-file-size">${formatLogSize(f.size)}</span>
+        </button>`).join("")}
+    </div>`;
+
+    if (!state.openPath) return list;
+
+    const fileName = state.openPath.split("/").pop();
+    const shareRow = state.shareUrl
+        ? `<div class="logs-share-url">
+            <i class="fa-solid fa-link"></i>
+            <a href="${escapeHtml(state.shareUrl)}" target="_blank" rel="noopener">${escapeHtml(state.shareUrl)}</a>
+            <button class="btn-sm" data-copy-log-share><i class="fa-solid fa-copy"></i></button>
+        </div>`
+        : "";
+
+    return `${list}
+    <div class="logs-toolbar">
+        <span class="logs-open-name">${escapeHtml(fileName)}</span>
+        <div style="flex:1"></div>
+        <button class="btn-sm" data-copy-log><i class="fa-solid fa-copy"></i> Copy</button>
+        <button class="btn-sm btn-accent" data-share-log ${state.sharing ? "disabled" : ""}>
+            ${state.sharing ? `<span class="spinner"></span>` : `<i class="fa-solid fa-share-nodes"></i>`}
+            <span>&nbsp;Share to mclo.gs</span>
+        </button>
+    </div>
+    ${shareRow}
+    <pre class="logs-view">${escapeHtml(state.content)}</pre>`;
 }
 
 // Overlay shell for panels that have no .panel-tabs footer on desktop

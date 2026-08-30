@@ -131,6 +131,9 @@ object JavaInstanceService {
         return LauncherProfiles.mainProfileJson.profiles.keys.firstOrNull()
     }
 
+    /** The active instance's real game directory — used by LogService.kt to find its logs/crash-reports. */
+    fun activeGameDir(): File? = activeProfileId()?.let { directoryFor(it) }
+
     /**
      * Desktop's BackupSavesAsync(): zips the active instance's saves folder
      * into backups/saves-<timestamp>.zip. Returns null when there is nothing

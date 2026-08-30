@@ -110,6 +110,8 @@ const App = {
         onboarding: { open: false, step: 0, edition: "bedrock", username: "" },
         pendingSessionStart: null,
         javaInstances: { instances: [], renamingId: null, renameValue: "", confirmDeleteId: null },
+        // Mirrors Components/LogsPanel.razor's own field set.
+        logs: { files: [], loaded: false, openPath: null, content: "", sharing: false, shareUrl: "" },
         news: {
             loading: false, posts: [], releases: [],
             fallbackItems: [
@@ -336,6 +338,47 @@ const App = {
         this.state.bedrockWorlds.loading = false;
         this.state.bedrockWorlds.loaded = true;
         if (this.state.openPanel === "bedrockworlds") this.openPanel("bedrockworlds");
+    },
+
+    // ── Logs & Crashes (Components/LogsPanel.razor) ──────────────────────
+
+    loadLogs() {
+        const l = this.state.logs;
+        try { l.files = JSON.parse(Bridge.listJavaLogs() || "[]"); } catch (e) { l.files = []; }
+        l.loaded = true;
+        // Auto-open the newest file so the panel isn't empty on entry, same as desktop.
+        if (!l.openPath && l.files.length > 0) this.openLog(l.files[0].path);
+        else if (this.state.openPanel === "logs") this.openPanel("logs");
+    },
+
+    openLog(path) {
+        const l = this.state.logs;
+        l.openPath = path;
+        l.shareUrl = "";
+        l.content = Bridge.readJavaLog(path);
+        if (this.state.openPanel === "logs") this.openPanel("logs");
+    },
+
+    copyLogContent() {
+        navigator.clipboard?.writeText(this.state.logs.content).catch(() => {});
+    },
+
+    async shareLog() {
+        const l = this.state.logs;
+        if (!l.content || l.sharing) return;
+        l.sharing = true;
+        if (this.state.openPanel === "logs") this.openPanel("logs");
+        try {
+            l.shareUrl = await LogSharing.share(l.content);
+        } catch (e) {
+            l.shareUrl = "";
+        }
+        l.sharing = false;
+        if (this.state.openPanel === "logs") this.openPanel("logs");
+    },
+
+    copyLogShareUrl() {
+        navigator.clipboard?.writeText(this.state.logs.shareUrl).catch(() => {});
     },
 
     saveSettings() {
@@ -1058,7 +1101,11 @@ const App = {
             // StatsPanel.razor, LogsPanel.razor) with no .panel-tabs footer at all —
             // not routed through panelShell(), which always appends one.
             case "stats": html = bareOverlayHtml("stats", "Statistics", "", statsPanelBody(this.state.settings.playSessions || [])); break;
-            case "logs": html = bareOverlayHtml("logs", "Logs & Crashes", `<button class="btn-sm" data-tooltip="Refresh"><i class="fa-solid fa-rotate"></i> Refresh</button>`, logsPanelBody()); break;
+            case "logs": {
+                if (!this.state.logs.loaded) this.loadLogs();
+                html = bareOverlayHtml("logs", "Logs & Crashes", `<button class="btn-sm" data-refresh-logs data-tooltip="Refresh"><i class="fa-solid fa-rotate"></i> Refresh</button>`, logsPanelBody(this.state.logs));
+                break;
+            }
             case "skinlibrary": {
                 if (this.state.skinLibrary.skins.length === 0) this.loadSkins();
                 html = skinLibraryPanelHtml(this.state.skinLibrary);
@@ -1395,6 +1442,13 @@ const App = {
             if (e.target.closest("[data-cancel-delete-instance]")) { this.cancelDeleteInstance(); return; }
             const deleteInstanceBtn = e.target.closest("[data-delete-instance]");
             if (deleteInstanceBtn) { this.deleteJavaInstance(deleteInstanceBtn.dataset.deleteInstance); return; }
+
+            if (e.target.closest("[data-refresh-logs]")) { this.loadLogs(); return; }
+            const openLogBtn = e.target.closest("[data-open-log]");
+            if (openLogBtn) { this.openLog(openLogBtn.dataset.openLog); return; }
+            if (e.target.closest("[data-copy-log]")) { this.copyLogContent(); return; }
+            if (e.target.closest("[data-share-log]")) { this.shareLog(); return; }
+            if (e.target.closest("[data-copy-log-share]")) { this.copyLogShareUrl(); return; }
 
             const installModpackBtn = e.target.closest("[data-install-modpack]");
             if (installModpackBtn) { this.installModpack(installModpackBtn.dataset.installModpack, installModpackBtn.dataset.installModpackName); return; }

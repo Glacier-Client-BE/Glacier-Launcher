@@ -87,6 +87,10 @@ const Bridge = (() => {
         // Custom Bedrock client .so picker
         pickCustomDllFile: () => { if (hasNative) native.pickCustomDllFile(); },
 
+        // Logs & Crashes panel (LogService.kt)
+        listJavaLogs: () => (hasNative ? native.listJavaLogs() : "[]"),
+        readJavaLog: (path) => (hasNative ? native.readJavaLog(path) : "No native bridge (browser preview)."),
+
         // Exit the app — desktop's .window-controls close button; the
         // minimize/maximize/fullscreen ones alongside it don't apply here.
         closeApp: () => { if (hasNative) native.closeApp(); },

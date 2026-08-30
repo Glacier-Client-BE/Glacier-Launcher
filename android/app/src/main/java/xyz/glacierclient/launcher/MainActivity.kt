@@ -25,6 +25,7 @@ import xyz.glacierclient.launcher.service.JavaEditionBridge
 import xyz.glacierclient.launcher.service.JavaInstanceService
 import xyz.glacierclient.launcher.service.LevelDatService
 import xyz.glacierclient.launcher.service.LauncherUpdateService
+import xyz.glacierclient.launcher.service.LogService
 import xyz.glacierclient.launcher.service.ModpackInstallService
 import java.io.File
 
@@ -543,6 +544,15 @@ private class AndroidBridge(private val activity: MainActivity, private val webV
 
     @JavascriptInterface
     fun setActiveJavaInstance(id: String): Boolean = JavaInstanceService.setActive(id)
+
+    // Logs & Crashes panel (Components/LogsPanel.razor / Services/LogService.cs).
+    // Redaction and the mclo.gs upload itself happen in JS (js/logs.js) —
+    // this only needs real file access to the active instance's logs.
+    @JavascriptInterface
+    fun listJavaLogs(): String = LogService.listLogs()
+
+    @JavascriptInterface
+    fun readJavaLog(path: String): String = LogService.readLog(path)
 
     // Modrinth-only modpack install (see ModpackInstallService.kt for why
     // CurseForge and loader installation aren't covered here yet).

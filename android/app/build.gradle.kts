@@ -33,6 +33,21 @@ android {
             // Android wants a positive versionCode.
             ?.coerceAtLeast(1) ?: 1
         versionName = System.getenv("GLACIER_VERSION") ?: "0.0.0-dev"
+
+        // The vendored Java Edition runtime ships native libs (JRE, LWJGL/
+        // GLFW, bytehook, ...) for all four Android ABIs, ~130MB combined,
+        // in one universal APK. x86/x86_64 exist for emulators and the
+        // handful of Intel-based Android tablets, not real phones — the
+        // devices this launcher actually targets are all arm64-v8a (or,
+        // rarely, armeabi-v7a on older hardware). Dropping the two Intel
+        // ABIs from packaging cuts roughly 55-60MB with no loss of real
+        // device support, without the multi-APK release/updater plumbing a
+        // full ABI split would need (LauncherUpdateService.kt expects one
+        // APK asset per GitHub release).
+        ndk {
+            abiFilters += listOf("armeabi-v7a", "arm64-v8a")
+        }
+
         // The merged-in Java Edition runtime (androidx.constraintlayout,
         // viewpager2, preference, bytehook, htmlcleaner, ...) pushes total
         // method count well past the pre-multidex 64K limit. minSdk 26 has
