@@ -154,11 +154,48 @@ function serverRowHtml(s, saved) {
             <span class="server-sub">${s.address}:${s.port}</span>
         </div>
         <div class="version-actions">
-            ${saved ? `<button class="icon-btn icon-btn-ghost" data-tooltip="Edit"><i class="fa-solid fa-pen"></i></button>
+            ${saved ? `<button class="icon-btn icon-btn-ghost" data-tooltip="Edit" data-edit-server="${s.address}"><i class="fa-solid fa-pen"></i></button>
                 <button class="icon-btn icon-btn-ghost" data-tooltip="Delete" data-delete-server="${s.address}"><i class="fa-solid fa-trash"></i></button>`
                 : `<button class="icon-btn" data-tooltip="Save" data-save-server="${s.address}"><i class="fa-solid fa-bookmark"></i></button>`}
             <button class="copy-btn" data-tooltip="Copy address" data-copy-address="${s.address}:${s.port}"><i class="fa-solid fa-copy"></i></button>
             <button class="icon-btn" data-tooltip="Launch & connect"><i class="fa-solid fa-play"></i></button>
+        </div>
+    </div>`;
+}
+
+// Add/edit server modal — real markup from Pages/Home.razor's "ADD/EDIT
+// SERVER MODAL" region, validated the same way Home.Panels.cs's
+// SaveServerModal() does (address required, port 1-65535).
+function serverModalHtml(state) {
+    if (!state || !state.open) return "";
+    const editing = !!state.editingAddress;
+    return `
+    <div class="modal-overlay" data-close-server-modal-backdrop>
+        <div class="modal-box">
+            <div class="modal-header">
+                <span class="modal-title">
+                    <i class="fa-solid fa-server" style="color:var(--accent);margin-right:8px;"></i>
+                    ${editing ? "Edit server" : "Add server"}
+                </span>
+                <button class="modal-close-btn" data-close-server-modal><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="modal-body">
+                <label class="modal-input-label">Display name</label>
+                <input class="modal-input" id="server-modal-name" placeholder="My Server" value="${escapeHtml(state.name)}" />
+
+                <label class="modal-input-label" style="margin-top:8px;">Address (IP or hostname)</label>
+                <input class="modal-input" id="server-modal-address" placeholder="play.example.com" value="${escapeHtml(state.address)}" />
+
+                <label class="modal-input-label" style="margin-top:8px;">Port</label>
+                <input class="modal-input" id="server-modal-port" type="number" placeholder="19132" value="${state.port}" />
+
+                ${state.error ? `<span class="error-text" style="display:block;margin-top:6px;">${escapeHtml(state.error)}</span>` : ""}
+
+                <div class="modal-btn-row" style="margin-top:14px;">
+                    <button class="modal-btn modal-btn-cancel" data-close-server-modal>Cancel</button>
+                    <button class="modal-btn modal-btn-confirm" data-save-server-modal><i class="fa-solid fa-floppy-disk"></i> Save</button>
+                </div>
+            </div>
         </div>
     </div>`;
 }

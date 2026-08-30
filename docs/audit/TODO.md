@@ -106,9 +106,29 @@
       stub — it's a materially different feature (isolated Bedrock
       account-folder copies, `Home.BedrockInstances.cs`) rather than a
       plain SAF list, and is lower priority than what's already real.
-- [ ] Diff `Components/*.razor` output markup against `panels.js`/`app.js`
-      generated HTML for spinners, tooltips, error dialogs, and toggles to
-      close the "Unverified" rows in `07_UI_PARITY.md`.
+- [x] Diffed `Components/*.razor` output markup against `panels.js`/`app.js`
+      generated HTML to close the "Unverified" rows in `07_UI_PARITY.md`.
+      Findings: `Components/Spinner.razor` and `Components/Modal.razor` are
+      never actually referenced anywhere in `Pages/Home.razor` — every real
+      spinner/modal on desktop is a hand-written `<span class="spinner">`/
+      `.modal-overlay > .modal-box` (no `role="status"`/`aria-live`/
+      `role="dialog"`/`aria-modal` anywhere in the real markup either), which
+      Android's `panels.js` already matches byte-for-byte — no gap, those
+      two rows are resolved as "already matches, component just unused."
+      Tooltips: both platforms already share the exact same CSS-driven
+      `[data-tooltip]` system (`app.css`), not a native browser tooltip —
+      also resolved, no gap. Error dialogs: real gap found and fixed — the
+      Servers panel's header "Add" button was a dead stub with no handler,
+      and there was no add/edit-server flow at all (`Pages/Home.razor`'s
+      real "ADD/EDIT SERVER MODAL" region with name/address/port fields and
+      `Home.Panels.cs`'s `SaveServerModal()` validation). Added the same
+      modal (`panels.js`'s `serverModalHtml()`, real `.modal-box`/
+      `.modal-input`/`.error-text` markup) with matching validation (address
+      required, port 1-65535) and edit support for existing saved servers.
+      The other desktop `error-text` sites (Flarial/OderSo/LeviLamina,
+      Windows-only third-party clients; per-version-row install errors for a
+      feature Android's read-only Versions list doesn't have) have no
+      Android surface to add an error to in the first place — not gaps.
 - [x] Add a shared `js/apiClient.js` wrapper (Android) to remove duplicated
       fetch/HTTP boilerplate — see `05_REFACTOR_PLAN.md`. `ApiClient.getJson`/
       `getText` (one `fetch` -> `if (!res.ok) throw` -> parse, matching the

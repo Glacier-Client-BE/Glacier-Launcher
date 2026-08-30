@@ -108,6 +108,7 @@ const App = {
         onboarding: { open: false, step: 0, edition: "bedrock", username: "" },
         pendingSessionStart: null,
         javaInstances: { instances: [], renamingId: null, renameValue: "", confirmDeleteId: null },
+        serverModal: { open: false, editingAddress: null, name: "", address: "", port: 19132, error: "" },
         // Mirrors Components/LogsPanel.razor's own field set.
         logs: { files: [], loaded: false, openPath: null, content: "", sharing: false, shareUrl: "" },
         // Side-loaded Bedrock build management (BedrockVersionService.kt) —
@@ -366,6 +367,68 @@ const App = {
         const uuid = (s.javaUuid || "").replace(/-/g, "");
         GlacierSkin.render(SKIN_VIEWER_CANVAS_ID, `https://mc-heads.net/skin/${uuid}`, s.skinViewerModel)
             .then(ok => { if (!ok) { s.skinViewerMode = "2d"; if (this.state.openPanel === "javaprofile") this.openPanel("javaprofile"); } });
+    },
+
+    // Add/edit server modal — mirrors Home.Panels.cs's OpenAddServerModal/
+    // OpenEditServerModal/CloseServerModal/SaveServerModal, real
+    // .modal-overlay/.modal-box markup from Pages/Home.razor's "ADD/EDIT
+    // SERVER MODAL" region (panels.js's serverModalHtml()).
+    openAddServerModal() {
+        this.state.serverModal = { open: true, editingAddress: null, name: "", address: "", port: 19132, error: "" };
+        this.renderServerModal();
+    },
+
+    openEditServerModal(address) {
+        const s = (this.state.settings.savedServers || []).find(x => x.address === address);
+        if (!s) return;
+        this.state.serverModal = { open: true, editingAddress: s.address, name: s.name, address: s.address, port: s.port, error: "" };
+        this.renderServerModal();
+    },
+
+    closeServerModal() {
+        this.state.serverModal.open = false;
+        this.renderServerModal();
+    },
+
+    saveServerModal() {
+        const m = this.state.serverModal;
+        const nameInput    = document.getElementById("server-modal-name");
+        const addressInput = document.getElementById("server-modal-address");
+        const portInput    = document.getElementById("server-modal-port");
+        m.name    = nameInput    ? nameInput.value    : m.name;
+        m.address = addressInput ? addressInput.value : m.address;
+        m.port    = portInput    ? Number(portInput.value) : m.port;
+
+        if (!m.address || !m.address.trim()) {
+            m.error = "Address is required.";
+            this.renderServerModal();
+            return;
+        }
+        if (!(m.port > 0 && m.port <= 65535)) {
+            m.error = "Port must be between 1 and 65535.";
+            this.renderServerModal();
+            return;
+        }
+
+        const name = m.name && m.name.trim() ? m.name.trim() : m.address.trim();
+        const servers = (this.state.settings.savedServers || []).slice();
+        if (m.editingAddress) {
+            const idx = servers.findIndex(x => x.address === m.editingAddress);
+            if (idx !== -1) servers[idx] = { ...servers[idx], name, address: m.address.trim(), port: m.port };
+        } else {
+            servers.push({ name, address: m.address.trim(), port: m.port });
+        }
+        this.state.settings.savedServers = servers;
+        this.saveSettings();
+
+        m.open = false;
+        this.renderServerModal();
+        if (this.state.openPanel === "servers") this.openPanel("servers");
+    },
+
+    renderServerModal() {
+        const root = document.getElementById("server-modal-root");
+        if (root) root.innerHTML = serverModalHtml(this.state.serverModal);
     },
 
     async loadBedrockWorlds() {
@@ -1065,7 +1128,7 @@ const App = {
         switch (id) {
             case "clients": html = panelShell({ id, title: "Clients", headerActions: `<button class="panel-icon-btn" data-open-panel="mcversions"><i class="fa-solid fa-clock-rotate-left"></i><span>Versions</span></button>`, body: clientsPanelBody(), activeTabId: id }); break;
             case "settings": html = this.settingsPanelHtml("all"); break;
-            case "servers": html = panelShell({ id, title: "Servers", headerActions: `<button class="panel-icon-btn"><i class="fa-solid fa-plus"></i><span>Add</span></button>`, body: serversPanelBody(), activeTabId: id }); break;
+            case "servers": html = panelShell({ id, title: "Servers", headerActions: `<button class="panel-icon-btn" data-open-server-modal data-tooltip="Add server"><i class="fa-solid fa-plus"></i><span>Add</span></button>`, body: serversPanelBody(), activeTabId: id }); break;
             case "credits": html = panelShell({ id, title: "Credits", body: creditsPanelBody(), activeTabId: id }); break;
             case "addons": {
                 this.state.cfCategory = (this.state.edition === "java" ? CurseForge.javaCategories : CurseForge.bedrockCategories)[0].classId;
@@ -1608,6 +1671,12 @@ const App = {
                 this.openPanel("servers");
                 return;
             }
+            if (e.target.closest("[data-open-server-modal]")) { this.openAddServerModal(); return; }
+            const editServerBtn = e.target.closest("[data-edit-server]");
+            if (editServerBtn) { this.openEditServerModal(editServerBtn.dataset.editServer); return; }
+            if (e.target.closest("[data-close-server-modal]")) { this.closeServerModal(); return; }
+            if (e.target.matches("[data-close-server-modal-backdrop]")) { this.closeServerModal(); return; }
+            if (e.target.closest("[data-save-server-modal]")) { this.saveServerModal(); return; }
 
             const mcvChannel = e.target.closest("[data-mcv-channel]");
             if (mcvChannel) {
