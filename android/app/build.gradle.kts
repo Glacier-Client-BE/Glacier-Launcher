@@ -144,6 +144,93 @@ android {
     }
 }
 
+// Generates res/raw/msal_config.json (MicrosoftAuth.kt) from CI secrets /
+// local signing env vars, overwriting the committed placeholder at build
+// time — same idea as CURSEFORGE_API_KEY's buildConfigField default, just
+// targeting a resource file instead of a BuildConfig constant, since MSAL
+// reads its client config from a raw JSON resource, not code.
+//
+// MSAL's Android redirect_uri is msauth://<package>/<base64 SHA-1 of the
+// signing cert>, per Microsoft's own documented public MSAL Android
+// redirect URI format (https://learn.microsoft.com/en-us/entra/identity-platform/msal-android-single-sign-on-across-devices),
+// not anything proprietary to this project. A build only works against the
+// real Azure app registration if BOTH the client_id and the redirect
+// signature hash match what's registered there, and the signature hash is
+// only knowable once we know which keystore signed the APK. So:
+//  - if a release keystore is configured (hasSigningConfig above), compute
+//    the real hash from it and bake in the real AZURE_CLIENT_ID.
+//  - otherwise (local/dev/PR/debug-signed builds) the redirect URI can
+//    never match Azure's registered one anyway, so client_id is left as
+//    the placeholder too — never let a real client ID leak into a config
+//    that can't complete sign-in, and never mislead a debug build into
+//    thinking it's fully configured.
+val generateMsalConfig = tasks.register("generateMsalConfig") {
+    val outputFile = layout.projectDirectory.file("src/main/res/raw/msal_config.json").asFile
+    val placeholderClientId = "00000000-0000-0000-0000-000000000000"
+    val placeholderHash = "YOUR_SIGNATURE_HASH_HERE"
+
+    inputs.property("hasSigningConfig", hasSigningConfig)
+    inputs.property("azureClientIdSet", !System.getenv("AZURE_CLIENT_ID").isNullOrBlank())
+    outputs.file(outputFile)
+
+    doLast {
+        val clientId: String
+        val signatureHash: String
+
+        if (hasSigningConfig) {
+            // Read the signing cert straight out of the keystore via
+            // java.security.KeyStore — portable across CI runners without
+            // relying on `keytool`/`openssl` being on PATH, unlike shelling
+            // out to the documented `keytool -exportcert | openssl sha1 -binary | openssl base64` recipe.
+            // Modern `keytool -genkeypair` defaults to PKCS12; older
+            // keystores may still be JKS. Try both rather than guessing.
+            val keyStore = try {
+                java.security.KeyStore.getInstance("PKCS12").apply {
+                    file(ksPath!!).inputStream().use { load(it, ksPassword!!.toCharArray()) }
+                }
+            } catch (e: Exception) {
+                java.security.KeyStore.getInstance("JKS").apply {
+                    file(ksPath!!).inputStream().use { load(it, ksPassword!!.toCharArray()) }
+                }
+            }
+            val cert = keyStore.getCertificate(ksKeyAlias)
+                ?: throw org.gradle.api.GradleException(
+                    "generateMsalConfig: alias '$ksKeyAlias' not found in keystore $ksPath"
+                )
+            val sha1 = java.security.MessageDigest.getInstance("SHA-1").digest(cert.encoded)
+            signatureHash = java.util.Base64.getEncoder().encodeToString(sha1)
+            clientId = System.getenv("AZURE_CLIENT_ID")?.takeIf { it.isNotBlank() } ?: placeholderClientId
+        } else {
+            signatureHash = placeholderHash
+            clientId = placeholderClientId
+        }
+
+        val json = """
+            {
+              "client_id": "$clientId",
+              "authorization_user_agent": "DEFAULT",
+              "redirect_uri": "msauth://xyz.glacierclient.launcher/$signatureHash",
+              "account_mode": "SINGLE",
+              "broker_redirect_uri_registered": false,
+              "authorities": [
+                {
+                  "type": "AAD",
+                  "audience": {
+                    "type": "AzureADandPersonalMicrosoftAccount",
+                    "tenant_id": "consumers"
+                  }
+                }
+              ]
+            }
+        """.trimIndent()
+        outputFile.writeText(json + "\n")
+    }
+}
+
+tasks.named("preBuild") {
+    dependsOn(generateMsalConfig)
+}
+
 dependencies {
     // The UI is a single WebView (assets/www/) reusing the desktop app's real
     // app.css and image assets for pixel-identical styling — see MainActivity.kt.
