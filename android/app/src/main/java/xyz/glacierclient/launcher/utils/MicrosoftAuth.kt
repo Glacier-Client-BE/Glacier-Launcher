@@ -109,7 +109,7 @@ object MicrosoftAuth {
             // ISingleAccountPublicClientApplication (from
             // createSingleAccountPublicClientApplication above), whose
             // sign-in entry point is signIn(SignInParameters).
-            val params = SignInParameters.Builder()
+            val params = SignInParameters.builder()
                 .withActivity(activity)
                 .withScopes(listOf("XboxLive.signin", "offline_access"))
                 .withCallback(object : AuthenticationCallback {
@@ -229,19 +229,31 @@ object MicrosoftAuth {
         return prefs.contains("xstsToken") && prefs.contains("userHash")
     }
 
+    /**
+     * Blocking (getCurrentAccount() is a synchronous call in this MSAL
+     * version — no callback overload exists), so this must not be called
+     * from the UI thread. Its only caller, MainActivity's
+     * signOutMicrosoft() @JavascriptInterface method, is already safe:
+     * WebView dispatches JS-interface calls on a background thread, not
+     * the UI thread.
+     */
+    @WorkerThread
     fun signOut(context: Context) {
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit().clear().apply()
         pca?.let { app ->
-            app.getCurrentAccount(object : ISingleAccountPublicClientApplication.CurrentAccountCallback {
-                override fun onAccountLoaded(activeAccount: IAccount?) {
-                    activeAccount?.let { app.signOut(object : ISingleAccountPublicClientApplication.SignOutCallback {
+            try {
+                val activeAccount = app.getCurrentAccount().currentAccount
+                activeAccount?.let {
+                    app.signOut(object : ISingleAccountPublicClientApplication.SignOutCallback {
                         override fun onSignOut() {}
                         override fun onError(exception: MsalException) {}
-                    }) }
+                    })
                 }
-                override fun onAccountChanged(priorAccount: IAccount?, currentAccount: IAccount?) {}
-                override fun onError(exception: MsalException) {}
-            })
+            } catch (_: Exception) {
+                // InterruptedException / MsalException: nothing left to do
+                // for a sign-out that's already cleared its local prefs
+                // above — the MSAL-side account cache is best-effort here.
+            }
         }
     }
 }

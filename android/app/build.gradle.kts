@@ -272,20 +272,6 @@ tasks.named("preBuild") {
     dependsOn(generateMsalConfig)
 }
 
-// msal's transitive com.microsoft.identity:common brings in an older gson
-// (2.8.6) than whatever else in the dependency graph already pulls 2.8.9,
-// and Gradle's default "highest version wins" resolution doesn't apply
-// across two different *jars* packaging overlapping classes the way it
-// does across two versions of the *same* artifact coordinate — both
-// gson-2.8.6.jar and gson-2.8.9.jar (com.google.code.gson:gson:2.8.9) were
-// landing on the classpath together, which AGP's checkDebugDuplicateClasses
-// task correctly refuses to package (two copies of com.google.gson.Gson
-// with no defined precedence). Forcing a single resolved version collapses
-// them back into the normal single-artifact case.
-configurations.all {
-    resolutionStrategy.force("com.google.code.gson:gson:2.8.9")
-}
-
 dependencies {
     // The UI is a single WebView (assets/www/) reusing the desktop app's real
     // app.css and image assets for pixel-identical styling — see MainActivity.kt.
@@ -330,6 +316,17 @@ dependencies {
     // just to resolve a feature this app never uses.
     implementation("com.microsoft.identity.client:msal:5.4.0") {
         exclude(group = "com.microsoft.device.display", module = "display-mask")
+        // The pojavlauncher submodule already ships a local gson-2.8.6.jar
+        // (a plain file dependency, not a Maven coordinate — Gradle's usual
+        // "highest version wins" conflict resolution and even an explicit
+        // resolutionStrategy.force don't apply to it at all, so both
+        // versions were landing on the classpath together and
+        // checkDebugDuplicateClasses correctly refused to package two
+        // copies of com.google.gson.Gson). Excluding msal's transitive
+        // gson leaves the local 2.8.6 jar as the only one — Gson's public
+        // API is stable across 2.8.x, so msal's own (internal-only) use of
+        // it works the same either way.
+        exclude(group = "com.google.code.gson", module = "gson")
     }
 
     // ShizukuExecutor.kt: Shizuku's official, open-source client API +
