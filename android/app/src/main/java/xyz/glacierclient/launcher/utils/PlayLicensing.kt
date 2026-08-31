@@ -84,7 +84,16 @@ object PlayLicensing {
                     }
                 }
 
-                val connection = object : ServiceConnection {
+                // lateinit var, not val: onServiceConnected below needs to
+                // unbind *this same connection* from inside its own
+                // callback, but a val's initializer can't reference the val
+                // being initialized (connection wouldn't exist yet at that
+                // point in the object expression). Assigning after
+                // construction closes that loop — by the time
+                // onServiceConnected actually runs (async, post-bindService)
+                // connection is long since assigned.
+                lateinit var connection: ServiceConnection
+                connection = object : ServiceConnection {
                     override fun onServiceConnected(name: ComponentName, binder: IBinder) {
                         val service = ILicensingService.Stub.asInterface(binder)
                         val nonce = java.security.SecureRandom().nextLong()

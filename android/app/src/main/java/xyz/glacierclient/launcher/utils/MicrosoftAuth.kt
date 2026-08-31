@@ -3,13 +3,13 @@ package xyz.glacierclient.launcher.utils
 
 import android.content.Context
 import androidx.annotation.WorkerThread
-import com.microsoft.identity.client.AcquireTokenInteractiveParameters
 import com.microsoft.identity.client.AuthenticationCallback
 import com.microsoft.identity.client.IAccount
 import com.microsoft.identity.client.IAuthenticationResult
 import com.microsoft.identity.client.IPublicClientApplication
 import com.microsoft.identity.client.ISingleAccountPublicClientApplication
 import com.microsoft.identity.client.PublicClientApplication
+import com.microsoft.identity.client.SignInParameters
 import com.microsoft.identity.client.SilentAuthenticationCallback
 import com.microsoft.identity.client.exception.MsalException
 import kotlinx.coroutines.Dispatchers
@@ -103,8 +103,14 @@ object MicrosoftAuth {
         pca = app
 
         val msResult = suspendCancellableCoroutine<IAuthenticationResult> { cont ->
-            val params = AcquireTokenInteractiveParameters.Builder()
-                .startAuthorizationFromActivity(activity)
+            // SignInParameters, not AcquireTokenInteractiveParameters/
+            // acquireToken(): the latter is IPublicClientApplication's
+            // general multi-account API. app here is an
+            // ISingleAccountPublicClientApplication (from
+            // createSingleAccountPublicClientApplication above), whose
+            // sign-in entry point is signIn(SignInParameters).
+            val params = SignInParameters.Builder()
+                .withActivity(activity)
                 .withScopes(listOf("XboxLive.signin", "offline_access"))
                 .withCallback(object : AuthenticationCallback {
                     override fun onSuccess(result: IAuthenticationResult) = cont.resume(result)
@@ -114,7 +120,7 @@ object MicrosoftAuth {
                     )
                 })
                 .build()
-            app.acquireToken(params)
+            app.signIn(params)
         }
 
         withContext(Dispatchers.IO) {
@@ -226,7 +232,7 @@ object MicrosoftAuth {
     fun signOut(context: Context) {
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit().clear().apply()
         pca?.let { app ->
-            app.currentAccountAsync(object : ISingleAccountPublicClientApplication.CurrentAccountCallback {
+            app.getCurrentAccount(object : ISingleAccountPublicClientApplication.CurrentAccountCallback {
                 override fun onAccountLoaded(activeAccount: IAccount?) {
                     activeAccount?.let { app.signOut(object : ISingleAccountPublicClientApplication.SignOutCallback {
                         override fun onSignOut() {}
