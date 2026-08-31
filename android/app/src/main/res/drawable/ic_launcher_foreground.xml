@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Adaptive-icon foreground layer. The canvas is 108dp, of which only the
+     centre 72dp is the guaranteed-visible safe zone — everything outside it
+     can be clipped by whatever mask the launcher applies.
+
+     This has to scale app_icon.png down to fit that safe zone, which needs
+     BOTH of the pieces below. A plain <bitmap android:gravity="center">
+     centres the bitmap at its *intrinsic* size without scaling it at all,
+     and app_icon.png is a 128x128 file in a density-less drawable/ folder
+     (so mdpi baseline => 128dp intrinsic). Centred unscaled on a 108dp
+     canvas it overflows the canvas entirely and the mask crops it, which is
+     what made the launcher icon look like a zoomed-in crop of the bear.
+     gravity="fill" instead stretches it to the item bounds, and the bounds
+     are what actually set the size.
+
+     Insets are in dp on a <layer-list> item rather than the percentages an
+     <inset> drawable takes: fractional inset values only parse from API 28,
+     and minSdk here is 26, so percentages would silently misbehave on
+     API 26-27. 23dp per side leaves a 62dp bear inside the 72dp safe zone —
+     app_icon.png's artwork is already cropped tight to its own canvas, so
+     it needs a little more breathing room than the safe zone alone.
+     The item box is square and the source is square (128x128), so "fill"
+     cannot distort the aspect ratio. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item
+        android:left="23dp"
+        android:top="23dp"
+        android:right="23dp"
+        android:bottom="23dp">
+        <bitmap
+            android:src="@drawable/app_icon"
+            android:gravity="fill" />
+    </item>
+</layer-list>

@@ -1,0 +1,16 @@
+{
+  "client_id": "00000000-0000-0000-0000-000000000000",
+  "authorization_user_agent": "DEFAULT",
+  "redirect_uri": "msauth://xyz.glacierclient.launcher/YOUR_SIGNATURE_HASH_HERE",
+  "account_mode": "SINGLE",
+  "broker_redirect_uri_registered": false,
+  "authorities": [
+    {
+      "type": "AAD",
+      "audience": {
+        "type": "AzureADandPersonalMicrosoftAccount",
+        "tenant_id": "consumers"
+      }
+    }
+  ]
+}

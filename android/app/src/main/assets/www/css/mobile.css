@@ -1,0 +1,408 @@
+/* Android-only layout overrides, loaded after the desktop's own app.css
+   (kept byte-for-byte elsewhere for fidelity). app.css was designed for a
+   resizable desktop window (min 500x360); a phone in forced landscape is
+   usually much shorter (~360-420px tall), so top-bar/footer/panel chrome
+   needs to shrink to leave room for actual content instead of being
+   letterboxed. Values below are scaled-down versions of app.css's own
+   numbers, not new sizes invented from scratch. */
+
+/* The background must reach every edge of the display.
+
+   This previously forced `background-size: contain` to avoid the heavier
+   crop that `cover` applies on a ~19.5:9 phone in landscape versus bg.jpg's
+   own 16:9. But `contain` fits the whole image inside the viewport, which
+   by definition cannot fill a viewport of a different aspect ratio — it
+   left flat #23272A letterbox bands down the left and right edges, so the
+   wallpaper visibly stopped short of the screen edges (and of the display
+   cutout the window already draws under, since MainActivity sets
+   setDecorFitsSystemWindows(false) and Theme.Glacier sets
+   windowLayoutInDisplayCutoutMode=shortEdges).
+
+   Back to `cover`, which is also what the desktop app's own app.css uses:
+   it scales the image to fill both axes and crops the overflow, so the
+   background is genuinely edge to edge. `center` keeps the crop even on
+   both sides instead of favouring one edge. background-color stays as the
+   paint behind the image while it decodes, and for a custom user
+   background whose own aspect ratio leaves nothing to show. */
+.window-bg {
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    background-color: #23272A;
+}
+
+/* app.css's home action-btn "grow" effect (icon -> icon+label, width
+   expansion) is pure :hover — real on a desktop mouse, but a touchscreen
+   never enters :hover at all (tapping only ever fires :active, briefly).
+   (hover: none) targets touch/stylus input specifically (won't fire on a
+   Bluetooth mouse plugged into the phone, which does support real hover),
+   duplicating the same :hover rules under :active so tapping still gives
+   the same tactile feedback instead of the button just sitting static. */
+@media (hover: none) {
+    .action-btn.hover-grow:active:not(:disabled) > .btn-label { display: inline; }
+    .action-btn.hover-grow:active:not(:disabled) > i { display: none; }
+    .action-btn.hover-grow:active:not(:disabled) {
+        width: 134px;
+        padding: 0 18px;
+        flex-shrink: 1;
+    }
+    .compact .action-btn.hover-grow:active:not(:disabled) { width: 120px; }
+    .action-btn.hover-grow:not(.launch-btn):active:not(:disabled) {
+        background: var(--accent);
+        box-shadow: 0 0 20px var(--accent-glow), 0 4px 14px rgba(0, 0, 0, 0.35);
+    }
+}
+
+/* ── Mobile scale-down ────────────────────────────────────────────────────
+   app.css is the desktop stylesheet byte-for-byte, sized for a window with
+   room to spare. A phone in forced landscape has roughly 760-900 x 360-420
+   CSS px, and measured against that the chrome was eating 137px of a panel's
+   307px — header 48, category row 48, tab bar 41 — leaving 165px of body,
+   about three 46px rows. Everything below shrinks the fixed chrome and row
+   metrics so the content area roughly doubles, rather than rescaling the
+   whole page (which would shrink text along with it and hurt legibility).
+
+   Keyed on both max-height and max-width now, not height alone: a normal
+   phone in forced landscape is height-scarce, but a foldable's cover
+   screen, a split-screen window, or the same phone held in an unexpectedly
+   narrow multi-window slice can be width-scarce instead (or both at once).
+   500px covers every common phone-landscape height (360/393/412/480) and
+   the equivalent narrow-width cases; a tighter tier follows for the
+   shortest/narrowest devices. */
+@media (max-height: 500px), (max-width: 500px) {
+    /* ── Fluid sizing ─────────────────────────────────────────────────────
+       Every numeric value below (and the former @media (max-height: 380px)
+       tier, folded in here) is expressed as `clamp(MIN, OFFSET + COEFF*1dvmin,
+       MAX)` rather than a single fixed number: a straight-line fit between a
+       MIN value at the smallest realistic size and a MAX value at this
+       block's own 360-500px window (or, for the handful of properties that
+       used to get a THIRD hardcoded number in the old 380px-tier, a lower
+       anchor down at 320px so the smallest devices and split-screen still
+       land on the same one continuous line instead of a second snap-point).
+       dvmin is 1% of whichever viewport dimension — width or height — is
+       currently smaller, so the same one formula tracks height on a
+       short-but-wide phone in landscape and width on a narrow-but-tall
+       window (a foldable's cover/inner screen, split-screen multitasking, a
+       small phone) without needing two separate axis-specific formulas; the
+       "d" (dynamic, as opposed to plain vmin) keeps an on-screen keyboard or
+       a browser chrome bar resizing the viewport from jerking these sizes
+       around. value(D) = MIN + (MAX-MIN)/(D_max-D_min)*(D-D_min), pre-solved
+       into OFFSET/COEFF (calc() can't divide a length by a length at
+       runtime) — so retuning only means picking new (dimension, value)
+       anchors and resolving this one line, not touching individual rules.
+       MAX anchors are mostly the pre-existing 500px-tier numbers (already
+       shrunk once from app.css's desktop sizes); MIN anchors run smaller for
+       decorative/text metrics and larger, toward a comfortable touch
+       target, for anything tappable — buttons, tabs, inputs — matching how
+       .panel-tab below was sized up past its old fixed value rather than
+       just re-deriving it. */
+    /* Top bar / footer — the two fixed strips framing every screen. */
+    .top-bar {
+        padding:
+            clamp(4px, calc(1.43px + 0.71dvmin), 5px)
+            clamp(8px, calc(2.86px + 1.43dvmin), 10px)
+            0;
+        gap: clamp(5px, calc(2.43px + 0.71dvmin), 6px);
+    }
+    .logo-icon {
+        width: clamp(20px, calc(9.71px + 2.86dvmin), 24px);
+        height: clamp(20px, calc(9.71px + 2.86dvmin), 24px);
+    }
+    .branding-title { font-size: clamp(10px, calc(7.43px + 0.71dvmin), 11px); line-height: 1.2; }
+    /* Both lines stay on mobile: "Glacier Productions" over "Glacier
+       Launcher" in grey (--text-dim, from app.css). */
+    .branding-sub { font-size: clamp(8px, calc(5.43px + 0.71dvmin), 9px); line-height: 1.2; }
+    /* The version pill is real UI, not decoration — it shows the running
+       version and becomes the "Update" button once a release is found
+       (App.renderUpdatePill / checkForUpdate). Hiding it on mobile removed
+       the only entry point to the in-app updater, so it is sized down
+       rather than dropped. */
+    .update-pill {
+        height: clamp(15px, calc(9.86px + 1.43dvmin), 17px);
+        padding: 0 clamp(6px, calc(3.43px + 0.71dvmin), 7px);
+        margin-left: clamp(5px, calc(2.43px + 0.71dvmin), 6px);
+        font-size: clamp(8px, calc(5.43px + 0.71dvmin), 9px);
+    }
+
+    .edition-tab {
+        padding: clamp(2px, calc(-0.57px + 0.71dvmin), 3px) clamp(6px, calc(0.86px + 1.43dvmin), 8px);
+        font-size: clamp(10px, calc(7.43px + 0.71dvmin), 11px);
+    }
+    .topbar-client-chip {
+        padding: clamp(2px, calc(-0.57px + 0.71dvmin), 3px) clamp(6px, calc(0.86px + 1.43dvmin), 8px);
+        font-size: clamp(10px, calc(7.43px + 0.71dvmin), 11px);
+    }
+    .search-trigger, .notif-bell-btn {
+        width: clamp(26px, calc(20.86px + 1.43dvmin), 28px);
+        height: clamp(26px, calc(20.86px + 1.43dvmin), 28px);
+    }
+
+    .footer {
+        padding: 0 clamp(8px, calc(2.86px + 1.43dvmin), 10px) clamp(5px, calc(2.43px + 0.71dvmin), 6px);
+        gap: clamp(5px, calc(2.43px + 0.71dvmin), 6px);
+    }
+    .avatar {
+        width: clamp(20px, calc(14.86px + 1.43dvmin), 22px);
+        height: clamp(20px, calc(14.86px + 1.43dvmin), 22px);
+    }
+    .username { font-size: clamp(11px, calc(8.43px + 0.71dvmin), 12px); }
+    .user-handle { font-size: clamp(9px, calc(6.43px + 0.71dvmin), 10px); }
+    .footer-right span { display: none; }
+    .news-strip { height: clamp(18px, calc(12.86px + 1.43dvmin), 20px); }
+
+    /* Home quick actions — the primary controls on the home screen, and the
+       main thing a thumb has to hit. 36px was a straight shrink of the
+       desktop 48px and too small a target; 90px overshot. 46px (at this
+       block's own ceiling) sits just under the desktop size and comfortably
+       above the ~44px minimum recommended for touch; 40px is the floor for
+       the shortest devices (was the old 380px-tier override), still a real
+       target, just tighter. */
+    .action-btn {
+        height: clamp(40px, calc(29.33px + 3.33dvmin), 46px);
+        font-size: clamp(12px, calc(10.22px + 0.56dvmin), 13px);
+        border-radius: clamp(10px, calc(4.86px + 1.43dvmin), 12px);
+    }
+    .btn-sq { width: clamp(40px, calc(29.33px + 3.33dvmin), 46px); }
+    .action-btn i { font-size: clamp(16px, calc(12.44px + 1.11dvmin), 18px); }
+
+    /* Panel chrome — the biggest win. Header, the category chip row and the
+       bottom tab bar are pure overhead above the content. */
+    .panel-overlay { padding-top: 2px; }
+    /* Header height is set by its tallest child, the round back/icon
+       buttons, not by its own padding — both have to come down. Anchored
+       down to 320px like the action buttons above since this used to carry
+       its own further 380px-tier override. */
+    .panel-header {
+        padding:
+            clamp(3px, calc(-0.56px + 1.11dvmin), 5px)
+            clamp(10px, calc(6.44px + 1.11dvmin), 12px);
+    }
+    .panel-title { font-size: clamp(12px, calc(9.43px + 0.71dvmin), 13px); }
+    .panel-back-btn, .panel-icon-btn {
+        width: clamp(24px, calc(18.86px + 1.43dvmin), 26px);
+        height: clamp(24px, calc(18.86px + 1.43dvmin), 26px);
+        font-size: clamp(10px, calc(7.43px + 0.71dvmin), 11px);
+    }
+    .panel-title-underline { margin-top: clamp(1px, calc(-1.57px + 0.71dvmin), 2px); }
+    .panel-handle { display: none; }
+    .panel-body {
+        padding:
+            clamp(4px, calc(-1.14px + 1.43dvmin), 6px)
+            clamp(10px, calc(4.86px + 1.43dvmin), 12px);
+    }
+    .panel-section-label {
+        padding: clamp(2px, calc(-0.57px + 0.71dvmin), 3px) clamp(3px, calc(0.43px + 0.71dvmin), 4px) 1px;
+        font-size: clamp(8px, calc(5.43px + 0.71dvmin), 9px);
+    }
+
+    /* Bottom tab bar — the row of panel-switching buttons a thumb rests on
+       most, and the previous 26px/9px shrink (a straight fraction of
+       app.css's own 32px/11px) read as genuinely too small to comfortably
+       tap or read. Sized up past even the desktop numbers instead of just
+       restoring them, and — rather than snapping between this block's one
+       fixed size and the shortest-device tier below — expressed as
+       `clamp(MIN, OFFSET + COEFF*1dvmin, MAX)`: a straight-line fit between
+       "36px/12px at a 360px minimum dimension" and "44px/14px at this
+       block's own 500px ceiling" (dvmin, 1% of whichever of width/height is
+       smaller, so a narrow window shrinks the tab bar the same way a short
+       one does, and an on-screen keyboard or a browser chrome bar resizing
+       the viewport doesn't resize the tab bar with it). Every phone
+       height/width in between gets its own point on that line rather than
+       jumping at a breakpoint — OFFSET/COEFF below are that line's
+       y-intercept/slope pre-solved (not a runtime division — CSS calc()
+       can't divide a length by a length), so nothing here needs touching
+       to retune, just the two (dimension, value) anchor pairs in this comment
+       if the target range ever changes. */
+    .panel-tabs {
+        padding:
+            clamp(4px, calc(-6.29px + 2.86dvmin), 8px)
+            clamp(10px, calc(-0.29px + 2.86dvmin), 14px)
+            clamp(6px, calc(-4.29px + 2.86dvmin), 10px);
+        gap: 2px;
+    }
+    .panel-tab {
+        height: clamp(36px, calc(15.43px + 5.71dvmin), 44px);
+        font-size: clamp(12px, calc(6.86px + 1.43dvmin), 14px);
+        padding: 0 clamp(8px, calc(-2.29px + 2.86dvmin), 12px);
+        gap: clamp(4px, calc(-1.14px + 1.43dvmin), 6px);
+    }
+    .panel-tab i { font-size: clamp(13px, calc(7.86px + 1.43dvmin), 15px); }
+    .panel-tabs-arrow {
+        width: clamp(28px, calc(12.57px + 4.29dvmin), 34px);
+        height: clamp(36px, calc(15.43px + 5.71dvmin), 44px);
+    }
+    .panel-tabs-arrow i { font-size: clamp(12px, calc(6.86px + 1.43dvmin), 14px); }
+
+    /* Category chip row (Settings' All/Clients/Looks/…, Java mods tabs).
+       .vcs-btn carries an explicit height: 38px, so padding alone does
+       nothing here — the height itself has to be overridden. Anchored down
+       to 320px like the panel header, matching its old 380px-tier override. */
+    #settings-categories {
+        padding:
+            clamp(3px, calc(-0.56px + 1.11dvmin), 5px)
+            clamp(10px, calc(6.44px + 1.11dvmin), 12px)
+            0;
+    }
+    .vcs-btn {
+        height: clamp(26px, calc(20.86px + 1.43dvmin), 28px);
+        padding: 0 clamp(8px, calc(2.86px + 1.43dvmin), 10px);
+        font-size: clamp(10px, calc(7.43px + 0.71dvmin), 11px);
+    }
+    .vcs-btn i { font-size: clamp(10px, calc(7.43px + 0.71dvmin), 11px); }
+
+    /* Rows and cards — measured at 46px each, the single biggest consumer
+       of body height once the chrome is trimmed. */
+    /* Row height is label + hint stacked, so the line boxes matter as much
+       as the font sizes — without tightening line-height the rows stayed at
+       40px even with smaller text. Unchanged across every tier (5px was
+       already the floor), so it stays a flat value. */
+    .setting-row { padding: 5px 0; }
+    .setting-label { font-size: clamp(11px, calc(8.43px + 0.71dvmin), 12px); line-height: 1.15; }
+    /* Also unchanged across tiers below 500px — only the 380px tier turns
+       this off entirely (see below), it never got a second size. */
+    .setting-hint { font-size: 9px; line-height: 1.2; }
+    .setting-meta { gap: 1px; }
+    .setting-input {
+        height: clamp(26px, calc(20.86px + 1.43dvmin), 28px);
+        font-size: clamp(11px, calc(8.43px + 0.71dvmin), 12px);
+        padding: 0 clamp(7px, calc(4.43px + 0.71dvmin), 8px);
+    }
+    .btn-sm {
+        height: clamp(24px, calc(18.86px + 1.43dvmin), 26px);
+        font-size: clamp(10px, calc(7.43px + 0.71dvmin), 11px);
+        padding: 0 clamp(8px, calc(2.86px + 1.43dvmin), 10px);
+    }
+    .toggle { transform: scale(0.85); }
+
+    /* Cards read as over-rounded once they are mobile-sized: .client-card
+       takes var(--r-md), 18px by default, against only 8px of padding. Set
+       explicitly rather than by overriding --r-md, because ThemeEngine
+       writes --r-sm/--r-md inline on the root element for a custom theme
+       (theme.js setThemeVars), and an inline style beats any stylesheet
+       rule here. */
+    .client-card { padding: clamp(7px, calc(4.43px + 0.71dvmin), 8px); border-radius: clamp(9px, calc(6.43px + 0.71dvmin), 10px); }
+    /* The category chips and bottom tab pills take var(--r-sm) (12px) on a
+       28px-tall control, which reads as a lozenge at mobile size. Border
+       radii are decorative rather than a scale a thumb interacts with
+       directly, so these stay flat rather than fluid. */
+    .vcs-btn { border-radius: 8px; }
+    .panel-tab { border-radius: 8px; }
+    .ts-chip { border-radius: 8px; }
+    .version-row { border-radius: 10px; }
+    .setting-input, .btn-sm { border-radius: 8px; }
+    .empty-state, .settings-section { border-radius: 10px; }
+    .client-card-name { font-size: clamp(11px, calc(8.43px + 0.71dvmin), 12px); }
+    .client-card-sub { font-size: 9px; }
+    .client-card-icon {
+        width: clamp(26px, calc(15.71px + 2.86dvmin), 30px);
+        height: clamp(26px, calc(15.71px + 2.86dvmin), 30px);
+    }
+
+    /* Every other var(--r-md) (18px) surface below has the same problem as
+       .client-card above: 18px was sized for a resizable desktop window,
+       and reads as an over-rounded "bubble" once the row itself shrinks to
+       ~40-46px tall on a phone. Bring them all down to the same 10-12px
+       band real Android/iOS list rows and cards use, instead of leaving
+       Settings (and every other panel built from these same shared
+       classes) the only thing fixed. Small chips/pills keep 8px, matching
+       .vcs-btn/.panel-tab above. */
+    .setting-row,
+    .server-row,
+    .credits-card,
+    .stats-card,
+    .modpack-row,
+    .skinlib-card,
+    .ts-color-cell,
+    .update-version-chip,
+    .update-changelog { border-radius: 10px; }
+    .modal-box,
+    .search-modal,
+    .sort-menu,
+    .ts-color-editor { border-radius: 12px; }
+    .credits-link-btn { border-radius: 8px; }
+
+    .version-row {
+        padding:
+            clamp(5px, calc(2.43px + 0.71dvmin), 6px)
+            clamp(7px, calc(4.43px + 0.71dvmin), 8px);
+    }
+    .version-icon {
+        width: clamp(26px, calc(15.71px + 2.86dvmin), 30px);
+        height: clamp(26px, calc(15.71px + 2.86dvmin), 30px);
+    }
+    .version-name { font-size: clamp(11px, calc(8.43px + 0.71dvmin), 12px); }
+    .version-sub { font-size: 9px; }
+
+    .ts-chip {
+        padding:
+            clamp(3px, calc(0.43px + 0.71dvmin), 4px)
+            clamp(8px, calc(5.43px + 0.71dvmin), 9px);
+        font-size: clamp(10px, calc(7.43px + 0.71dvmin), 11px);
+    }
+    .modal-btn {
+        height: clamp(27px, calc(19.29px + 2.14dvmin), 30px);
+        font-size: clamp(11px, calc(8.43px + 0.71dvmin), 12px);
+    }
+    .empty-state i { font-size: clamp(20px, calc(14.86px + 1.43dvmin), 22px); }
+    .empty-state span { font-size: clamp(11px, calc(8.43px + 0.71dvmin), 12px); }
+    .empty-state small { font-size: 9px; }
+    /* .status-msg only ever had a single hardcoded size, and only at the
+       shortest heights below — kept flat rather than invented a second
+       anchor for a value that never actually varied. */
+    .status-msg { font-size: 10px; }
+}
+
+/* Shortest devices (and split-screen): only the boolean toggles remain here
+   — every numeric override that used to live in this tier (action-btn,
+   panel-header, #settings-categories, …) got folded into the single fluid
+   clamp() formula for that property above instead of being a second
+   hardcoded snap-point, so this block is now just display:none rules with
+   no fluid equivalent. */
+@media (max-height: 380px) {
+    .recently-launched { display: none !important; }
+    .setting-hint { display: none; }
+}
+
+/* Safe-area insets for the chrome, the other half of drawing edge to edge.
+
+   The background above now fills the whole display, and the window itself
+   already extends under the system bars and the display cutout
+   (MainActivity's setDecorFitsSystemWindows(false) plus Theme.Glacier's
+   windowLayoutInDisplayCutoutMode=shortEdges). That is what we want for the
+   wallpaper, but interactive chrome underneath a camera notch is not
+   reachable — and in the forced landscape orientation this app runs in, the
+   notch sits on the left or right edge, exactly where the branding block
+   and the footer's account row are.
+
+   So the background stays edge to edge while only the chrome is padded in
+   by env(safe-area-inset-*), which index.html already opts into with
+   viewport-fit=cover in its viewport meta. max() keeps each of app.css's
+   own padding values as the floor, so on a device with no cutout (all
+   insets 0) these rules change nothing at all. Declared after the
+   max-height blocks above so the shorter-screen padding overrides still
+   apply as the floor on small screens. */
+.top-bar {
+    padding-left: max(14px, env(safe-area-inset-left));
+    padding-right: max(14px, env(safe-area-inset-right));
+    padding-top: max(10px, env(safe-area-inset-top));
+}
+
+.footer {
+    padding-left: max(16px, env(safe-area-inset-left));
+    padding-right: max(16px, env(safe-area-inset-right));
+    padding-bottom: max(16px, env(safe-area-inset-bottom));
+}
+
+@media (max-height: 480px) {
+    .top-bar {
+        padding-left: max(10px, env(safe-area-inset-left));
+        padding-right: max(10px, env(safe-area-inset-right));
+        padding-top: max(6px, env(safe-area-inset-top));
+    }
+
+    .footer {
+        padding-left: max(10px, env(safe-area-inset-left));
+        padding-right: max(10px, env(safe-area-inset-right));
+        padding-bottom: max(8px, env(safe-area-inset-bottom));
+    }
+}

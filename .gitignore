@@ -11,3 +11,15 @@ publish/
 crash.txt
 crash_domain.txt
 run_output.txt
+
+# Android
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/.idea/
+android/*.iml
+android/captures/
+android/pojavlauncher/**/build/
+android/pojavlauncher/.gradle/
+android/pojavlauncher/local.properties

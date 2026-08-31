@@ -1,0 +1,139 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES"
+        tools:ignore="QueryAllPackagesPermission" />
+    <!-- The merged-in app_pojavlauncher library declares these same two
+         permissions with maxSdkVersion=28; ours (32) is the one that should
+         win, since Pojav's own shared-storage reads work fine up through
+         API 32 same as everything else here — tools:replace resolves the
+         real manifest-merger conflict instead of Pojav's more conservative
+         value silently winning. -->
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32"
+        tools:replace="android:maxSdkVersion" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32"
+        tools:replace="android:maxSdkVersion" />
+    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE"
+        tools:ignore="ScopedStorage" />
+    <!-- Self-update: Android has no equivalent of the desktop app's silent
+         exe-swap-and-relaunch (AutoUpdateService.cs) — a foreground app can
+         never install its own APK without the user confirming the system
+         package-installer dialog. This permission plus the FileProvider
+         below are what let LauncherUpdateService.kt hand a downloaded APK
+         to that dialog instead of failing to open it at all. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+
+    <application
+        android:name=".GlacierApp"
+        android:allowBackup="true"
+        android:fullBackupContent="@xml/backup_rules"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:theme="@style/Theme.Glacier"
+        android:process="${applicationId}"
+        android:supportsRtl="true"
+        tools:replace="android:name,android:icon,android:roundIcon,android:label,android:theme,android:process,android:fullBackupContent,android:dataExtractionRules">
+        <!-- tools:replace above resolves real conflicts with the merged-in
+             app_pojavlauncher library's own <application> attributes (see
+             android/README.md's "Single-APK distribution" section):
+               - android:name: keep GlacierApp (which extends Pojav's own
+                 PojavApplication and calls super.onCreate() — its one-time
+                 runtime/crash-handler setup still runs), not PojavApplication
+                 directly.
+               - android:icon / android:theme: keep Glacier's own, not
+                 Pojav's — a plain attribute-value conflict, not exclusion of
+                 functionality.
+               - android:roundIcon: Glacier's own manifest never declared this
+                 attribute at all, so without an explicit override the merger
+                 additively inherits Pojav's `@mipmap/ic_launcher_round` —
+                 real resource, real name, just Pojav's own mascot icon, not
+                 Glacier's. Point it at Glacier's own adaptive icon (an
+                 adaptive icon already renders correctly under a round mask,
+                 no separate round-specific asset needed) so a round-icon
+                 launcher shows Glacier's icon too, not Pojav's.
+               - android:label: both manifests happen to name @string/app_name,
+                 so the merger sees no conflict — but which app_name that
+                 resolves to is decided by resource merging, not by the
+                 merger, and Pojav shipped 48 localized values-<locale>/
+                 strings.xml files that also define it. A locale-qualified
+                 library resource beats :app's unqualified values/ one, so on
+                 any device whose locale matched one of those translations
+                 the launcher label reverted to "PojavLauncher" while the
+                 icon (which has no localized variant) stayed Glacier's.
+                 scripts/rebrand-pojav.sh now strips app_name/app_short_name
+                 from every translation so they all fall back to Glacier's
+                 own; this tools:replace states the intent explicitly rather
+                 than relying on the two values coincidentally matching.
+               - android:process: force the app's real default main process
+                 instead of inheriting Pojav's own ":launcher" secondary
+                 process, since this is one merged app now, not two. -->
+
+        <!-- Hands a downloaded update APK (see LauncherUpdateService.kt) to
+             the system package installer as a content:// Uri instead of a
+             raw file:// path, which Android has refused for security
+             reasons since API 24. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:screenOrientation="landscape"
+            android:configChanges="orientation|screenSize|keyboardHidden|screenLayout"
+            android:theme="@style/Theme.Glacier">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- MSAL's own redirect-capture activity (MicrosoftAuth.kt) — MSAL
+             requires this declared explicitly (it is NOT auto-merged from
+             the msal library's manifest on all AGP/MSAL version
+             combinations). android:host/pathPrefix must stay in sync with
+             the "redirect_uri" in res/raw/msal_config.json, which itself
+             needs the app's real release/debug signing certificate
+             signature hash substituted in by the project owner — see that
+             file's redirect_uri and MicrosoftAuth.AZURE_CLIENT_ID. -->
+        <!-- Shizuku's own official provider (dev.rikka.shizuku:provider) —
+             lets the Shizuku Manager app/service discover and grant this
+             app permission (ShizukuExecutor.kt). No android:name override
+             needed; the library manifest supplies it, this entry only
+             needs to exist so manifest merging doesn't drop it under some
+             AGP/library version combinations. -->
+        <provider
+            android:name="rikka.shizuku.ShizukuProvider"
+            android:authorities="${applicationId}.shizuku"
+            android:multiprocess="false"
+            android:enabled="true"
+            android:exported="true"
+            android:permission="android.permission.INTERACT_ACROSS_USERS_FULL" />
+
+        <activity
+            android:name="com.microsoft.identity.client.BrowserTabActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="msauth"
+                    android:host="xyz.glacierclient.launcher"
+                    android:path="/${msalSignatureHash}" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>

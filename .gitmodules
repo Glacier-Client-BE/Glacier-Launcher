@@ -1,0 +1,3 @@
+[submodule "android/pojavlauncher"]
+	path = android/pojavlauncher
+	url = https://github.com/PojavLauncherTeam/PojavLauncher.git

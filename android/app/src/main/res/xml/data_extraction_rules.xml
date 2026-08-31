@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- API 31+ equivalent of backup_rules.xml: on Android 12+ this file (not
+     android:fullBackupContent) governs both auto cloud backup and the
+     on-device "transfer to new phone" flow. Same exclusion, same reason —
+     see backup_rules.xml's comment. -->
+<data-extraction-rules>
+    <cloud-backup>
+        <include domain="sharedpref" path="." />
+        <exclude domain="sharedpref" path="msAccountData.xml" />
+    </cloud-backup>
+    <device-transfer>
+        <include domain="sharedpref" path="." />
+        <exclude domain="sharedpref" path="msAccountData.xml" />
+    </device-transfer>
+</data-extraction-rules>

@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>Glacier Launcher</title>
+    <!-- Same stylesheet as the desktop app's wwwroot/css/app.css, byte for byte. -->
+    <link rel="stylesheet" href="vendor/fontawesome/css/all.min.css" />
+    <link rel="stylesheet" href="css/app.css" />
+    <link rel="stylesheet" href="css/mobile.css" />
+    <style>
+        /* Same reset the desktop shell's index.html applies inline. */
+        html, body, #app { height: 100%; margin: 0; padding: 0; overflow: hidden; }
+        /* Android has no window chrome to drag/resize — the desktop .top-bar's
+           drag-zone and window-control buttons (minimize/maximize/close) are
+           genuinely inapplicable here and are the only intentional omission
+           from .top-bar's real markup. Everything else below is unmodified. */
+    </style>
+</head>
+<body>
+    <div id="app">
+        <div class="window">
+            <div class="window-bg" style="background-image:url('images/bg.jpg')"></div>
+
+            <!-- ── TOP BAR ── (real markup from Pages/Home.razor's <div class="top-bar">) -->
+            <div class="top-bar">
+                <div class="branding">
+                    <img class="logo-icon" src="images/icon.png" alt="" />
+                    <div class="branding-text">
+                        <span class="branding-title">Glacier Productions</span>
+                        <span class="branding-sub">Glacier Launcher</span>
+                    </div>
+                    <button class="update-pill" id="update-pill" data-tooltip="Launcher update available — click to update"><span id="version-pill">v0.0.0-dev</span></button>
+                </div>
+                <div class="top-bar-spacer"></div>
+                <div class="edition-switcher" data-tooltip="Switch Minecraft edition">
+                    <button class="edition-tab active" id="edition-bedrock" data-edition="bedrock">
+                        <i class="fa-solid fa-cube"></i><span>Bedrock</span>
+                    </button>
+                    <button class="edition-tab" id="edition-java" data-edition="java">
+                        <i class="fa-brands fa-java"></i><span>Java</span>
+                    </button>
+                </div>
+                <div class="topbar-client-chip" id="client-chip" data-tooltip="Active client">
+                    <div class="chip-dot"></div>
+                    <i class="chip-icon fa-solid fa-cube"></i>
+                    <span id="client-chip-label">Vanilla</span>
+                </div>
+                <button class="search-trigger" id="search-trigger-btn" data-tooltip="Search">
+                    <i class="fa-solid fa-magnifying-glass"></i>
+                </button>
+                <div class="notif-bell-wrap" id="notif-bell-wrap">
+                    <button class="notif-bell-btn" id="notif-bell-btn" data-tooltip="Notifications & downloads">
+                        <i class="fa-solid fa-bell"></i>
+                        <span class="notif-bell-badge" id="notif-bell-badge" style="display:none;"></span>
+                    </button>
+                </div>
+
+                <!-- Desktop's .window-controls also has minimize/maximize/fullscreen
+                     buttons — genuinely inapplicable here (no windowing on Android),
+                     same intentional omission as the top-bar drag-zone. Close is the
+                     one control that still means something: exit the app. -->
+                <div class="window-controls">
+                    <button class="wnd-btn close-btn" id="app-close-btn" data-tooltip="Close">
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- ── ONBOARDING WIZARD (real markup from Pages/Home.razor) ── -->
+            <div id="onboarding-root"></div>
+
+            <!-- ── ANNOUNCEMENT / MAINTENANCE BANNER ── -->
+            <div id="announcement-root"></div>
+
+            <!-- ── MAIN CONTENT ── (real markup: .main-content > .btn-row quick actions) -->
+            <div class="main-content" id="main-content">
+                <div class="btn-row" id="quick-actions"></div>
+
+                <div id="home-view">
+                    <p class="status-msg" id="status-msg"></p>
+                    <div class="recently-launched" id="recently-launched" style="display:none;">
+                        <span class="recently-label">Recent:</span>
+                        <div id="recently-launched-items"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ── FOOTER ── (real markup from Pages/Home.razor's <div class="footer">) -->
+            <div class="footer">
+                <div class="footer-profile-area" id="footer-profile">
+                    <img class="avatar" src="images/icon.png" alt="" />
+                    <div class="user-info">
+                        <span class="username" id="footer-username">Not signed in</span>
+                        <span class="user-handle" id="footer-handle">Local profile</span>
+                    </div>
+                </div>
+                <div class="footer-right">
+                    <button class="xbox-connect-btn" id="xbox-connect-btn">
+                        <i class="fa-solid fa-gamepad"></i> Xbox
+                    </button>
+                    <button class="discord-connect-btn" id="discord-connect-btn">
+                        <i class="fa-brands fa-discord"></i> Connect
+                    </button>
+                    <span style="font-size:11px; color:var(--text-dim);">
+                        <i class="fa-solid fa-clock" style="margin-right:4px;"></i>
+                        <span id="footer-version">Glacier Launcher for Android</span>
+                    </span>
+                </div>
+            </div>
+
+            <!-- News ticker -->
+            <div class="news-strip">
+                <div class="news-track" id="news-track"></div>
+            </div>
+
+            <!-- Panels are injected here as fresh DOM nodes so app.css's slideUp
+                 keyframe animation (keyed on a .panel-overlay element mounting)
+                 replays every time a panel opens, same as Blazor's @if. -->
+            <div id="panel-root"></div>
+
+            <!-- Global search (real markup: .search-overlay > .search-modal) -->
+            <div id="search-root"></div>
+
+            <!-- Launcher update modal (real markup: .modal-overlay > .update-modal, see Pages/Home.razor) -->
+            <div id="update-root"></div>
+
+            <!-- Add/edit server modal (real markup: .modal-overlay > .modal-box, see Pages/Home.razor's "ADD/EDIT SERVER MODAL") -->
+            <div id="server-modal-root"></div>
+        </div>
+    </div>
+
+    <script src="js/bridge.js"></script>
+    <script src="js/apiClient.js"></script>
+    <script src="js/httpcache.js"></script>
+    <script src="js/curseforge.js"></script>
+    <script src="js/modrinth.js"></script>
+    <script src="js/javaedition.js"></script>
+    <script src="js/updater.js"></script>
+    <script src="js/bedrockstorage.js"></script>
+    <script src="js/javainstances.js"></script>
+    <script src="js/customdll.js"></script>
+    <script src="js/modpackinstall.js"></script>
+    <script src="js/logs.js"></script>
+    <script src="js/skinlibrary.js"></script>
+    <script src="js/skinviewer.js"></script>
+    <script src="js/xboxauth.js"></script>
+    <script src="js/discordauth.js"></script>
+    <script src="js/theme.js"></script>
+    <script src="js/panels.js"></script>
+    <script src="js/app.js"></script>
+    <script src="js/tabcycler.js"></script>
+</body>
+</html>
