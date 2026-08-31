@@ -97,6 +97,25 @@ jobs:
         if: steps.versioning.outputs.SKIP != 'true'
         uses: android-actions/setup-android@v3
 
+      # android-actions/setup-android provisions the SDK platform/build-tools
+      # but not the NDK app_pojavlauncher's native build needs — AGP resolves
+      # and downloads that itself the first time a build actually touches it
+      # (~10s, every run, with nothing here to key it against explicitly
+      # since no build file pins an ndkVersion — it's whatever AGP/Pojav's
+      # own native build resolves). Keyed on a hash of the Gradle build files
+      # so a change to the dependency graph (which could shift the resolved
+      # NDK version) invalidates the cache instead of silently keeping a
+      # stale one; restore-keys falls back to the most recent cache of any
+      # hash if there's no exact match, still saving the download even then.
+      - name: Cache Android NDK
+        if: steps.versioning.outputs.SKIP != 'true'
+        uses: actions/cache@v4
+        with:
+          path: /usr/local/lib/android/sdk/ndk
+          key: ndk-${{ runner.os }}-${{ hashFiles('android/**/build.gradle*', 'android/gradle.properties') }}
+          restore-keys: |
+            ndk-${{ runner.os }}-
+
       - name: Set up Gradle
         if: steps.versioning.outputs.SKIP != 'true'
         uses: gradle/actions/setup-gradle@v4
@@ -147,16 +166,18 @@ jobs:
           KS_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
         run: echo "$KS_B64" | base64 -d > "$RUNNER_TEMP/glacier-release.keystore"
 
-      - name: Build debug APK
-        if: steps.versioning.outputs.SKIP != 'true'
-        env:
-          GLACIER_VERSION: ${{ steps.versioning.outputs.NEXT_VERSION }}
-          CURSEFORGE_API_KEY: ${{ secrets.CURSEFORGE_API_KEY }}
-          PLAY_LICENSING_PUBLIC_KEY: ${{ secrets.PLAY_LICENSING_PUBLIC_KEY }}
-          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-        run: gradle :app:assembleDebug --no-daemon
-
-      - name: Build release APK
+      # One invocation for both variants, not two: each separate `gradle`
+      # process pays JVM startup, project configuration, and dependency
+      # resolution again from scratch (`--no-daemon` means nothing carries
+      # over in memory between them either way) — real time on every run,
+      # not just a first/cold one. A single invocation also lets the Gradle
+      # build cache (org.gradle.caching=true, gradle.properties) actually
+      # hit within this run: debug and release share most of the same
+      # inputs (same sources, same resources), so most of release's tasks
+      # become cache hits from debug's run moments earlier instead of
+      # rerunning. All the env vars both variants need are passed together;
+      # ANDROID_KEYSTORE_PATH etc. are simply unused by :app:assembleDebug.
+      - name: Build debug and release APKs
         if: steps.versioning.outputs.SKIP != 'true'
         env:
           GLACIER_VERSION: ${{ steps.versioning.outputs.NEXT_VERSION }}
@@ -167,7 +188,7 @@ jobs:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-        run: gradle :app:assembleRelease --no-daemon
+        run: gradle :app:assembleDebug :app:assembleRelease --no-daemon
 
       - name: Upload build artifacts
         if: steps.versioning.outputs.SKIP != 'true'
