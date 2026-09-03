@@ -354,10 +354,17 @@
 <SubTabs strip="versions-instances" active="versions" onNavigate={(k) => onNavigate?.(k)} />
 
 <!-- ── Microsoft Store install (BedrockUpdater method) ──
-     `InstallFromStoreAsync` is backed by `StoreInstallService`, a WinRT
-     AppInstallManager wrapper with no Tauri command in this build, so both
-     buttons render disabled with an explanatory tooltip rather than
-     pretending to work. -->
+     `InstallFromStoreAsync` is backed by `StoreInstallService`, which wraps
+     WinRT's `AppInstallManager`
+     (`Windows.ApplicationModel.Store.Preview.InstallControl`). The `windows`
+     crate ships no bindings for that namespace — it is a restricted preview
+     contract, and there is no
+     `ApplicationModel_Store_Preview_InstallControl` feature to enable — so
+     there is no honest way to drive an in-app install with real progress
+     from Rust today. Both buttons render disabled and say so, rather than
+     pretending to work or silently substituting a different behaviour (e.g.
+     shelling out to a Store deep link, which installs without any of the
+     progress reporting the original shows). See PARITY.md. -->
 <div class="mcv-store-row">
   <div class="mcv-store-meta">
     <span class="mcv-store-title"
@@ -370,14 +377,14 @@
     type="button"
     class="vcs-btn"
     disabled
-    data-tooltip="Store install isn't wired up in this build yet."
+    data-tooltip="Unavailable: needs WinRT AppInstallManager, which has no Rust bindings. Install from the Microsoft Store app instead."
     onmousedown={(e) => e.stopPropagation()}>Release</button
   >
   <button
     type="button"
     class="vcs-btn vcs-btn-ghost"
     disabled
-    data-tooltip="Store install isn't wired up in this build yet."
+    data-tooltip="Unavailable: needs WinRT AppInstallManager, which has no Rust bindings. Install from the Microsoft Store app instead."
     onmousedown={(e) => e.stopPropagation()}>Preview</button
   >
 </div>

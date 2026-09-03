@@ -353,6 +353,73 @@ panels confirmed present in `dist/assets/*.js` rather than trusting the file cou
 **168 distinct commands invoked, 0 missing** of 195 registered.
 
 
+
+## Phase 3 follow-up — the stub list and the two missing Bedrock services
+
+### LeviLamina mod installation was broken three ways
+
+Against `LeviLaminaModsService.DownloadAndInstallAsync`:
+
+- **Wrong directory.** `ModsDirectory` is `LeviLaminaDirectory + "/plugins"` — `<clients>/LeviLamina/plugins`,
+  which is where the loader actually reads. Installs went to `<clients>/LeviLaminaMods`, so **no installed
+  mod could ever load**.
+- **Wrong folder name.** The original uses `SanitizeFolderName(mod.RepoName)` — repo name only. The rewrite
+  used `<owner>_<repo>`, so an install made by the old app was invisible to the new one and vice versa.
+- **No extraction.** The original downloads to a temp file, wipes the destination, then extracts a `.zip`
+  or copies any other asset verbatim. The rewrite dropped the raw asset into the folder, leaving an
+  unextracted zip.
+
+Downloading to a temp file first also means a cancelled download can no longer leave a half-written file
+in the plugins folder. `IsInstalled` drops a non-empty check the original doesn't have, and the queue
+label now matches `label: mod.Name`.
+
+### Post-switch Bedrock version change (the TODO the plan listed first)
+
+`switch_bedrock_instance` now performs it, and returns the original's **warning string** instead of a
+bool: empty means the data swap *and* the version switch succeeded, non-empty means the swap worked but
+the version didn't. Reporting those separately matters — the swap is the destructive half and must not
+read as a failure because the version switch afterwards didn't take. It lives in the command layer, which
+keeps `InstanceService` free of any dependency on package registration; that dependency was what its TODO
+was waiting for.
+
+Three further TODOs were removed as **stale**, not fixed: the VanillaTweaks and BedrockTweaks download
+paths already run through the shared queue.
+
+### `GdkArchiveService` — ported
+
+The first of the two missing Bedrock services. Without it the version browser could not offer anything
+past **1.21.120**, because Microsoft's appx/Windows-Update channel stops there after the GDK move — while
+the panel's own info popover told the user those builds come from the community archive and are "marked
+GDK". Nothing produced those rows and nothing rendered the marker, so the promise was empty.
+
+`gl_bedrock::gdk`, **7 tests**. The C# asset regex is hand-parsed rather than adding a regex crate for one
+fixed pattern. `WuVersion` gains `source` / `friendly_version` / `download_url` / `sha256`, all
+`#[serde(default)]` so Windows Update entries and cached JSON deserialize unchanged. The list command
+merges both sources on `version|channel` (the C# `MergeKey`), archive applied second so it wins a tie;
+either source failing is survivable, only both failing is an error. Downloads branch on source: archive
+entries use their direct URL and verify the published SHA-256.
+
+Two latent frontend bugs surfaced doing this, both harmless until the archive started producing rows:
+
+- **The `{#each}` keys were `v.version` alone.** The merge key is version+channel, so a Release and a
+  Preview build can share a version string and would collide. The original keys on `{Version}|{Channel}`
+  for exactly this reason.
+- The non-active row was missing the flex wrapper the original has around the version name — which is the
+  element the GDK badge sits in.
+
+### `StoreInstallService` — NOT portable, and why
+
+The second missing Bedrock service, and the one genuine dead end so far. It wraps WinRT's
+`AppInstallManager` from `Windows.ApplicationModel.Store.Preview.InstallControl`. The `windows` crate
+(0.61) **ships no bindings for that namespace** — it is a restricted preview contract, and there is no
+`ApplicationModel_Store_Preview_InstallControl` feature to enable. Driving it would mean hand-rolling COM
+activation and vtables for a restricted API.
+
+The two Store buttons therefore stay visibly disabled, and their tooltip now names the actual blocker
+instead of saying "isn't wired up yet". Deliberately **not** substituted: shelling out to an
+`ms-windows-store://` deep link would install the game but silently drop the in-app progress, stage
+reporting and cancel that the original shows — a different feature wearing the same button.
+
 ## Phases 6 and 7 — verification and the cutover commit
 
 ### CI was red before this, in two places
