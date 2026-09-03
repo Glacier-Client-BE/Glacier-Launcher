@@ -1,9 +1,26 @@
-bin/
-obj/
+# Rust
+/target
+crates/*/target
+src-tauri/target
+
+# Node / frontend
+frontend/node_modules
+frontend/dist
+frontend/.vite
+
+# Tauri
+src-tauri/gen
+
+# Editor / OS
 .vs/
 *.user
 *.suo
 .claude/
+.DS_Store
+
+# Legacy WPF build artifacts (retained temporarily during migration)
+bin/
+obj/
 wwwroot.zip
 publish_test/
 publish_final/
