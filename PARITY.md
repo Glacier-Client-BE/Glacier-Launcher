@@ -352,6 +352,63 @@ navigate to them.
 panels confirmed present in `dist/assets/*.js` rather than trusting the file count.
 **168 distinct commands invoked, 0 missing** of 195 registered.
 
+
+## Phases 6 and 7 — verification and the cutover commit
+
+### CI was red before this, in two places
+
+`.github/workflows/ci.yml` gates on `cargo fmt --all -- --check`,
+`cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace`,
+`npx tsc --noEmit -p tsconfig.app.json` and `npm run build`. Three of those five failed on the tree as
+it stood:
+
+- **`cargo fmt --check`** — 123 diffs across 30+ files. Formatted.
+- **`clippy -D warnings`** — 11 warnings, so the job would have failed on the first push. Each fixed on
+  its merits rather than silenced: a genuinely dead `VSYNC_KEY` const (the frontend keeps its own copy
+  and the match arm uses the literal), three `i64 -> i64` casts, two reverse `sort_by`s that are
+  `sort_by_key(Reverse(..))`, and four `Default::default()` field reassignments rebuilt with struct
+  update syntax. The one exception is `MEMORYSTATUSEX`, which keeps a scoped `#[allow]` and a reason —
+  renaming a Win32 struct away from the name the API documents would only make the P/Invoke harder to
+  check.
+- **`tsc --noEmit`** — exit 2, with **108 errors, all of them in `interop.js`**. That file is a verbatim
+  port of the original's browser-interop layer: plain JS never written against a type checker, full of
+  `window.*` expando properties. Its typed surface for the rest of the app is the hand-written
+  `interop.d.ts`, which *is* checked, so `interop.js` is now excluded from the typecheck rather than
+  rewritten (rewriting it would break the "verbatim port" rule that exists precisely because paraphrasing
+  this codebase is what caused the original failure).
+
+All five gates pass locally now.
+
+### The cutover commit
+
+Committed on branch `rust-tauri-cutover`, not `main`, in the three commits the plan calls for:
+
+1. Remove the WPF tree (133 deletions) plus the `.gitignore` change, which belongs with it — it stops
+   tracking `bin/`/`obj/` and starts ignoring the Rust and Node artifacts the next commit's tree
+   produces.
+2. Add the Rust workspace, `crates/`, `src-tauri/`, `frontend/` — 228 files, 57,638 lines.
+3. Docs and CI: the rewritten `README.md` (it still advertised ".NET 10, WPF, and Blazor WebView" and was
+   Bedrock-only), `PARITY.md`, `REWRITE-PLAN.md`, the inventories, and `ci.yml` replacing the WPF-shaped
+   `release.yml`.
+
+`HANDOFF_PROMPT.md` and `injection-plan.md` are gone as the plan requires. Both were **untracked**, so
+deleting them would have been unrecoverable — they are archived to
+`MinecraftLauncher-rust-snapshot/_retired-docs/` first.
+
+Verified nothing generated was staged (`node_modules`, `target/`, `frontend/dist`, `gen/schemas` all
+clean), and that `frontend/package-lock.json` is committed, since CI's `npm ci` fails without it.
+
+### Clean-checkout verification
+
+Cloned the branch to a temp directory and built it from nothing: `npm ci` clean, `tsc --noEmit` exit 0,
+`vite build` clean. This is the check that catches work left untracked, and it passed.
+
+### Still outstanding
+
+The **Phase 5 side-by-side acceptance pass** has not happened. Everything verified so far is
+source-level parity plus static checks; nothing has been run against the original launcher from
+`publish_final`, and the Phase 0 reference screenshots were never taken. That needs a desktop session.
+
 ## Phase 3 — Bedrock services
 
 **6 MATCH / 12 DIVERGE / 6 MISSING** across 25 services. All **141** commands are registered in
