@@ -1,0 +1,15 @@
+[package]
+name = "gl-auth"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Microsoft/Xbox OAuth chain: live.com token exchange, XBL/XSTS, Minecraft profile (LiveAuthService, XboxProfileService)"
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+tokio.workspace = true
+reqwest.workspace = true

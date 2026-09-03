@@ -1,0 +1,19 @@
+[package]
+name = "gl-integrations"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Discord RPC, announcements/news, VanillaTweaks, skins, server ping, misc GitHub-backed content catalogs"
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+tokio.workspace = true
+reqwest = { workspace = true, features = ["multipart"] }
+discord-rich-presence = "0.2.4"
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }

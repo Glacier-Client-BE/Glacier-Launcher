@@ -1,0 +1,15 @@
+[package]
+name = "gl-nbt"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Standalone NBT binary format reader/writer and level.dat editing (NbtIo.cs, LevelDatEditorService.cs)"
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+tokio.workspace = true
+flate2 = "1"

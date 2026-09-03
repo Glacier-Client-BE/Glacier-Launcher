@@ -1,0 +1,32 @@
+[workspace]
+resolver = "2"
+members = [
+    "src-tauri",
+    "crates/gl-persistence",
+    "crates/gl-auth",
+    "crates/gl-java",
+    "crates/gl-modpack",
+    "crates/gl-bedrock",
+    "crates/gl-nbt",
+    "crates/gl-injection",
+    "crates/gl-win32chrome",
+    "crates/gl-download",
+    "crates/gl-clients",
+    "crates/gl-integrations",
+    "crates/gl-settings",
+    "crates/gl-update",
+    "crates/gl-launch",
+]
+
+[workspace.package]
+edition = "2021"
+license = ""
+authors = ["Glacier Client"]
+
+[workspace.dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tokio = { version = "1", features = ["full"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "stream"] }
+thiserror = "2"
+tracing = "0.1"

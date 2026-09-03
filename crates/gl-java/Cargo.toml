@@ -1,0 +1,20 @@
+[package]
+name = "gl-java"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Java Edition instance/version/runtime management and launch (JavaInstanceService, JavaInstallService, JavaVersionService, JavaRuntimeDownloadService, JavaGameLauncher, JavaModAnalyzer, JavaModLoaderService)"
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+tokio.workspace = true
+reqwest.workspace = true
+zip = "2"
+futures-util = "0.3"
+
+[dev-dependencies]
+tempfile = "3"

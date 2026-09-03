@@ -1,0 +1,10 @@
+{
+  "name": "glacier-launcher-workspace",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Root scripts for running/building the Tauri app. Run from the repo root.",
+  "scripts": {
+    "dev": "npx --prefix frontend tauri dev -c src-tauri/tauri.conf.json",
+    "build": "npx --prefix frontend tauri build -c src-tauri/tauri.conf.json"
+  }
+}

@@ -1,0 +1,21 @@
+[package]
+name = "gl-bedrock"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Bedrock Edition instance/world/pack/backup management, WU SOAP version protocol, MSIX resolution (BedrockInstanceService, BedrockVersionService, BedrockPackageService, BedrockWorldService, BedrockBackupService, BedrockScreenshotService, BedrockOptionsService, ShaderService, GdkArchiveService)"
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+tokio.workspace = true
+reqwest.workspace = true
+zip = "2"
+tempfile = "3"
+roxmltree = "0.20"
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt"] }

@@ -1,0 +1,69 @@
+//! Shared application state: the long-lived service instances that Tauri
+//! commands operate on. Held behind `Mutex` (these services do their own
+//! synchronous, atomic-write-backed I/O — not `async`-heavy enough to
+//! warrant `tokio::sync::Mutex`) and constructed once in `setup`.
+
+use std::sync::Mutex;
+
+use gl_bedrock::BedrockInstanceService;
+use gl_integrations::discord::DiscordRpcService;
+use gl_java::{InstanceService as JavaInstanceService, VersionService as JavaVersionService};
+use gl_settings::{NotificationService, ThemeService};
+
+pub struct AppState {
+    pub java_instances: Mutex<JavaInstanceService>,
+    /// `tokio::sync::Mutex`, not `std::sync::Mutex`: `VersionService::get_versions`
+    /// is `async` and needs `&mut self` held across the `.await`, which a std
+    /// `MutexGuard` can't do (it isn't `Send`).
+    pub java_versions: tokio::sync::Mutex<JavaVersionService>,
+    pub bedrock_instances: Mutex<BedrockInstanceService>,
+    /// In-app notification feed (C# `NotificationService`). Holds its own
+    /// interior mutability, so it is not wrapped in another `Mutex`.
+    pub notifications: NotificationService,
+    /// Saved custom themes (C# `ThemeService`). Interior mutability, so no
+    /// outer `Mutex`.
+    pub themes: ThemeService,
+    pub discord: Mutex<DiscordRpcService>,
+    pub http: reqwest::Client,
+    pub downloads: gl_download::DownloadQueue,
+    pub clients_dir: std::path::PathBuf,
+}
+
+impl AppState {
+    pub fn new() -> Result<Self, String> {
+        let root = gl_settings::launcher_root();
+
+        let java_instances = JavaInstanceService::new(root.join("java"))
+            .map_err(|e| format!("failed to initialize Java instances: {e}"))?;
+        let java_versions = JavaVersionService::new(JavaVersionService::default_cache_file());
+        // The live com.mojang root, resolved per-account (C#
+        // `CurseForgeService.ComMojangRoot`). Passing `None` here left the
+        // instance system unable to seed a default instance from — or swap
+        // folders with — the real game install.
+        let live_root = gl_bedrock::com_mojang_root();
+        let bedrock_instances = BedrockInstanceService::new(root.join("bedrock"), Some(live_root))
+            .map_err(|e| format!("failed to initialize Bedrock instances: {e}"))?;
+
+        let http = reqwest::Client::builder()
+            .user_agent(gl_download::USER_AGENT)
+            .build()
+            .map_err(|e| format!("failed to build HTTP client: {e}"))?;
+
+        let downloads = gl_download::DownloadQueue::new(
+            gl_download::DownloadClient::from_client(http.clone()),
+            4,
+        );
+
+        Ok(Self {
+            java_instances: Mutex::new(java_instances),
+            java_versions: tokio::sync::Mutex::new(java_versions),
+            bedrock_instances: Mutex::new(bedrock_instances),
+            notifications: NotificationService::new(),
+            themes: ThemeService::new(),
+            discord: Mutex::new(DiscordRpcService::new()),
+            http,
+            downloads,
+            clients_dir: root.join("clients"),
+        })
+    }
+}

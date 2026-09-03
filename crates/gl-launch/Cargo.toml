@@ -1,0 +1,19 @@
+[package]
+name = "gl-launch"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Full-pipeline game launch orchestration (Java Edition process spawn + arg resolution, Bedrock package resolution/activation) built on top of gl-java's arg-builder and gl-injection's process helpers"
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+tokio.workspace = true
+gl-java = { path = "../gl-java" }
+gl-injection = { path = "../gl-injection" }
+
+[dev-dependencies]
+tempfile = "3"

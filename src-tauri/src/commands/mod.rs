@@ -1,0 +1,31 @@
+//! Thin #[tauri::command] wrappers. Business logic lives in the gl-* crates;
+//! commands here only deserialize args, call into a crate, and map errors.
+
+pub mod auth;
+pub mod bedrock;
+pub mod client_library;
+pub mod clients;
+pub mod downloads;
+pub mod injection;
+pub mod integrations;
+pub mod java;
+pub mod java_mods;
+pub mod java_screenshots;
+pub mod java_worlds;
+pub mod launch;
+pub mod launchers;
+pub mod leveldat;
+pub mod levilamina_mods;
+pub mod logs;
+pub mod modpack;
+pub mod notifications;
+pub mod servers;
+pub mod settings;
+pub mod shaders;
+pub mod skins;
+pub mod system;
+pub mod theme;
+pub mod tweaks;
+pub mod update;
+pub mod utilities;
+pub mod versions;
