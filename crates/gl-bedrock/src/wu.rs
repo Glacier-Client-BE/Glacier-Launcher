@@ -55,7 +55,7 @@ const INSTALLED_NON_LEAF_UPDATE_IDS: &[u32] = &[
 
 /// One installable vanilla Bedrock build resolved from Windows Update.
 /// Mirrors the WU-sourced fields of the C# `VanillaVersion` model.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WuVersion {
     pub version: String,
     pub update_id: String,
@@ -63,6 +63,25 @@ pub struct WuVersion {
     pub size_bytes: u64,
     /// `"Release"` or `"Preview"`.
     pub channel: String,
+
+    // --- Fields carried by entries from the community GDK archive.
+    // All default, so a Windows Update entry (and any previously cached JSON)
+    // deserializes unchanged.
+    /// `"gdk"` for community-archive entries, empty for Windows Update ones.
+    /// Port of `VanillaVersion.Source`; `IsGdk` in the C# is `Source == "gdk"`.
+    #[serde(default)]
+    pub source: String,
+    /// The archive release tag the asset came from, shown as the row's label.
+    #[serde(default)]
+    pub friendly_version: String,
+    /// Direct asset URL. Windows Update entries resolve theirs from
+    /// `update_id` at download time and leave this empty.
+    #[serde(default)]
+    pub download_url: String,
+    /// Published SHA-256 for the asset, verified on download. Empty when the
+    /// archive published no usable digest.
+    #[serde(default)]
+    pub sha256: String,
 }
 
 struct UpdateInfo {
@@ -461,6 +480,9 @@ pub async fn list_versions(client: &reqwest::Client) -> Result<Vec<WuVersion>> {
                 update_id: u.update_id,
                 package_name: u.package_name,
                 size_bytes: u.size_bytes,
+                // Windows Update entries carry none of the archive fields;
+                // the download path resolves their URL from `update_id`.
+                ..Default::default()
             })
         })
         .collect();
@@ -472,7 +494,7 @@ pub async fn list_versions(client: &reqwest::Client) -> Result<Vec<WuVersion>> {
 /// Parses a dotted version string into a comparable tuple, newest-first
 /// sort key. Mirrors `VanillaVersionService.TryParseVersion` + the
 /// `OrderByDescending` it feeds.
-fn version_key(v: &str) -> (u32, u32, u32, u32) {
+pub fn version_key(v: &str) -> (u32, u32, u32, u32) {
     let mut parts = v.split('.').map(|p| p.parse::<u32>().unwrap_or(0));
     (
         parts.next().unwrap_or(0),

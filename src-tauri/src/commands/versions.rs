@@ -84,15 +84,49 @@ pub fn latite_version_dll_path(state: State<'_, AppState>, tag: String) -> Strin
     latite_dll_path(&state, &tag).to_string_lossy().into_owned()
 }
 
-/// Lists installable vanilla Bedrock builds currently offered by Windows
-/// Update. Mirrors `VanillaVersionService.FetchFromStoreApiAsync`.
+/// Lists installable vanilla Bedrock builds from both sources, merged.
+/// Mirrors `VanillaVersionService.GetVersionsAsync` (:49-99).
+///
+/// Windows Update alone stops at 1.21.120 — after the GDK move newer builds
+/// were never published there — so the community GDK archive is merged in on
+/// top. Merge key is `version|channel`, matching the C# `MergeKey`, and the
+/// archive is applied second so it wins a tie, again as the C# does.
+///
+/// Either source failing is survivable: whatever the other returned is still
+/// shown. Both failing is a real error rather than a silently empty list.
 #[tauri::command]
 pub async fn list_vanilla_bedrock_versions(
     state: State<'_, AppState>,
 ) -> Result<Vec<WuVersion>, String> {
-    gl_bedrock::wu::list_versions(&state.http)
-        .await
-        .map_err(|e| e.to_string())
+    use std::collections::HashMap;
+
+    let wu = gl_bedrock::wu::list_versions(&state.http).await;
+    let gdk = gl_bedrock::gdk::list_versions(&state.http).await;
+
+    let (wu, gdk) = match (wu, gdk) {
+        (Err(wu_err), Err(gdk_err)) => {
+            return Err(format!("{wu_err} | GDK archive failed: {gdk_err}"));
+        }
+        (wu, gdk) => (wu.unwrap_or_default(), gdk.unwrap_or_default()),
+    };
+
+    let mut merged: HashMap<String, WuVersion> = HashMap::new();
+    for v in wu {
+        merged.insert(merge_key(&v), v);
+    }
+    for v in gdk {
+        merged.insert(merge_key(&v), v);
+    }
+
+    let mut versions: Vec<WuVersion> = merged.into_values().collect();
+    versions.sort_by_key(|v| std::cmp::Reverse(gl_bedrock::wu::version_key(&v.version)));
+    Ok(versions)
+}
+
+/// Port of `VanillaVersionService.MergeKey` (:119) — `Version|Channel`,
+/// compared case-insensitively as the C# dictionary is.
+fn merge_key(v: &WuVersion) -> String {
+    format!("{}|{}", v.version.to_lowercase(), v.channel.to_lowercase())
 }
 
 /// Whether a given vanilla Bedrock build has already been downloaded and
@@ -113,10 +147,30 @@ pub async fn download_vanilla_bedrock_version(
     state: State<'_, AppState>,
     version: WuVersion,
 ) -> Result<String, String> {
-    let url = gl_bedrock::wu::get_download_url(&state.http, &version.update_id)
-        .await
-        .map_err(|e| e.to_string())?
-        .ok_or_else(|| "Could not resolve a download URL for this version.".to_string())?;
+    // Port of the `IsGdk` branch in `DownloadVersionAsync` (:204-218): archive
+    // entries carry a direct URL and a published hash; Windows Update entries
+    // resolve theirs from the update id and have nothing to verify against.
+    let is_gdk = version.source.eq_ignore_ascii_case(gl_bedrock::gdk::SOURCE);
+    let (url, expected_sha) = if is_gdk {
+        if version.download_url.is_empty() {
+            return Err(
+                "This archive entry has no download URL. Refresh the list and try again."
+                    .to_string(),
+            );
+        }
+        let sha = if version.sha256.is_empty() {
+            None
+        } else {
+            Some(version.sha256.clone())
+        };
+        (version.download_url.clone(), sha)
+    } else {
+        let resolved = gl_bedrock::wu::get_download_url(&state.http, &version.update_id)
+            .await
+            .map_err(|e| e.to_string())?
+            .ok_or_else(|| "Could not resolve a download URL for this version.".to_string())?;
+        (resolved, None)
+    };
 
     let versions_dir = vanilla_bedrock_versions_dir();
     std::fs::create_dir_all(&versions_dir).map_err(|e| e.to_string())?;
@@ -128,6 +182,11 @@ pub async fn download_vanilla_bedrock_version(
         .with_label(format!("Bedrock {}", version.version));
     if version.size_bytes > 0 {
         req = req.with_known_total_bytes(version.size_bytes);
+    }
+    if let Some(sha) = expected_sha {
+        // The archive is a third-party mirror, so its published hash is the
+        // only integrity check available; the C# passes it the same way.
+        req = req.with_sha256(sha);
     }
     let handle = state.downloads.submit(req);
     handle.join().await.map_err(|e| e.to_string())?;

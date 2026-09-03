@@ -17,7 +17,8 @@
    * make local rules win over it.
    */
   import { invoke } from '@tauri-apps/api/core'
-  import { onDestroy } from 'svelte'
+  import { listen, type UnlistenFn } from '@tauri-apps/api/event'
+  import { onDestroy, onMount } from 'svelte'
   import PanelHeader from './components/PanelHeader.svelte'
   import SubTabs from './components/SubTabs.svelte'
   import EditionTabs from './components/EditionTabs.svelte'
@@ -44,6 +45,11 @@
     package_name: string
     channel: string
     size_bytes: number
+    /** `"gdk"` for community-archive entries; `IsGdk` is `Source == "gdk"`. */
+    source: string
+    friendly_version: string
+    download_url: string
+    sha256: string
     is_downloaded: boolean
     is_downloading: boolean
     is_switching: boolean
@@ -54,8 +60,21 @@
 
   type WuVersion = Pick<
     VanillaVersion,
-    'version' | 'update_id' | 'package_name' | 'channel' | 'size_bytes'
+    | 'version'
+    | 'update_id'
+    | 'package_name'
+    | 'channel'
+    | 'size_bytes'
+    | 'source'
+    | 'friendly_version'
+    | 'download_url'
+    | 'sha256'
   >
+
+  /** Port of `VanillaVersion.IsGdk`. */
+  function isGdk(v: VanillaVersion): boolean {
+    return v.source === 'gdk'
+  }
 
   // Legacy Bedrock versions are all "1.x.y.z"; the newer calendar-based
   // scheme (e.g. "26.1") uses a non-1 major, so we prefix those with "v" to
@@ -142,14 +161,13 @@
   }
 
   // ── Download progress ────────────────────────────────────────────────
-  // The Rust queue has no push channel to the frontend, so progress and
-  // cancellation for an in-flight `download_vanilla_bedrock_version` are
-  // read back off the shared download registry (`list_downloads` /
-  // `cancel_download`), which labels each Bedrock job "Bedrock <version>".
+  // The queue pushes `downloads-changed` (the port of
+  // `DownloadService.Changed`) carrying the whole snapshot, so this listens
+  // rather than polling. Each Bedrock job is labelled "Bedrock <version>".
   type DownloadEntry = { id: string; label: string; status: string; progress: number }
 
   let downloadEntries = $state<DownloadEntry[]>([])
-  let pollTimer: ReturnType<typeof setInterval> | undefined
+  let unlistenDownloads: UnlistenFn | undefined
 
   function entryFor(v: VanillaVersion): DownloadEntry | undefined {
     return downloadEntries.find(
@@ -157,25 +175,14 @@
     )
   }
 
-  function startPolling() {
-    if (pollTimer) return
-    pollTimer = setInterval(async () => {
-      try {
-        downloadEntries = await invoke<DownloadEntry[]>('list_downloads')
-      } catch {
-        downloadEntries = []
-      }
-      if (!mcVersionsList.some((v) => v.is_downloading)) stopPolling()
-    }, 1000)
-  }
-
-  function stopPolling() {
-    if (pollTimer) clearInterval(pollTimer)
-    pollTimer = undefined
-    downloadEntries = []
-  }
-
-  onDestroy(stopPolling)
+  onMount(() => {
+    listen<DownloadEntry[]>('downloads-changed', (e) => {
+      downloadEntries = e.payload
+    }).then((fn) => {
+      unlistenDownloads = fn
+    })
+  })
+  onDestroy(() => unlistenDownloads?.())
 
   /** Port of `HandleMcVersionDownload`. */
   async function handleMcVersionDownload(v: VanillaVersion) {
@@ -183,7 +190,6 @@
     v.is_downloading = true
     v.error_message = ''
     v.progress = 0
-    startPolling()
     try {
       await invoke('download_vanilla_bedrock_version', {
         version: {
@@ -192,6 +198,12 @@
           package_name: v.package_name,
           size_bytes: v.size_bytes,
           channel: v.channel,
+          // Archive entries carry their URL and hash on the row; without
+          // these the backend has nothing to download or verify against.
+          source: v.source,
+          friendly_version: v.friendly_version,
+          download_url: v.download_url,
+          sha256: v.sha256,
         },
       })
       v.is_downloaded = true
@@ -203,7 +215,6 @@
     } finally {
       v.is_downloading = false
       v.progress = 0
-      if (!mcVersionsList.some((x) => x.is_downloading)) stopPolling()
     }
   }
 
@@ -426,12 +437,15 @@
 
     {#if activeList.length > 0}
       <span class="panel-section-label">Active</span>
-      {#each activeList as v (v.version)}
+      {#each activeList as v (`${v.version}|${v.channel}`)}
         <div class="version-row mcv-active-row">
           <div class="version-meta">
             <div style="display:flex; align-items:center; gap:6px;">
               <span class="version-name">Minecraft {displayName(v)}</span>
               <span class="tag-active">Active</span>
+              {#if isGdk(v)}
+                <span class="mcv-source-tag" data-tooltip="Community GDK unpack archive">GDK</span>
+              {/if}
             </div>
             {#if v.error_message}
               <span class="error-text">{v.error_message}</span>
@@ -445,10 +459,19 @@
       <span class="panel-section-label">All Versions</span>
     {/if}
 
-    {#each restList as v (v.version)}
+    {#each restList as v (`${v.version}|${v.channel}`)}
       <div class="version-row {v.error_message ? 'error-row' : ''}">
         <div class="version-meta">
-          <span class="version-name">Minecraft {displayName(v)}</span>
+          <div style="display:flex; align-items:center; gap:6px;">
+            <span class="version-name">Minecraft {displayName(v)}</span>
+            {#if isGdk(v)}
+              <span
+                class="mcv-source-tag"
+                data-tooltip="Community GDK unpack archive — verified against its published SHA-256"
+                >GDK</span
+              >
+            {/if}
+          </div>
           {#if v.error_message}
             <span class="error-text">{v.error_message}</span>
           {:else if v.is_downloaded && !v.is_downloading}

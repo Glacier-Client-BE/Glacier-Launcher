@@ -26,6 +26,7 @@
 
 pub mod backup;
 pub mod error;
+pub mod gdk;
 pub mod import;
 pub mod instance;
 pub mod model;
