@@ -235,17 +235,58 @@ pub fn rename_bedrock_instance(
 }
 
 /// Switches the active Bedrock instance, swapping the managed com.mojang
-/// folders between the live install and the target instance. Port of
-/// `BedrockInstanceService.SwitchToAsync`.
+/// folders between the live install and the target instance, then switching
+/// the installed Minecraft build to the instance's recorded version tag. Port
+/// of `BedrockInstanceService.SwitchToAsync`.
 ///
 /// This moves real game data on disk, so it resolves the live root the same
 /// way every other Bedrock command now does rather than trusting a path from
 /// the frontend.
+///
+/// Returns the original's **warning string**, not a bool: empty means fully
+/// successful, and a non-empty value means the data swap succeeded but the
+/// game version did not change. Both halves are reported because the data swap
+/// is the destructive part and must not be reported as a failure just because
+/// the version switch afterwards didn't take.
 #[tauri::command]
-pub fn switch_bedrock_instance(state: State<'_, AppState>, id: String) -> Result<bool, String> {
+pub fn switch_bedrock_instance(state: State<'_, AppState>, id: String) -> Result<String, String> {
     let live_root = gl_bedrock::com_mojang_root();
-    let mut svc = state.bedrock_instances.lock().map_err(|e| e.to_string())?;
-    svc.switch_to(&id, live_root).map_err(|e| e.to_string())
+
+    let version_tag = {
+        let mut svc = state.bedrock_instances.lock().map_err(|e| e.to_string())?;
+        // A `false` here means the requested instance was already active, so
+        // the C# returns early with no warning and no version switch.
+        if !svc.switch_to(&id, live_root).map_err(|e| e.to_string())? {
+            return Ok(String::new());
+        }
+        svc.instances()
+            .into_iter()
+            .find(|i| i.id.eq_ignore_ascii_case(&id))
+            .map(|i| i.version_tag)
+            .unwrap_or_default()
+    };
+
+    // Port of `SwitchToAsync:158` — no tag recorded means nothing to switch.
+    if version_tag.trim().is_empty() {
+        return Ok(String::new());
+    }
+
+    let manifest = crate::commands::versions::vanilla_bedrock_version_dir(&version_tag)
+        .join("AppxManifest.xml");
+    if !manifest.is_file() {
+        return Ok(format!(
+            "Switched instance data, but Minecraft {version_tag} isn't downloaded — game version left as-is."
+        ));
+    }
+
+    match gl_bedrock::wu::unregister_current()
+        .and_then(|_| gl_bedrock::wu::register_version(&manifest))
+    {
+        Ok(()) => Ok(String::new()),
+        Err(e) => Ok(format!(
+            "Switched instance data, but couldn't switch game version: {e}"
+        )),
+    }
 }
 
 /// Archives the live com.mojang state into the active instance without

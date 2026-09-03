@@ -16,7 +16,7 @@ fn vanilla_bedrock_versions_dir() -> PathBuf {
     gl_settings::launcher_root().join("mc-bedrock-versions")
 }
 
-fn vanilla_bedrock_version_dir(version: &str) -> PathBuf {
+pub fn vanilla_bedrock_version_dir(version: &str) -> PathBuf {
     vanilla_bedrock_versions_dir().join(version)
 }
 

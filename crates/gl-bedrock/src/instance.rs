@@ -9,7 +9,8 @@
 //! - `SwitchToAsync`'s call into `VanillaVersionService` to also switch the
 //!   installed game version is out of scope here (that lives in a different
 //!   crate/service); callers should perform that step themselves after
-//!   `switch_to` returns. See the `TODO` below.
+//!   `switch_to` returns; the command layer performs it, see `switch_to`'s
+//!   doc comment.
 
 use std::path::{Path, PathBuf};
 
@@ -183,10 +184,12 @@ impl BedrockInstanceService {
     /// active instance's directory, then the target instance's directory is
     /// copied into the live root.
     ///
-    /// TODO: wire the post-switch game-version change (VanillaVersionService
-    /// equivalent) once that service exists in another crate — the C#
-    /// version optionally switches the installed Minecraft build to match
-    /// `instance.version_tag` after the data swap.
+    /// The C# `SwitchToAsync` also switches the installed Minecraft build to
+    /// match `instance.version_tag` after the data swap, and returns a warning
+    /// string rather than a bool. That half lives in
+    /// `src-tauri/src/commands/bedrock.rs::switch_bedrock_instance`, which can
+    /// reach `gl_bedrock::wu`'s package registration; keeping it out of here
+    /// leaves this service free of any dependency on package registration.
     pub fn switch_to(&mut self, id: &str, live_root: &Path) -> Result<bool> {
         let target = self
             .find(id)

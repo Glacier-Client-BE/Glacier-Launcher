@@ -9,10 +9,6 @@
    * listing rather than hitting a search endpoint, so the debounced re-search
    * below reproduces the original's behaviour exactly: spinner, refetch,
    * filter.
-   *
-   * Not ported: zip-extraction of the downloaded release asset into the mods
-   * folder — the raw asset is downloaded as-is (see the backend's
-   * `levilamina_mods.rs` doc comment).
    */
   import { invoke } from '@tauri-apps/api/core'
   import { listen, type UnlistenFn } from '@tauri-apps/api/event'
@@ -91,6 +87,7 @@
         repoOwner: m.repo_owner,
         repoName: m.repo_name,
         latestVersion: m.latest_version,
+        modName: m.name,
       })
       installed[key(m)] = true
       onToast?.(`${m.name} installed!`, 'success')
@@ -114,18 +111,15 @@
 
   /**
    * Live install progress, replacing the original's `levModsInstallProgress`
-   * + `ThrottledProgress`. The backend labels the queue entry
-   * `<owner>/<repo> <tag>`; the tag isn't known here, so match on the prefix.
+   * + `ThrottledProgress`. The queue entry is labelled with the mod's display
+   * name, matching the C#'s `label: mod.Name`.
    */
   type QueueEntry = { id: string; label: string; status: string; progress: number }
   let queue = $state<QueueEntry[]>([])
   let unlisten: UnlistenFn | undefined
 
   function progressFor(m: LeviLaminaMod): number {
-    const prefix = `${key(m)} `
-    return (
-      queue.find((e) => e.status === 'Downloading' && e.label.startsWith(prefix))?.progress ?? 0
-    )
+    return queue.find((e) => e.status === 'Downloading' && e.label === m.name)?.progress ?? 0
   }
 
   onMount(() => {

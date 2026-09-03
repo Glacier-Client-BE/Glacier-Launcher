@@ -8,7 +8,10 @@
 //!   request/response logic (build the VanillaTweaks zip request, list the
 //!   file blobs to fetch for a Bedrock selection, build the manifest.json)
 //!   but does not perform the actual byte downloads — callers should wire
-//!   those to `gl-download` once available (see `// TODO` markers below).
+//!   those URLs; the caller downloads them through the shared `gl-download`
+//!   queue (see `build_vanilla_tweaks_pack` / `build_bedrock_tweaks_pack` in
+//!   `src-tauri/src/commands/tweaks.rs`), which keeps this crate free of
+//!   filesystem and download policy.
 //! - Importing the finished `.mcpack` into CurseForge/Bedrock instances
 //!   (`CurseForgeService.ImportBedrockPackFileAsync`) is out of scope for
 //!   this crate; that belongs with the Bedrock pack management code.
@@ -141,8 +144,6 @@ pub async fn request_vanilla_resource_pack_zip(
     })?;
 
     Ok(format!("https://vanillatweaks.net{link}"))
-    // TODO: wire to gl-download once available — download `downloadUrl` and
-    // write it to <minecraft_dir>/resourcepacks/<sanitized file name>.
 }
 
 #[derive(Debug, Default)]

@@ -102,10 +102,15 @@
     if (id === activeInstanceId) return
     isSwitchingBedrockInstance = true
     try {
-      const switched = await invoke<boolean>('switch_bedrock_instance', { id })
+      // `switch_bedrock_instance` returns the original's warning string, not a
+      // bool: empty means the data swap AND the game-version switch both
+      // succeeded, non-empty means the data swap worked but the version didn't
+      // (Home.BedrockInstances.cs:29-34).
+      const warning = await invoke<string>('switch_bedrock_instance', { id })
       await loadInstances()
       const name = instances.find((i) => i.id === id)?.name ?? ''
-      if (switched) toast(`Switched to '${name}'.`, 'success')
+      if (warning) toast(warning, 'warning')
+      else toast(`Switched to '${name}'.`, 'success')
     } catch (e) {
       toast(String(e), 'error')
     } finally {
