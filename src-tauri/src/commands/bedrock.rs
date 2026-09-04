@@ -53,15 +53,25 @@ fn bedrock_root(instance_dir: &str) -> BedrockRoot {
     }
 }
 
-/// The directory for `folder_name` under the selected instance, or under the
-/// live install when no instance is selected.
-fn bedrock_dir(instance_dir: &str, folder_name: &str) -> PathBuf {
-    bedrock_root(instance_dir).dir_for(folder_name)
+/// The live com.mojang directory for `folder_name`.
+///
+/// The browsing panels read the LIVE folder, never an instance's archive -
+/// `BedrockWorldService.WorldsDir` and `BedrockPackService.DirFor` are static
+/// paths in the original, with no instance parameter. The instance system
+/// *swaps* data between the live folder and an instance directory
+/// (`SwitchToAsync`), so live always holds the active instance's data and an
+/// instance directory is a dormant snapshot. Reading from the snapshot means a
+/// user who has never switched instances sees nothing, because the default
+/// instance's archive is empty.
+fn live_dir(folder_name: &str) -> PathBuf {
+    BedrockRoot::Live.dir_for(folder_name)
 }
 
 #[tauri::command]
-pub fn list_bedrock_worlds(instance_dir: String) -> Result<Vec<BedrockWorld>, String> {
-    let svc = BedrockWorldService::new(bedrock_dir(&instance_dir, "minecraftWorlds"));
+pub fn list_bedrock_worlds(_instance_dir: String) -> Result<Vec<BedrockWorld>, String> {
+    // `_instance_dir` is accepted and ignored - see `live_dir`. Kept in the
+    // signature so the panels don't all need changing for a backend-side fix.
+    let svc = BedrockWorldService::new(live_dir("minecraftWorlds"));
     svc.list_worlds().map_err(|e| e.to_string())
 }
 
@@ -116,7 +126,7 @@ pub fn bedrock_worlds_dir() -> String {
 }
 
 #[tauri::command]
-pub fn list_bedrock_packs(instance_dir: String, kind: String) -> Result<Vec<BedrockPack>, String> {
+pub fn list_bedrock_packs(_instance_dir: String, kind: String) -> Result<Vec<BedrockPack>, String> {
     let kind = parse_pack_kind(&kind)?;
     let dir_name = match kind {
         PackKind::Resource => "resource_packs",
@@ -127,7 +137,7 @@ pub fn list_bedrock_packs(instance_dir: String, kind: String) -> Result<Vec<Bedr
         PackKind::SkinDev => "development_skin_packs",
     };
     let svc = BedrockPackService::new();
-    svc.list_packs(&bedrock_dir(&instance_dir, dir_name), kind)
+    svc.list_packs(&live_dir(dir_name), kind)
         .map_err(|e| e.to_string())
 }
 

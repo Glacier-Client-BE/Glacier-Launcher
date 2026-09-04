@@ -175,14 +175,14 @@ fn infer_kind(key: &str, value: &str, meta: &Option<Meta>) -> OptionKind {
 /// per-account-resolved `minecraftpe` folder. Joining `"minecraftpe"` onto an
 /// empty instance dir produced the *relative* path `minecraftpe/options.txt`,
 /// which never matched the real file.
-fn options_path(instance_dir: &str) -> PathBuf {
-    if instance_dir.trim().is_empty() {
-        gl_bedrock::paths::minecraft_pe_dir().join("options.txt")
-    } else {
-        Path::new(instance_dir)
-            .join("minecraftpe")
-            .join("options.txt")
-    }
+fn options_path(_instance_dir: &str) -> PathBuf {
+    // Always the LIVE file. `BedrockOptionsService.OptionsPath` is a static
+    // `CurseForgeService.MinecraftPeDir + "options.txt"` with no instance
+    // parameter: the instance system swaps data in and out of the live folder,
+    // so live is always the active instance's data and an instance directory
+    // is a dormant snapshot. Resolving into the snapshot meant the Options tab
+    // reported "options.txt isn't available" on a machine that has one.
+    gl_bedrock::paths::minecraft_pe_dir().join("options.txt")
 }
 
 /// Port of C# `GameLauncher.IsMinecraftRunning()`.
