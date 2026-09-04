@@ -225,7 +225,15 @@
       .then((list) => {
         javaVersions = list
         // Port of `_javaTweaksVersion = TweaksService.JavaVersions[0]`.
-        if (!javaVersion && list.length > 0) javaVersion = list[0]
+        if (!javaVersion && list.length > 0) {
+          javaVersion = list[0]
+          // The Java list can only be fetched once a version is known: the
+          // endpoint is `.../json/<version>/rpcategories.json`, so loading
+          // before this resolves requests `.../json//rpcategories.json` and
+          // 404s. The C# has no such window because `_javaTweaksVersion` is
+          // initialised synchronously from `TweaksService.JavaVersions[0]`.
+          if (isJava) load()
+        }
       })
       .catch(() => {})
     listen<QueueEntry[]>('downloads-changed', (e) => {
@@ -238,7 +246,9 @@
     unlisten?.()
   })
 
-  load()
+  // Bedrock needs no version, so it can load immediately; Java waits for the
+  // version list above.
+  if (!isJava) load()
 </script>
 
 <PanelHeader title={tweaksTitle} {onBack}>

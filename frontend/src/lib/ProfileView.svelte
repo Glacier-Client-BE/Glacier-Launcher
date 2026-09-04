@@ -31,6 +31,7 @@
    * No scoped <style> block: every class below exists in app.css.
    * No `.panel-overlay` / `.panel-handle`: App.svelte supplies those.
    */
+  import { open } from '@tauri-apps/plugin-dialog'
   import { invoke } from '@tauri-apps/api/core'
   import PanelHeader from './components/PanelHeader.svelte'
   import EditionTabs from './components/EditionTabs.svelte'
@@ -115,6 +116,37 @@
   }
 
   /** Port of `OpenPlayerNameMc`. */
+  /**
+   * Port of the panel's Change-skin action. The picker has to originate in the
+   * host: WebView2 exposes no real path for a file chosen inside the page.
+   * Slim/classic follows the panel's own `JavaSkinSlimModel` toggle, as the
+   * original does.
+   */
+  async function changeSkin() {
+    const path = await open({
+      title: 'Choose a skin PNG',
+      multiple: false,
+      directory: false,
+      filters: [{ name: 'Minecraft skin (PNG)', extensions: ['png'] }],
+    })
+    if (!path || typeof path !== 'string') return
+    try {
+      await invoke('apply_skin', { path, slim: settings?.JavaSkinSlimModel ?? false })
+      onToast?.('Skin applied.', 'success')
+    } catch (e) {
+      onToast?.(String(e), 'error')
+    }
+  }
+
+  async function resetSkin() {
+    try {
+      await invoke('reset_skin', {})
+      onToast?.('Skin reset to the default.', 'success')
+    } catch (e) {
+      onToast?.(String(e), 'error')
+    }
+  }
+
   function openPlayerNameMc() {
     void invoke('open_url', { url: `https://namemc.com/profile/${playerCleanUuid}` })
   }
@@ -380,19 +412,17 @@
 
         <div class="profile-actions">
           <button class="skin-btn" onclick={openPlayerNameMc}><i class="fa-solid fa-id-card"></i> NameMC</button>
-          <button class="skin-btn" disabled data-tooltip="Skin upload is not available in this build"
+          <button class="skin-btn" onclick={changeSkin}
             ><i class="fa-solid fa-upload"></i> Change skin</button
           >
-          <button class="skin-btn" disabled data-tooltip="The skin library is not available in this build"
+          <button class="skin-btn" onclick={() => onNavigate?.('skinlibrary')}
             ><i class="fa-solid fa-shirt"></i> Skin library</button
           >
           <button class="skin-btn skin-btn-ghost" onclick={downloadPlayerSkin}
             ><i class="fa-solid fa-download"></i> Download</button
           >
-          <button
-            class="skin-btn skin-btn-ghost"
-            disabled
-            data-tooltip="Skin reset is not available in this build"><i class="fa-solid fa-eraser"></i> Reset</button
+          <button class="skin-btn skin-btn-ghost" onclick={resetSkin}
+            ><i class="fa-solid fa-eraser"></i> Reset</button
           >
         </div>
         <div class="profile-actions">

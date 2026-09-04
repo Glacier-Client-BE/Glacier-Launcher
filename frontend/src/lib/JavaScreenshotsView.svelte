@@ -1,6 +1,7 @@
 <script lang="ts">
   import { invoke } from '@tauri-apps/api/core'
   import { convertFileSrc } from '@tauri-apps/api/core'
+  import EditionTabs from './components/EditionTabs.svelte'
   import PanelHeader from './components/PanelHeader.svelte'
   import IconBtn from './components/IconBtn.svelte'
   import Spinner from './components/Spinner.svelte'
@@ -11,7 +12,8 @@
   // `<instance>/screenshots/*.png`, vs. Bedrock's two-source merge in
   // BedrockScreenshotService) so this is a small standalone command
   // (java_screenshots.rs) rather than reusing gl_bedrock's service.
-  let { onBack }: { onBack?: () => void } = $props()
+  let { onBack, onNavigate }: { onBack?: () => void; onNavigate?: (view: string) => void } =
+    $props()
 
   type ScreenshotFile = { name: string; path: string; kind: string; size_bytes: number; modified_at: string }
 
@@ -118,3 +120,7 @@
     {/each}
   {/if}
 </div>
+
+<!-- Home.razor:5400-5403: this panel ends with `JavaTabs("photos")`. It had no
+     bottom strip at all, which made it a dead end. -->
+<EditionTabs active="photos" edition="java" onNavigate={(v) => onNavigate?.(v)} />

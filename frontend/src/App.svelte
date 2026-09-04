@@ -622,7 +622,6 @@
     addons: 'bedrockpacks',
     packs: 'bedrockpacks',
     mcversions: 'bedrock-versions',
-    versions: 'versions',
     worlds: 'bedrockworlds',
     servers: 'servers',
     utilities: 'utilities',
@@ -658,12 +657,26 @@
   const EDITION_VIEW_MAP: Record<string, { bedrock: View; java: View }> = {
     photos: { bedrock: 'bedrockscreenshots', java: 'java-screenshots' },
     backups: { bedrock: 'bedrockbackups', java: 'java-backups' },
+    // `versions` means the Java version browser on the Java edition
+    // (JavaTabs:34 and the javaclients panel's Versions button, both
+    // OpenJavaVersions) and the Latite/OderSo client-DLL picker on Bedrock
+    // (reached from the Clients panel). The Bedrock *game* version browser is
+    // `mcversions`, and the versions-instances strip's own `versions` key is
+    // handled before this map because it means that one instead.
+    versions: { bedrock: 'versions', java: 'mc-versions' },
   }
 
   function navigateFromPanel(originalView: string, strip?: string) {
     if (strip === 'utilities' && UTILITIES_SUBTABS.includes(originalView)) {
       utilInitialTab = originalView
       openPanel('utilities')
+      return
+    }
+    // The versions-instances strip is Bedrock-only and its `versions` tab is
+    // `OpenMcVersions` (Home.MergedPanels.cs:36) - the Bedrock game-version
+    // browser, not the client-DLL picker the bare key otherwise means.
+    if (strip === 'versions-instances' && originalView === 'versions') {
+      openPanel('bedrock-versions')
       return
     }
     const perEdition = EDITION_VIEW_MAP[originalView]
@@ -1450,7 +1463,7 @@
           onToast={showToast}
         />
       {:else if currentView === 'java-screenshots'}
-        <JavaScreenshotsView onBack={closePanel} />
+        <JavaScreenshotsView onBack={closePanel} onNavigate={navigateFromPanel} />
       {:else if currentView === 'utilities'}
         <UtilitiesView
           instanceDir={activeBedrockInstance?.directory ?? ''}
