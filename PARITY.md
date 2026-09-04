@@ -420,6 +420,96 @@ instead of saying "isn't wired up yet". Deliberately **not** substituted: shelli
 `ms-windows-store://` deep link would install the game but silently drop the in-app progress, stage
 reporting and cancel that the original shows — a different feature wearing the same button.
 
+## Phase 5 — running the app
+
+### How it was inspected
+
+Neither obvious route worked. The dev build is masked out of desktop screenshots
+(the computer-use allowlist resolves installed Start-menu apps, and a `target\debug`
+binary is not one), and the frontend cannot be loaded in an ordinary browser because
+`interop.js` calls `getCurrentWindow()` at module scope, which throws outside Tauri
+and kills the bootstrap.
+
+What worked: restart with `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9223`
+and drive the real WebView2 over CDP. That inspects the actual running app against the
+user's real data, which is stronger than either alternative. The driver and sweep scripts
+are throwaway; the recipe is the one thing worth keeping.
+
+**The original could not be run for a side-by-side.** `publish_final` contains no
+executable, and `bin/Release`'s build hardcodes its dev-time static-asset content root
+(`C:\Users\User\MinecraftLauncher\wwwroot`, which is now the Rust repo), so it exits on
+startup. A true visual comparison needs it rebuilt.
+
+### The headline defect: every browsing panel was empty
+
+The machine has 5 Bedrock worlds and 15 resource-pack folders. Worlds, Packs and
+Utilities all rendered empty. Cause and fix are recorded under the live-folder commit —
+the rewrite invented an `instance_dir` parameter for commands the original resolves
+statically against the live com.mojang folder.
+
+This is the class of bug that only running the app finds: every static check passed, the
+panels were faithful transcriptions, and the commands returned successfully. They were
+just pointed at an empty directory.
+
+### `versions` — a fourth ambiguous navigation key
+
+After `clients`, `photos` and `backups`. On the Java edition the Versions tab opened the
+**Bedrock** Latite/OderSo DLL picker. Four emitters, three meanings; resolved by edition
+with the emitting strip taking precedence.
+
+### Other defects found by running
+
+- **Vanilla Tweaks 404'd on open** — self-inflicted in the tweaks commit: making
+  `javaVersion` load asynchronously left a window where `load()` ran with an empty version
+  and requested `.../json//rpcategories.json`. All six versions were always fine.
+- **Java Screenshots had no bottom tab strip**, making it a dead end.
+- **Profile disabled three features that now work** — Change skin, Skin library and Reset
+  said "not available in this build" after their commands had been added. A working
+  feature left disabled misinforms the user as much as a fake one does.
+
+### Not defects, after investigation
+
+- The header client chip changing from "Flarial Client" to "Vanilla" was **me**: it is a
+  click-to-cycle control. The value survives a webview reload, a full panel sweep and a
+  process restart.
+- The `{schema_version, data}` settings envelope differs from the original's bare object,
+  but `gl-settings::load` migrates the legacy `glacier-settings.json` on first run and
+  never deletes it. The user's original file is still on disk untouched.
+
+### Command smoke test
+
+54 read-only commands invoked against the running app: **47 returned real data, 0 failed
+for app reasons.** The seven non-OK results were five harness argument mistakes and two
+correct "not installed" errors (OderSo, LeviLamina). Real values included 910 Java
+versions, 57 Bedrock versions, 87 LeviLamina mods, 32 Latite releases, 152 shader
+materials, 522 parsed Bedrock options, 21 OderSo DLLs and 8 theme presets.
+
+### Injection — proven, finally
+
+The plan called a throwaway-host test non-negotiable before ever pointing injection at
+Minecraft, and it had never been done. `crates/gl-injection/tests/throwaway_host.rs`
+spawns a disposable process, injects System32's `version.dll`, and asserts the module
+probe then sees it — covering `OpenProcess`, `VirtualAllocEx`, `WriteProcessMemory`,
+resolving `LoadLibraryW`, `CreateRemoteThread`, the wait, and verification. **It passes.**
+Three further tests need no host and run in CI. Injection into the real game has **not**
+been attempted and needs the user's go-ahead.
+
+### Write paths exercised
+
+- **Bedrock backup**: 16 MB, 475 entries, all five managed folders, zip integrity OK — and
+  it correctly drew worlds from the account folder and packs from `Shared`, confirming the
+  per-subfolder live resolution.
+- **World export**: produced a structurally valid `.mcworld` — `level.dat` at the root,
+  `db/` present, bundled behaviour packs, integrity OK.
+- **level.dat editor**: parsed real values (seed, game type, difficulty, experiments), so
+  the `gl-nbt` port works against real save data.
+- **Themes**: create → 18 CSS variables → delete round-trips, and `themes.json` keeps the
+  original's bare PascalCase array shape.
+
+Deliberately not exercised, as destructive or account-touching: backup *restore*, world
+delete, instance switch (swaps game data), version switch (unregisters the game package),
+and skin apply (changes a real Minecraft account).
+
 ## Phases 6 and 7 — verification and the cutover commit
 
 ### CI was red before this, in two places
