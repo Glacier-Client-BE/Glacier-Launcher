@@ -155,3 +155,39 @@ fn process_lookup_finds_a_spawned_host_and_loses_it_after_exit() {
     }
     panic!("host pid {pid} still listed after the process was killed");
 }
+
+#[test]
+fn window_visibility_is_false_for_a_class_that_does_not_exist() {
+    // No real window ever has this class name, so this must return false
+    // rather than hang or panic - the loop in `is_target_window_visible`
+    // must terminate on FindWindowExW's "not found" error.
+    assert!(!gl_injection::is_target_window_visible(
+        std::process::id(),
+        "GlacierTestNonexistentWindowClass"
+    ));
+}
+
+#[test]
+fn wait_for_target_window_gives_up_when_the_process_has_already_exited() {
+    // A pid that is already dead: the poll loop must notice and return
+    // false immediately rather than spinning for the full timeout.
+    let host = spawn_host().expect("failed to spawn throwaway host");
+    let pid = host.id();
+    let mut host = host;
+    host.kill().ok();
+    host.wait().ok();
+
+    let start = Instant::now();
+    let ready = gl_injection::wait_for_target_window(
+        pid,
+        "Bedrock",
+        Duration::from_secs(10),
+        Duration::from_millis(50),
+    );
+    assert!(!ready);
+    assert!(
+        start.elapsed() < Duration::from_secs(5),
+        "should give up quickly once the process is gone, took {:?}",
+        start.elapsed()
+    );
+}

@@ -25,6 +25,19 @@ pub const RELEASE_FAMILY_NAME: &str = "Microsoft.MinecraftUWP_8wekyb3d8bbwe";
 pub const PREVIEW_FAMILY_NAME: &str = "Microsoft.MinecraftWindowsBeta_8wekyb3d8bbwe";
 pub const GAME_EXE_NAME: &str = "Minecraft.Windows.exe";
 
+/// Win32 window class of Minecraft Bedrock's main window, confirmed against
+/// Flarial's own official launcher (`Flarial.Runtime/Game/Minecraft.Base.cs`:
+/// `const string ClassName = "Bedrock";`). Used as the injection-readiness
+/// signal in [`launch`].
+const GAME_WINDOW_CLASS: &str = "Bedrock";
+
+/// Longest we will wait for the game's window before falling back to a fixed
+/// delay. Generous because a cold/slow machine can take a while to reach the
+/// main menu, and the fallback path below is what runs if this is ever too
+/// short.
+const WINDOW_READY_TIMEOUT: Duration = Duration::from_secs(45);
+const WINDOW_POLL_INTERVAL: Duration = Duration::from_millis(120);
+
 #[derive(Debug, Clone)]
 pub struct BedrockPackageInfo {
     pub family_name: String,
@@ -355,12 +368,39 @@ pub async fn launch(
         });
     };
 
+    // Readiness wait, modeled on Flarial's own official launcher
+    // (`Flarial.Runtime/Game/Minecraft.Bootstrap.cs::Launch`): the game's
+    // main window only becomes visible once its script engine has finished
+    // booting, which is what actually determines whether injection is safe
+    // - a fixed delay before this was a guess at that moment, too short on a
+    // slow machine and wasted time on a fast one. `injection_delay_ms`
+    // (still a user-facing setting) is kept as a MINIMUM wait, so a value the
+    // user set for a specific reason (e.g. a client that wants extra time
+    // after menu load) is still honored on top of the readiness signal.
+    let window_ready = tokio::task::spawn_blocking(move || {
+        gl_injection::wait_for_target_window(
+            pid,
+            GAME_WINDOW_CLASS,
+            WINDOW_READY_TIMEOUT,
+            WINDOW_POLL_INTERVAL,
+        )
+    })
+    .await
+    .unwrap_or(false);
+
     if injection_delay_ms > 0 {
         sleep(Duration::from_millis(injection_delay_ms)).await;
+    } else if !window_ready {
+        // Neither a configured delay nor a confirmed-visible window: give the
+        // game a short grace period rather than injecting the instant the
+        // process object exists, which is well before it can safely load a
+        // client DLL. This mirrors the floor the old fixed-delay code
+        // effectively provided.
+        sleep(Duration::from_millis(1500)).await;
     }
 
-    // The game can exit or restart during the injection delay — re-resolve
-    // rather than injecting into a stale PID. Mirrors the C# re-check.
+    // The game can exit or restart during the wait — re-resolve rather than
+    // injecting into a stale PID. Mirrors the C# re-check.
     let current_pid = find_game_process_for(family).ok_or(LaunchError::BedrockLaunchTimedOut)?;
 
     gl_injection::inject_dll(current_pid, &dll_path, verify_injection)

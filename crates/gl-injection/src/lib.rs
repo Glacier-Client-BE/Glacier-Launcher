@@ -53,8 +53,8 @@ use windows::Win32::System::Memory::{
 use windows::Win32::System::Threading::{
     CreateRemoteThread, GetCurrentProcess, GetExitCodeThread, OpenProcess, OpenProcessToken,
     WaitForSingleObject, PROCESS_ACCESS_RIGHTS, PROCESS_ALL_ACCESS, PROCESS_CREATE_THREAD,
-    PROCESS_QUERY_INFORMATION, PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_VM_OPERATION,
-    PROCESS_VM_READ, PROCESS_VM_WRITE,
+    PROCESS_QUERY_INFORMATION, PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_SYNCHRONIZE,
+    PROCESS_VM_OPERATION, PROCESS_VM_READ, PROCESS_VM_WRITE,
 };
 
 /// Errors that can occur while enabling privileges, injecting a DLL, or
@@ -566,6 +566,103 @@ fn try_grant_uwp_access(path: &Path) -> WinResult<()> {
         }
 
         Ok(())
+    }
+}
+
+/// Whether a top-level window of class `class_name` belonging to `process_id`
+/// is currently visible.
+///
+/// Modeled directly on Flarial's own official launcher
+/// (`Flarial.Runtime/Game/Minecraft.Bootstrap.cs::Launch`,
+/// `Minecraft.Lookup.cs::GetWindow`): Minecraft Bedrock's main window (Win32
+/// class `"Bedrock"`) only becomes visible once the game's script engine has
+/// finished booting, which is what actually determines whether injecting a
+/// client DLL is safe. A fixed post-launch delay is a guess at that moment;
+/// this checks it directly.
+///
+/// Enumerates every top-level window of the given class (there is normally at
+/// most one, but a stale window from a previous instance could still be
+/// closing) and returns `true` for the first one owned by `process_id` that
+/// is visible.
+pub fn is_target_window_visible(process_id: u32, class_name: &str) -> bool {
+    use windows::Win32::Foundation::HWND;
+    use windows::Win32::UI::WindowsAndMessaging::{
+        FindWindowExW, GetWindowThreadProcessId, IsWindowVisible,
+    };
+
+    let class_wide: Vec<u16> = class_name
+        .encode_utf16()
+        .chain(std::iter::once(0))
+        .collect();
+    let class_pcwstr = PCWSTR(class_wide.as_ptr());
+
+    let mut after: Option<HWND> = None;
+    loop {
+        let hwnd = match unsafe { FindWindowExW(None, after, class_pcwstr, PCWSTR::null()) } {
+            Ok(h) => h,
+            Err(_) => return false,
+        };
+
+        let mut owner_pid = 0u32;
+        unsafe { GetWindowThreadProcessId(hwnd, Some(&mut owner_pid)) };
+
+        if owner_pid == process_id {
+            return unsafe { IsWindowVisible(hwnd) }.as_bool();
+        }
+
+        after = Some(hwnd);
+    }
+}
+
+/// Polls [`is_target_window_visible`] until it is `true`, the process exits,
+/// or `timeout` elapses. Returns `true` only on the visible-window case.
+///
+/// This is the readiness wait Flarial's launcher performs before injecting
+/// (a `FileSystemWatcher`/`WaitForMultipleObjects` pair there; a poll loop
+/// here, which needs no extra Windows API surface and is precise enough at a
+/// short interval).
+///
+/// Liveness is checked via a single `HANDLE` opened once at the start, not by
+/// re-opening `process_id` by number on every iteration: Windows recycles
+/// process ids as soon as they're freed, so a numeric re-check can easily
+/// find some unrelated, unrelated-but-alive process that was just handed the
+/// same id and wrongly conclude the original process is still running. A
+/// `HANDLE` refers to the specific kernel object regardless of what happens
+/// to the number afterward, so `WaitForSingleObject` on it can't be fooled
+/// that way. If the handle can't be opened at all, liveness can't be
+/// determined and the loop falls back to timing out rather than spinning
+/// forever.
+pub fn wait_for_target_window(
+    process_id: u32,
+    class_name: &str,
+    timeout: Duration,
+    poll_interval: Duration,
+) -> bool {
+    let handle = match unsafe {
+        OpenProcess(
+            PROCESS_SYNCHRONIZE | PROCESS_QUERY_LIMITED_INFORMATION,
+            false,
+            process_id,
+        )
+    } {
+        Ok(h) if !h.is_invalid() => OwnedHandle(h),
+        _ => return false,
+    };
+
+    let deadline = Instant::now() + timeout;
+    loop {
+        if is_target_window_visible(process_id, class_name) {
+            return true;
+        }
+        // A 0ms wait just polls the signaled state without blocking; `0`
+        // (`WAIT_OBJECT_0`) means the process has already exited.
+        if unsafe { WaitForSingleObject(handle.0, 0) }.0 == 0 {
+            return false;
+        }
+        if Instant::now() >= deadline {
+            return false;
+        }
+        std::thread::sleep(poll_interval);
     }
 }
 
