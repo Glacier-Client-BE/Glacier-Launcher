@@ -510,6 +510,76 @@ Deliberately not exercised, as destructive or account-touching: backup *restore*
 delete, instance switch (swaps game data), version switch (unregisters the game package),
 and skin apply (changes a real Minecraft account).
 
+## Phase 5 follow-up — injection against the real game, and the console window bug
+
+### Injection against real Minecraft — proven
+
+Launched Bedrock with the Flarial Client DLL end to end via the running app (driven over
+CDP, not just source-reading): `launch_bedrock_instance` returned PID 4296, `tasklist`
+confirmed that PID is `Minecraft.Windows.exe` — a separate process from
+`glacier-launcher.exe` — and `Get-Process -Id 4296 | Modules` showed
+`Flarial.Client.Release.dll` loaded inside it. Injection targets the game, never the
+launcher's own process; there is no code path that could resolve otherwise
+(`inject_bedrock_client`/`find_game_process_for` both resolve strictly by process name).
+
+Also modeled the injection-readiness wait on Flarial's own official launcher
+(`flarialmc/Flarial.Launcher`): `gl_injection::wait_for_target_window` polls the Bedrock
+main window's Win32 visibility (class `"Bedrock"`) instead of sleeping a fixed delay,
+liveness-checked via a held `HANDLE` (not a re-opened PID, which Windows can recycle to an
+unrelated process mid-poll — caught by a purpose-built test before it shipped).
+
+### Real defect: the console window was rendering the main app
+
+Running the app surfaced something no static check caught: launching Bedrock opened a
+second window that looked identical to the main launcher, not a console. Root cause —
+`open_console_window` pointed the window at `console.html`, but that file never existed;
+Vite's dev-server SPA fallback silently served `index.html` (the main app) instead of
+erroring. Fixed by actually building the console page:
+`frontend/console.html` + `console-main.ts` + `GameConsoleApp.svelte`, wired into
+`vite.config.ts`'s multi-page `rollupOptions.input`, ported line-for-line off
+`GameConsoleWindow.xaml`/`.xaml.cs` — status dot + label, PID, Auto-close/Auto-scroll/Wrap/
+Clear/Copy/Save/mclo.gs/Stop, colored log lines by kind. New backend commands:
+`save_console_log`, `upload_console_log_to_mclogs`, `console_stop_game` (an alias of the
+existing `cancel_launch`), `console_content_title`, plus a `game-console://status` event
+carrying starting/running/failed + PID.
+
+A second, subtler mismatch found only by comparing against a screenshot of the real
+original: the OS window title bar is supposed to stay the **static** `"Game Console"`
+(`Title="Game Console"` in the XAML) — only the in-content header changes per launch
+(`"Minecraft Bedrock · Flarial Client"`). The first port set the OS title to the dynamic
+string. Fixed by keeping `.title("Game Console")` fixed and moving the dynamic name to a
+`game-console://title` event (plus a `console_content_title` command for the window's
+first paint, since a plain `emit` on window creation races the page's own listener
+registration).
+
+Live-verified after the fix: `MainWindowTitle` reads `"Game Console"`; the console page's
+DOM shows content title `"Minecraft Bedrock · Flarial.Client.Release.dll"`, status
+`"Running"`, `"PID 4296"`, and the real launch-info log lines — not the main app.
+
+### Not a defect: the "multiple windows" observation
+
+Confirmed via `tasklist` (one `glacier-launcher.exe`) and by reading `package.json`/
+`tauri.conf.json`: `npm run dev` runs `tauri dev`, which auto-rebuilds and relaunches the
+Rust binary on every `.rs` change. The extra windows seen during active editing were dev-
+tooling restarts, not a shipped-app bug — the second *legitimate* window per launch is the
+console above.
+
+### Packaging: icon and installer
+
+`src-tauri/icons/*` turned out to hold a generic abstract swirl, not the real Glacier
+mark — never noticed because it renders as a plausible-looking icon rather than a broken
+one. The real logo (a polar bear head) was found at
+`MinecraftLauncher-wpf-backup-full/icon.ico` (256×256 source) and regenerated into every
+size via `tauri icon`, replacing the wrong set; verified by extracting the running
+`glacier-launcher.exe`'s embedded icon resource directly (`Icon.ExtractAssociatedIcon`),
+which now shows the bear. `bundle.icon` and the tray icon already pointed at this
+directory, so no config changes were needed once the files themselves were right.
+
+Added minimal NSIS branding that didn't exist before: `bundle.windows.nsis` with a
+per-user install mode (no UAC elevation prompt needed), the app icon as the installer
+icon, and `"Glacier Launcher"` as the Start Menu folder name. No header/sidebar installer
+artwork exists to port — that needs real assets from the user, not fabricated ones.
+
 ## Phases 6 and 7 — verification and the cutover commit
 
 ### CI was red before this, in two places

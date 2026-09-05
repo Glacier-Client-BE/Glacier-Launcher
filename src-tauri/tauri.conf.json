@@ -43,6 +43,15 @@
     ],
     "android": {
       "debugApplicationIdSuffix": ".debug"
+    },
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser",
+        "installerIcon": "icons/icon.ico",
+        "languages": ["English"],
+        "displayLanguageSelector": false,
+        "startMenuFolder": "Glacier Launcher"
+      }
     }
   }
 }

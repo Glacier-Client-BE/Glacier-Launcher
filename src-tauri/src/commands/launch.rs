@@ -23,12 +23,26 @@ use crate::state::AppState;
 const CONSOLE_WINDOW_LABEL: &str = "game-console";
 const CONSOLE_LOG_EVENT: &str = "game-console://log";
 const CONSOLE_EXIT_EVENT: &str = "game-console://exit";
+const CONSOLE_STATUS_EVENT: &str = "game-console://status";
+const CONSOLE_TITLE_EVENT: &str = "game-console://title";
 
 /// PID of the most recently launched Java process, if it may still be
 /// running. Not stored on `AppState` (kept local to this module): mirrors
 /// the original's `_launchCts`/force-close scope, which only ever needs to
 /// reach "the thing we just tried to launch," not general app state.
 static LAST_JAVA_PID: Mutex<Option<u32>> = Mutex::new(None);
+
+/// The console window's current in-content title (`TitleLabel.Text` in the
+/// original). Read by the console page on mount via [`console_content_title`]
+/// — a plain `emit` on window creation would race the page's own listener
+/// registration, since the webview hasn't loaded yet when the window is
+/// built.
+static CONSOLE_TITLE: Mutex<String> = Mutex::new(String::new());
+
+#[tauri::command]
+pub fn console_content_title() -> String {
+    CONSOLE_TITLE.lock().map(|g| g.clone()).unwrap_or_default()
+}
 
 /// Force-kills a process by PID, matching `Process.Kill(entireProcessTree:
 /// true)` from the original's `ForceCloseLaunch`. `taskkill /T` recurses to
@@ -79,15 +93,45 @@ struct ConsoleExitPayload {
     code: Option<i32>,
 }
 
+/// Mirrors `GameConsoleWindow.SetStatus`/`MarkRunning`/`MarkFailed`: the
+/// console window's status dot + label, driven by launch progress rather
+/// than only by process-exit (which `CONSOLE_EXIT_EVENT` already covers).
+#[derive(Clone, serde::Serialize)]
+struct ConsoleStatusPayload {
+    status: &'static str, // "starting" | "running" | "failed"
+    pid: Option<u32>,
+    message: Option<String>,
+}
+
+fn emit_status(app: &AppHandle, status: &'static str, pid: Option<u32>, message: Option<String>) {
+    let _ = app.emit(
+        CONSOLE_STATUS_EVENT,
+        ConsoleStatusPayload {
+            status,
+            pid,
+            message,
+        },
+    );
+}
+
 /// Opens (or focuses) the live console window used to stream stdout/stderr
 /// from a launched game process. Simpler than the original's Win32 console
 /// window (`GameConsoleWindow.xaml`) — just a second Tauri webview that
 /// listens for `CONSOLE_LOG_EVENT`/`CONSOLE_EXIT_EVENT`.
-fn open_console_window(app: &AppHandle, title: &str) -> Result<(), String> {
+fn open_console_window(app: &AppHandle, content_title: &str) -> Result<(), String> {
+    // The OS-level window title stays the static "Game Console" — matches
+    // `GameConsoleWindow.xaml`'s `Title="Game Console"`. The per-launch name
+    // (e.g. "Minecraft Bedrock · Flarial Client") is the *content* header
+    // (`TitleLabel.Text`, set via `SetTitle`), shown below the status dot,
+    // not the OS chrome.
+    if let Ok(mut guard) = CONSOLE_TITLE.lock() {
+        *guard = content_title.to_string();
+    }
+
     if let Some(win) = app.get_webview_window(CONSOLE_WINDOW_LABEL) {
-        let _ = win.set_title(title);
         let _ = win.show();
         let _ = win.set_focus();
+        let _ = app.emit_to(CONSOLE_WINDOW_LABEL, CONSOLE_TITLE_EVENT, content_title);
         return Ok(());
     }
 
@@ -96,7 +140,7 @@ fn open_console_window(app: &AppHandle, title: &str) -> Result<(), String> {
         CONSOLE_WINDOW_LABEL,
         WebviewUrl::App("console.html".into()),
     )
-    .title(title)
+    .title("Game Console")
     .inner_size(900.0, 560.0)
     .build()
     .map(|_| ())
@@ -305,15 +349,21 @@ pub async fn launch_java_instance(
     };
 
     open_console_window(&app, "Minecraft Java")?;
+    emit_status(&app, "starting", None, None);
     emit_log(
         &app,
         "info",
         format!(".minecraft = {}", req.mc_dir.display()),
     );
 
-    let launched = gl_java_launch::launch(req)
-        .await
-        .map_err(|e| e.to_string())?;
+    let launched = match gl_java_launch::launch(req).await {
+        Ok(l) => l,
+        Err(e) => {
+            let msg = e.to_string();
+            emit_status(&app, "failed", None, Some(msg.clone()));
+            return Err(msg);
+        }
+    };
 
     emit_log(&app, "info", format!("Started PID {}", launched.pid));
     emit_log(&app, "info", launched.command_line.clone());
@@ -322,6 +372,7 @@ pub async fn launch_java_instance(
     if let Ok(mut guard) = LAST_JAVA_PID.lock() {
         *guard = Some(pid);
     }
+    emit_status(&app, "running", Some(pid), None);
     stream_child_output(app, launched.child);
 
     Ok(pid)
@@ -351,14 +402,22 @@ pub async fn launch_bedrock_instance(
                 .unwrap_or_else(|| "Vanilla".to_string())
         ),
     )?;
+    emit_status(&app, "starting", None, None);
 
-    let result = gl_bedrock_launch::launch(
+    let result = match gl_bedrock_launch::launch(
         dll_path.map(PathBuf::from),
         settings.injection_delay_ms.max(0) as u64,
         settings.verify_injection,
     )
     .await
-    .map_err(|e| e.to_string())?;
+    {
+        Ok(r) => r,
+        Err(e) => {
+            let msg = e.to_string();
+            emit_status(&app, "failed", None, Some(msg.clone()));
+            return Err(msg);
+        }
+    };
 
     emit_log(
         &app,
@@ -383,6 +442,7 @@ pub async fn launch_bedrock_instance(
             format!("Minecraft started (PID {}).", result.pid)
         },
     );
+    emit_status(&app, "running", Some(result.pid), None);
 
     Ok(result.pid)
 }
@@ -390,4 +450,45 @@ pub async fn launch_bedrock_instance(
 #[tauri::command]
 pub fn is_bedrock_game_running() -> bool {
     gl_bedrock_launch::find_game_process().is_some()
+}
+
+/// Port of `GameConsoleWindow.SaveBtn_Click`: writes the console's full text
+/// to a path the user already chose via a save dialog.
+#[tauri::command]
+pub fn save_console_log(path: String, content: String) -> Result<(), String> {
+    std::fs::write(path, content).map_err(|e| e.to_string())
+}
+
+/// Port of `GameConsoleWindow.ShareBtn_Click`: uploads the console's full
+/// text to mclo.gs and returns the share URL.
+#[tauri::command]
+pub async fn upload_console_log_to_mclogs(content: String) -> Result<String, String> {
+    let client = reqwest::Client::new();
+    let resp = client
+        .post("https://api.mclo.gs/1/log")
+        .form(&[("content", content.as_str())])
+        .timeout(std::time::Duration::from_secs(15))
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let status = resp.status();
+    let body = resp.text().await.map_err(|e| e.to_string())?;
+    if !status.is_success() {
+        return Err(format!("mclo.gs upload failed (HTTP {status}): {body}"));
+    }
+
+    let parsed: serde_json::Value = serde_json::from_str(&body).map_err(|e| e.to_string())?;
+    parsed["url"]
+        .as_str()
+        .map(str::to_string)
+        .ok_or_else(|| "mclo.gs response had no url".to_string())
+}
+
+/// Port of `GameConsoleWindow.StopBtn_Click`: kills the process the console
+/// window is currently attached to. An alias of [`cancel_launch`] under the
+/// console's own name — same underlying kill, different caller.
+#[tauri::command]
+pub fn console_stop_game() {
+    cancel_launch();
 }
