@@ -8,6 +8,7 @@
 pub mod announcements;
 pub mod discord;
 pub mod error;
+pub mod lan;
 pub mod models;
 pub mod news;
 pub mod server_ping;

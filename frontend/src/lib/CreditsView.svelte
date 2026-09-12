@@ -3,7 +3,6 @@
   // Static content — names, roles and links copied verbatim from the source,
   // nothing fabricated or updated.
   import { invoke } from '@tauri-apps/api/core'
-  import EditionTabs from './components/EditionTabs.svelte'
   import PanelHeader from './components/PanelHeader.svelte'
 
   let { edition, onBack, onNavigate }: {
@@ -30,7 +29,7 @@
   <div class="credits-card credits-card-glacier">
     <div class="credits-card-icon" style="padding:6px;">
       <img
-        src="https://media.discordapp.net/attachments/1252981510223429693/1491099168612028497/1000167923-removebg-preview.png?ex=69d675d1&is=69d52451&hm=f8489d83a088d107f933b54625e9ebd93dd1d726788804f0dbc498720a3b689f&=&width=320&height=320"
+        src="images/icon.png"
         style="width:100%;height:100%;object-fit:contain;" alt="" />
     </div>
     <div class="credits-card-meta">
@@ -100,7 +99,7 @@
   <span class="panel-section-label">Tweaks</span>
 
   <div class="credits-card">
-    <div class="credits-card-icon" style="padding:6px;"><i class="fa-solid fa-wand-magic-sparkles" style="color:var(--accent);font-size:20px;"></i></div>
+    <div class="credits-card-icon" style="padding:6px;"><img src="images/vanilla-tweaks.png" style="width:100%;height:100%;object-fit:contain;" alt="" /></div>
     <div class="credits-card-meta">
       <span class="credits-card-name">VanillaTweaks</span>
       <span class="credits-card-sub">Java resource packs — by the VanillaTweaks team</span>
@@ -113,7 +112,7 @@
   </div>
 
   <div class="credits-card">
-    <div class="credits-card-icon" style="padding:6px;"><i class="fa-solid fa-wand-magic-sparkles" style="color:var(--accent);font-size:20px;"></i></div>
+    <div class="credits-card-icon" style="padding:6px;"><img src="images/bedrock-tweaks.png" style="width:100%;height:100%;object-fit:contain;" alt="" /></div>
     <div class="credits-card-meta">
       <span class="credits-card-name">BedrockTweaks</span>
       <span class="credits-card-sub">Bedrock resource packs — by the BedrockTweaks team</span>
@@ -139,4 +138,3 @@
   </div>
 </div>
 
-<EditionTabs active="credits" {edition} onNavigate={(v) => onNavigate?.(v)} />

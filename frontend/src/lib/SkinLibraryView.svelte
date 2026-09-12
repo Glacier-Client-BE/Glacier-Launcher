@@ -207,9 +207,10 @@
   </div>
 
   {#if skins.length === 0}
-    <div class="stats-empty">
-      No saved skins yet. Add a PNG or pull one in by username, then apply it to your signed-in
-      account.
+    <div class="empty-state">
+      <i class="fa-solid fa-shirt"></i>
+      <span>No saved skins yet. Add a PNG or pull one in by username, then apply it to your signed-in
+      account.</span>
     </div>
   {:else}
     <div class="skinlib-grid">

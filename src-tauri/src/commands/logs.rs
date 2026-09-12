@@ -6,7 +6,6 @@
 //! are thin enough (file scan + regex redaction; a small JSON-persisted
 //! list) that a dedicated crate would be overkill, matching how this file is
 //! scoped as "lowest risk, finish it" in the task brief.
-#![allow(dead_code)]
 
 use std::path::{Path, PathBuf};
 
@@ -80,6 +79,47 @@ fn scan_log_dir(dir: &Path, is_crash: bool, out: &mut Vec<LogFile>) {
     }
 }
 
+#[derive(Debug, Clone, Serialize)]
+pub struct CrashReportInfo {
+    pub name: String,
+    pub path: String,
+    /// Unix seconds, matching `LogFile::modified_at`'s convention.
+    pub modified_at: String,
+}
+
+/// Finds the newest `crash-*.txt` under `<minecraft_dir>/crash-reports` for
+/// the Settings panel's "Latest crash report" row. Mirrors
+/// `Home.Panels.cs::LatestJavaCrashFile` — this is the flat, version-scoped
+/// `.minecraft` layout (`JavaVersions.MinecraftDir`), distinct from
+/// `list_logs`'s per-instance `crash-reports` folder.
+#[tauri::command]
+pub fn latest_java_crash_report(minecraft_dir: String) -> Option<CrashReportInfo> {
+    let dir = Path::new(&minecraft_dir).join("crash-reports");
+    let entries = std::fs::read_dir(&dir).ok()?;
+
+    entries
+        .flatten()
+        .filter_map(|entry| {
+            let path = entry.path();
+            let name = path.file_name()?.to_string_lossy().into_owned();
+            if !name.starts_with("crash-") || !name.to_ascii_lowercase().ends_with(".txt") {
+                return None;
+            }
+            let modified = entry.metadata().ok()?.modified().ok()?;
+            Some((path, name, modified))
+        })
+        .max_by_key(|(_, _, modified)| *modified)
+        .map(|(path, name, modified)| CrashReportInfo {
+            name,
+            modified_at: modified
+                .duration_since(std::time::UNIX_EPOCH)
+                .ok()
+                .map(|d| d.as_secs().to_string())
+                .unwrap_or_default(),
+            path: path.to_string_lossy().into_owned(),
+        })
+}
+
 /// Reads a log file (transparently gunzipping `.gz`), truncated to the last
 /// `max_lines` lines — mirrors `LogService.ReadLogAsync`.
 #[tauri::command]
@@ -120,9 +160,115 @@ pub fn log_looks_like_crash(text: String) -> bool {
             .contains("a fatal error has been detected")
 }
 
-/// Redacts access tokens / session args / JWT-shaped strings before sharing,
-/// mirrors `LogService.Redact`.
+/// Redacts access tokens / session args / JWT-shaped strings / the local
+/// Windows username (from `Users\<name>\` paths) / IPv4 addresses (server
+/// connection lines) before sharing, mirrors `LogService.Redact`.
 fn redact(text: &str) -> String {
+    let text = redact_user_paths(text);
+    let text = redact_ipv4(&text);
+    redact_tokens(&text)
+}
+
+/// Masks the username segment of `...\Users\<name>\...` / `.../Users/<name>/...`
+/// paths (Windows profile dirs leak the OS account name, which is frequently
+/// the player's real name) while leaving the rest of the path intact.
+fn redact_user_paths(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let bytes = text.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        let has_users_word = i + 5 <= bytes.len() && text[i..i + 5].eq_ignore_ascii_case("users");
+        if has_users_word {
+            // Confirm whole-word "users" (not e.g. "byusers") and followed by
+            // a path separator, then a username segment, then a separator.
+            let word_start_ok = i == 0 || !bytes[i - 1].is_ascii_alphanumeric();
+            let after = i + 5;
+            if word_start_ok
+                && after < bytes.len()
+                && matches!(bytes[after], b'\\' | b'/')
+            {
+                let sep = bytes[after];
+                let name_start = after + 1;
+                let name_end = text[name_start..]
+                    .find(|c: char| c == '\\' || c == '/')
+                    .map(|off| name_start + off);
+                if let Some(name_end) = name_end {
+                    if name_end > name_start {
+                        out.push_str(&text[i..=after]);
+                        out.push_str("<redacted-user>");
+                        out.push(sep as char);
+                        i = name_end + 1;
+                        continue;
+                    }
+                }
+            }
+        }
+        let ch = text[i..].chars().next().unwrap();
+        out.push(ch);
+        i += ch.len_utf8();
+    }
+    out
+}
+
+/// Masks IPv4 addresses (e.g. `Connecting to <ip>:<port>` lines) so a shared
+/// log doesn't leak the player's or a server's real IP.
+fn redact_ipv4(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let bytes = text.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i].is_ascii_digit() {
+            let rest = &text[i..];
+            let mut end = 0;
+            let mut octets = 0;
+            let mut ok = true;
+            let mut chars = rest.char_indices().peekable();
+            loop {
+                let seg_start = end;
+                let mut seg_len = 0;
+                while let Some(&(pos, c)) = chars.peek() {
+                    if c.is_ascii_digit() {
+                        seg_len += 1;
+                        end = pos + c.len_utf8();
+                        chars.next();
+                    } else {
+                        break;
+                    }
+                }
+                if seg_len == 0 || seg_len > 3 || rest[seg_start..end].parse::<u16>().unwrap_or(999) > 255 {
+                    ok = false;
+                    break;
+                }
+                octets += 1;
+                if octets == 4 {
+                    break;
+                }
+                if let Some(&(pos, '.')) = chars.peek() {
+                    end = pos + 1;
+                    chars.next();
+                } else {
+                    ok = false;
+                    break;
+                }
+            }
+            // Must not be immediately followed by another digit/dot (avoid
+            // chopping a longer numeric/version string) and must have hit 4 octets.
+            let boundary_ok = end >= rest.len()
+                || !matches!(rest.as_bytes()[end], b'.' | b'0'..=b'9');
+            if ok && octets == 4 && boundary_ok {
+                out.push_str("<redacted-ip>");
+                i += end;
+                continue;
+            }
+        }
+        let ch = text[i..].chars().next().unwrap();
+        out.push(ch);
+        i += ch.len_utf8();
+    }
+    out
+}
+
+fn redact_tokens(text: &str) -> String {
     // Small hand-rolled scanner rather than pulling in `regex` for four
     // patterns: walks token-by-token looking for the flag/key names and
     // masks the value that follows, plus any JWT-shaped substring anywhere.
@@ -200,6 +346,51 @@ fn redact_jwts(text: &str) -> String {
         i += ch.len_utf8();
     }
     out
+}
+
+#[cfg(test)]
+mod redact_tests {
+    use super::redact;
+
+    #[test]
+    fn masks_windows_username_in_path() {
+        let text = r"Loading mods from C:\Users\JohnDoe\AppData\Roaming\.glacier\mods";
+        let out = redact(text);
+        assert!(!out.contains("JohnDoe"), "username leaked: {out}");
+        assert!(out.contains(r"C:\Users\<redacted-user>\AppData"));
+    }
+
+    #[test]
+    fn masks_unix_style_users_path() {
+        let text = "path=/Users/jane.doe/Library/glacier";
+        let out = redact(text);
+        assert!(!out.contains("jane.doe"), "username leaked: {out}");
+        assert!(out.contains("/Users/<redacted-user>/Library"));
+    }
+
+    #[test]
+    fn masks_ipv4_addresses() {
+        let text = "Connecting to server 203.0.113.42:25565 ...";
+        let out = redact(text);
+        assert!(!out.contains("203.0.113.42"), "ip leaked: {out}");
+        assert!(out.contains("<redacted-ip>:25565"));
+    }
+
+    #[test]
+    fn leaves_version_like_numbers_alone() {
+        // A 3-segment version string must never be treated as an IPv4 address.
+        let text = "Minecraft version 1.21.4 loaded";
+        let out = redact(text);
+        assert_eq!(out, text);
+    }
+
+    #[test]
+    fn still_masks_tokens_and_jwts() {
+        let text = "--accessToken abc123 done eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U";
+        let out = redact(text);
+        assert!(!out.contains("abc123"));
+        assert!(out.contains("<redacted-token>"));
+    }
 }
 
 /// Redacts and uploads log text to mclo.gs, returning the share URL —

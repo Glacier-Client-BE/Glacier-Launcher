@@ -21,8 +21,8 @@
   import { onDestroy, onMount } from 'svelte'
   import PanelHeader from './components/PanelHeader.svelte'
   import SubTabs from './components/SubTabs.svelte'
-  import EditionTabs from './components/EditionTabs.svelte'
   import InlineProgress from './components/InlineProgress.svelte'
+  import IconBtn from './components/IconBtn.svelte'
 
   let {
     onBack,
@@ -260,41 +260,31 @@
     <InlineProgress progress={v.progress || (entryFor(v)?.progress ?? 0)} onCancel={() => cancelMcVersionDownload(v)} />
   {:else if v.is_switching}
     <div class="version-actions">
-      <button type="button" class="icon-btn" disabled aria-label="Switching"><span class="spinner"></span></button>
+      <IconBtn disabled loading title="Switching" />
     </div>
   {:else}
     <div class="version-actions">
       {#if v.is_downloaded}
-        <button
-          type="button"
-          class="icon-btn icon-btn-ghost"
+        <IconBtn
+          ghost
+          icon="fa-solid fa-trash"
           title="Delete"
-          aria-label="Delete"
-          onclick={() => handleMcVersionDelete(v)}
-        >
-          <i class="fa-solid fa-trash"></i>
-        </button>
+          onClick={() => handleMcVersionDelete(v)}
+        />
         {#if !v.is_active}
-          <button
-            type="button"
-            class="icon-btn mcv-switch-btn"
+          <IconBtn
+            class="mcv-switch-btn"
+            icon="fa-solid fa-right-left"
             title="Switch to this version"
-            aria-label="Switch to this version"
-            onclick={() => handleMcVersionSwitch(v)}
-          >
-            <i class="fa-solid fa-right-left"></i>
-          </button>
+            onClick={() => handleMcVersionSwitch(v)}
+          />
         {/if}
       {:else}
-        <button
-          type="button"
-          class="icon-btn"
+        <IconBtn
+          icon="fa-solid fa-download"
           title="Download"
-          aria-label="Download"
-          onclick={() => handleMcVersionDownload(v)}
-        >
-          <i class="fa-solid fa-download"></i>
-        </button>
+          onClick={() => handleMcVersionDownload(v)}
+        />
       {/if}
     </div>
   {/if}
@@ -492,5 +482,3 @@
     {/each}
   {/if}
 </div>
-
-<EditionTabs edition="bedrock" active="mcversions" onNavigate={(view) => onNavigate?.(view)} />

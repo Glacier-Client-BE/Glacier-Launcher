@@ -61,9 +61,9 @@
   {:else if error}
     <span class="error-text">{error}</span>
   {:else if !stats || stats.session_count === 0}
-    <div class="stats-empty">
+    <div class="empty-state">
       <i class="fa-solid fa-chart-simple"></i>
-      No play sessions recorded yet.
+      <span>No play sessions recorded yet.</span>
     </div>
   {:else}
     <div class="stats-cards">

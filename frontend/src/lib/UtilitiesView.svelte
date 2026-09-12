@@ -21,10 +21,10 @@
    * progress, and `AppliedShader.HadStock`.
    */
   import { invoke } from '@tauri-apps/api/core'
+  import { untrack } from 'svelte'
   import { open } from '@tauri-apps/plugin-dialog'
   import PanelHeader from './components/PanelHeader.svelte'
   import SubTabs from './components/SubTabs.svelte'
-  import EditionTabs from './components/EditionTabs.svelte'
   import Spinner from './components/Spinner.svelte'
   import Toggle from './components/Toggle.svelte'
   import type { LauncherSettings } from './settings'
@@ -47,8 +47,18 @@
   const INTERNAL: Tab[] = ['options', 'shaders', 'clients', 'system']
 
   let utilTab = $state<Tab>(
-    (INTERNAL as string[]).includes(initialTab) ? (initialTab as Tab) : 'options',
+    (INTERNAL as string[]).includes(untrack(() => initialTab)) ? (untrack(() => initialTab) as Tab) : 'options',
   )
+
+  /// Labels for the breadcrumb's trailing segment — the sub-tab is internal
+  /// state here (not a top-level `View` in App.svelte), so it can't come
+  /// from the shared navHistory and is spelled out locally instead.
+  const UTIL_TAB_LABELS: Record<Tab, string> = {
+    options: 'Options',
+    shaders: 'Shaders',
+    clients: 'Clients',
+    system: 'System Info',
+  }
 
   function toast(message: string, kind: 'info' | 'success' | 'error' | 'warning' = 'info') {
     if (onToast) onToast(message, kind)
@@ -506,7 +516,7 @@
   loadUtilTab()
 </script>
 
-<PanelHeader title="Utilities" {onBack}>
+<PanelHeader title="Utilities" {onBack} breadcrumb={['Home', 'Utilities', UTIL_TAB_LABELS[utilTab]]}>
   {#snippet extraActions()}
     <button
       type="button"
@@ -948,5 +958,3 @@
     </button>
   </div>
 {/if}
-
-<EditionTabs edition="bedrock" active="utilities" onNavigate={(view) => onNavigate?.(view)} />

@@ -20,23 +20,18 @@
    *     wardrobe list stays empty. The original only renders the card when
    *     `_capesLoading || _capes.Count > 0`, so with no data the card does not
    *     render at all — that is the original's own empty behaviour, preserved.
-   *   - skin library: no `skinlibrary` view in the rewrite.
-   *   - instance clone: no `duplicate_java_instance` command.
-   *   - instance import: no `import_java_instance_zip` /
-   *     `import_official_minecraft` command.
-   *   - `mcRunning`: the host does not track a running Java process and does
-   *     not pass one in, so the "In game" badge defaults to false rather than
-   *     being invented.
+   *   - `mcRunning`: now wired to App.svelte's `pollMcRunning`, which for
+   *     Java checks `is_java_game_running` (the last-launched PID's liveness)
+   *     rather than name-matching `java.exe`.
    *
    * No scoped <style> block: every class below exists in app.css.
    * No `.panel-overlay` / `.panel-handle`: App.svelte supplies those.
    */
-  import { open } from '@tauri-apps/plugin-dialog'
+  import { open, save } from '@tauri-apps/plugin-dialog'
   import { invoke } from '@tauri-apps/api/core'
   import PanelHeader from './components/PanelHeader.svelte'
-  import EditionTabs from './components/EditionTabs.svelte'
   import SkinViewer from './components/SkinViewer.svelte'
-  import type { LauncherSettings, JavaInstance } from './settings'
+  import type { LauncherSettings, JavaInstance, JvmPreset } from './settings'
 
   let {
     settings,
@@ -273,18 +268,108 @@
     toast('Instance switched.', 'info')
   }
 
-  /** Port of `NewJavaInstance`. */
+  // ------------------------------------------------ templates / JVM presets
+
+  /** Built-in JVM-argument templates ("Vanilla", "Balanced", "Performance",
+   *  "Low-End") — feature 2 (offered at creation) and feature 3 (per-instance
+   *  preset dropdown). JVM flags only, no mod/API downloads. */
+  let jvmPresets = $state<JvmPreset[]>([])
+  let newInstanceTemplate = $state('vanilla')
+
+  async function loadJvmPresets() {
+    try {
+      jvmPresets = await invoke<JvmPreset[]>('list_jvm_presets')
+    } catch {
+      jvmPresets = []
+    }
+  }
+  loadJvmPresets()
+
+  /** Port of `NewJavaInstance`, extended to apply the selected template. */
   async function newJavaInstance() {
     try {
-      const instance = await invoke<JavaInstance>('create_java_instance', {
+      const instance = await invoke<JavaInstance>('create_java_instance_from_template', {
         name: 'New Instance',
         versionId: '',
+        template: newInstanceTemplate || null,
       })
       await reloadInstances()
       onChange({ ...settings, JavaActiveInstanceId: instance.id })
       toast('Instance created.', 'success')
     } catch (e) {
       toast(String(e), 'error')
+    }
+  }
+
+  /** Feature 3: change an instance's JVM-args preset from its row dropdown. */
+  async function onInstancePresetChange(id: string, preset: string) {
+    try {
+      await invoke('set_instance_jvm_preset', { id, preset })
+      await reloadInstances()
+      toast('JVM args preset applied.', 'success')
+    } catch (e) {
+      toast(String(e), 'error')
+    }
+  }
+
+  // ---------------------------------------------------------------- groups
+
+  let editingGroupId = $state('')
+  let editingGroupValue = $state('')
+
+  function beginEditGroup(inst: JavaInstance) {
+    editingGroupId = inst.id
+    editingGroupValue = inst.group ?? ''
+  }
+
+  async function commitGroup() {
+    const id = editingGroupId
+    editingGroupId = ''
+    try {
+      await invoke('set_instance_group', { id, group: editingGroupValue.trim() || null })
+      await reloadInstances()
+    } catch (e) {
+      toast(String(e), 'error')
+    }
+  }
+
+  /** Groups instances by `group` (falling back to "Ungrouped"), preserving
+   *  each group's first-seen order. No drag-and-drop — just collapsible
+   *  `<details>` sections. */
+  const groupedInstances = $derived.by(() => {
+    const groups = new Map<string, JavaInstance[]>()
+    for (const inst of instances) {
+      const key = inst.group?.trim() || 'Ungrouped'
+      if (!groups.has(key)) groups.set(key, [])
+      groups.get(key)!.push(inst)
+    }
+    return Array.from(groups.entries())
+  })
+
+  // ---------------------------------------------------------------- export
+
+  let exportingId = $state('')
+
+  /** Feature 6: export an instance's full directory tree as a zip via the
+   *  same `@tauri-apps/plugin-dialog` picker used for import. `zip` is
+   *  already a workspace dependency in `gl-java`, so this is a real zip, not
+   *  a folder copy. */
+  async function exportInstance(inst: JavaInstance) {
+    if (exportingId) return
+    const dest = await save({
+      title: `Export '${inst.name}'`,
+      defaultPath: `${inst.name}.zip`,
+      filters: [{ name: 'Zip archive', extensions: ['zip'] }],
+    })
+    if (!dest) return
+    exportingId = inst.id
+    try {
+      await invoke('export_java_instance', { id: inst.id, destPath: dest })
+      toast('Instance exported.', 'success')
+    } catch (e) {
+      toast(String(e), 'error')
+    } finally {
+      exportingId = ''
     }
   }
 
@@ -335,6 +420,69 @@
       toast(String(e), 'error')
     }
     confirmDeleteInstanceId = ''
+  }
+
+  /** Port of `CloneInstance` - copies the instance's metadata and full
+   * directory tree (mods, saves, config, etc.) into a new "<name> Copy". */
+  async function cloneJavaInstance(id: string) {
+    try {
+      await invoke<JavaInstance>('duplicate_java_instance', { id })
+      await reloadInstances()
+      toast('Instance cloned.', 'success')
+    } catch (e) {
+      toast(String(e), 'error')
+    }
+  }
+
+  let importBusy = $state(false)
+
+  /**
+   * Port of `ImportInstanceZip`'s non-`.mrpack` branch only
+   * (`JavaInstanceService.ImportModpackAsync`): extracts a CurseForge/
+   * Modrinth-`overrides/`-shaped or MultiMC-shaped zip directly.
+   *
+   * A `.mrpack` file needs a different path (`InstallMrpackFileAsync`):
+   * parse `modrinth.index.json`, resolve and download each listed mod from
+   * Modrinth's API, *then* extract `overrides/`. That resolver doesn't
+   * exist in this build yet, so `.mrpack` is intentionally not offered here
+   * — accepting it and only extracting overrides would silently produce an
+   * instance with no mods, which is worse than not offering it at all.
+   */
+  async function importInstanceZip() {
+    if (importBusy) return
+    const path = await open({
+      multiple: false,
+      title: 'Import instance / modpack',
+      filters: [{ name: 'Modpacks & instances', extensions: ['zip'] }],
+    })
+    if (typeof path !== 'string') return
+    importBusy = true
+    try {
+      const instance = await invoke<JavaInstance>('import_java_instance_zip', { zipPath: path })
+      onChange({ ...settings, JavaActiveInstanceId: instance.id })
+      await reloadInstances()
+      toast('Instance imported.', 'success')
+    } catch (e) {
+      toast(String(e), 'error')
+    } finally {
+      importBusy = false
+    }
+  }
+
+  /** Port of `ImportOfficialMinecraft`. */
+  async function importOfficialMinecraft() {
+    if (importBusy) return
+    importBusy = true
+    try {
+      const instance = await invoke<JavaInstance>('import_official_minecraft')
+      onChange({ ...settings, JavaActiveInstanceId: instance.id })
+      await reloadInstances()
+      toast('Imported .minecraft into a new instance.', 'success')
+    } catch (e) {
+      toast(String(e), 'error')
+    } finally {
+      importBusy = false
+    }
   }
 </script>
 
@@ -487,60 +635,137 @@
     <div class="instance-card-head">
       <span><i class="fa-solid fa-cubes-stacked"></i> Instances</span>
       <div style="flex:1"></div>
+      <select
+        class="setting-select"
+        bind:value={newInstanceTemplate}
+        data-tooltip="JVM-args template applied to the new instance"
+        aria-label="New instance template"
+      >
+        {#each jvmPresets as p (p.id)}
+          <option value={p.id}>{p.label}</option>
+        {/each}
+      </select>
       <button class="btn-sm" onclick={newJavaInstance}><i class="fa-solid fa-plus"></i> New</button>
       <button
         class="btn-sm"
-        disabled
-        data-tooltip="Instance / modpack import is not available in this build"
+        onclick={() => onNavigate?.('instance-wizard')}
+        data-tooltip="Guided setup: version, name, RAM"
+        ><i class="fa-solid fa-wand-magic-sparkles"></i> Wizard</button
+      >
+      <button
+        class="btn-sm"
+        onclick={importInstanceZip}
+        disabled={importBusy}
+        data-tooltip="Import a .zip modpack/instance"
         ><i class="fa-solid fa-file-import"></i> Import</button
       >
-      <button class="btn-sm" disabled data-tooltip="Importing your official .minecraft is not available in this build"
+      <button
+        class="btn-sm"
+        onclick={importOfficialMinecraft}
+        disabled={importBusy}
+        data-tooltip="Import your official .minecraft" aria-label="Import official .minecraft"
         ><i class="fa-brands fa-microsoft"></i></button
       >
+      <button
+        class="btn-sm"
+        onclick={() => onNavigate?.('import-launcher')}
+        data-tooltip="Import instances from MultiMC, Prism, CurseForge, ATLauncher, or Modrinth App"
+        aria-label="Import from another launcher"
+        ><i class="fa-solid fa-right-to-bracket"></i> From another launcher</button
+      >
+      <button
+        class="btn-sm"
+        onclick={() => onNavigate?.('sync-packs')}
+        data-tooltip="Keep resourcepacks, options, or mod lists consistent across instances"
+        ><i class="fa-solid fa-arrows-rotate"></i> Sync</button
+      >
     </div>
-    {#each instances as inst (inst.id)}
-      {@const isActive = inst.id === activeInstance?.id}
-      <div class="instance-row {isActive ? 'active' : ''}">
-        {#if renamingInstanceId === inst.id}
-          <input
-            class="setting-input instance-rename"
-            value={renameInstanceValue}
-            oninput={(e) => (renameInstanceValue = e.currentTarget.value)}
-            onkeydown={onRenameInstanceKey}
-          />
-          <button class="vcs-btn" onclick={commitRenameInstance}><i class="fa-solid fa-check"></i></button>
-        {:else}
-          <button class="instance-name-btn" onclick={() => switchInstance(inst.id)}>
-            {#if isActive}<i class="fa-solid fa-circle-check"></i>{:else}<i class="fa-regular fa-circle"></i>{/if}
-            <span>{inst.name}</span>
-          </button>
-          <button
-            class="instance-icon-btn"
-            onclick={() => beginRenameInstance(inst.id, inst.name)}
-            data-tooltip="Rename"><i class="fa-solid fa-pen"></i></button
-          >
-          <button
-            class="instance-icon-btn"
-            disabled
-            data-tooltip="Cloning an instance is not available in this build"
-            ><i class="fa-solid fa-copy"></i></button
-          >
-          {#if confirmDeleteInstanceId === inst.id}
-            <button
-              class="instance-icon-btn instance-del"
-              onclick={() => deleteJavaInstance(inst.id)}
-              data-tooltip="Confirm delete"><i class="fa-solid fa-check"></i></button
-            >
-            <button class="instance-icon-btn" onclick={cancelDeleteInstance}><i class="fa-solid fa-xmark"></i></button>
-          {:else}
-            <button class="instance-icon-btn" onclick={() => confirmDeleteInstance(inst.id)} data-tooltip="Delete"
-              ><i class="fa-solid fa-trash"></i></button
-            >
-          {/if}
-        {/if}
-      </div>
+    {#each groupedInstances as [groupName, groupInstances] (groupName)}
+      <details class="instance-group" open>
+        <summary class="instance-group-summary">{groupName} ({groupInstances.length})</summary>
+        {#each groupInstances as inst (inst.id)}
+          {@const isActive = inst.id === activeInstance?.id}
+          <div class="instance-row {isActive ? 'active' : ''}">
+            {#if renamingInstanceId === inst.id}
+              <input
+                class="setting-input instance-rename"
+                value={renameInstanceValue}
+                oninput={(e) => (renameInstanceValue = e.currentTarget.value)}
+                onkeydown={onRenameInstanceKey}
+              />
+              <button class="vcs-btn" onclick={commitRenameInstance} aria-label="Confirm rename"><i class="fa-solid fa-check"></i></button>
+            {:else if editingGroupId === inst.id}
+              <span class="instance-hint" style="margin-right:6px;">{inst.name} · group:</span>
+              <input
+                class="setting-input instance-rename"
+                placeholder="Ungrouped"
+                value={editingGroupValue}
+                oninput={(e) => (editingGroupValue = e.currentTarget.value)}
+                onkeydown={(e) => { e.stopPropagation(); if (e.key === 'Enter') void commitGroup() }}
+              />
+              <button class="vcs-btn" onclick={commitGroup} aria-label="Confirm group"><i class="fa-solid fa-check"></i></button>
+            {:else}
+              <button class="instance-name-btn" onclick={() => switchInstance(inst.id)}>
+                {#if isActive}<i class="fa-solid fa-circle-check"></i>{:else}<i class="fa-regular fa-circle"></i>{/if}
+                <span>{inst.name}</span>
+              </button>
+              <select
+                class="setting-select instance-version-select"
+                value={inst.jvm_args_preset ?? ''}
+                onchange={(e) => onInstancePresetChange(inst.id, e.currentTarget.value)}
+                onclick={(e) => e.stopPropagation()}
+                data-tooltip="JVM-args preset for this instance"
+                aria-label="JVM-args preset for this instance"
+              >
+                <option value="" disabled>{inst.jvm_args_preset ? '' : 'Custom'}</option>
+                {#each jvmPresets as p (p.id)}
+                  <option value={p.id}>{p.label}</option>
+                {/each}
+              </select>
+              <button
+                class="instance-icon-btn"
+                onclick={() => { switchInstance(inst.id); onNavigate?.('instance-detail') }}
+                data-tooltip="Open details" aria-label="Open details"><i class="fa-solid fa-arrow-up-right-from-square"></i></button
+              >
+              <button
+                class="instance-icon-btn"
+                onclick={() => beginRenameInstance(inst.id, inst.name)}
+                data-tooltip="Rename" aria-label="Rename"><i class="fa-solid fa-pen"></i></button
+              >
+              <button
+                class="instance-icon-btn"
+                onclick={() => beginEditGroup(inst)}
+                data-tooltip="Set group/folder" aria-label="Set group"><i class="fa-solid fa-folder"></i></button
+              >
+              <button
+                class="instance-icon-btn"
+                onclick={() => cloneJavaInstance(inst.id)}
+                data-tooltip="Clone" aria-label="Clone instance"
+                ><i class="fa-solid fa-copy"></i></button
+              >
+              <button
+                class="instance-icon-btn"
+                onclick={() => exportInstance(inst)}
+                disabled={exportingId === inst.id}
+                data-tooltip="Export as .zip" aria-label="Export instance"
+                ><i class="fa-solid fa-file-export"></i></button
+              >
+              {#if confirmDeleteInstanceId === inst.id}
+                <button
+                  class="instance-icon-btn instance-del"
+                  onclick={() => deleteJavaInstance(inst.id)}
+                  data-tooltip="Confirm delete" aria-label="Confirm delete"><i class="fa-solid fa-check"></i></button
+                >
+                <button class="instance-icon-btn" onclick={cancelDeleteInstance} aria-label="Cancel delete"><i class="fa-solid fa-xmark"></i></button>
+              {:else}
+                <button class="instance-icon-btn" onclick={() => confirmDeleteInstance(inst.id)} data-tooltip="Delete" aria-label="Delete"
+                  ><i class="fa-solid fa-trash"></i></button
+                >
+              {/if}
+            {/if}
+          </div>
+        {/each}
+      </details>
     {/each}
   </div>
 </div>
-
-<EditionTabs active="profile" edition="java" onNavigate={(v) => onNavigate?.(v)} />

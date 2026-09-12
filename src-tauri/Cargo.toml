@@ -1,6 +1,6 @@
 [package]
 name = "glacier-launcher"
-version = "0.1.0"
+version = "2.0.0"
 description = "Glacier Launcher"
 authors = ["Glacier Client"]
 license = ""
@@ -18,16 +18,17 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2.6.3", features = [] }
 
 [dependencies]
-serde_json = "1.0"
-serde = { version = "1.0", features = ["derive"] }
+serde_json.workspace = true
+serde.workspace = true
 winreg = "0.52"
 zip = { version = "2", default-features = false, features = ["deflate"] }
 log = "0.4"
-tauri = { version = "2.11.3", features = ["tray-icon"] }
+tauri = { version = "2.11.3", features = ["protocol-asset", "tray-icon"] }
 tauri-plugin-log = "2"
 tauri-plugin-dialog = "2"
-tokio = { version = "1", features = ["full"] }
-reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "stream"] }
+tokio.workspace = true
+reqwest.workspace = true
+base64 = "0.22"
 url = "2"
 
 gl-persistence = { path = "../crates/gl-persistence" }
@@ -44,3 +45,4 @@ gl-integrations = { path = "../crates/gl-integrations" }
 gl-settings = { path = "../crates/gl-settings" }
 gl-update = { path = "../crates/gl-update" }
 gl-launch = { path = "../crates/gl-launch" }
+gl-sync = { path = "../crates/gl-sync" }

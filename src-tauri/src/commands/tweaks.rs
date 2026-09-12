@@ -2,7 +2,6 @@
 //! Business logic (category fetch/flatten, blob resolution, manifest
 //! building) lives in the crate; this module adds the byte-downloading /
 //! file-assembly glue that the crate intentionally leaves to callers.
-#![allow(dead_code)]
 
 use std::io::Write;
 use std::path::Path;
@@ -18,7 +17,7 @@ use zip::{CompressionMethod, ZipWriter};
 
 use crate::state::AppState;
 
-/// Fetches an image server-side and returns its raw bytes to the frontend.
+/// Fetches an image server-side and returns a ready-to-use `data:` URL.
 ///
 /// Some external hosts (confirmed: vanillatweaks.net) hotlink-block based on
 /// the `Referer` header and return 403 to any browser-context request whose
@@ -26,8 +25,13 @@ use crate::state::AppState;
 /// directly at their icon URLs in both a WebView2 host and this app's
 /// webview. `reqwest` here sends no `Referer` at all, so proxying the fetch
 /// through the backend sidesteps the block entirely.
+///
+/// Returns a complete `data:<mime>;base64,<b64>` string so the frontend
+/// can assign it directly to `<img src>` without any JS binary-to-base64
+/// conversion (which is fragile across environments).
 #[tauri::command]
-pub async fn fetch_image_bytes(state: State<'_, AppState>, url: String) -> Result<Vec<u8>, String> {
+pub async fn fetch_image_bytes(state: State<'_, AppState>, url: String) -> Result<String, String> {
+    use base64::Engine;
     let bytes = state
         .http
         .get(&url)
@@ -39,7 +43,18 @@ pub async fn fetch_image_bytes(state: State<'_, AppState>, url: String) -> Resul
         .bytes()
         .await
         .map_err(|e| e.to_string())?;
-    Ok(bytes.to_vec())
+    let mime = sniff_image_mime(&bytes);
+    let b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
+    Ok(format!("data:{mime};base64,{b64}"))
+}
+
+fn sniff_image_mime(bytes: &[u8]) -> &'static str {
+    if bytes.starts_with(b"\x89PNG") { "image/png" }
+    else if bytes.starts_with(b"\xff\xd8") { "image/jpeg" }
+    else if bytes.starts_with(b"GIF") { "image/gif" }
+    else if bytes.len() >= 12 && &bytes[0..4] == b"RIFF" && &bytes[8..12] == b"WEBP" { "image/webp" }
+    else if bytes.starts_with(b"<svg") || bytes.starts_with(b"<?xml") { "image/svg+xml" }
+    else { "image/png" }
 }
 
 #[tauri::command]

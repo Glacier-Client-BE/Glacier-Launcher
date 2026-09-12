@@ -60,15 +60,38 @@ fn default_bedrock_port() -> i32 {
     19132
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+/// A saved Microsoft/Xbox → Minecraft sign-in, mirroring `Models.JavaAccount`.
+/// Lets the Settings panel switch between multiple signed-in accounts
+/// without re-authenticating each time (`XboxProfileService.SwitchAccount`/
+/// `PersistAccount`).
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "PascalCase")]
 pub struct JavaAccount {
+    /// Minecraft UUID when available, else the account's Xbox XUID — matches
+    /// `PersistAccount`'s `id = string.IsNullOrWhiteSpace(mcProfile.Uuid) ?
+    /// profile.Xuid : mcProfile.Uuid`.
     #[serde(default)]
     pub id: String,
     #[serde(default)]
     pub username: String,
     #[serde(default)]
     pub uuid: String,
+    #[serde(default)]
+    pub gamertag: String,
+    #[serde(default)]
+    pub xuid: String,
+    #[serde(default)]
+    pub gamer_picture_url: String,
+    #[serde(default)]
+    pub minecraft_access_token: String,
+    #[serde(default)]
+    pub minecraft_access_token_expiry: String,
+    #[serde(default)]
+    pub minecraft_skin_url: String,
+    #[serde(default)]
+    pub refresh_token: String,
+    #[serde(default)]
+    pub last_used_at: String,
 }
 
 // Field-by-field port of Models/LauncherSettings.cs. Defaults are wired via
@@ -100,6 +123,13 @@ pub struct LauncherSettings {
     pub font_family: String,
     pub ui_scale_pct: i32,
     pub background_fit: String,
+
+    /// Which side of the window panels slide in from/anchor to: "right"
+    /// (default, matches the original) or "left".
+    pub panel_side: String,
+    /// User-dragged panel width in px, from the resize handle beside the
+    /// panel's edge. `0.0` means "use the CSS default" (`min(460px, 92vw)`).
+    pub panel_width_px: f64,
 
     pub window_width: f64,
     pub window_height: f64,
@@ -204,9 +234,41 @@ pub struct LauncherSettings {
 
     pub onboarding_completed: bool,
 
+    pub accessibility_mode: bool,
+
     pub language: String,
 
     pub last_dismissed_announcement_id: String,
+
+    /// Auto-backup-every-N-launches for Bedrock worlds (feature 20). `0`
+    /// disables it. Global rather than per-world, matching the scope of the
+    /// existing manual "Back up now" action (whole com.mojang snapshot).
+    pub bedrock_auto_backup_every_n_launches: i32,
+    /// Bedrock launches since the last auto-backup ran. Reset to 0 whenever
+    /// an auto-backup fires (manual backups don't reset it).
+    pub bedrock_launches_since_backup: i32,
+
+    /// Feature 23: whether the user has dismissed the one-time marketplace
+    /// content reminder banner on the Bedrock Worlds/Backups panels.
+    pub bedrock_marketplace_reminder_dismissed: bool,
+
+    /// UI polish feature 37: user-rebound keyboard shortcuts, serialized as a
+    /// JSON object mapping action name (`"search"`, `"launch"`,
+    /// `"fullscreen"`) to a normalized combo string (e.g. `"ctrl+k"`).
+    /// `"{}"` (the default) means every action uses its hardcoded default
+    /// combo. Kept as an opaque JSON string rather than a typed map since the
+    /// set of rebindable actions is a frontend concern (`interop.js`), not
+    /// something the Rust side interprets.
+    pub keyboard_shortcuts: String,
+
+    /// UI polish feature 42: whether the user has dismissed the first-run
+    /// onboarding checklist card shown once after the setup wizard finishes.
+    pub onboarding_checklist_dismissed: bool,
+
+    /// Mods & content feature 17: starred/favorited mod project ids
+    /// (Modrinth project id, or a CurseForge numeric id as a string) from the
+    /// mod browse UI. Local-only, same persistence path as everything else.
+    pub starred_mod_ids: Vec<String>,
 }
 
 impl Default for LauncherSettings {
@@ -224,7 +286,9 @@ impl Default for LauncherSettings {
 
             accent_color: "#7289da".into(),
             theme_preset: "dark".into(),
-            blur_intensity: 14,
+            // Defaults to off: backdrop-filter blur is expensive on low-end iGPUs
+            // (e.g. Celeron N5100). Users on faster hardware can re-enable it in Settings.
+            blur_intensity: 0,
             background_opacity: 0.80,
             custom_background_path: String::new(),
             compact_mode: false,
@@ -234,6 +298,9 @@ impl Default for LauncherSettings {
             font_family: String::new(),
             ui_scale_pct: 100,
             background_fit: "cover".into(),
+
+            panel_side: "right".into(),
+            panel_width_px: 0.0,
 
             window_width: 880.0,
             window_height: 600.0,
@@ -338,9 +405,21 @@ impl Default for LauncherSettings {
 
             onboarding_completed: false,
 
+            accessibility_mode: false,
+
             language: "en".into(),
 
             last_dismissed_announcement_id: String::new(),
+
+            bedrock_auto_backup_every_n_launches: 0,
+            bedrock_launches_since_backup: 0,
+
+            bedrock_marketplace_reminder_dismissed: false,
+
+            keyboard_shortcuts: "{}".into(),
+            onboarding_checklist_dismissed: false,
+
+            starred_mod_ids: Vec::new(),
         }
     }
 }

@@ -25,6 +25,7 @@
 //! from there instead of joining literal subfolders.
 
 pub mod backup;
+pub mod community_db;
 pub mod error;
 pub mod gdk;
 pub mod import;

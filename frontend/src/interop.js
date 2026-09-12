@@ -4,6 +4,7 @@
 // to — everything else (scale, theming, panel drag-resize, tab cycler) is
 // pure DOM manipulation and ports unchanged.
 import { getCurrentWindow } from '@tauri-apps/api/window';
+import { convertFileSrc } from '@tauri-apps/api/core';
 
 const tauriWindow = getCurrentWindow();
 
@@ -63,9 +64,47 @@ function kb(name) {
     window.dispatchEvent(new CustomEvent('glacier:kbshortcut', { detail: name }));
 }
 
+// Feature 37: a handful of the shortcuts below ("search", "launch",
+// "fullscreen") can be rebound from Settings. Rebindings are persisted as a
+// JSON string in `LauncherSettings.KeyboardShortcuts` (opaque to the Rust
+// side) and applied here via `setKeyboardShortcuts`. Everything else stays
+// hardcoded, same as before.
+window._glacierShortcuts = {};
+
+/** Normalizes a KeyboardEvent into a combo string like "ctrl+shift+k". */
+function comboFromEvent(e) {
+    const parts = [];
+    if (e.ctrlKey) parts.push('ctrl');
+    if (e.altKey) parts.push('alt');
+    if (e.shiftKey) parts.push('shift');
+    const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+    if (!['Control', 'Alt', 'Shift', 'Meta'].includes(e.key)) parts.push(key);
+    return parts.join('+');
+}
+
+window.setKeyboardShortcuts = (json) => {
+    try { window._glacierShortcuts = JSON.parse(json || '{}') || {}; }
+    catch { window._glacierShortcuts = {}; }
+};
+
+/** Rebindable-action default combos, mirrored in SettingsView.svelte. */
+const REBINDABLE_DEFAULTS = { search: 'ctrl+k', launch: 'ctrl+l', fullscreen: 'f11' };
+
+function matchesAction(e, action) {
+    const combo = window._glacierShortcuts[action] || REBINDABLE_DEFAULTS[action];
+    return combo === comboFromEvent(e);
+}
+
 document.addEventListener('keydown', e => {
-    if (e.ctrlKey && !e.shiftKey && e.key === 'k') { e.preventDefault(); kb('search');   return; }
-    if (e.ctrlKey && !e.shiftKey && e.key === 'l') { e.preventDefault(); kb('launch');   return; }
+    // Skip rebindable-action matching while a rebind capture UI owns the
+    // keydown (it stops propagation itself), and skip while typing in a
+    // text field so single-letter custom bindings don't fire mid-sentence.
+    const inField = /^(input|textarea)$/i.test(e.target?.tagName || '') && !window._glacierCapturingShortcut;
+
+    if (!inField && matchesAction(e, 'search'))     { e.preventDefault(); kb('search');   return; }
+    if (!inField && matchesAction(e, 'launch'))     { e.preventDefault(); kb('launch');   return; }
+    if (!inField && matchesAction(e, 'fullscreen')) { e.preventDefault(); kb('fullscreen'); return; }
+
     if (e.ctrlKey && !e.shiftKey && e.key === '1') { e.preventDefault(); kb('settings'); return; }
     if (e.ctrlKey && !e.shiftKey && e.key === '2') { e.preventDefault(); kb('clients');  return; }
     if (e.ctrlKey && !e.shiftKey && e.key === '3') { e.preventDefault(); kb('versions'); return; }
@@ -77,7 +116,6 @@ document.addEventListener('keydown', e => {
     if (e.ctrlKey && e.shiftKey && (e.key === 't' || e.key === 'T')) { e.preventDefault(); kb('cycletheme'); return; }
     if (e.ctrlKey && e.shiftKey && (e.key === 'a' || e.key === 'A')) { e.preventDefault(); kb('cycleaccent'); return; }
     if (e.ctrlKey && e.shiftKey && (e.key === 'd' || e.key === 'D')) { e.preventDefault(); kb('diagnostics'); return; }
-    if (e.key === 'F11')       { e.preventDefault(); kb('fullscreen'); return; }
     if (e.key === 'Escape')    { kb('escape'); return; }
     if (e.key === 'ArrowDown') { kb('down'); return; }
     if (e.key === 'ArrowUp')   { kb('up'); return; }
@@ -114,12 +152,17 @@ window.setBlurIntensity = (px) => {
     document.documentElement.classList.toggle('no-blur', Number(px) <= 0);
 };
 
+// TODO(UI polish feature 39 - live/animated wallpaper): intentionally
+// skipped. The target hardware (Celeron N5100) has no headroom for a
+// per-frame animated background; static wallpaper only.
 window.setCustomBackground = (filePath) => {
     const bg = document.querySelector('.window-bg');
     if (!bg) return;
     if (filePath) {
-        const fileName = filePath.replace(/\\/g, '/').split('/').pop();
-        bg.style.backgroundImage = `url('https://glacier-files.local/${encodeURIComponent(fileName)}?t=${Date.now()}')`;
+        // Tauri's asset protocol (enabled with scope: ["**"] in
+        // tauri.conf.json) serves any local file the user picked, without
+        // needing to copy it into the launcher's own folder first.
+        bg.style.backgroundImage = `url('${convertFileSrc(filePath)}')`;
     } else {
         bg.style.backgroundImage = "url('../images/bg.jpg')";
     }
@@ -127,14 +170,36 @@ window.setCustomBackground = (filePath) => {
 
 window.setCompactMode = (enabled) => {
     document.documentElement.classList.toggle('compact', !!enabled);
+    // Feature 36: also expose it as a `data-density` attribute so any new
+    // CSS (list rows, etc.) can target `[data-density="compact"]` alongside
+    // the existing `.compact` class rules.
+    if (enabled) document.documentElement.setAttribute('data-density', 'compact');
+    else document.documentElement.removeAttribute('data-density');
+};
+
+window.setPanelSide = (side) => {
+    document.documentElement.setAttribute('data-panel-side', side === 'left' ? 'left' : 'right');
+};
+
+window.setPanelWidth = (px) => {
+    const n = Number(px);
+    if (n > 0) document.documentElement.style.setProperty('--sidebar-w-user', n + 'px');
+    else document.documentElement.style.removeProperty('--sidebar-w-user');
+};
+
+window.setAccessibilityMode = (enabled) => {
+    window._glacierA11y = !!enabled;
+    document.documentElement.classList.toggle('a11y-mode', !!enabled);
+    recomputeNoAnimations();
 };
 
 window._glacierAnimEnabled = true;
 window._glacierAnimSpeed   = 1;
+window._glacierA11y        = false;
 
 function recomputeNoAnimations() {
     document.documentElement.classList.toggle('no-animations',
-        !window._glacierAnimEnabled || window._glacierAnimSpeed <= 0);
+        window._glacierA11y || !window._glacierAnimEnabled || window._glacierAnimSpeed <= 0);
 }
 
 window.setAnimationsEnabled = (enabled) => {
@@ -155,8 +220,7 @@ window.setAnimationSpeed = (speed) => {
 window.glacierViewTransition = (apply) => {
     const root = document.documentElement;
     if (!document.startViewTransition
-        || root.classList.contains('no-animations')
-        || document.querySelector('.panel-overlay.dragging')) {
+        || root.classList.contains('no-animations')) {
         return apply();
     }
     root.classList.add('vt-active');
@@ -181,7 +245,7 @@ window.glacierViewTransition = (apply) => {
     });
 };
 
-window.applyStoredSettings = (accent, theme, blur, customBg, compact, animations, animSpeed) => {
+window.applyStoredSettings = (accent, theme, blur, customBg, compact, animations, animSpeed, panelSide, panelWidth) => {
     if (accent) window.setAccentColor(accent);
     if (theme)  window.setTheme(theme);
     if (blur != null) window.setBlurIntensity(blur);
@@ -189,6 +253,8 @@ window.applyStoredSettings = (accent, theme, blur, customBg, compact, animations
     if (compact != null) window.setCompactMode(compact);
     if (animations != null) window.setAnimationsEnabled(animations);
     if (animSpeed != null) window.setAnimationSpeed(animSpeed);
+    if (panelSide) window.setPanelSide(panelSide);
+    if (panelWidth != null) window.setPanelWidth(panelWidth);
     applyScale();
 };
 
@@ -274,202 +340,78 @@ window.focusSearchInput = () => {
     setTimeout(() => { const el = document.querySelector('.search-modal-input'); if (el) el.focus(); }, 50);
 };
 
-window.glacierSkin = (function () {
-    let libPromise = null;
-    const viewers = {};
-
-    function updatePauseState(canvasId) {
-        const v = viewers[canvasId];
-        if (v) v.renderPaused = document.hidden || !!v._glacierOffscreen;
-    }
-
-    document.addEventListener('visibilitychange', () => {
-        for (const id of Object.keys(viewers)) updatePauseState(id);
-    });
-
-    const io = ('IntersectionObserver' in window)
-        ? new IntersectionObserver(entries => {
-            for (const e of entries) {
-                const v = viewers[e.target.id];
-                if (v) { v._glacierOffscreen = !e.isIntersecting; updatePauseState(e.target.id); }
-            }
-        }, { threshold: 0.01 })
-        : null;
-
-    function loadScript(src) {
-        return new Promise(resolve => {
-            const s = document.createElement('script');
-            s.src = src;
-            s.onload  = () => resolve(true);
-            s.onerror = () => resolve(false);
-            document.head.appendChild(s);
-        });
-    }
-
-    function ensureLib() {
-        if (window.skinview3d) return Promise.resolve(true);
-        if (libPromise) return libPromise;
-        libPromise = (async () => {
-            if (await loadScript('/js/skinview3d.bundle.js') && window.skinview3d) return true;
-            if (await loadScript('https://cdn.jsdelivr.net/npm/skinview3d@3/bundles/skinview3d.bundle.js') && window.skinview3d) return true;
-            libPromise = null;
-            return false;
-        })();
-        return libPromise;
-    }
-
-    return {
-        render: async function (canvasId, skinUrl, capeUrl, model) {
-            try {
-                if (!await ensureLib()) return false;
-                const canvas = document.getElementById(canvasId);
-                if (!canvas) return false;
-                if (viewers[canvasId]) { try { viewers[canvasId].dispose(); } catch (e) {} delete viewers[canvasId]; }
-
-                const w = canvas.clientWidth  || 240;
-                const h = canvas.clientHeight || 340;
-                const viewer = new skinview3d.SkinViewer({ canvas, width: w, height: h });
-                try { await viewer.loadSkin(skinUrl, { model: model === 'slim' ? 'slim' : 'default' }); }
-                catch (e) { return false; }
-                viewer.autoRotate      = true;
-                viewer.autoRotateSpeed = 0.55;
-                viewer.zoom            = 0.85;
-                try { viewer.animation = new skinview3d.WalkingAnimation(); viewer.animation.speed = 0.6; } catch (e) {}
-                if (capeUrl) { try { await viewer.loadCape(capeUrl); } catch (e) {   } }
-                viewers[canvasId] = viewer;
-                if (io) io.observe(canvas);
-                updatePauseState(canvasId);
-                return true;
-            } catch (e) {
-                return false;
-            }
-        },
-
-        setModel: async function (canvasId, skinUrl, model) {
-            const v = viewers[canvasId];
-            if (!v) return false;
-            try { await v.loadSkin(skinUrl, { model: model === 'slim' ? 'slim' : 'default' }); return true; }
-            catch (e) { return false; }
-        },
-
-        setCape: async function (canvasId, capeUrl, mode) {
-            const v = viewers[canvasId];
-            if (!v) return false;
-            try {
-                if (mode === 'off' || !capeUrl) { v.resetCape(); return true; }
-                await v.loadCape(capeUrl, { backEquipment: mode === 'elytra' ? 'elytra' : 'cape' });
-                return true;
-            } catch (e) { return false; }
-        },
-
-        probe: function (url) {
-            return new Promise(resolve => {
-                const img = new Image();
-                img.onload  = () => resolve(true);
-                img.onerror = () => resolve(false);
-                img.src = url;
-            });
-        },
-        dispose: function (canvasId) {
-            if (io) { const c = document.getElementById(canvasId); if (c) io.unobserve(c); }
-            if (viewers[canvasId]) { try { viewers[canvasId].dispose(); } catch (e) {} delete viewers[canvasId]; }
-        }
-    };
-})();
-
 (function () {
-    const SNAP_POINTS_PCT = [40, 78, 95];
-    const DISMISS_PCT     = 18;
-    const MIN_PCT         = 12;
+    // The panel sidebar is a fixed ~460px width (see .panel-overlay), so any
+    // strip of tabs wide enough to overflow it needs the same prev/next
+    // paging — not just the bottom `.panel-tabs` strip, but the in-panel
+    // `.versions-client-switcher` strip too (Utilities' 6 sub-tabs, in
+    // particular, don't all fit). Each strip sizes its own page: how many
+    // tabs actually fit is measured live from the rendered items rather than
+    // a shared guess, so a strip on its own full-width line (like the
+    // Client Library version filter) pages fewer times than a narrower one
+    // squeezed next to a search box.
+    const STRIPS = [
+        { bar: '.panel-tabs', item: '.panel-tab' },
+        { bar: '.versions-client-switcher', item: '.vcs-btn' },
+        { bar: '.mcv-filter-bar .mcv-channel-tabs', item: '.mcv-channel-tab' },
+    ];
 
-    let drag = null;
-
-    document.addEventListener('pointerdown', e => {
-        if (e.button !== 0) return;
-        const handle = e.target.closest('.panel-handle');
-        if (!handle) return;
-        const overlay = handle.closest('.panel-overlay');
-        if (!overlay) return;
-
-        e.preventDefault();
-        drag = {
-            overlay,
-            handle,
-            pointerId: e.pointerId,
-            startY: e.clientY,
-            startH: overlay.getBoundingClientRect().height,
-            viewportH: window.innerHeight,
-        };
-        try { handle.setPointerCapture(e.pointerId); } catch { }
-        overlay.classList.add('dragging');
-    });
-
-    document.addEventListener('pointermove', e => {
-        if (!drag || e.pointerId !== drag.pointerId) return;
-        const dy = e.clientY - drag.startY;
-        const newH = drag.startH - dy;
-        const pct = Math.max(0, (newH / drag.viewportH) * 100);
-
-        drag.overlay.style.height = Math.max(MIN_PCT, Math.min(95, pct)) + '%';
-        drag.lastPct = pct;
-    });
-
-    function endDrag(e) {
-        if (!drag) return;
-        if (e && e.pointerId !== drag.pointerId) return;
-        const overlay = drag.overlay;
-        const pct = drag.lastPct ?? (overlay.getBoundingClientRect().height / drag.viewportH) * 100;
-        overlay.classList.remove('dragging');
-        try { drag.handle.releasePointerCapture(drag.pointerId); } catch { }
-        drag = null;
-
-        if (pct < DISMISS_PCT) {
-            overlay.style.height = '';
-            if (window._glacierDotNet) {
-                try { window._glacierDotNet.invokeMethodAsync('KbShortcut', 'escape'); } catch { }
-            }
-            return;
-        }
-
-        const snap = SNAP_POINTS_PCT.reduce(
-            (best, p) => Math.abs(p - pct) < Math.abs(best - pct) ? p : best,
-            SNAP_POINTS_PCT[0]
-        );
-        overlay.style.height = snap + '%';
+    function tabsOf(bar, itemSelector) {
+        return Array.from(bar.querySelectorAll(':scope > ' + itemSelector));
     }
 
-    document.addEventListener('pointerup', endDrag);
-    document.addEventListener('pointercancel', endDrag);
-})();
+    // How many tabs fit per page, measured from the bar's actual content
+    // width and the first tab's actual rendered width (+ gap) — not a fixed
+    // guess, so it adapts to however wide the strip's own line is.
+    function pageSizeFor(bar, tabs) {
+        if (tabs.length === 0) return 1;
+        const barStyle = getComputedStyle(bar);
+        const gap = parseFloat(barStyle.columnGap || barStyle.gap || '0') || 0;
+        // A tab hidden by a previous page's refresh reports 0 width, so pick
+        // any currently-visible one (there's always at least one) rather
+        // than assuming tabs[0] is it.
+        const sample = tabs.find(t => t.getBoundingClientRect().width > 0) || tabs[0];
+        const tabWidth = sample.getBoundingClientRect().width || 1;
 
-(function () {
-    const PAGE_SIZE = 4;
+        // First check whether every tab fits on one page with NO arrows at
+        // all (bar.clientWidth is the container's own width regardless of
+        // its children, so this is the true "no cycler needed" width). Only
+        // when that fails do we reserve room for the prev/next buttons and
+        // recompute — otherwise a strip that could show all 2-3 tabs at
+        // once was being forced down to 1 by unconditionally reserving
+        // arrow space it would never actually need.
+        const perPageNoArrows = Math.floor((bar.clientWidth + gap) / (tabWidth + gap));
+        if (perPageNoArrows >= tabs.length) return tabs.length;
 
-    function tabsOf(bar) {
-        return Array.from(bar.querySelectorAll(':scope > .panel-tab'));
+        const arrowsReserved = 2 * 34 + 2 * gap; // prev + next .panel-tabs-arrow, when both showing
+        const available = bar.clientWidth - arrowsReserved;
+        const perPage = Math.floor((available + gap) / (tabWidth + gap));
+        return Math.max(1, perPage);
     }
 
-    function refreshCyclerButtons(bar) {
+    function refreshCyclerButtons(bar, itemSelector) {
         const prev = bar.querySelector(':scope > .panel-tabs-arrow.prev');
         const next = bar.querySelector(':scope > .panel-tabs-arrow.next');
         if (!prev || !next) return;
 
-        const tabs = tabsOf(bar);
-        const totalPages = Math.max(1, Math.ceil(tabs.length / PAGE_SIZE));
+        const tabs = tabsOf(bar, itemSelector);
+        const pageSize = pageSizeFor(bar, tabs);
+        const totalPages = Math.max(1, Math.ceil(tabs.length / pageSize));
         let page = parseInt(bar.dataset.page || '0', 10);
 
         const activeIdx = tabs.findIndex(t => t.classList.contains('active'));
         if (activeIdx >= 0) {
-            const activePage = Math.floor(activeIdx / PAGE_SIZE);
-            if (Math.floor(activeIdx / PAGE_SIZE) !== page && bar.dataset.userPaged !== String(page)) {
+            const activePage = Math.floor(activeIdx / pageSize);
+            if (Math.floor(activeIdx / pageSize) !== page && bar.dataset.userPaged !== String(page)) {
                 page = activePage;
             }
         }
         page = Math.min(Math.max(page, 0), totalPages - 1);
         bar.dataset.page = String(page);
+        bar.dataset.pageSize = String(pageSize);
 
         tabs.forEach((tab, i) => {
-            tab.style.display = Math.floor(i / PAGE_SIZE) === page ? '' : 'none';
+            tab.style.display = Math.floor(i / pageSize) === page ? '' : 'none';
         });
 
         const overflowing = totalPages > 1;
@@ -478,43 +420,46 @@ window.glacierSkin = (function () {
     }
 
     function ensureTabCyclers() {
-        document.querySelectorAll('.panel-tabs:not(.cycler-ready)').forEach(bar => {
-            bar.classList.add('cycler-ready');
-            bar.dataset.page = '0';
+        for (const { bar: barSelector, item: itemSelector } of STRIPS) {
+            document.querySelectorAll(barSelector + ':not(.cycler-ready)').forEach(bar => {
+                bar.classList.add('cycler-ready');
+                bar.dataset.page = '0';
 
-            const prev = document.createElement('button');
-            prev.type = 'button';
-            prev.className = 'panel-tabs-arrow prev';
-            prev.title = 'Previous tabs';
-            prev.innerHTML = '<i class="fa-solid fa-chevron-left"></i>';
-            prev.addEventListener('click', e => {
-                e.stopPropagation();
-                const p = Math.max(0, parseInt(bar.dataset.page || '0', 10) - 1);
-                bar.dataset.page = String(p);
-                bar.dataset.userPaged = String(p);
-                refreshCyclerButtons(bar);
+                const prev = document.createElement('button');
+                prev.type = 'button';
+                prev.className = 'panel-tabs-arrow prev';
+                prev.title = 'Previous tabs';
+                prev.innerHTML = '<i class="fa-solid fa-chevron-left"></i>';
+                prev.addEventListener('click', e => {
+                    e.stopPropagation();
+                    const p = Math.max(0, parseInt(bar.dataset.page || '0', 10) - 1);
+                    bar.dataset.page = String(p);
+                    bar.dataset.userPaged = String(p);
+                    refreshCyclerButtons(bar, itemSelector);
+                });
+
+                const next = document.createElement('button');
+                next.type = 'button';
+                next.className = 'panel-tabs-arrow next';
+                next.title = 'Next tabs';
+                next.innerHTML = '<i class="fa-solid fa-chevron-right"></i>';
+                next.addEventListener('click', e => {
+                    e.stopPropagation();
+                    const pageSize = parseInt(bar.dataset.pageSize || '1', 10);
+                    const totalPages = Math.max(1, Math.ceil(tabsOf(bar, itemSelector).length / pageSize));
+                    const p = Math.min(totalPages - 1, parseInt(bar.dataset.page || '0', 10) + 1);
+                    bar.dataset.page = String(p);
+                    bar.dataset.userPaged = String(p);
+                    refreshCyclerButtons(bar, itemSelector);
+                });
+
+                bar.insertBefore(prev, bar.firstChild);
+                bar.appendChild(next);
+                refreshCyclerButtons(bar, itemSelector);
             });
 
-            const next = document.createElement('button');
-            next.type = 'button';
-            next.className = 'panel-tabs-arrow next';
-            next.title = 'Next tabs';
-            next.innerHTML = '<i class="fa-solid fa-chevron-right"></i>';
-            next.addEventListener('click', e => {
-                e.stopPropagation();
-                const totalPages = Math.max(1, Math.ceil(tabsOf(bar).length / PAGE_SIZE));
-                const p = Math.min(totalPages - 1, parseInt(bar.dataset.page || '0', 10) + 1);
-                bar.dataset.page = String(p);
-                bar.dataset.userPaged = String(p);
-                refreshCyclerButtons(bar);
-            });
-
-            bar.insertBefore(prev, bar.firstChild);
-            bar.appendChild(next);
-            refreshCyclerButtons(bar);
-        });
-
-        document.querySelectorAll('.panel-tabs.cycler-ready').forEach(refreshCyclerButtons);
+            document.querySelectorAll(barSelector + '.cycler-ready').forEach(bar => refreshCyclerButtons(bar, itemSelector));
+        }
     }
 
     const tabsObserver = new MutationObserver(() => ensureTabCyclers());

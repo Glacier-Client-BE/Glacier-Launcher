@@ -1,7 +1,10 @@
 <script lang="ts">
   import { invoke } from '@tauri-apps/api/core'
+  import { untrack } from 'svelte'
   import PanelHeader from './components/PanelHeader.svelte'
   import Spinner from './components/Spinner.svelte'
+  import ViewModeToggle from './components/ViewModeToggle.svelte'
+  import { loadViewMode, saveViewMode, type ViewMode } from './viewMode'
   import type { LauncherSettings } from './settings'
 
   // Ported from Components/ModpacksPanel.razor. Search hits
@@ -29,13 +32,18 @@
     source: 'cf' | 'mr'
   }
 
-  let source = $state<'cf' | 'mr'>(settings.CurseForgeApiKey?.trim() ? 'cf' : 'mr')
+  let source = $state<'cf' | 'mr'>(untrack(() => settings.CurseForgeApiKey)?.trim() ? 'cf' : 'mr')
   let sourceTouched = $state(false)
   let query = $state('')
   let searching = $state(false)
   let searched = $state(false)
   let error = $state('')
   let results = $state<PackResult[]>([])
+  let modpacksViewMode = $state<ViewMode>(loadViewMode('modpacks'))
+  function setModpacksViewMode(m: ViewMode) {
+    modpacksViewMode = m
+    saveViewMode('modpacks', m)
+  }
 
   const cfAvailable = $derived(!!settings.CurseForgeApiKey?.trim())
 
@@ -155,7 +163,11 @@
   search()
 </script>
 
-<PanelHeader title="Modpacks" {onBack} />
+<PanelHeader title="Modpacks" {onBack}>
+  {#snippet extraActions()}
+    <ViewModeToggle mode={modpacksViewMode} onChange={setModpacksViewMode} />
+  {/snippet}
+</PanelHeader>
 
 <div class="panel-body">
   <div class="modpack-source-tabs">
@@ -174,8 +186,9 @@
   </div>
 
   {#if source === 'cf' && !cfAvailable}
-    <div class="stats-empty">
-      A CurseForge API key is required to browse CurseForge. Add one in Settings, or use Modrinth (no key needed).
+    <div class="empty-state">
+      <i class="fa-solid fa-key"></i>
+      <span>A CurseForge API key is required to browse CurseForge. Add one in Settings, or use Modrinth (no key needed).</span>
     </div>
   {/if}
 
@@ -186,13 +199,17 @@
       <i class="fa-solid fa-triangle-exclamation"></i><span>{error}</span>
     </div>
   {:else if results.length === 0 && searched}
-    <div class="stats-empty">No modpacks found for "{query}".</div>
+    <div class="empty-state">
+      <i class="fa-solid fa-magnifying-glass"></i>
+      <span>No modpacks found for "{query}".</span>
+    </div>
   {/if}
 
   {#if installMsg}
     <div class="cache-notice"><i class="fa-solid fa-circle-info"></i><span>{installMsg}</span></div>
   {/if}
 
+  <div class="version-list {modpacksViewMode === 'grid' ? 'grid-view' : ''}">
   {#each results as r (r.source + r.id)}
     <div class="modpack-row">
       {#if r.icon}
@@ -219,4 +236,5 @@
       </button>
     </div>
   {/each}
+  </div>
 </div>

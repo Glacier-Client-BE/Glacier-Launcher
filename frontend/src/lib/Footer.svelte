@@ -1,5 +1,7 @@
 <script lang="ts">
   import { invoke } from '@tauri-apps/api/core'
+  import { listen } from '@tauri-apps/api/event'
+  import { onDestroy } from 'svelte'
   import type { LauncherSettings } from './settings'
 
   let {
@@ -11,6 +13,19 @@
     onChange: (next: LauncherSettings) => void
     onOpenMcVersions?: () => void
   } = $props()
+
+  const CLIENT_ICONS: Record<string, string> = {
+    'Custom DLL': 'fa-solid fa-file-code',
+  }
+
+  const CLIENT_IMAGES: Record<string, string> = {
+    'Flarial Client': '/images/clients/flarial.svg',
+    'OderSo Client': '/images/clients/oderso.png',
+    'Latite Client': '/images/clients/latite.png',
+    'LeviLamina Client': '/images/clients/levi-lamina.png',
+    'LeviLamina': '/images/clients/levi-lamina.png',
+    Vanilla: '/images/mc-logo.png',
+  }
 
   /// Installed Bedrock build for the `.footer-mc-version` chip.
   type InstalledBedrockVersion = { installed: boolean; display_version: string; is_preview: boolean }
@@ -44,6 +59,10 @@
     }
     return settings?.LastUsedVersion ? settings.LastUsedVersion : 'Latite Client'
   }
+
+  const clientLabel = $derived(footerVersionLabel())
+  const clientImage = $derived(CLIENT_IMAGES[clientLabel])
+  const clientIconClass = $derived(CLIENT_ICONS[clientLabel])
 
   const xboxSignedIn = $derived(!!settings.XboxGamertag)
   const discordSignedIn = $derived(settings.DiscordLoggedIn)
@@ -113,6 +132,54 @@
     }
     onChange({ ...settings, DiscordRichPresence: enabling })
   }
+
+  // --- Phase 4: running Java instances badge -------------------------------
+  // Polls `list_running_instances` (cheap — a `Vec` clone off a `Mutex`) on a
+  // slow interval and additionally refreshes on `java-process-changed`, so
+  // the badge updates immediately on launch/exit without needing a tight
+  // poll loop (this targets a Celeron N5100 — see project perf notes).
+  type RunningProcess = { instance_id: string; pid: number; started_at: number }
+  let runningInstances = $state<RunningProcess[]>([])
+  let showRunningDropdown = $state(false)
+  let killingId = $state('')
+
+  async function refreshRunning() {
+    try {
+      runningInstances = await invoke<RunningProcess[]>('list_running_instances')
+    } catch {
+      // best-effort
+    }
+  }
+
+  function displayName(instanceId: string): string {
+    return instanceId.startsWith('version:') ? instanceId.slice('version:'.length) : instanceId
+  }
+
+  async function stopInstance(instanceId: string) {
+    killingId = instanceId
+    try {
+      await invoke('kill_instance', { instanceId })
+    } catch {
+      // best-effort — refreshRunning() below reconciles regardless
+    } finally {
+      killingId = ''
+      await refreshRunning()
+    }
+  }
+
+  let unlistenProcessChanged: (() => void) | undefined
+  let runningPollHandle: ReturnType<typeof setInterval> | undefined
+
+  refreshRunning()
+  runningPollHandle = setInterval(refreshRunning, 10000)
+  listen('java-process-changed', () => refreshRunning()).then((un) => {
+    unlistenProcessChanged = un
+  })
+
+  onDestroy(() => {
+    if (runningPollHandle) clearInterval(runningPollHandle)
+    unlistenProcessChanged?.()
+  })
 </script>
 
 <div class="footer">
@@ -192,6 +259,48 @@
   </div>
 
   <div class="footer-right">
+    {#if runningInstances.length > 0}
+      <div class="footer-running-badge-wrap">
+        <button
+          type="button"
+          class="footer-client-label footer-running-badge"
+          onclick={(e) => {
+            e.stopPropagation()
+            showRunningDropdown = !showRunningDropdown
+          }}
+          data-tooltip="Running Java instances"
+        >
+          <i class="fa-solid fa-circle-play"></i>
+          <span>{runningInstances.length} running</span>
+        </button>
+        {#if showRunningDropdown}
+          <div class="footer-running-dropdown" role="menu">
+            {#each runningInstances as p (p.instance_id)}
+              <div class="footer-running-row">
+                <span class="footer-running-name" title={p.instance_id}>{displayName(p.instance_id)}</span>
+                <span class="footer-running-pid">PID {p.pid}</span>
+                <button
+                  type="button"
+                  class="btn-sm footer-running-stop"
+                  disabled={killingId === p.instance_id}
+                  onclick={(e) => {
+                    e.stopPropagation()
+                    stopInstance(p.instance_id)
+                  }}
+                >
+                  {#if killingId === p.instance_id}
+                    <i class="fa-solid fa-spinner fa-spin"></i>
+                  {:else}
+                    <i class="fa-solid fa-stop"></i>
+                  {/if}
+                  Stop
+                </button>
+              </div>
+            {/each}
+          </div>
+        {/if}
+      </div>
+    {/if}
     {#if mcVersion.installed}
       <div
         class="footer-mc-version"
@@ -221,8 +330,15 @@
         <span>Not installed</span>
       </div>
     {/if}
-    <span style="font-size:11px; color:var(--text-dim);">
-      <i class="fa-solid fa-clock" style="margin-right:4px;"></i>{footerVersionLabel()}
+    <span class="footer-client-label">
+      {#if clientImage}
+        <img class="chip-icon" src={clientImage} alt="" style="width:14px;height:14px;object-fit:contain;" />
+      {:else if clientIconClass}
+        <i class="chip-icon {clientIconClass}"></i>
+      {:else}
+        <i class="fa-solid fa-clock"></i>
+      {/if}
+      <span>{clientLabel}</span>
     </span>
   </div>
 </div>

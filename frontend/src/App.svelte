@@ -21,9 +21,14 @@
   import LeviLaminaModsView from './lib/LeviLaminaModsView.svelte'
   import MCVersionsView from './lib/MCVersionsView.svelte'
   import ProfileView from './lib/ProfileView.svelte'
+  import ImportLauncherView from './lib/ImportLauncherView.svelte'
   import JavaBackupsView from './lib/JavaBackupsView.svelte'
   import SkinLibraryView from './lib/SkinLibraryView.svelte'
   import JavaScreenshotsView from './lib/JavaScreenshotsView.svelte'
+  import InstanceWizard from './lib/InstanceWizard.svelte'
+  import InstanceDetailView from './lib/InstanceDetailView.svelte'
+  import ModrinthBrowseV2 from './lib/ModrinthBrowseV2.svelte'
+  import SyncPacksView from './lib/SyncPacksView.svelte'
   import LauncherClientsView from './lib/LauncherClientsView.svelte'
   import BedrockVanillaVersionsView from './lib/BedrockVanillaVersionsView.svelte'
   import UtilitiesView from './lib/UtilitiesView.svelte'
@@ -32,7 +37,10 @@
   import NewsView from './lib/NewsView.svelte'
   import CreditsView from './lib/CreditsView.svelte'
   import Footer from './lib/Footer.svelte'
+  import Modal from './lib/components/Modal.svelte'
+  import { listen } from '@tauri-apps/api/event'
   import OnboardingModal from './lib/OnboardingModal.svelte'
+  import OnboardingChecklist from './lib/OnboardingChecklist.svelte'
   import { t } from './lib/i18n'
   import type { BedrockInstance } from './lib/settings'
 
@@ -67,12 +75,23 @@
     | 'downloads'
     | 'news'
     | 'credits'
+    | 'instance-wizard'
+    | 'instance-detail'
+    | 'modrinth-browse-v2'
+    | 'sync-packs'
 
 
-  type JavaInstance = { id: string; directory: string }
+  type JavaInstance = { id: string; directory: string; name?: string }
 
   let settings = $state<LauncherSettings | null>(null)
   let currentView = $state<View>('home')
+  /// Navigation history stack for real "back to parent" behavior + a
+  /// breadcrumb trail. Each entry is the view being navigated AWAY from
+  /// (with a human label) at the moment `openPanel` opens a new view on top
+  /// of it. Cleared whenever the user returns to Home, since Home is always
+  /// the root of every chain.
+  type NavEntry = { view: View; label: string }
+  let navHistory = $state<NavEntry[]>([])
   let contentInitialTab = $state('worlds')
   /// World whose level.dat is open in the NBT editor - the original's
   /// `levelDatEditing` deep-link from a world row.
@@ -83,12 +102,63 @@
   let activeBedrockInstance = $state<BedrockInstance | null>(null)
   let activeJavaInstance = $state<JavaInstance | null>(null)
   let isLaunching = $state(false)
+
+  /**
+   * Feature 27 — auto-fallback to vanilla after repeated injection failures.
+   *
+   * Purely a UI-level counter around the existing `launch_bedrock_instance`
+   * call: it does not touch gl-injection or the launch command itself. After
+   * 3 consecutive failed launches with the same non-Vanilla client, offer to
+   * launch Vanilla instead rather than silently letting the user retry the
+   * same broken injection forever. Any successful launch, or switching
+   * clients, resets the count.
+   */
+  const injectionFailureCounts: Record<string, number> = {}
+  let vanillaFallbackPrompt = $state<{ client: string } | null>(null)
+
+  function recordLaunchOutcome(client: string, succeeded: boolean) {
+    if (client === 'Vanilla' || succeeded) {
+      delete injectionFailureCounts[client]
+      if (succeeded) vanillaFallbackPrompt = null
+      return
+    }
+    const count = (injectionFailureCounts[client] ?? 0) + 1
+    injectionFailureCounts[client] = count
+    if (count >= 3) {
+      vanillaFallbackPrompt = { client }
+    }
+  }
+
+  async function launchVanillaFallback() {
+    const failedClient = vanillaFallbackPrompt?.client
+    vanillaFallbackPrompt = null
+    if (failedClient) delete injectionFailureCounts[failedClient]
+    if (!settings) return
+    await saveSettings({ ...settings, SelectedClient: 'Vanilla' })
+    await handleLaunch()
+  }
+
+  function dismissVanillaFallbackPrompt() {
+    vanillaFallbackPrompt = null
+  }
   type Announcement = { id: string; title: string; message: string; kind: string; url: string }
   let announcement = $state<Announcement | null>(null)
   let dragDepth = 0
   let currentVersion = $state('')
   let launcherUpdateAvailable = $state(false)
   let isFullscreen = $state(false)
+  let panelExpanded = $state(false)
+
+  const panelSide = $derived(settings?.PanelSide ?? 'right')
+
+  function togglePanelExpand() {
+    panelExpanded = !panelExpanded
+    if (panelExpanded) {
+      document.documentElement.style.setProperty('--sidebar-w-user', '760px')
+    } else {
+      document.documentElement.style.removeProperty('--sidebar-w-user')
+    }
+  }
 
   type NewsItem = { icon: string; title: string; subtitle: string; url: string }
   let newsItems = $state<NewsItem[]>([])
@@ -96,9 +166,10 @@
   const isBedrock = $derived(settings?.Edition !== 'java')
 
   // Client chip + live-running indicator (top-bar): mirrors CycleClient /
-  // mcRunning from Home.Clients.cs / Home.razor — only Bedrock has a
-  // process-detection command wired (is_bedrock_game_running); Java has no
-  // equivalent yet, so the running pill only lights up on Bedrock.
+  // mcRunning from Home.Clients.cs / Home.razor. Bedrock is detected by
+  // scanning for the UWP process (is_bedrock_game_running); Java is detected
+  // by checking the PID of the most recently launched Java process
+  // (is_java_game_running) since it isn't UWP-packaged.
   const CLIENT_ICONS: Record<string, string> = {
     'Custom DLL': 'fa-solid fa-file-code',
     Vanilla: 'fa-solid fa-cube',
@@ -156,22 +227,25 @@
   }
 
   async function pollMcRunning() {
-    if (!isBedrock) {
-      mcRunning = false
-      return
-    }
     try {
-      mcRunning = await invoke<boolean>('is_bedrock_game_running')
+      mcRunning = await invoke<boolean>(
+        isBedrock ? 'is_bedrock_game_running' : 'is_java_game_running',
+      )
     } catch {
       mcRunning = false
     }
   }
 
-  function cycleClient() {
-    if (!settings) return
-    const idx = CYCLE_CLIENTS.indexOf(settings.SelectedClient)
-    const next = CYCLE_CLIENTS[(idx + 1) % CYCLE_CLIENTS.length]
-    saveSettings({ ...settings, SelectedClient: next })
+  let clientMenuOpen = $state(false)
+
+  function toggleClientMenu() {
+    clientMenuOpen = !clientMenuOpen
+  }
+
+  function selectClientFromMenu(name: string) {
+    clientMenuOpen = false
+    if (!settings || settings.SelectedClient === name) return
+    saveSettings({ ...settings, SelectedClient: name })
   }
 
   // Notification bell: the original shows BOTH the download queue and the
@@ -192,6 +266,25 @@
   let downloads = $state<DownloadEntry[]>([])
   let notifications = $state<AppNotification[]>([])
   let unreadCount = $state(0)
+
+  // Feature 41: a small client-side category filter for the notification
+  // list. There's no structured category field on AppNotification yet, so
+  // categorization is inferred from the icon/title the same way the bell
+  // panel already picks an icon per notification.
+  type NotifCategory = 'all' | 'downloads' | 'updates' | 'social'
+  let notifFilter = $state<NotifCategory>('all')
+
+  function notificationCategory(n: AppNotification): NotifCategory {
+    const hay = `${n.Icon} ${n.Title} ${n.Message}`.toLowerCase()
+    if (hay.includes('download')) return 'downloads'
+    if (hay.includes('update') || hay.includes('launcher-update') || hay.includes('version')) return 'updates'
+    if (hay.includes('discord') || hay.includes('xbox') || hay.includes('friend') || hay.includes('social')) return 'social'
+    return 'all'
+  }
+
+  const filteredNotifications = $derived(
+    notifFilter === 'all' ? notifications : notifications.filter((n) => notificationCategory(n) === notifFilter),
+  )
 
   async function loadDownloads() {
     try {
@@ -253,9 +346,10 @@
   //
   // Scope note: the original ships 42 quick actions. Entries whose target
   // does not exist in this rewrite yet (folder-open commands, settings
-  // import, Utilities sub-tabs, Xbox/Discord modals, Theme Studio, Skin
-  // Library, Backups) are omitted rather than rendered as dead rows - see
-  // PARITY.md. The DOM, grouping, highlighting and key handling are faithful.
+  // import, Utilities sub-tabs, Xbox/Discord modals) are omitted rather than
+  // rendered as dead rows - see PARITY.md. Theme Studio, Skin Library and the
+  // Bedrock/Java Backups panels now have their own entries below. The DOM,
+  // grouping, highlighting and key handling are faithful.
   type SearchResult = {
     icon: string
     label: string
@@ -263,6 +357,10 @@
     sub?: string
     shortcut?: string
     run: () => void
+    /// Entries the original ships but this rewrite hasn't wired up yet.
+    /// Shown greyed-out with a tooltip instead of being silently absent,
+    /// so Ctrl+K doesn't feel like it's missing things at random.
+    disabled?: boolean
   }
 
   let searchOpen = $state(false)
@@ -290,7 +388,7 @@
 
   const searchIndex = $derived<SearchResult[]>([
     { icon: 'fa-solid fa-play', label: 'Launch Game', category: 'Quick Actions', sub: 'with ' + (settings?.SelectedClient ?? ''), shortcut: 'Ctrl+L', run: () => { closeSearch(); handleLaunch() } },
-    { icon: 'fa-solid fa-gear', label: 'Open Settings', category: 'Quick Actions', sub: 'Injection, Appearance, Account', shortcut: 'Ctrl+1', run: () => { closeSearch(); openPanel('settings') } },
+    { icon: 'fa-solid fa-gear', label: 'Open Settings', category: 'Quick Actions', sub: 'Injection, Appearance, Account', shortcut: 'Ctrl+,', run: () => { closeSearch(); openPanel('settings') } },
     { icon: 'fa-solid fa-puzzle-piece', label: 'Manage Clients', category: 'Quick Actions', sub: 'Flarial, Latite, OderSo, Custom DLL', shortcut: 'Ctrl+2', run: () => { closeSearch(); openPanel('clients') } },
     { icon: 'fa-solid fa-server', label: 'Servers', category: 'Quick Actions', sub: 'Quick-launch into saved servers', shortcut: 'Ctrl+5', run: () => { closeSearch(); openPanel('servers') } },
     { icon: 'fa-solid fa-clock-rotate-left', label: 'Browse Versions', category: 'Quick Actions', sub: 'Download and manage client versions', run: () => { closeSearch(); openPanel('versions') } },
@@ -301,16 +399,22 @@
     { icon: 'fa-solid fa-globe', label: 'Worlds', category: 'Bedrock', sub: 'Manage Bedrock worlds', run: () => { closeSearch(); openPanel('bedrockworlds') } },
     { icon: 'fa-solid fa-layer-group', label: 'LeviLamina Mods', category: 'Bedrock', sub: 'Manage LeviLamina mods', run: () => { closeSearch(); openPanel('levilamina-mods') } },
     { icon: 'fa-solid fa-wand-magic-sparkles', label: 'Tweaks', category: 'Bedrock', sub: 'Vanilla and Bedrock Tweaks packs', run: () => { closeSearch(); openPanel('tweaks') } },
+    { icon: 'fa-solid fa-box-archive', label: 'Vanilla Bedrock Versions', category: 'Bedrock', sub: 'Install and switch vanilla Bedrock game versions', run: () => { closeSearch(); openPanel('bedrock-versions') } },
+    { icon: 'fa-solid fa-clock-rotate-left', label: 'Bedrock Backups', category: 'Bedrock', sub: 'Back up and restore Bedrock worlds', run: () => { closeSearch(); openPanel('bedrockbackups') } },
+    { icon: 'fa-solid fa-camera', label: 'Bedrock Photos', category: 'Bedrock', sub: 'Bedrock screenshots gallery', run: () => { closeSearch(); openPanel('bedrockscreenshots') } },
     { icon: 'fa-brands fa-java', label: 'Java Versions', category: 'Java', sub: 'Install or launch Java Edition', run: () => { closeSearch(); openPanel('versions') } },
     { icon: 'fa-solid fa-cubes', label: 'Browse Modpacks', category: 'Java', sub: 'Install CurseForge / Modrinth modpacks into an instance', run: () => { closeSearch(); openPanel('modpacks') } },
     { icon: 'fa-solid fa-puzzle-piece', label: 'Mods', category: 'Java', sub: 'Manage installed mods', run: () => { closeSearch(); openPanel('java-mods') } },
     { icon: 'fa-solid fa-file-lines', label: 'Logs and Crashes', category: 'Java', sub: 'View logs, detect crashes, share to mclo.gs', run: () => { closeSearch(); openPanel('logs') } },
+    { icon: 'fa-solid fa-clock-rotate-left', label: 'Java Backups', category: 'Java', sub: 'Back up and restore Java worlds', run: () => { closeSearch(); openPanel('java-backups') } },
     { icon: 'fa-solid fa-chart-simple', label: 'Statistics', category: 'Navigation', sub: 'Playtime, sessions and launch history', run: () => { closeSearch(); openPanel('stats') } },
     { icon: 'fa-solid fa-cubes', label: 'Instances', category: 'Navigation', sub: 'Manage game instances', run: () => { closeSearch(); openPanel('instances') } },
     { icon: 'fa-solid fa-rocket', label: 'Launchers', category: 'Launchers', sub: 'Lunar, Badlion and other launchers', run: () => { closeSearch(); openPanel('launchers') } },
     { icon: 'fa-solid fa-user', label: 'Profile', category: 'Account', sub: 'Your account and skin', run: () => { closeSearch(); openPanel('profile') } },
+    { icon: 'fa-solid fa-shirt', label: 'Skin Library', category: 'Account', sub: 'Manage and apply your saved skins', run: () => { closeSearch(); openPanel('skinlibrary') } },
     { icon: 'fa-solid fa-images', label: 'Photos', category: 'Java', sub: 'Java screenshots gallery', run: () => { closeSearch(); openPanel('java-screenshots') } },
     { icon: 'fa-solid fa-download', label: 'Downloads', category: 'Quick Actions', sub: 'Active and recent downloads', run: () => { closeSearch(); openPanel('downloads') } },
+    { icon: 'fa-solid fa-palette', label: 'Theme Studio', category: 'Settings', sub: 'Customize the launcher appearance', run: () => { closeSearch(); openPanel('themestudio') } },
     { icon: 'fa-solid fa-file-export', label: 'Export Settings', category: 'Settings', sub: 'Save settings as JSON', run: () => { closeSearch(); invoke('export_settings').catch(() => {}) } },
     { icon: 'fa-solid fa-expand', label: 'Toggle Fullscreen', category: 'Quick Actions', sub: 'F11 fullscreen mode', shortcut: 'F11', run: () => { closeSearch(); toggleFullscreen() } },
     { icon: '/images/clients/flarial.svg', label: 'Select Flarial', category: 'Clients', sub: 'Switch active client to Flarial', run: () => { closeSearch(); selectClient('Flarial Client') } },
@@ -319,6 +423,14 @@
     { icon: 'fa-solid fa-cube', label: 'Select Vanilla', category: 'Clients', sub: 'Launch Minecraft without a client', run: () => { closeSearch(); selectClient('Vanilla') } },
     { icon: 'fa-solid fa-newspaper', label: 'News and Updates', category: 'About', sub: 'Changelogs and announcements', run: () => { closeSearch(); openPanel('news') } },
     { icon: 'fa-solid fa-heart', label: 'Credits', category: 'About', sub: 'View launcher credits', run: () => { closeSearch(); openPanel('credits') } },
+
+    // Not wired up yet in this rewrite (see scope note above / PARITY.md) -
+    // shown disabled instead of omitted, so search doesn't feel incomplete
+    // for no visible reason.
+    { icon: 'fa-solid fa-folder-open', label: 'Open Game Folder', category: 'Quick Actions', sub: 'Not available yet', run: () => {}, disabled: true },
+    { icon: 'fa-solid fa-file-import', label: 'Import Settings', category: 'Settings', sub: 'Not available yet', run: () => {}, disabled: true },
+    { icon: 'fa-brands fa-xbox', label: 'Xbox Account', category: 'Account', sub: 'Not available yet', run: () => {}, disabled: true },
+    { icon: 'fa-brands fa-discord', label: 'Discord Account', category: 'Account', sub: 'Not available yet', run: () => {}, disabled: true },
   ])
 
   /// An empty query shows the default Quick Actions list; a query filters
@@ -477,7 +589,30 @@
       }
       return
     }
-    // Java modpack imports (.mrpack/.zip/.jar) aren't wired to a backend
+    if (ext === 'jar') {
+      // Feature 19: local mod jar drag-and-drop. There's no per-card
+      // Instances grid for Java instances (unlike Bedrock's), so this drops
+      // into the currently active Java instance's mods folder rather than a
+      // specific card — the closest equivalent target in this UI.
+      if (!activeJavaInstance) {
+        status = 'No active Java instance to install the mod into.'
+        showToast('No active Java instance to install the mod into.', 'error')
+        return
+      }
+      try {
+        const fileName = await invoke<string>('install_local_mod_jar', {
+          instanceId: activeJavaInstance.id,
+          sourcePath: path,
+        })
+        status = `Installed "${fileName}" into ${activeJavaInstance.name ?? 'the active instance'}.`
+        showToast(`Installed "${fileName}".`, 'success')
+      } catch (e) {
+        status = `Import failed: ${e}`
+        showToast(`Import failed: ${e}`, 'error')
+      }
+      return
+    }
+    // Java modpack imports (.mrpack/.zip) aren't wired to a backend
     // handler yet — surface that honestly instead of silently discarding
     // the drop.
     status = `Importing .${ext || '?'} files isn't wired up yet.`
@@ -521,6 +656,53 @@
     }
   }
 
+  // ------------------------------------------- quick-switch (top-bar, Java)
+
+  /** Feature 4: quick-switch instance dropdown in the top bar, for jumping
+   *  between Java instances without opening the full Instances/Profile
+   *  panel. Reuses `list_java_instances` + the same
+   *  `JavaActiveInstanceId`/`saveSettings` mechanism `ProfileView`'s
+   *  `switchInstance` already uses. */
+  let quickSwitchInstances = $state<JavaInstance[]>([])
+
+  async function loadQuickSwitchInstances() {
+    if (!settings || settings.Edition === 'bedrock') {
+      quickSwitchInstances = []
+      return
+    }
+    try {
+      quickSwitchInstances = await invoke<JavaInstance[]>('list_java_instances')
+    } catch {
+      quickSwitchInstances = []
+    }
+  }
+
+  async function quickSwitchInstance(id: string) {
+    if (!settings || id === settings.JavaActiveInstanceId) return
+    await saveSettings({ ...settings, JavaActiveInstanceId: id })
+    await loadActiveJavaInstance()
+    await loadPrelaunchWarnings()
+  }
+
+  // --------------------------------------------------- pre-launch warnings
+
+  /** Feature 1: non-blocking pre-launch health check (Java version match,
+   *  configured heap vs available RAM, free disk space). Never blocks
+   *  Launch — just an advisory banner above the launch button. */
+  let prelaunchWarnings = $state<{ level: string; message: string }[]>([])
+
+  async function loadPrelaunchWarnings() {
+    if (!settings || isBedrock) {
+      prelaunchWarnings = []
+      return
+    }
+    try {
+      prelaunchWarnings = await invoke('java_prelaunch_check', { id: null })
+    } catch {
+      prelaunchWarnings = []
+    }
+  }
+
   async function loadNews() {
     try {
       const posts = await invoke<any[] | null>('get_news')
@@ -561,6 +743,8 @@
       applyTheme()
       await loadActiveBedrockInstance()
       await loadActiveJavaInstance()
+      await loadQuickSwitchInstances()
+      await loadPrelaunchWarnings()
       await loadNews()
       await loadAnnouncement()
       await pollMcRunning()
@@ -595,12 +779,16 @@
       settings.AnimationsEnabled,
       settings.AnimationSpeed,
     )
+    window.setKeyboardShortcuts?.(settings.KeyboardShortcuts)
   }
 
   function setEdition(ed: string) {
     if (!settings || settings.Edition === ed) return
     saveSettings({ ...settings, Edition: ed })
     currentView = 'home'
+    void loadActiveJavaInstance()
+    void loadQuickSwitchInstances()
+    void loadPrelaunchWarnings()
   }
 
   /// Panel navigation runs inside a View Transition when the platform
@@ -666,6 +854,42 @@
     versions: { bedrock: 'versions', java: 'mc-versions' },
   }
 
+  /// Human-readable labels for breadcrumbs and navHistory entries. Kept
+  /// separate from the i18n `t()` labels used on the Home buttons since
+  /// several views (e.g. leveldat, themestudio) have no Home button at all.
+  const VIEW_LABELS: Record<View, string> = {
+    home: 'Home',
+    clients: 'Clients',
+    instances: 'Instances',
+    bedrockworlds: 'Worlds',
+    bedrockpacks: 'Packs',
+    bedrockbackups: 'Backups',
+    bedrockscreenshots: 'Screenshots',
+    leveldat: 'Level Editor',
+    themestudio: 'Theme Studio',
+    settings: 'Settings',
+    'java-mods': 'Mods',
+    modpacks: 'Modpacks',
+    versions: 'Versions',
+    tweaks: 'Tweaks',
+    servers: 'Servers',
+    logs: 'Logs',
+    stats: 'Statistics',
+    'levilamina-mods': 'LeviLamina Mods',
+    'mc-versions': 'MC Versions',
+    launchers: 'Launchers',
+    'bedrock-versions': 'Versions & Instances',
+    profile: 'Profile',
+    'java-screenshots': 'Screenshots',
+    'java-backups': 'Backups',
+    skinlibrary: 'Skin Library',
+    utilities: 'Utilities',
+    clientlibrary: 'Client Library',
+    downloads: 'Downloads',
+    news: 'News',
+    credits: 'Credits',
+  }
+
   function navigateFromPanel(originalView: string, strip?: string) {
     if (strip === 'utilities' && UTILITIES_SUBTABS.includes(originalView)) {
       utilInitialTab = originalView
@@ -694,15 +918,55 @@
   function openPanel(v: View, tab?: string) {
     navigate(() => {
       if (tab) contentInitialTab = tab
+      // Track the chain so `goBack` can return to the actual parent panel
+      // instead of always falling back to Home. Opening straight from Home
+      // starts a fresh chain; re-opening the view already on screen (e.g. a
+      // tab switch that reuses the same View key) is not a navigation.
+      if (currentView === 'home') {
+        navHistory = []
+      } else if (currentView !== v) {
+        navHistory = [...navHistory, { view: currentView, label: VIEW_LABELS[currentView] ?? currentView }]
+      }
       currentView = v
     })
   }
 
   function closePanel() {
+    if (panelExpanded) {
+      panelExpanded = false
+      document.documentElement.style.removeProperty('--sidebar-w-user')
+    }
+    navHistory = []
     navigate(() => {
       currentView = 'home'
     })
   }
+
+  /// Pops the last entry off `navHistory` and returns to it, so a panel's
+  /// back button lands on the panel that actually opened it (e.g.
+  /// Instances -> MC Versions -> back goes to Instances) instead of always
+  /// jumping to Home. Falls back to `closePanel` when the stack is empty,
+  /// which is also what a single-level Home -> Panel back button should do.
+  function goBack() {
+    if (navHistory.length === 0) {
+      closePanel()
+      return
+    }
+    const prev = navHistory[navHistory.length - 1]
+    navHistory = navHistory.slice(0, -1)
+    navigate(() => {
+      currentView = prev.view
+    })
+  }
+
+  /// Full "Home / Parent / Current" trail for the current view, handed to
+  /// PanelHeader's optional `breadcrumb` prop. Panels that don't pass it
+  /// render exactly as before.
+  const breadcrumbTrail = $derived([
+    VIEW_LABELS.home,
+    ...navHistory.map((h) => h.label),
+    VIEW_LABELS[currentView] ?? currentView,
+  ])
 
   /// Port of `OpenUrl` (Home.razor.cs:670). `window.open` is inert inside the
   /// WebView2 host, so this goes through the `open_url` command.
@@ -726,6 +990,7 @@
           dllPath = settings.CustomDllPath || null
         }
         await invoke('launch_bedrock_instance', { dllPath })
+        recordLaunchOutcome(settings.SelectedClient, true)
       } else {
         await invoke('launch_java_instance', { instanceId: null })
       }
@@ -733,6 +998,7 @@
       console.error('Launch failed:', e)
       status = `Launch failed: ${String(e)}`
       showToast(`Launch failed: ${String(e)}`, 'error')
+      if (isBedrock && settings) recordLaunchOutcome(settings.SelectedClient, false)
     } finally {
       isLaunching = false
     }
@@ -755,10 +1021,12 @@
       isLaunching = false
       status = 'Injected! Have fun.'
       showToast('Injection successful!', 'success')
+      if (settings) recordLaunchOutcome(settings.SelectedClient, true)
     } catch (e) {
       isLaunching = false
       status = String(e)
       showToast(String(e), 'error')
+      if (settings) recordLaunchOutcome(settings.SelectedClient, false)
     }
   }
 
@@ -805,12 +1073,88 @@
 
   window.addEventListener('glacier:kbshortcut', (e: Event) => {
     const name = (e as CustomEvent<string>).detail
-    if (name === 'escape') { if (isLaunching) forceCloseLaunch(); else closePanel() }
+    if (name === 'escape') { if (isLaunching) forceCloseLaunch(); else goBack() }
     else if (name === 'settings') openPanel('settings')
     else if (name === 'clients' && isBedrock) openPanel('clients')
     else if (name === 'launch') handleLaunch()
     else if (name === 'fullscreen') toggleFullscreen()
     else if (name === 'search') openSearch()
+  })
+
+  // --- Phase 4: crash-analysis modal ---------------------------------------
+  // When a launched Java instance's process exits non-zero, checks its
+  // newest crash report with the existing `log_looks_like_crash`/
+  // `latest_java_crash_report` commands, and if it looks like a crash, runs
+  // it through `analyze_crash`'s local pattern matcher and shows this modal.
+  // Scoped to the currently-active instance (the common single-instance
+  // launch case) — a bare version launch (`launch_java_version`, id shaped
+  // like "version:<id>") has no per-instance directory to look a crash
+  // report up in, so it's not covered here.
+  type CrashAnalysis = { category: string; message: string; suggested_fix: string }
+  let crashModalOpen = $state(false)
+  let crashAnalysis = $state<CrashAnalysis | null>(null)
+  let crashLogPath = $state('')
+  let crashSharing = $state(false)
+  let crashShareUrl = $state('')
+
+  async function maybeShowCrashModal(instanceId: string) {
+    if (!activeJavaInstance || activeJavaInstance.id !== instanceId) return
+    try {
+      const report = await invoke<{ path: string } | null>('latest_java_crash_report', {
+        minecraftDir: activeJavaInstance.directory,
+      })
+      if (!report) return
+      const text = await invoke<string>('read_log', { path: report.path })
+      const looksLikeCrash = await invoke<boolean>('log_looks_like_crash', { text })
+      if (!looksLikeCrash) return
+      crashLogPath = report.path
+      crashShareUrl = ''
+      crashAnalysis = await invoke<CrashAnalysis>('analyze_crash', { logPath: report.path })
+      crashModalOpen = true
+    } catch (e) {
+      console.error('Crash analysis failed:', e)
+    }
+  }
+
+  async function shareCrashLog() {
+    if (!crashLogPath) return
+    crashSharing = true
+    try {
+      const content = await invoke<string>('read_log', { path: crashLogPath })
+      crashShareUrl = await invoke<string>('share_log', { content })
+    } catch (e) {
+      console.error('Share crash log failed:', e)
+    } finally {
+      crashSharing = false
+    }
+  }
+
+  async function openCrashLogFolder() {
+    if (!crashLogPath) return
+    // There's no per-file "reveal in Explorer" command in this app — just the
+    // generic `open_folder(path)` (see commands::system::open_folder), so we
+    // open the crash log's parent directory instead.
+    const parentDir = crashLogPath.replace(/[\\/][^\\/]*$/, '')
+    if (!parentDir || parentDir === crashLogPath) return
+    try {
+      await invoke('open_folder', { path: parentDir })
+    } catch (e) {
+      console.error('Open crash report folder failed:', e)
+    }
+  }
+
+  function closeCrashModal() {
+    crashModalOpen = false
+    crashAnalysis = null
+    crashLogPath = ''
+    crashShareUrl = ''
+  }
+
+  listen<{ instance_id: string; status: string; exit_code?: number }>('java-process-changed', (evt) => {
+    const { instance_id, status, exit_code } = evt.payload
+    if (status === 'exited' && typeof exit_code === 'number' && exit_code !== 0) {
+      maybeShowCrashModal(instance_id)
+    }
   })
 </script>
 
@@ -839,7 +1183,9 @@
     <div class="search-overlay" role="presentation" onclick={closeSearch}>
       <div class="search-modal" role="presentation" onclick={(e) => e.stopPropagation()}>
         <div class="search-modal-input-row">
-          <i class="fa-solid fa-magnifying-glass"></i>
+          <div class="search-modal-input-icon">
+            <i class="fa-solid fa-magnifying-glass"></i>
+          </div>
           <!-- svelte-ignore a11y_autofocus -->
           <input
             bind:this={searchInputEl}
@@ -849,6 +1195,9 @@
             oninput={() => (searchSelIdx = 0)}
             onkeydown={onSearchKeydown}
           />
+          {#if searchQuery}
+            <span class="search-result-count">{searchFlat.length} result{searchFlat.length === 1 ? '' : 's'}</span>
+          {/if}
           <span class="search-modal-esc">ESC</span>
         </div>
         <div class="search-results">
@@ -857,9 +1206,10 @@
               <div class="search-category">Quick Actions</div>
               {#each searchIndex as r, idx (r.label)}
                 <div
-                  class="search-result-item {searchSelIdx === idx ? 'sel' : ''}"
+                  class="search-result-item {searchSelIdx === idx ? 'sel' : ''} {r.disabled ? 'disabled' : ''}"
                   role="presentation"
-                  onclick={r.run}
+                  data-tooltip={r.disabled ? 'Not ported yet' : undefined}
+                  onclick={() => { if (!r.disabled) r.run() }}
                   onmouseenter={() => (searchSelIdx = idx)}
                 >
                   <div class="search-result-icon">
@@ -878,7 +1228,7 @@
                   {#if r.shortcut}
                     <div class="kbs"><kbd>{r.shortcut}</kbd></div>
                   {/if}
-                  <span class="search-result-enter">&#8629;</span>
+                  {#if !r.disabled}<span class="search-result-enter">&#8629;</span>{/if}
                 </div>
               {/each}
             {:else}
@@ -890,9 +1240,10 @@
               {#each grp.results as r (r.label)}
                 {@const fi = searchFlat.indexOf(r)}
                 <div
-                  class="search-result-item {searchSelIdx === fi ? 'sel' : ''}"
+                  class="search-result-item {searchSelIdx === fi ? 'sel' : ''} {r.disabled ? 'disabled' : ''}"
                   role="presentation"
-                  onclick={r.run}
+                  data-tooltip={r.disabled ? 'Not ported yet' : undefined}
+                  onclick={() => { if (!r.disabled) r.run() }}
                   onmouseenter={() => (searchSelIdx = fi)}
                 >
                   <div class="search-result-icon">
@@ -908,11 +1259,16 @@
                       <span class="search-result-sub">{@html highlight(r.sub, searchQuery)}</span>
                     {/if}
                   </div>
-                  <span class="search-result-enter">&#8629;</span>
+                  {#if !r.disabled}<span class="search-result-enter">&#8629;</span>{/if}
                 </div>
               {/each}
             {/each}
           {/if}
+        </div>
+        <div class="search-footer">
+          <span class="search-footer-hint"><kbd>&#8593;</kbd><kbd>&#8595;</kbd> Navigate</span>
+          <span class="search-footer-hint"><kbd>&#8629;</kbd> Select</span>
+          <span class="search-footer-hint"><kbd>ESC</kbd> Close</span>
         </div>
       </div>
     </div>
@@ -936,7 +1292,12 @@
           <span>Update</span>
         </button>
       {:else}
-        <button class="update-pill">
+        <button
+          class="update-pill"
+          onclick={() => openPanel('news')}
+          onmousedown={(e) => e.stopPropagation()}
+          data-tooltip="News & Updates"
+        >
           <span>v{currentVersion}</span>
         </button>
       {/if}
@@ -955,24 +1316,67 @@
       </div>
 
       {#if isBedrock}
-        <div
-          class="topbar-client-chip"
-          role="button"
-          tabindex="0"
-          onclick={cycleClient}
-          onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') cycleClient() }}
-          onmousedown={(e) => e.stopPropagation()}
-          data-tooltip="Click to cycle client ({settings.SelectedClient})"
-        >
-          <div class="chip-dot" class:live={mcRunning}></div>
-          {#if CLIENT_IMAGES[settings.SelectedClient]}
-            <img class="chip-icon" src={CLIENT_IMAGES[settings.SelectedClient]} alt="" style="width:14px;height:14px;object-fit:contain;" />
-          {:else}
-            <i class="chip-icon {CLIENT_ICONS[settings.SelectedClient] ?? ''}"></i>
+        <div class="topbar-client-chip {clientMenuOpen ? 'open' : ''}" style="position:relative;">
+          <button
+            class="topbar-client-chip-btn"
+            style="all:unset; display:flex; align-items:center; gap:inherit; cursor:pointer;"
+            onclick={toggleClientMenu}
+            onmousedown={(e) => e.stopPropagation()}
+            aria-haspopup="listbox"
+            aria-expanded={clientMenuOpen}
+            data-tooltip="Select client ({settings.SelectedClient})"
+          >
+            <div class="chip-dot" class:live={mcRunning}></div>
+            {#if CLIENT_IMAGES[settings.SelectedClient]}
+              <img class="chip-icon" src={CLIENT_IMAGES[settings.SelectedClient]} alt="" style="width:14px;height:14px;object-fit:contain;" />
+            {:else}
+              <i class="chip-icon {CLIENT_ICONS[settings.SelectedClient] ?? ''}"></i>
+            {/if}
+            <span>{settings.SelectedClient}</span>
+            <i class="fa-solid fa-chevron-down chip-arrow"></i>
+          </button>
+          {#if clientMenuOpen}
+            <div class="tw-dropdown-menu" role="listbox" tabindex="-1" onmousedown={(e) => e.stopPropagation()}>
+              {#each CYCLE_CLIENTS as name (name)}
+                <button
+                  class="tw-dropdown-item {settings.SelectedClient === name ? 'active' : ''}"
+                  role="option"
+                  aria-selected={settings.SelectedClient === name}
+                  onclick={() => selectClientFromMenu(name)}
+                >
+                  {#if CLIENT_IMAGES[name]}
+                    <img src={CLIENT_IMAGES[name]} alt="" style="width:14px;height:14px;object-fit:contain;" />
+                  {:else}
+                    <i class="fa-solid {CLIENT_ICONS[name] ?? ''}"></i>
+                  {/if}
+                  <span style="flex:1;">{name}</span>
+                  {#if settings.SelectedClient === name}
+                    <i class="fa-solid fa-check"></i>
+                  {/if}
+                </button>
+              {/each}
+            </div>
           {/if}
-          <span>{settings.SelectedClient}</span>
-          <i class="fa-solid fa-chevron-right chip-arrow"></i>
         </div>
+      {/if}
+      {#if isBedrock && clientMenuOpen}
+        <div class="notif-backdrop" role="presentation" onclick={() => (clientMenuOpen = false)}></div>
+      {/if}
+
+      {#if !isBedrock && quickSwitchInstances.length > 1}
+        <select
+          class="setting-select"
+          style="max-width:150px;"
+          value={activeJavaInstance?.id ?? ''}
+          onchange={(e) => quickSwitchInstance(e.currentTarget.value)}
+          onmousedown={(e) => e.stopPropagation()}
+          data-tooltip="Quick-switch Java instance"
+          aria-label="Quick-switch Java instance"
+        >
+          {#each quickSwitchInstances as inst (inst.id)}
+            <option value={inst.id}>{inst.name ?? inst.id}</option>
+          {/each}
+        </select>
       {/if}
 
       {#if mcRunning}
@@ -1037,14 +1441,32 @@
                 <button class="notif-clear-btn" onclick={clearNotifications}>Clear all</button>
               {/if}
             </div>
+            {#if notifications.length > 0}
+              <div class="notif-filter-tabs" role="tablist" aria-label="Filter notifications">
+                {#each [['all', 'All'], ['downloads', 'Downloads'], ['updates', 'Updates'], ['social', 'Social']] as [value, label] (value)}
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={notifFilter === value}
+                    class="notif-filter-tab {notifFilter === value ? 'active' : ''}"
+                    onclick={() => (notifFilter = value as typeof notifFilter)}
+                  >{label}</button>
+                {/each}
+              </div>
+            {/if}
             <div class="notif-panel-list">
               {#if notifications.length === 0}
                 <div class="notif-empty">
                   <i class="fa-regular fa-bell-slash"></i>
                   <span>No notifications</span>
                 </div>
+              {:else if filteredNotifications.length === 0}
+                <div class="notif-empty">
+                  <i class="fa-regular fa-bell-slash"></i>
+                  <span>No notifications in this category</span>
+                </div>
               {:else}
-                {#each notifications as n (n.Id)}
+                {#each filteredNotifications as n (n.Id)}
                   <div class="notif-item {n.Kind}">
                     <i class={n.Icon}></i>
                     <div class="notif-item-body">
@@ -1072,15 +1494,6 @@
       <button class="wnd-btn minimize-btn" data-tooltip="Minimize" aria-label="Minimize" onmousedown={(e) => e.stopPropagation()} onclick={() => window.minimizeWindow?.()}>
         <i class="fa-solid fa-minus"></i>
       </button>
-      <button
-        class="wnd-btn fullscreen-btn"
-        data-tooltip={isFullscreen ? 'Exit fullscreen' : 'Fullscreen (F11)'}
-        aria-label={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
-        onmousedown={(e) => e.stopPropagation()}
-        onclick={toggleFullscreen}
-      >
-        <i class="fa-solid {isFullscreen ? 'fa-compress' : 'fa-expand'}"></i>
-      </button>
       <button class="wnd-btn maximize-btn" data-tooltip="Maximize" aria-label="Maximize" onmousedown={(e) => e.stopPropagation()} onclick={() => window.maximizeWindow?.()}>
         <i class="fa-solid fa-square"></i>
       </button>
@@ -1101,10 +1514,24 @@
         <button class="btn-sm" onclick={() => openUrl(announcement?.url ?? '')}>Learn more</button>
       {/if}
       {#if announcement.kind !== 'maintenance'}
-        <button class="announcement-banner-close" onclick={dismissAnnouncement} data-tooltip="Dismiss">
+        <button class="announcement-banner-close" onclick={dismissAnnouncement} data-tooltip="Dismiss" aria-label="Dismiss">
           <i class="fa-solid fa-xmark"></i>
         </button>
       {/if}
+    </div>
+  {/if}
+
+  {#if !isBedrock && prelaunchWarnings.length > 0 && currentView === 'home'}
+    <div class="announcement-banner" style="background:var(--warning-bg, #4a3a12); border-color:var(--warning-border, #a97d1a);">
+      <i class="fa-solid fa-triangle-exclamation"></i>
+      <div class="announcement-banner-text">
+        {#each prelaunchWarnings as w, i (i)}
+          <span class="announcement-banner-msg">{w.message}</span>
+        {/each}
+      </div>
+      <button class="announcement-banner-close" onclick={() => (prelaunchWarnings = [])} data-tooltip="Dismiss" aria-label="Dismiss">
+        <i class="fa-solid fa-xmark"></i>
+      </button>
     </div>
   {/if}
 
@@ -1280,6 +1707,10 @@
       {#if currentView === 'home'}
         <p class="status-msg visible">{status === 'ready' ? '' : status}</p>
 
+        {#if settings.OnboardingCompleted && !settings.OnboardingChecklistDismissed}
+          <OnboardingChecklist {settings} onChange={saveSettings} onNavigate={(v) => openPanel(v as View)} />
+        {/if}
+
         {#if settings.ShowRecentlyLaunched && editionRecents.length > 0}
           <div class="recently-launched">
             <span class="recently-label">Recent:</span>
@@ -1309,6 +1740,19 @@
     {/each}
   </div>
 
+  {#if vanillaFallbackPrompt}
+    <div class="vanilla-fallback-prompt" role="alertdialog" aria-label="Repeated injection failures">
+      <i class="fa-solid fa-triangle-exclamation"></i>
+      <span>{vanillaFallbackPrompt.client} failed to inject 3 times in a row.</span>
+      <button class="btn-sm" onclick={launchVanillaFallback} onmousedown={(e) => e.stopPropagation()}>
+        Launch Vanilla instead
+      </button>
+      <button class="icon-btn icon-btn-ghost" data-tooltip="Dismiss" aria-label="Dismiss" onclick={dismissVanillaFallbackPrompt} onmousedown={(e) => e.stopPropagation()}>
+        <i class="fa-solid fa-xmark"></i>
+      </button>
+    </div>
+  {/if}
+
   <div class="news-strip">
     <div class="news-track">
       {#each newsItems.length ? [...newsItems, ...newsItems] : [] as item}
@@ -1333,26 +1777,39 @@
   </div>
 
   {#if currentView !== 'home' && settings}
+    <button
+      class="panel-expand-btn"
+      onclick={togglePanelExpand}
+      onmousedown={(e) => e.stopPropagation()}
+      title={panelExpanded ? 'Collapse panel' : 'Expand panel'}
+      aria-label={panelExpanded ? 'Collapse panel' : 'Expand panel'}
+    >
+      {#if panelSide === 'left'}
+        <i class="fa-solid {panelExpanded ? 'fa-chevron-left' : 'fa-chevron-right'}"></i>
+      {:else}
+        <i class="fa-solid {panelExpanded ? 'fa-chevron-right' : 'fa-chevron-left'}"></i>
+      {/if}
+    </button>
     <div class="panel-overlay">
-      <div class="panel-handle"></div>
       {#if currentView === 'clients'}
         <ClientsView
           {settings}
           onChange={saveSettings}
-          onBack={closePanel}
+          onBack={goBack}
           onOpenVersions={() => openPanel('versions')}
           onNavigate={navigateFromPanel}
+          breadcrumb={breadcrumbTrail}
         />
       {:else if currentView === 'instances'}
         <InstancesView
-          onBack={closePanel}
+          onBack={goBack}
           onNavigate={navigateFromPanel}
           onToast={(m, k) => showToast(m, k ?? 'info')}
         />
       {:else if currentView === 'bedrockworlds'}
         <BedrockWorldsView
           instance={activeBedrockInstance}
-          onBack={closePanel}
+          onBack={goBack}
           onNavigate={navigateFromPanel}
           onEditLevelDat={(dir) => { levelDatWorldDir = dir; openPanel('leveldat') }}
           onToast={showToast}
@@ -1360,20 +1817,20 @@
       {:else if currentView === 'bedrockpacks'}
         <BedrockPacksView
           instance={activeBedrockInstance}
-          onBack={closePanel}
+          onBack={goBack}
           onNavigate={navigateFromPanel}
           onToast={showToast}
         />
       {:else if currentView === 'bedrockbackups'}
         <BedrockBackupsView
           instance={activeBedrockInstance}
-          onBack={closePanel}
+          onBack={goBack}
           onNavigate={navigateFromPanel}
           onToast={showToast}
         />
       {:else if currentView === 'bedrockscreenshots'}
         <BedrockScreenshotsView
-          onBack={closePanel}
+          onBack={goBack}
           onNavigate={navigateFromPanel}
           onToast={showToast}
         />
@@ -1381,115 +1838,188 @@
         <ThemeStudioView
           {settings}
           onChange={saveSettings}
-          onBack={() => openPanel('settings')}
+          onBack={goBack}
+          breadcrumb={breadcrumbTrail}
           onToast={showToast}
         />
       {:else if currentView === 'leveldat'}
-        <LevelDatEditorView worldDir={levelDatWorldDir} onBack={() => openPanel('bedrockworlds')} />
+        <LevelDatEditorView worldDir={levelDatWorldDir} onBack={goBack} />
       {:else if currentView === 'settings'}
-        <SettingsView {settings} onChange={saveSettings} onBack={closePanel} onNavigate={navigateFromPanel} />
+        <SettingsView {settings} onChange={saveSettings} onBack={goBack} onNavigate={navigateFromPanel} />
       {:else if currentView === 'java-mods'}
-        <JavaModsView {settings} onBack={closePanel} onNavigate={navigateFromPanel} />
+        <JavaModsView {settings} onBack={goBack} onNavigate={navigateFromPanel} onToast={showToast} />
       {:else if currentView === 'modpacks'}
-        <ModpacksView {settings} onBack={closePanel} />
+        <ModpacksView {settings} onBack={goBack} />
       {:else if currentView === 'versions'}
         <VersionsView
           {settings}
-          onBack={() => openPanel('clients')}
+          onBack={goBack}
           onSaveSettings={saveSettings}
           onSelectClient={(name) => settings && saveSettings({ ...settings, SelectedClient: name })}
           onLaunchDll={launchWithDll}
           onToast={showToast}
+          breadcrumb={breadcrumbTrail}
         />
       {:else if currentView === 'tweaks'}
         <TweaksView
           edition={isBedrock ? 'Bedrock' : 'Java'}
           minecraftDir={(isBedrock ? activeBedrockInstance?.directory : activeJavaInstance?.directory) ?? ''}
-          onBack={closePanel}
+          onBack={goBack}
           onNavigate={navigateFromPanel}
           onToast={showToast}
         />
       {:else if currentView === 'servers'}
         <ServersView
-          onBack={closePanel}
+          onBack={goBack}
           onNavigate={navigateFromPanel}
           onToast={(m, k) => showToast(m, k ?? 'info')}
         />
       {:else if currentView === 'logs'}
-        <LogsPanel instanceDir={(isBedrock ? activeBedrockInstance?.directory : activeJavaInstance?.directory) ?? ''} onBack={closePanel} />
+        <LogsPanel
+          instanceDir={(isBedrock ? activeBedrockInstance?.directory : activeJavaInstance?.directory) ?? ''}
+          instanceId={isBedrock ? undefined : activeJavaInstance?.id}
+          onBack={goBack}
+        />
       {:else if currentView === 'stats'}
-        <StatsPanel onBack={closePanel} />
+        <StatsPanel onBack={goBack} />
       {:else if currentView === 'skinlibrary'}
         <SkinLibraryView
           {settings}
-          onBack={closePanel}
+          onBack={goBack}
           onSaveSettings={saveSettings}
           onToast={showToast}
         />
       {:else if currentView === 'java-backups'}
         <JavaBackupsView
           instanceName={activeJavaInstance?.name ?? ''}
-          onBack={closePanel}
+          onBack={goBack}
           onToast={showToast}
         />
       {:else if currentView === 'levilamina-mods'}
-        <LeviLaminaModsView onBack={() => openPanel('clients')} onToast={showToast} />
+        <LeviLaminaModsView onBack={goBack} onToast={showToast} />
       {:else if currentView === 'mc-versions'}
         <MCVersionsView
           {settings}
-          onBack={closePanel}
+          onBack={goBack}
           onNavigate={navigateFromPanel}
           onSaveSettings={saveSettings}
           onToast={showToast}
         />
       {:else if currentView === 'launchers'}
         <LauncherClientsView
-          onBack={closePanel}
+          onBack={goBack}
           onNavigate={navigateFromPanel}
           onToast={showToast}
         />
       {:else if currentView === 'bedrock-versions'}
         <BedrockVanillaVersionsView
-          onBack={closePanel}
+          onBack={goBack}
           onNavigate={navigateFromPanel}
           onToast={(m, k) => showToast(m, k ?? 'info')}
         />
       {:else if currentView === 'profile'}
         <ProfileView
           {settings}
+          {mcRunning}
           onChange={saveSettings}
-          onBack={closePanel}
+          onBack={goBack}
           onNavigate={navigateFromPanel}
           onToast={showToast}
         />
+      {:else if currentView === 'import-launcher'}
+        <ImportLauncherView
+          onBack={goBack}
+          onToast={showToast}
+          onImported={() => {}}
+        />
       {:else if currentView === 'java-screenshots'}
-        <JavaScreenshotsView onBack={closePanel} onNavigate={navigateFromPanel} />
+        <JavaScreenshotsView onBack={goBack} onNavigate={navigateFromPanel} />
+      {:else if currentView === 'instance-wizard'}
+        <InstanceWizard
+          onDone={(instance) => {
+            goBack()
+            activeJavaInstance = instance
+            showToast(`Created "${instance.name}".`, 'success')
+          }}
+          onCancel={goBack}
+          onToast={showToast}
+        />
+      {:else if currentView === 'instance-detail'}
+        {#if activeJavaInstance}
+          <InstanceDetailView
+            instance={activeJavaInstance}
+            onBack={goBack}
+            onToast={showToast}
+            onLaunch={(id) => { void id; goBack() }}
+          />
+        {:else}
+          <div class="panel-body"><p>No instance selected.</p></div>
+        {/if}
+      {:else if currentView === 'modrinth-browse-v2'}
+        <ModrinthBrowseV2 instanceId={activeJavaInstance?.id} onBack={goBack} onToast={showToast} />
+      {:else if currentView === 'sync-packs'}
+        <SyncPacksView onBack={goBack} onToast={showToast} />
       {:else if currentView === 'utilities'}
         <UtilitiesView
           instanceDir={activeBedrockInstance?.directory ?? ''}
           initialTab={utilInitialTab}
-          onBack={closePanel}
+          onBack={goBack}
           onNavigate={navigateFromPanel}
           onToast={showToast}
         />
       {:else if currentView === 'clientlibrary'}
         <ClientLibraryView
           instanceDir={activeBedrockInstance?.directory ?? ''}
-          onBack={closePanel}
+          onBack={goBack}
           onNavigate={navigateFromPanel}
         />
       {:else if currentView === 'downloads'}
-        <DownloadsView onBack={closePanel} onOpenSettings={() => openPanel('settings')} onOpenCredits={() => openPanel('credits')} />
+        <DownloadsView onBack={goBack} onOpenSettings={() => openPanel('settings')} onOpenCredits={() => openPanel('credits')} />
       {:else if currentView === 'news'}
-        <NewsView onBack={closePanel} onOpenSettings={() => openPanel('settings')} onOpenCredits={() => openPanel('credits')} />
+        <NewsView onBack={goBack} onOpenSettings={() => openPanel('settings')} onOpenCredits={() => openPanel('credits')} />
       {:else if currentView === 'credits'}
         <CreditsView
           edition={isBedrock ? 'bedrock' : 'java'}
-          onBack={closePanel}
+          onBack={goBack}
           onNavigate={navigateFromPanel}
         />
       {/if}
 
     </div>
   {/if}
+
+  <Modal
+    open={crashModalOpen && !!crashAnalysis}
+    title={crashAnalysis ? `Game crashed — ${crashAnalysis.category}` : 'Game crashed'}
+    icon="fa-solid fa-skull-crossbones"
+    iconColor="var(--red)"
+    onClose={closeCrashModal}
+  >
+    {#if crashAnalysis}
+      <div class="crash-modal-body">
+        <p class="crash-modal-message">{crashAnalysis.message}</p>
+        <p class="crash-modal-fix"><i class="fa-solid fa-wrench"></i> {crashAnalysis.suggested_fix}</p>
+        {#if crashShareUrl}
+          <div class="logs-share-url">
+            <i class="fa-solid fa-link"></i>
+            <a href={crashShareUrl} target="_blank" rel="noreferrer">{crashShareUrl}</a>
+          </div>
+        {/if}
+      </div>
+      <div class="crash-modal-actions">
+        <button type="button" class="btn-sm" onclick={openCrashLogFolder}>
+          <i class="fa-solid fa-folder-open"></i> Open log folder
+        </button>
+        <button type="button" class="btn-sm" disabled={crashSharing} onclick={shareCrashLog}>
+          {#if crashSharing}
+            <i class="fa-solid fa-spinner fa-spin"></i>
+          {:else}
+            <i class="fa-solid fa-share-nodes"></i>
+          {/if}
+          Share to mclo.gs
+        </button>
+        <button type="button" class="btn-sm" onclick={closeCrashModal}>Dismiss</button>
+      </div>
+    {/if}
+  </Modal>
 </div>

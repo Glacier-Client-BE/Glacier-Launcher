@@ -18,6 +18,7 @@
 import { invoke } from '@tauri-apps/api/core'
 import { open } from '@tauri-apps/plugin-dialog'
 import ColorPicker from './components/ColorPicker.svelte'
+import PanelHeader from './components/PanelHeader.svelte'
 import type { LauncherSettings } from './settings'
 
 let {
@@ -25,11 +26,13 @@ let {
   onChange,
   onBack,
   onToast,
+  breadcrumb = [],
 }: {
   settings: LauncherSettings
   onChange: (next: LauncherSettings) => void
   onBack?: () => void
   onToast?: (message: string, kind: 'info' | 'success' | 'error') => void
+  breadcrumb?: string[]
 } = $props()
 
 /** Mirrors the Rust `ThemeDefinition` (PascalCase over the IPC boundary). */
@@ -362,33 +365,20 @@ function fileName(p: string): string {
 <!-- `.panel-overlay` and `.panel-handle` are supplied once by App.svelte
    around whichever panel is active, so this panel must not emit its own
    or the two nest and render a panel inside a panel. -->
-<div class="panel-header">
-  <div class="panel-title-wrap">
-    <span class="panel-title">Theme Studio</span>
-    <div class="panel-title-underline"></div>
-  </div>
-  <div class="panel-header-actions">
+<PanelHeader title="Theme Studio" onBack={closePanel} {breadcrumb}>
+  {#snippet extraActions()}
     <button class="btn-sm" onclick={newTheme} onmousedown={(e) => e.stopPropagation()}>
       <i class="fa-solid fa-plus"></i> New
     </button>
     <button class="btn-sm" onclick={importTheme} onmousedown={(e) => e.stopPropagation()}>
       <i class="fa-solid fa-file-import"></i> Import
     </button>
-    <button
-      class="panel-back-btn"
-      onclick={closePanel}
-      onmousedown={(e) => e.stopPropagation()}
-      data-tooltip="Back"
-      aria-label="Back"
-    >
-      <i class="fa-solid fa-chevron-down"></i>
-    </button>
-  </div>
-</div>
+  {/snippet}
+</PanelHeader>
 
 <div class="panel-body">
   {#if themes.length === 0}
-    <div class="ts-empty">
+    <div class="empty-state">
       <i class="fa-solid fa-palette"></i>
       <span>No custom themes yet</span>
       <small>Start from the current preset and make it yours — every color, radius and font is editable.</small>
@@ -414,6 +404,25 @@ function fileName(p: string): string {
     </div>
 
     {#if sel}
+      <div class="ts-preview-card">
+        <div class="ts-preview-topbar">
+          <img class="ts-preview-logo" src="/images/icon.png" alt="" />
+          <span class="ts-preview-title">Glacier Launcher</span>
+          <span class="ts-preview-pill">{isActive(sel) ? 'ACTIVE' : 'PREVIEW'}</span>
+        </div>
+        <div class="ts-preview-body">
+          <button class="ts-preview-launch" type="button" tabindex="-1">
+            <i class="fa-solid fa-play"></i> Launch
+          </button>
+          <div class="ts-preview-icons">
+            <span><i class="fa-solid fa-gear"></i></span>
+            <span><i class="fa-solid fa-puzzle-piece"></i></span>
+            <span><i class="fa-solid fa-globe"></i></span>
+            <span><i class="fa-solid fa-heart"></i></span>
+          </div>
+        </div>
+      </div>
+
       <div class="ts-actions">
         {#if isActive(sel)}
           <button class="btn-sm ts-active-btn" onclick={deactivateTheme}>

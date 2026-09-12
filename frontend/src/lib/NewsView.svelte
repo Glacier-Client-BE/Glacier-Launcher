@@ -15,13 +15,13 @@
   import { invoke } from '@tauri-apps/api/core'
   import { onMount } from 'svelte'
   import PanelHeader from './components/PanelHeader.svelte'
-  import PanelTabs from './components/PanelTabs.svelte'
   import Spinner from './components/Spinner.svelte'
+  import { invokeCached } from './invokeCache'
 
-  let { onBack, onOpenSettings, onOpenCredits }: {
+  const RELEASES_TTL_MS = 10 * 60 * 1000
+
+  let { onBack }: {
     onBack?: () => void
-    onOpenSettings?: () => void
-    onOpenCredits?: () => void
   } = $props()
 
   type NewsPost = { icon: string; title: string; subtitle: string; url: string; date: string }
@@ -30,9 +30,18 @@
 
   let posts = $state<NewsPost[]>([])
   let announcement = $state<Announcement | null>(null)
-  let releases = $state<LauncherRelease[]>([])
+  let launcherReleases = $state<LauncherRelease[]>([])
+  let clientReleases = $state<LauncherRelease[]>([])
+  let glacierReleases = $state<LauncherRelease[]>([])
+  let changelogTab = $state<'glacier' | 'latite' | 'launcher'>('glacier')
   let expandedTag = $state<string | null>(null)
   let loading = $state(true)
+
+  const releases = $derived(
+    changelogTab === 'glacier' ? glacierReleases :
+    changelogTab === 'latite' ? clientReleases :
+    launcherReleases
+  )
 
   /**
    * Port of `OpenUrl` (Home.razor.cs:670). `window.open` is inert inside the
@@ -75,14 +84,18 @@
   async function load() {
     loading = true
     try {
-      const [news, ann, rel] = await Promise.all([
+      const [news, ann, glacierRel, clientRel, launcherRel] = await Promise.all([
         invoke<NewsPost[] | null>('get_news'),
         invoke<Announcement | null>('get_announcement'),
-        invoke<LauncherRelease[]>('list_launcher_releases', { max: 12 }).catch(() => []),
+        invokeCached<LauncherRelease[]>('list_glacier_client_releases', { max: 12 }, RELEASES_TTL_MS).catch(() => []),
+        invokeCached<LauncherRelease[]>('list_client_releases', { max: 12 }, RELEASES_TTL_MS).catch(() => []),
+        invokeCached<LauncherRelease[]>('list_launcher_releases', { max: 12 }, RELEASES_TTL_MS).catch(() => []),
       ])
       posts = news ?? []
       announcement = ann
-      releases = rel ?? []
+      glacierReleases = glacierRel ?? []
+      clientReleases = clientRel ?? []
+      launcherReleases = launcherRel ?? []
     } finally {
       loading = false
     }
@@ -131,8 +144,26 @@
       <div class="cache-notice"><i class="fa-solid fa-circle-info"></i><span>No news available (offline or rate-limited).</span></div>
     {/if}
 
+    <span class="panel-section-label">Changelog</span>
+    <div class="mcv-channel-tabs">
+      <button
+        type="button"
+        class="mcv-channel-tab {changelogTab === 'glacier' ? 'active' : ''}"
+        onclick={() => { changelogTab = 'glacier'; expandedTag = null }}
+      >Glacier</button>
+      <button
+        type="button"
+        class="mcv-channel-tab {changelogTab === 'latite' ? 'active' : ''}"
+        onclick={() => { changelogTab = 'latite'; expandedTag = null }}
+      >Latite</button>
+      <button
+        type="button"
+        class="mcv-channel-tab {changelogTab === 'launcher' ? 'active' : ''}"
+        onclick={() => { changelogTab = 'launcher'; expandedTag = null }}
+      >Launcher</button>
+    </div>
+
     {#if releases.length > 0}
-      <span class="panel-section-label">Changelog</span>
       {#each releases as r (r.tag)}
         <div class="news-row" role="button" tabindex="0" onclick={() => toggleRelease(r.tag)} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleRelease(r.tag) } }}>
           <div class="news-icon"><i class="fa-solid fa-code-branch"></i></div>
@@ -147,21 +178,8 @@
           <i class="fa-solid {expandedTag === r.tag ? 'fa-chevron-up' : 'fa-chevron-down'} news-ext"></i>
         </div>
       {/each}
+    {:else}
+      <div class="cache-notice"><i class="fa-solid fa-circle-info"></i><span>No {changelogTab === 'glacier' ? 'Glacier Client' : changelogTab === 'latite' ? 'Latite' : 'launcher'} changelog available.</span></div>
     {/if}
   {/if}
 </div>
-
-<PanelTabs
-  tabs={[
-    { id: 'settings', label: 'Settings', icon: 'fa-solid fa-gear' },
-    { id: 'home', label: 'Home', icon: 'fa-solid fa-house' },
-    { id: 'news', label: 'News', icon: 'fa-solid fa-newspaper' },
-    { id: 'credits', label: 'Credits', icon: 'fa-solid fa-heart' },
-  ]}
-  active="news"
-  onSelect={(id) => {
-    if (id === 'settings') onOpenSettings?.()
-    else if (id === 'home') onBack?.()
-    else if (id === 'credits') onOpenCredits?.()
-  }}
-/>

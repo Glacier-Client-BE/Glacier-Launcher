@@ -2,14 +2,14 @@
 //! Badlion Client installs and enumerates Lunar's offline multiversion
 //! game files.
 //!
-//! Deviation from the C# original: `LunarBadlionService.ReadUninstallExe`
-//! falls back to scanning the Windows uninstall registry keys
-//! (`HKCU`/`HKLM\...\Uninstall`) for a `DisplayIcon` path when the exe
-//! isn't found at a well-known location. This crate has no registry
-//! dependency in scope (none of the pre-approved crates provide one), so
-//! only the well-known-path candidates are checked here. Wire a registry
-//! lookup back in at the `gl-integrations` or Tauri host layer if that
-//! fallback turns out to matter in practice.
+//! `find_lunar`/`find_badlion` first check the same well-known install
+//! paths as the C# original, then fall back to `read_uninstall_exe`, a
+//! straight port of `LunarBadlionService.ReadUninstallExe`: it scans the
+//! Windows uninstall registry (`HKCU`/`HKLM` ×
+//! `...\Uninstall` and `...\WOW6432Node\...\Uninstall`) for a subkey whose
+//! `DisplayName` contains the client name, and reads that entry's
+//! `DisplayIcon` value (stripped of its optional `,<index>` icon-resource
+//! suffix and surrounding quotes) as the installed exe path.
 //!
 //! Actually launching a detected client (spawning the exe, or the
 //! direct-JRE-launch path) is left to the caller — this module only
@@ -81,7 +81,10 @@ fn find_lunar(local_app_data: &Path) -> Option<PathBuf> {
             .join("Lunar Client.exe"),
         local_app_data.join("lunarclient").join("Lunar Client.exe"),
     ];
-    candidates.into_iter().find(|p| p.is_file())
+    candidates
+        .into_iter()
+        .find(|p| p.is_file())
+        .or_else(|| read_uninstall_exe("Lunar Client"))
 }
 
 fn find_badlion(local_app_data: &Path) -> Option<PathBuf> {
@@ -94,7 +97,72 @@ fn find_badlion(local_app_data: &Path) -> Option<PathBuf> {
             .join("Badlion Client")
             .join("Badlion Client.exe"),
     ];
-    candidates.into_iter().find(|p| p.is_file())
+    candidates
+        .into_iter()
+        .find(|p| p.is_file())
+        .or_else(|| read_uninstall_exe("Badlion Client"))
+}
+
+/// Scans the Windows uninstall registry for an entry whose `DisplayName`
+/// contains `display_name_contains` (case-insensitive) and returns its
+/// `DisplayIcon` path if that file exists on disk. Mirrors
+/// `LunarBadlionService.ReadUninstallExe` exactly, including checking both
+/// hives and both the 64- and 32-bit (`WOW6432Node`) uninstall key
+/// locations, and swallowing any registry-access error into `None` (the C#
+/// original wraps the whole method in a bare `try { } catch { return null; }`).
+#[cfg(windows)]
+fn read_uninstall_exe(display_name_contains: &str) -> Option<PathBuf> {
+    use winreg::enums::{HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE};
+    use winreg::RegKey;
+
+    const UNINSTALL_SUBKEYS: [&str; 2] = [
+        r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall",
+        r"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall",
+    ];
+
+    for hive in [HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE] {
+        let root = RegKey::predef(hive);
+        for sub in UNINSTALL_SUBKEYS {
+            let Ok(uninstall_key) = root.open_subkey(sub) else {
+                continue;
+            };
+            for name in uninstall_key.enum_keys().flatten() {
+                let Ok(entry) = uninstall_key.open_subkey(&name) else {
+                    continue;
+                };
+                let display_name: String = match entry.get_value("DisplayName") {
+                    Ok(v) => v,
+                    Err(_) => continue,
+                };
+                if !display_name
+                    .to_ascii_lowercase()
+                    .contains(&display_name_contains.to_ascii_lowercase())
+                {
+                    continue;
+                }
+                let icon: String = match entry.get_value("DisplayIcon") {
+                    Ok(v) => v,
+                    Err(_) => continue,
+                };
+                if icon.is_empty() {
+                    continue;
+                }
+                // Strip the optional ",<icon-index>" suffix (e.g.
+                // `"C:\...\app.exe",0`), then surrounding quotes.
+                let icon = icon.split(',').next().unwrap_or(&icon).trim().trim_matches('"');
+                let path = PathBuf::from(icon);
+                if path.is_file() {
+                    return Some(path);
+                }
+            }
+        }
+    }
+    None
+}
+
+#[cfg(not(windows))]
+fn read_uninstall_exe(_display_name_contains: &str) -> Option<PathBuf> {
+    None
 }
 
 fn list_version_dirs(offline_root: &Path) -> Vec<String> {

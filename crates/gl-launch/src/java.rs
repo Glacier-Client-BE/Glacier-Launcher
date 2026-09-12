@@ -9,10 +9,14 @@
 //!   user to install one / point Settings → Java Runtime at it.
 //! - No on-demand missing-library auto-install. If any classpath entry is
 //!   absent on disk, we fail fast telling the user to reinstall the version.
-//! - No live MSA token refresh on launch (`XboxProfileService.RefreshProfileAsync`).
-//!   We use the cached access token from settings if present and unexpired,
-//!   otherwise fall back to offline mode, exactly like the C# fallback path
-//!   when refresh throws.
+//! - Live MSA token refresh on launch (`XboxProfileService.RefreshProfileAsync`)
+//!   IS now wired, one layer up: `src-tauri/src/commands/launch.rs`'s
+//!   `resolve_java_auth` proactively refreshes via `gl_auth::refresh` when
+//!   the cached token is expired or within `gl_auth::PROACTIVE_REFRESH_BUFFER_SECS`
+//!   of expiring (matching NoRiskClient's 12h buffer), persisting the result
+//!   back to settings. This crate itself still only receives the final
+//!   resolved `ResolvedAuth` — it has no settings/auth dependency of its own,
+//!   by design (see `ResolvedAuth`'s own doc comment below).
 //! - Windows-registry JRE discovery (`HKLM/HKCU ...JavaSoft/Adoptium`) is not
 //!   ported; `JAVA_HOME`, `PATH`, and the bundled `<mcDir>/runtime` tree are.
 
@@ -38,6 +42,10 @@ pub struct JavaLaunchRequest {
     pub glacier_runtime_root: PathBuf,
     pub options: LaunchOptions,
     pub auth: ResolvedAuth,
+    /// Extra raw game-side args appended after the version's own (e.g. from
+    /// `InstanceSettings::extra_game_args`). Empty by default.
+    #[allow(clippy::struct_field_names)]
+    pub extra_game_args: Vec<String>,
 }
 
 /// Pre-resolved auth values — the caller (Tauri command layer, which has
@@ -132,8 +140,9 @@ pub async fn launch(req: JavaLaunchRequest) -> Result<LaunchedJava> {
         &req.options,
     )?;
     let auth = req.auth.clone_for_log();
-    let game_args =
+    let mut game_args =
         jl::build_game_args(&profile, &req.mc_dir, &req.version_id, &auth, &req.options);
+    game_args.extend(req.extra_game_args.iter().cloned());
 
     let command_line = sanitise(
         &jl::render_command_line(

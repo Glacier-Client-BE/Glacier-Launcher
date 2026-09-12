@@ -1,17 +1,74 @@
 //! Port of `Services/JavaModLoaderService.cs`: installs Fabric/Quilt version
-//! profiles and downloads Forge/NeoForge installer jars.
-//!
-//! Deviation from the C# original: Forge/NeoForge installers are only
-//! downloaded here (mirroring `DownloadForgeInstallerAsync` /
-//! `DownloadNeoForgeInstallerAsync`) — actually *running* the installer jar
-//! (which requires a JVM + the Forge installer's own install-client flow) is
-//! left to a later pass; the download is real and the jar path is returned so
-//! callers can invoke it with the instance's Java runtime.
+//! profiles, downloads Forge/NeoForge installer jars, and runs them
+//! (mirrors `ModpackInstallService.RunLoaderInstallerAsync`).
 
 use crate::download::{download_to_file, get_string};
 use crate::error::{io_err, JavaError, Result};
+use crate::loader::install_profile::InstallProfile;
+use crate::loader::maven::MavenCoordinate;
+use crate::loader::patcher;
+use crate::loader::processors::{run_processors, ProcessorContext};
+use crate::runtime_download::RuntimeDownloadService;
+use gl_download::{DownloadQueue, DownloadRequest};
 use serde_json::Value;
+use std::io::Read;
 use std::path::{Path, PathBuf};
+
+#[cfg(windows)]
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
+/// Run a downloaded Forge/NeoForge installer jar against `instance_dir`,
+/// mirroring `ModpackInstallService.RunLoaderInstallerAsync`: resolves (or
+/// downloads) a Java 17 runtime, then runs
+/// `java -jar <installer_jar> --installClient <instance_dir>` with
+/// `instance_dir` as the working directory, and waits for it to exit.
+pub async fn run_loader_installer(
+    installer_jar: &Path,
+    instance_dir: &Path,
+    runtimes_root: &Path,
+) -> Result<()> {
+    let runtime = RuntimeDownloadService::new(runtimes_root.to_path_buf());
+    let javaw = match runtime.get_cached_javaw(17) {
+        Some(p) => p,
+        None => runtime.download(17, |_, _| {}).await?,
+    };
+    let java = {
+        let candidate = PathBuf::from(javaw.to_string_lossy().replace("javaw.exe", "java.exe"));
+        if candidate.is_file() {
+            candidate
+        } else {
+            javaw
+        }
+    };
+
+    std::fs::create_dir_all(instance_dir).map_err(io_err(instance_dir))?;
+
+    let mut cmd = tokio::process::Command::new(&java);
+    cmd.arg("-jar")
+        .arg(installer_jar)
+        .arg("--installClient")
+        .arg(instance_dir)
+        .current_dir(instance_dir)
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null());
+    #[cfg(windows)]
+    cmd.creation_flags(CREATE_NO_WINDOW);
+
+    let mut child = cmd
+        .spawn()
+        .map_err(|e| JavaError::Other(format!("could not start the loader installer: {e}")))?;
+    let status = child
+        .wait()
+        .await
+        .map_err(|e| JavaError::Other(format!("loader installer failed: {e}")))?;
+    if !status.success() {
+        return Err(JavaError::Other(format!(
+            "loader installer exited with status {status}"
+        )));
+    }
+    Ok(())
+}
 
 /// Install a Fabric loader profile for `minecraft_version` into `versions_dir`
 /// (mirrors `InstallFabricAsync`). Returns the resolved profile id.
@@ -275,4 +332,267 @@ fn urlencode(v: &str) -> String {
         }
     }
     out
+}
+
+// ── Forge / NeoForge: real install-profile execution (Phase 2) ────────────
+//
+// Unlike Fabric/Quilt (a static version-profile JSON fetched and written
+// straight into `versions/`), Forge/NeoForge ship a self-extracting
+// installer jar containing an `install_profile.json` that names a
+// `processors` pipeline which must actually be *run* (each a maven-coordinate
+// jar invoked via its own manifest `Main-Class`) to produce the loader's
+// launchable artifacts. See `crate::loader` for the DTOs/executor.
+
+/// Installs Forge for `minecraft_version` into `mc_dir` (mirrors
+/// `install_fabric`/`install_quilt`'s role, but for the processors-based
+/// installer format). `mc_dir` is the Java root containing `versions/`,
+/// `libraries/`, etc. Requires the vanilla client jar for
+/// `minecraft_version` to already be installed under
+/// `versions/<minecraft_version>/<minecraft_version>.jar`. Returns the
+/// resolved loader version id to persist via
+/// `InstanceService::set_instance_loader`.
+pub async fn install_forge(
+    client: &reqwest::Client,
+    downloads: &DownloadQueue,
+    mc_dir: &Path,
+    runtimes_root: &Path,
+    minecraft_version: &str,
+    loader_version: Option<&str>,
+    mut on_progress: impl FnMut(&str),
+) -> Result<String> {
+    let build = match loader_version {
+        Some(v) if !v.trim().is_empty() => v.to_string(),
+        _ => latest_forge_version(client, minecraft_version).await?,
+    };
+    let artifact = resolve_forge_artifact(client, minecraft_version, &build).await;
+    let file = format!("forge-{artifact}-installer.jar");
+    let url =
+        format!("https://maven.minecraftforge.net/net/minecraftforge/forge/{artifact}/{file}");
+    let installer_jar = mc_dir.join("loaders").join("forge").join(&file);
+
+    install_from_installer_jar(
+        downloads,
+        mc_dir,
+        runtimes_root,
+        minecraft_version,
+        &url,
+        &installer_jar,
+        "Forge",
+        &mut on_progress,
+    )
+    .await
+}
+
+/// Installs NeoForge (mirrors [`install_forge`]).
+pub async fn install_neoforge(
+    client: &reqwest::Client,
+    downloads: &DownloadQueue,
+    mc_dir: &Path,
+    runtimes_root: &Path,
+    minecraft_version: &str,
+    loader_version: Option<&str>,
+    mut on_progress: impl FnMut(&str),
+) -> Result<String> {
+    let ver = match loader_version {
+        Some(v) if !v.trim().is_empty() => v.to_string(),
+        _ => latest_neoforge_version(client, minecraft_version).await?,
+    };
+    let file = format!("neoforge-{ver}-installer.jar");
+    let url = format!("https://maven.neoforged.net/releases/net/neoforged/neoforge/{ver}/{file}");
+    let installer_jar = mc_dir.join("loaders").join("neoforge").join(&file);
+
+    install_from_installer_jar(
+        downloads,
+        mc_dir,
+        runtimes_root,
+        minecraft_version,
+        &url,
+        &installer_jar,
+        "NeoForge",
+        &mut on_progress,
+    )
+    .await
+}
+
+async fn install_from_installer_jar(
+    downloads: &DownloadQueue,
+    mc_dir: &Path,
+    runtimes_root: &Path,
+    minecraft_version: &str,
+    installer_url: &str,
+    installer_jar: &Path,
+    loader_name: &str,
+    on_progress: &mut impl FnMut(&str),
+) -> Result<String> {
+    on_progress(&format!("Downloading {loader_name} installer..."));
+    download_via_queue(downloads, installer_url, installer_jar, "installer").await?;
+
+    on_progress("Reading install profile...");
+    let raw_profile = read_jar_entry_string(installer_jar, "install_profile.json")?;
+    let profile_json: Value = serde_json::from_str(&raw_profile)?;
+    if patcher::requires_legacy_patching(&profile_json) {
+        return Err(JavaError::Other(format!(
+            "{loader_name} {minecraft_version} uses the legacy (pre-1.13) installer format, \
+             which this launcher does not support. Only the modern processors-based installer \
+             (Minecraft 1.13+) is implemented."
+        )));
+    }
+    let profile: InstallProfile = InstallProfile::parse(&raw_profile).map_err(JavaError::Json)?;
+
+    let libraries_dir = mc_dir.join("libraries");
+    let vanilla_jar = mc_dir
+        .join("versions")
+        .join(minecraft_version)
+        .join(format!("{minecraft_version}.jar"));
+    if !vanilla_jar.is_file() {
+        return Err(JavaError::Other(format!(
+            "Minecraft {minecraft_version} must be installed before installing {loader_name} \
+             (missing {})",
+            vanilla_jar.display()
+        )));
+    }
+
+    on_progress("Downloading loader libraries...");
+    download_install_libraries(downloads, &profile, &libraries_dir).await?;
+
+    on_progress("Resolving a Java runtime for the installer processors...");
+    let java_major = required_java_major(minecraft_version);
+    let runtime = RuntimeDownloadService::new(runtimes_root.to_path_buf());
+    let javaw = match runtime.get_cached_javaw(java_major) {
+        Some(p) => p,
+        None => runtime.download(java_major, |_, _| {}).await?,
+    };
+    let java_exe = {
+        let candidate = PathBuf::from(javaw.to_string_lossy().replace("javaw.exe", "java.exe"));
+        if candidate.is_file() {
+            candidate
+        } else {
+            javaw
+        }
+    };
+
+    on_progress("Running installer processors...");
+    let ctx = ProcessorContext {
+        root: mc_dir.to_path_buf(),
+        libraries_dir,
+        installer_jar: installer_jar.to_path_buf(),
+        minecraft_jar: vanilla_jar,
+        side: "client".to_string(),
+        java_exe,
+    };
+    run_processors(&ctx, &profile).await.map_err(|e| {
+        JavaError::Other(format!(
+            "{loader_name} {minecraft_version} install failed while running installer processors: {e}"
+        ))
+    })?;
+
+    on_progress("Writing version profile...");
+    let version_json_entry = profile
+        .json
+        .clone()
+        .unwrap_or_else(|| "/version.json".to_string());
+    let version_json = read_jar_entry_string(installer_jar, version_json_entry.trim_start_matches('/'))?;
+    let versions_dir = mc_dir.join("versions").join(&profile.version);
+    tokio::fs::create_dir_all(&versions_dir)
+        .await
+        .map_err(io_err(&versions_dir))?;
+    let dest = versions_dir.join(format!("{}.json", profile.version));
+    crate::util::write_atomic(&dest, &version_json)?;
+
+    on_progress(&format!("{loader_name} {} installed.", profile.version));
+    Ok(profile.version)
+}
+
+/// Downloads every `install_profile.json` library entry that declares a
+/// direct download URL, via `gl-download`'s queue so it shows in the
+/// Downloads panel; entries with no `downloads.artifact` (generated/output
+/// artifacts a processor will produce) just get their parent directory
+/// created so the processor can write into it.
+async fn download_install_libraries(
+    downloads: &DownloadQueue,
+    profile: &InstallProfile,
+    libraries_dir: &Path,
+) -> Result<()> {
+    let mut handles = Vec::new();
+    for lib in &profile.libraries {
+        let coord = MavenCoordinate::parse(&lib.name)?;
+        let dest = libraries_dir.join(coord.relative_path());
+        if let Some(parent) = dest.parent() {
+            tokio::fs::create_dir_all(parent)
+                .await
+                .map_err(io_err(parent))?;
+        }
+        let Some(artifact) = lib.downloads.as_ref().and_then(|d| d.artifact.as_ref()) else {
+            continue;
+        };
+        if artifact.url.trim().is_empty() || dest.is_file() {
+            continue;
+        }
+        let mut req = DownloadRequest::new(artifact.url.clone(), dest).with_label(lib.name.clone());
+        if let Some(size) = artifact.size {
+            req = req.with_known_total_bytes(size);
+        }
+        handles.push(downloads.submit(req));
+    }
+    for handle in handles {
+        handle
+            .join()
+            .await
+            .map_err(|e| JavaError::Other(format!("failed to download a loader library: {e}")))?;
+    }
+    Ok(())
+}
+
+async fn download_via_queue(
+    downloads: &DownloadQueue,
+    url: &str,
+    dest: &Path,
+    label: &str,
+) -> Result<()> {
+    if dest.is_file() {
+        return Ok(());
+    }
+    let req = DownloadRequest::new(url.to_string(), dest.to_path_buf()).with_label(label.to_string());
+    downloads
+        .submit(req)
+        .join()
+        .await
+        .map_err(|e| JavaError::Other(format!("failed to download {label}: {e}")))?;
+    Ok(())
+}
+
+fn read_jar_entry_string(jar_path: &Path, entry: &str) -> Result<String> {
+    let file = std::fs::File::open(jar_path).map_err(io_err(jar_path))?;
+    let mut archive = zip::ZipArchive::new(file)?;
+    let mut zf = archive.by_name(entry).map_err(|_| {
+        JavaError::Other(format!(
+            "{} has no entry '{entry}'",
+            jar_path.display()
+        ))
+    })?;
+    let mut out = String::new();
+    zf.read_to_string(&mut out).map_err(io_err(jar_path))?;
+    Ok(out)
+}
+
+/// The Java major version Forge/NeoForge require to run their installer
+/// processors, by Minecraft version bracket (matches Mojang's own bundled-
+/// runtime brackets, which Forge/NeoForge track).
+fn required_java_major(minecraft_version: &str) -> u32 {
+    let parts: Vec<u32> = minecraft_version
+        .split(['.', '-'])
+        .map(|p| p.parse::<u32>().unwrap_or(0))
+        .collect();
+    let major = parts.first().copied().unwrap_or(1);
+    let minor = parts.get(1).copied().unwrap_or(0);
+    let patch = parts.get(2).copied().unwrap_or(0);
+    if major == 1 && (minor > 20 || (minor == 20 && patch >= 5)) {
+        21
+    } else if major == 1 && minor >= 18 {
+        17
+    } else if major == 1 && minor == 17 {
+        16
+    } else {
+        8
+    }
 }

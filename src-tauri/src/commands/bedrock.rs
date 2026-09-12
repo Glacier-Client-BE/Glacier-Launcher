@@ -8,6 +8,15 @@ use tauri::State;
 
 use crate::state::AppState;
 
+/// Resolves the live `com.mojang` folder (resource packs, worlds, behaviour
+/// packs) for the Settings panel's "Open Minecraft folder" button. Reuses
+/// the same per-account root resolution the world/pack/screenshot commands
+/// already depend on, rather than a fresh lookup.
+#[tauri::command]
+pub fn resolve_com_mojang_folder() -> String {
+    gl_bedrock::com_mojang_root().display().to_string()
+}
+
 /// Imports a dropped Bedrock content file (`.mcworld`/`.mctemplate`/`.mcpack`/
 /// `.mcaddon`) into the given instance's folder. Mirrors the original app's
 /// drag-drop import handling for Bedrock content.
@@ -18,6 +27,13 @@ pub fn import_bedrock_content(
 ) -> Result<ImportOutcome, String> {
     gl_bedrock::import_content(Path::new(&source_path), Path::new(&instance_dir))
         .map_err(|e| e.to_string())
+}
+
+/// Public alias so other command modules (e.g. the conflict detector in
+/// `bedrock_addons.rs`) can reuse the same kind-string parsing instead of
+/// duplicating it.
+pub fn parse_pack_kind_pub(kind: &str) -> Result<PackKind, String> {
+    parse_pack_kind(kind)
 }
 
 fn parse_pack_kind(kind: &str) -> Result<PackKind, String> {
@@ -179,6 +195,82 @@ pub fn delete_bedrock_backup(backup_path: String) -> Result<(), String> {
         .map_err(|e| e.to_string())
 }
 
+/// Feature 20 — Bedrock world backup scheduler. Called right before a
+/// Bedrock launch: bumps the launches-since-backup counter and, if it has
+/// reached the configured `bedrock_auto_backup_every_n_launches` threshold,
+/// fires an automatic backup by reusing the exact same
+/// `BedrockBackupService::create_backup_from` the manual "Back up now" button
+/// calls (no separate zip/copy logic). `0` disables the feature, matching the
+/// convention used elsewhere in this settings struct for "off".
+///
+/// Returns `Some(backup_path)` when an auto-backup ran, `None` otherwise.
+/// Never fails the launch: a backup error is logged by the caller and
+/// swallowed here, same as other best-effort pre-launch steps
+/// (`accelerate_loading_ms`, Discord presence, etc).
+pub fn maybe_run_bedrock_auto_backup() -> Result<Option<String>, String> {
+    let mut settings = gl_settings::load().map_err(|e| e.to_string())?;
+    if settings.bedrock_auto_backup_every_n_launches <= 0 {
+        return Ok(None);
+    }
+
+    settings.bedrock_launches_since_backup += 1;
+
+    let should_backup =
+        settings.bedrock_launches_since_backup >= settings.bedrock_auto_backup_every_n_launches;
+
+    let result = if should_backup {
+        settings.bedrock_launches_since_backup = 0;
+        let svc = BedrockBackupService::new(backups_dir());
+        Some(
+            svc.create_backup_from(&BedrockRoot::Live, Some("Auto-backup"))
+                .map(|p| p.to_string_lossy().into_owned())
+                .map_err(|e| e.to_string())?,
+        )
+    } else {
+        None
+    };
+
+    gl_settings::save(&settings).map_err(|e| e.to_string())?;
+    Ok(result)
+}
+
+/// Feature 23 — whether the one-time marketplace-content reminder banner has
+/// been dismissed already.
+#[tauri::command]
+pub fn bedrock_marketplace_reminder_dismissed() -> Result<bool, String> {
+    Ok(gl_settings::load()
+        .map_err(|e| e.to_string())?
+        .bedrock_marketplace_reminder_dismissed)
+}
+
+/// Persists the dismissal so the banner doesn't come back.
+#[tauri::command]
+pub fn dismiss_bedrock_marketplace_reminder() -> Result<(), String> {
+    let mut settings = gl_settings::load().map_err(|e| e.to_string())?;
+    settings.bedrock_marketplace_reminder_dismissed = true;
+    gl_settings::save(&settings).map_err(|e| e.to_string())
+}
+
+/// Reads the auto-backup-every-N-launches setting for the Backups panel.
+#[tauri::command]
+pub fn bedrock_auto_backup_interval() -> Result<i32, String> {
+    Ok(gl_settings::load()
+        .map_err(|e| e.to_string())?
+        .bedrock_auto_backup_every_n_launches)
+}
+
+/// Sets the auto-backup-every-N-launches setting. `0` disables it.
+#[tauri::command]
+pub fn set_bedrock_auto_backup_interval(every_n_launches: i32) -> Result<(), String> {
+    let mut settings = gl_settings::load().map_err(|e| e.to_string())?;
+    settings.bedrock_auto_backup_every_n_launches = every_n_launches.max(0);
+    // Restarting the count on a settings change avoids an immediate backup
+    // firing on the very next launch just because the old counter had
+    // already accumulated toward a since-lowered threshold.
+    settings.bedrock_launches_since_backup = 0;
+    gl_settings::save(&settings).map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 pub fn list_bedrock_screenshots(_instance_dir: String) -> Result<Vec<ScreenshotFile>, String> {
     // C# `BedrockScreenshotService.ComMojangScreenshotsDir` is a static
@@ -242,6 +334,19 @@ pub fn rename_bedrock_instance(
         .lock()
         .map_err(|_| "bedrock instance service lock poisoned".to_string())?;
     svc.rename(&id, &new_name).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn set_bedrock_instance_accent_color(
+    state: State<'_, AppState>,
+    id: String,
+    color: Option<String>,
+) -> Result<(), String> {
+    let mut svc = state
+        .bedrock_instances
+        .lock()
+        .map_err(|_| "bedrock instance service lock poisoned".to_string())?;
+    svc.set_accent_color(&id, color).map_err(|e| e.to_string())
 }
 
 /// Switches the active Bedrock instance, swapping the managed com.mojang

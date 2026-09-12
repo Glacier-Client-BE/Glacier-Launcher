@@ -14,10 +14,33 @@
 //! validating the marker. The caller is expected to perform the actual
 //! file-swap + relaunch using the [`PathBuf`] this returns.
 //!
-//! # TODO
-//! Bulk update-file download is intentionally not implemented here — wire it
-//! to `gl-download` once that crate exists. For now, callers can issue a
-//! plain `reqwest` GET for the release asset (see [`crate::releases`]).
+//! # Adaptation vs. the C# original
+//! `AutoUpdateService.LaunchSwapScript` generates a `.bat` file that waits
+//! for the current process to exit, then `copy /Y`'s a freshly-downloaded
+//! **portable exe** over the running one and relaunches it. That mechanism
+//! assumed the old WPF app shipped as a single portable `.exe` that could
+//! legally be overwritten in place once its file handle was released.
+//!
+//! The Tauri build instead ships as an NSIS installer
+//! (`tauri.conf.json`'s `bundle.nsis`), so "swap the exe" isn't the right
+//! primitive any more — there is no single portable exe to `copy /Y` over;
+//! the installed files live under Program Files / per-user install dir and
+//! are only safely replaced by re-running the installer (which knows how to
+//! update shortcuts, the uninstall registry entry, WebView2 runtime checks,
+//! etc.). So the swap step here is "launch the downloaded installer and
+//! exit the running app so its file locks are released", implemented in
+//! `src-tauri/src/commands/update.rs::install_launcher_update`
+//! (`gl_download::DownloadRequest` bulk-downloads the installer through the
+//! same `DownloadQueue` every other download in the app uses, matching
+//! `AutoUpdateService`'s use of `DownloadService` for the update payload).
+//!
+//! What this module still owns unchanged from the C# original is the
+//! *resumability* contract: if launching the installer fails (e.g. the
+//! previous run's installer process couldn't be spawned, or the running exe
+//! held a lock the installer needs and the attempt was deferred), the
+//! pending-update marker below lets the next launch retry automatically
+//! before showing any UI — exactly mirroring `TryResumePendingUpdate`,
+//! just retrying "spawn the installer" instead of "copy the exe".
 
 use std::path::{Path, PathBuf};
 

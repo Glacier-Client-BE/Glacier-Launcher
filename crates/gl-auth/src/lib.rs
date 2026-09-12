@@ -671,6 +671,34 @@ pub async fn refresh(client: &reqwest::Client, refresh_token: &str) -> Result<Si
     resolve_sign_in(client, &live_token).await
 }
 
+/// Safety margin used by [`token_needs_refresh`], matching the buffer NoRiskClient's
+/// launcher applies before its own Minecraft token expiry (`minecraft_auth.rs`'s
+/// "Minecraft token stale or nearing expiry, initiating proactive refresh" check).
+/// Glacier's own [`LiveToken`]/[`SignInResult`] expiry timestamps are computed with
+/// their own margins baked in (see `parse_live_token_response` and
+/// `resolve_sign_in`'s `+ 23h`), so this is an *additional* caller-side buffer for
+/// deciding whether it's worth refreshing proactively before a launch, rather than
+/// waiting for the token to actually fail.
+pub const PROACTIVE_REFRESH_BUFFER_SECS: i64 = 12 * 3600;
+
+/// Returns `true` when a token expiring at `expiry_unix` (seconds since epoch, as
+/// stored in [`SignInResult::minecraft_access_token_expiry_unix`] or persisted
+/// settings) is already expired or will expire within `buffer_secs`.
+///
+/// Glacier previously had no equivalent of this check anywhere in the launch path
+/// (see `gl-launch/src/java.rs`'s doc comment: "No live MSA token refresh on
+/// launch") — accounts were only ever refreshed reactively, on explicit user
+/// action or after a launch already failed with a stale token. NoRiskClient's
+/// `minecraft_auth.rs` instead re-checks token freshness with a buffer before
+/// every use and refreshes proactively when it's close to expiring. This helper
+/// is the (currently unwired) building block for the same policy here: a caller
+/// with access to the persisted expiry and refresh token (the Tauri command/launch
+/// orchestration layer, not this crate) can call `token_needs_refresh(expiry, now)`
+/// before invoking [`refresh`], instead of only reacting to a launch-time failure.
+pub fn token_needs_refresh(expiry_unix: i64, now_unix: i64) -> bool {
+    expiry_unix <= now_unix.saturating_add(PROACTIVE_REFRESH_BUFFER_SECS)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -866,6 +894,38 @@ mod tests {
         let body = r#"{"username":"...","roles":[],"access_token":"mc-token","token_type":"Bearer","expires_in":86400}"#;
         let parsed: McAuthResponse = serde_json::from_str(body).expect("parse");
         assert_eq!(parsed.access_token.as_deref(), Some("mc-token"));
+    }
+
+    #[test]
+    fn token_needs_refresh_true_when_already_expired() {
+        assert!(token_needs_refresh(1_000, 2_000));
+    }
+
+    #[test]
+    fn token_needs_refresh_true_within_buffer() {
+        let now = 1_000_000;
+        // Expires in 1 hour, well inside the 12h proactive buffer.
+        assert!(token_needs_refresh(now + 3_600, now));
+    }
+
+    #[test]
+    fn token_needs_refresh_false_when_comfortably_valid() {
+        let now = 1_000_000;
+        // Expires in 48 hours, outside the 12h buffer.
+        assert!(!token_needs_refresh(now + 48 * 3_600, now));
+    }
+
+    #[test]
+    fn token_needs_refresh_boundary_at_exact_buffer_is_true() {
+        let now = 1_000_000;
+        assert!(token_needs_refresh(
+            now + PROACTIVE_REFRESH_BUFFER_SECS,
+            now
+        ));
+        assert!(!token_needs_refresh(
+            now + PROACTIVE_REFRESH_BUFFER_SECS + 1,
+            now
+        ));
     }
 
     #[test]

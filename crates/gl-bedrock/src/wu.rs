@@ -22,6 +22,10 @@ use std::fs::File;
 use std::io::Read as _;
 use std::path::Path;
 use std::process::Command as StdCommand;
+#[cfg(windows)]
+use std::os::windows::process::CommandExt as _;
+#[cfg(windows)]
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
 use roxmltree::Document;
 use serde::{Deserialize, Serialize};
@@ -38,7 +42,19 @@ const WUWS_NS: &str = "http://www.microsoft.com/SoftwareDistribution/Server/Clie
 
 /// Device attributes string WU expects, describing a generic retail x64
 /// Windows 10/11 client. Mirrors the C# constant of the same shape.
+///
+/// This is embedded directly into a hand-built XML request body below (the
+/// C# original goes through `XElement`, which escapes automatically). Every
+/// interpolation site must run this through [`xml_escape_amp`] first, since
+/// the raw value contains bare `&` separators that are illegal inside XML text.
 const DEVICE_ATTRIBUTES: &str = "E:BranchReadinessLevel=CBServicingBranch&AttrDataVer=264&FlightRing=Retail&FlightContent=Mainline&InstallLanguage=en-US&OSUILocale=en-US&InstallationType=Client&OSArchitecture=AMD64&OSVersion=10.0.22621.1&OSSkuId=48&App=WU&IsFlightingEnabled=1&IsDeviceRetailDemo=0";
+
+/// Escapes `&` for embedding `DEVICE_ATTRIBUTES` in the hand-built XML
+/// bodies below. Only `&` needs handling — the constant contains no `<`,
+/// `>`, `"`, or `'`.
+fn xml_escape_amp(s: &str) -> String {
+    s.replace('&', "&amp;")
+}
 
 /// A parent/"non-leaf" update ID WU treats as already installed so that
 /// `SyncUpdates` returns only the Minecraft leaf updates under it, instead
@@ -207,6 +223,7 @@ async fn fetch_updates(client: &reqwest::Client, cookie: &str) -> Result<Vec<Upd
         .collect::<Vec<_>>()
         .join("\n");
 
+    let device_attributes = xml_escape_amp(DEVICE_ATTRIBUTES);
     let body = format!(
         r#"<SyncUpdates xmlns="{WUWS_NS}">
             <cookie>
@@ -239,7 +256,7 @@ async fn fetch_updates(client: &reqwest::Client, cookie: &str) -> Result<Vec<Upd
                 <ClientPreferredLanguages/>
                 <ProductsParameters>
                     <SyncCurrentVersionOnly>false</SyncCurrentVersionOnly>
-                    <DeviceAttributes>{DEVICE_ATTRIBUTES}</DeviceAttributes>
+                    <DeviceAttributes>{device_attributes}</DeviceAttributes>
                     <CallerAttributes>Interactive=1;IsSeeker=1;</CallerAttributes>
                     <Products/>
                 </ProductsParameters>
@@ -278,8 +295,13 @@ async fn fetch_updates(client: &reqwest::Client, cookie: &str) -> Result<Vec<Upd
             .and_then(|n| n.text());
 
         if let (Some(id), Some(frag)) = (id, frag) {
-            if !id_map.iter().any(|(existing, _)| existing == id) {
-                id_map.push((id.to_string(), frag.to_string()));
+            // Matches C#'s `idMap[id] = frag` on a `Dictionary<string, string>`:
+            // a repeated ID overwrites the fragment (last-wins) while keeping
+            // the key's original iteration position, rather than the first
+            // occurrence winning.
+            match id_map.iter_mut().find(|(existing, _)| existing == id) {
+                Some((_, existing_frag)) => *existing_frag = frag.to_string(),
+                None => id_map.push((id.to_string(), frag.to_string())),
             }
         }
     }
@@ -304,9 +326,15 @@ async fn fetch_updates(client: &reqwest::Client, cookie: &str) -> Result<Vec<Upd
             continue;
         };
 
+        // Matches `VanillaVersionService`'s `AppxPackageInstallData`
+        // .Descendants("AppxMetadata")` - `AppxMetadata` must be a *child* of
+        // `AppxPackageInstallData`, not merely present anywhere in the
+        // fragment (a plain `.descendants()` search over-matches when a
+        // fragment nests an unrelated `AppxMetadata` element elsewhere).
         let Some(package_moniker) = frag_doc
             .descendants()
-            .find(|n| n.has_tag_name("AppxMetadata"))
+            .find(|n| n.has_tag_name("AppxPackageInstallData"))
+            .and_then(|n| n.children().find(|c| c.has_tag_name("AppxMetadata")))
             .and_then(|n| n.attribute("PackageMoniker"))
         else {
             continue;
@@ -342,6 +370,7 @@ async fn fetch_updates(client: &reqwest::Client, cookie: &str) -> Result<Vec<Upd
 /// `GetExtendedUpdateInfo2` — resolves the actual `.appx` download URL for
 /// a single update ID.
 pub async fn get_download_url(client: &reqwest::Client, update_id: &str) -> Result<Option<String>> {
+    let device_attributes = xml_escape_amp(DEVICE_ATTRIBUTES);
     let body = format!(
         r#"<GetExtendedUpdateInfo2 xmlns="{WUWS_NS}">
             <updateIDs>
@@ -354,7 +383,7 @@ pub async fn get_download_url(client: &reqwest::Client, update_id: &str) -> Resu
                 <XmlUpdateFragmentType>FileUrl</XmlUpdateFragmentType>
                 <XmlUpdateFragmentType>FileDecryption</XmlUpdateFragmentType>
             </infoTypes>
-            <deviceAttributes>{DEVICE_ATTRIBUTES}</deviceAttributes>
+            <deviceAttributes>{device_attributes}</deviceAttributes>
         </GetExtendedUpdateInfo2>"#
     );
 
@@ -380,7 +409,7 @@ pub async fn get_download_url(client: &reqwest::Client, update_id: &str) -> Resu
     Ok(url)
 }
 
-fn detect_channel(package_name: &str) -> &'static str {
+pub fn detect_channel(package_name: &str) -> &'static str {
     if package_name.to_ascii_lowercase().contains("windowsbeta") {
         "Preview"
     } else {
@@ -393,7 +422,7 @@ fn detect_channel(package_name: &str) -> &'static str {
 /// order:
 /// 1. A named `_v1.2.3`/`-v1.2` scheme, bounded by `_`/`-`/end-of-string.
 /// 2. The first bare `\d+\.\d+\.\d+(\.\d+)?` run anywhere in the string.
-fn parse_version_from_package(package_name: &str) -> Option<String> {
+pub fn parse_version_from_package(package_name: &str) -> Option<String> {
     named_scheme_version(package_name).or_else(|| generic_version(package_name))
 }
 
@@ -586,8 +615,11 @@ pub fn extract_appx(zip_path: &Path, dest_dir: &Path) -> Result<()> {
 }
 
 fn run_powershell(script: &str) -> Result<String> {
-    let output = StdCommand::new("powershell.exe")
-        .args(["-NoProfile", "-NonInteractive", "-Command", script])
+    let mut ps_cmd = StdCommand::new("powershell.exe");
+    ps_cmd.args(["-NoProfile", "-NonInteractive", "-Command", script]);
+    #[cfg(windows)]
+    ps_cmd.creation_flags(CREATE_NO_WINDOW);
+    let output = ps_cmd
         .output()
         .map_err(|e| BedrockError::Wu(format!("failed to run powershell.exe: {e}")))?;
     if !output.status.success() {
@@ -633,6 +665,14 @@ pub fn register_version(manifest_path: &Path) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn escapes_ampersands_for_xml_embedding() {
+        assert_eq!(
+            xml_escape_amp("A=1&B=2&C=3"),
+            "A=1&amp;B=2&amp;C=3"
+        );
+    }
 
     #[test]
     fn parses_generic_dotted_version_from_package_moniker() {

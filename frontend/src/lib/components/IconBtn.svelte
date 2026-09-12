@@ -10,6 +10,7 @@
     disabled = false,
     loading = false,
     onClick,
+    onMouseDown,
     children,
   }: {
     icon?: string
@@ -19,6 +20,7 @@
     disabled?: boolean
     loading?: boolean
     onClick?: () => void
+    onMouseDown?: (e: MouseEvent) => void
     children?: Snippet
   } = $props()
 </script>
@@ -34,6 +36,7 @@
     e.stopPropagation()
     onClick?.()
   }}
+  onmousedown={onMouseDown}
 >
   {#if loading}
     <Spinner size={14} />
@@ -46,4 +49,6 @@
 
 <!-- .icon-btn / .icon-btn-ghost are defined in app.css (ported 1:1 from the
      original — confirmed against Home.razor's own `class="icon-btn"` /
-     `class="icon-btn icon-btn-ghost"` markup) — no scoped styles here. -->
+     `class="icon-btn icon-btn-ghost"` markup) — no scoped styles here.
+     `onMouseDown` is an optional pass-through: several call sites stop
+     mousedown propagation to avoid triggering a parent row/card handler. -->

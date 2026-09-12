@@ -11,16 +11,23 @@
    */
   import { invoke } from '@tauri-apps/api/core'
   import PanelHeader from './components/PanelHeader.svelte'
+  import Spinner from './components/Spinner.svelte'
+  import ViewModeToggle from './components/ViewModeToggle.svelte'
+  import { loadViewMode, saveViewMode, type ViewMode } from './viewMode'
 
   let {
     instanceName,
     onBack,
     onToast,
+    embedded = false,
   }: {
     /** `Instances.ActiveInstance.Name`, used only in the section label. */
     instanceName: string
     onBack?: () => void
     onToast?: (message: string, kind?: string) => void
+    /** Phase 8: hosted inside `InstanceDetailView`'s Worlds tab — suppress
+     * the standalone PanelHeader/back-button. */
+    embedded?: boolean
   } = $props()
 
   type JavaWorld = { name: string; path: string; size: number; modified_at: string }
@@ -31,6 +38,12 @@
   /** Port of `_confirmRestore` — the path awaiting a second click, or null. */
   let confirmRestore = $state<string | null>(null)
   let busy = $state(false)
+  let isLoading = $state(true)
+  let backupsViewMode = $state<ViewMode>(loadViewMode('java-backups'))
+  function setBackupsViewMode(m: ViewMode) {
+    backupsViewMode = m
+    saveViewMode('java-backups', m)
+  }
 
   /** Port of `FormatSize` — note this one is `0.#` (ONE decimal), not the
    *  `0.##` used elsewhere in the app. Kept as the original has it. */
@@ -55,6 +68,7 @@
       onToast?.(String(e), 'error')
     } finally {
       confirmRestore = null
+      isLoading = false
     }
   }
 
@@ -98,19 +112,51 @@
   reload()
 </script>
 
-<PanelHeader title="World Backups" {onBack}>
-  {#snippet extraActions()}
-    <button class="btn-sm" onclick={reload} onmousedown={(e) => e.stopPropagation()}>
-      <i class="fa-solid fa-rotate"></i> Refresh
+{#if !embedded}
+  <PanelHeader title="World Backups" {onBack}>
+    {#snippet extraActions()}
+      <button
+        type="button"
+        class="panel-icon-btn {isLoading ? 'spinning' : ''}"
+        disabled={isLoading}
+        onclick={reload}
+        onmousedown={(e) => e.stopPropagation()}
+        data-tooltip="Refresh"
+        aria-label="Refresh"
+      >
+        <i class="fa-solid fa-rotate"></i>
+      </button>
+      <ViewModeToggle mode={backupsViewMode} onChange={setBackupsViewMode} />
+    {/snippet}
+  </PanelHeader>
+{:else}
+  <div class="panel-body-inline-actions">
+    <button
+      type="button"
+      class="panel-icon-btn {isLoading ? 'spinning' : ''}"
+      disabled={isLoading}
+      onclick={reload}
+      data-tooltip="Refresh"
+      aria-label="Refresh"
+    >
+      <i class="fa-solid fa-rotate"></i>
     </button>
-  {/snippet}
-</PanelHeader>
+    <ViewModeToggle mode={backupsViewMode} onChange={setBackupsViewMode} />
+  </div>
+{/if}
 
 <div class="panel-body">
+  {#if isLoading}
+    <div class="versions-loading"><Spinner size={18} /><span>Loading worlds and backups...</span></div>
+  {:else}
   <span class="panel-section-label">Worlds ({instanceName})</span>
   {#if worlds.length === 0}
-    <div class="stats-empty">No worlds in this instance's saves folder yet.</div>
+    <div class="empty-state">
+      <i class="fa-solid fa-globe"></i>
+      <span>No worlds in this instance's saves folder yet.</span>
+    </div>
   {:else}
+    <div class="version-list {backupsViewMode === 'grid' ? 'grid-view' : ''}">
     {#each worlds as w (w.path)}
       <div class="version-row">
         <div class="version-meta">
@@ -127,14 +173,17 @@
         </button>
       </div>
     {/each}
+    </div>
   {/if}
 
   <span class="panel-section-label">Backups</span>
   {#if backups.length === 0}
-    <div class="stats-empty">
-      No backups yet. Backing up a world zips it into the instance's backups folder.
+    <div class="empty-state">
+      <i class="fa-solid fa-clock-rotate-left"></i>
+      <span>No backups yet. Backing up a world zips it into the instance's backups folder.</span>
     </div>
   {:else}
+    <div class="version-list {backupsViewMode === 'grid' ? 'grid-view' : ''}">
     {#each backups as b (b.path)}
       <div class="version-row">
         <div class="version-meta">
@@ -175,5 +224,7 @@
         {/if}
       </div>
     {/each}
+    </div>
+  {/if}
   {/if}
 </div>

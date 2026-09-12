@@ -12,6 +12,11 @@ pub struct BedrockInstance {
     pub directory: String,
     pub created_at: String,
     pub updated_at: String,
+    /// Optional per-instance accent hex color (e.g. "#7289da") shown as a
+    /// small dot/border on the instance card. `None` falls back to the
+    /// global theme accent.
+    #[serde(default)]
+    pub accent_color: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

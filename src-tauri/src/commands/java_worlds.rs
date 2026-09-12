@@ -66,6 +66,32 @@ pub async fn backup_java_world(
     .map_err(|e| e.to_string())?
 }
 
+/// Backs up every world in the active Java instance's `saves/` folder.
+/// Called from the frontend before a Java launch when
+/// `JavaBackupSavesBeforeLaunch` is enabled — there's no single "current"
+/// world to single out ahead of launch (that's chosen from the in-game
+/// world list), so every world gets a fresh backup, matching the safety
+/// intent of the setting. Best-effort per world: one failing world (e.g.
+/// briefly locked) doesn't stop the others from being backed up.
+#[tauri::command]
+pub async fn backup_active_java_world(state: State<'_, AppState>) -> Result<Vec<String>, String> {
+    let dir = active_dir(&state)?;
+    let worlds = worlds::list_worlds(&dir).map_err(|e| e.to_string())?;
+    let stamp = utc_timestamp();
+
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut backed_up = Vec::new();
+        for world in worlds {
+            if let Ok(path) = worlds::backup_world(&dir, Path::new(&world.path), &stamp) {
+                backed_up.push(path.to_string_lossy().into_owned());
+            }
+        }
+        backed_up
+    })
+    .await
+    .map_err(|e| e.to_string())
+}
+
 /// Port of `RestoreBackupAsync`.
 ///
 /// **Destructive**: this replaces the world folder the archive names, which is

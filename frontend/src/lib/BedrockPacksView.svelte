@@ -16,7 +16,7 @@
  */
 import { invoke, convertFileSrc } from '@tauri-apps/api/core'
 import SubTabs from './components/SubTabs.svelte'
-import EditionTabs from './components/EditionTabs.svelte'
+import IconBtn from './components/IconBtn.svelte'
 import type { BedrockInstance } from './settings'
 
 /** Port of Models/BedrockPack.cs (Rust: gl-bedrock model.rs:52). */
@@ -181,11 +181,22 @@ function fileToUrl(path: string | null): string {
 <!-- `.panel-overlay` and `.panel-handle` are supplied once by App.svelte
    around whichever panel is active, so this panel must not emit its own
    or the two nest and render a panel inside a panel. -->
-<div class="panel-header">
+<div class="panel-header has-back">
+  <button
+    type="button"
+    class="panel-back-btn"
+    onclick={onBack}
+    onmousedown={(e) => e.stopPropagation()}
+    data-tooltip="Back"
+    aria-label="Back"
+  >
+    <i class="fa-solid fa-arrow-left"></i>
+  </button>
   <div class="panel-title-wrap">
     <span class="panel-title">Packs</span>
     <div class="panel-title-underline"></div>
   </div>
+  <div class="panel-header-spacer"></div>
   <div class="panel-header-actions">
     <button
       class="panel-icon-btn"
@@ -195,6 +206,7 @@ function fileToUrl(path: string | null): string {
       data-tooltip={packsFolderPath
         ? 'Open folder'
         : 'Open folder — unavailable: the packs folder path is resolved by the game install and is only known once packs are listed'}
+      aria-label="Open folder"
     >
       <i class="fa-solid fa-folder-open"></i>
     </button>
@@ -204,16 +216,9 @@ function fileToUrl(path: string | null): string {
       onclick={refreshBedrockPacks}
       onmousedown={(e) => e.stopPropagation()}
       data-tooltip="Refresh"
+      aria-label="Refresh"
     >
       <i class="fa-solid fa-rotate"></i>
-    </button>
-    <button
-      class="panel-back-btn"
-      onclick={onBack}
-      onmousedown={(e) => e.stopPropagation()}
-      data-tooltip="Back"
-    >
-      <i class="fa-solid fa-chevron-down"></i>
     </button>
   </div>
 </div>
@@ -250,48 +255,39 @@ function fileToUrl(path: string | null): string {
           >
         </div>
         <div class="version-actions">
-          <button
-            class="icon-btn icon-btn-ghost"
-            data-tooltip="Open folder"
-            onclick={() => openBedrockPackFolder(pack)}
-            onmousedown={(e) => e.stopPropagation()}
-          >
-            <i class="fa-solid fa-folder-open"></i>
-          </button>
+          <IconBtn
+            ghost
+            icon="fa-solid fa-folder-open"
+            title="Open folder"
+            onClick={() => openBedrockPackFolder(pack)}
+            onMouseDown={(e) => e.stopPropagation()}
+          />
           {#if confirmDeletePackPath === pack.folder_path}
-            <button
-              class="icon-btn icon-btn-ghost"
-              data-tooltip="Confirm delete"
-              onclick={() => deleteBedrockPack(pack)}
-              onmousedown={(e) => e.stopPropagation()}
-            >
-              <i class="fa-solid fa-check"></i>
-            </button>
-            <button
-              class="icon-btn icon-btn-ghost"
-              data-tooltip="Cancel"
-              onclick={cancelDeletePack}
-              onmousedown={(e) => e.stopPropagation()}
-            >
-              <i class="fa-solid fa-xmark"></i>
-            </button>
+            <IconBtn
+              ghost
+              icon="fa-solid fa-check"
+              title="Confirm delete"
+              onClick={() => deleteBedrockPack(pack)}
+              onMouseDown={(e) => e.stopPropagation()}
+            />
+            <IconBtn
+              ghost
+              icon="fa-solid fa-xmark"
+              title="Cancel"
+              onClick={cancelDeletePack}
+              onMouseDown={(e) => e.stopPropagation()}
+            />
           {:else}
-            <button
-              class="icon-btn icon-btn-ghost"
-              data-tooltip="Delete"
-              onclick={() => confirmDeletePack(pack.folder_path)}
-              onmousedown={(e) => e.stopPropagation()}
-            >
-              <i class="fa-solid fa-trash"></i>
-            </button>
+            <IconBtn
+              ghost
+              icon="fa-solid fa-trash"
+              title="Delete"
+              onClick={() => confirmDeletePack(pack.folder_path)}
+              onMouseDown={(e) => e.stopPropagation()}
+            />
           {/if}
         </div>
       </div>
     {/each}
   {/if}
 </div>
-
-<!-- EditionTabs renders its own `.panel-tabs` wrapper (matching
-     Home.razor's `<div class="panel-tabs">@BedrockTabs(...)</div>`), so it
-     must not be wrapped again here. -->
-<EditionTabs edition="bedrock" active="addons" {onNavigate} />

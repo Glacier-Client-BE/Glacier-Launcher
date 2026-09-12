@@ -7,10 +7,22 @@
 
 use gl_settings::LauncherSettings;
 use std::path::PathBuf;
+use tauri::{AppHandle, Manager};
 
 #[tauri::command]
 pub fn get_launcher_root() -> String {
     gl_settings::launcher_root().display().to_string()
+}
+
+/// Closes the main launcher window after a successful game launch, when
+/// `CloseAfterLaunch` is enabled. Uses `close()` (not `hide()`) — this is an
+/// explicit "close after launch" preference, distinct from `MinimizeToTray`,
+/// which governs the window's own close (X) button instead.
+#[tauri::command]
+pub fn close_launcher_window(app: AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.close();
+    }
 }
 
 #[tauri::command]
@@ -73,14 +85,15 @@ pub fn open_url(url: String) -> Result<(), String> {
         ));
     }
 
-    // `explorer <url>` is the shell-execute path for a URL on Windows, the
-    // same route `UseShellExecute = true` takes. It returns a non-zero exit
-    // code even on success, so the spawn result is all we can check.
-    std::process::Command::new("explorer")
-        .arg(trimmed)
-        .spawn()
-        .map(|_| ())
-        .map_err(|e| e.to_string())
+    // `rundll32 url.dll,FileProtocolHandler <url>` is a robust way to open URLs
+    // on Windows, behaving like `Process.Start` with `UseShellExecute = true`.
+    // It properly handles percent-encoded characters and ampersands without
+    // the escaping issues of `cmd /c start` or the File Explorer bug of `explorer.exe`.
+    let status = std::process::Command::new("rundll32")
+        .args(["url.dll,FileProtocolHandler", trimmed])
+        .status()
+        .map_err(|e| e.to_string())?;
+    if status.success() { Ok(()) } else { Err(format!("start command exited with {status}")) }
 }
 
 #[cfg(test)]

@@ -20,7 +20,6 @@
   import { invoke } from '@tauri-apps/api/core'
   import { onMount } from 'svelte'
   import SubTabs from './components/SubTabs.svelte'
-  import EditionTabs from './components/EditionTabs.svelte'
   import InlineProgress from './components/InlineProgress.svelte'
 
   let {
@@ -200,17 +199,29 @@
   onMount(() => loadClientLibrary(false))
 </script>
 
-<div class="panel-header">
+<div class="panel-header has-back">
+  <button
+    type="button"
+    class="panel-back-btn"
+    onclick={onBack}
+    onmousedown={(e) => e.stopPropagation()}
+    data-tooltip="Back"
+    aria-label="Back"
+  >
+    <i class="fa-solid fa-arrow-left"></i>
+  </button>
   <div class="panel-title-wrap">
     <span class="panel-title">Client Library</span>
     <div class="panel-title-underline"></div>
   </div>
+  <div class="panel-header-spacer"></div>
   <div class="panel-header-actions">
     <button
       class="panel-icon-btn"
       onclick={openSiteUrl}
       onmousedown={(e) => e.stopPropagation()}
       data-tooltip="Indigo-Tools/ClientLibrary on GitHub"
+      aria-label="Open on GitHub"
     >
       <i class="fa-brands fa-github"></i>
     </button>
@@ -220,16 +231,9 @@
       onclick={() => loadClientLibrary(true)}
       onmousedown={(e) => e.stopPropagation()}
       data-tooltip="Refresh"
+      aria-label="Refresh"
     >
       <i class="fa-solid fa-rotate"></i>
-    </button>
-    <button
-      class="panel-back-btn"
-      onclick={onBack}
-      onmousedown={(e) => e.stopPropagation()}
-      data-tooltip="Back"
-    >
-      <i class="fa-solid fa-chevron-down"></i>
     </button>
   </div>
 </div>
@@ -348,6 +352,7 @@
                     <button
                       class="icon-btn icon-btn-ghost"
                       data-tooltip="Remove from resource packs"
+                      aria-label="Remove from resource packs"
                       onclick={() => uninstallClientPack(dl)}
                       onmousedown={(e) => e.stopPropagation()}
                     >
@@ -372,5 +377,3 @@
     {/each}
   {/if}
 </div>
-
-<EditionTabs edition="bedrock" active="addons" onNavigate={(v) => onNavigate?.(v)} />

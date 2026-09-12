@@ -1,13 +1,18 @@
 //! Port of the CRUD/layout portions of `Services/JavaInstanceService.cs`.
 //!
-//! Deviation from the C# original: modpack import/export, world/backup
-//! listing, and mod-toggling helpers are out of scope for this crate (they
-//! belong to higher-level services once `gl-modpack`/UI wiring exists). Only
-//! instance CRUD, layout management, and the active-instance/version/RAM
-//! bookkeeping needed by `JavaGameLauncher` are ported here.
+//! The rest of `JavaInstanceService.cs` is ported elsewhere in this crate:
+//! world/backup/datapack listing lives in [`crate::worlds`], mods-folder
+//! listing/toggling/deleting lives in [`crate::mod_analyzer`], and modpack
+//! overrides extraction / export / import / official-`.minecraft` import
+//! live in [`crate::modpack_transfer`] (all previously missing; ported to
+//! close that gap). `SetActive`/`SetActiveVersion`'s settings-file
+//! bookkeeping is intentionally not duplicated here — it belongs to the
+//! Tauri-side app state that owns `SettingsService`'s Rust equivalent, which
+//! calls `set_instance_version`/`create`/`get` from this service and persists
+//! the active-instance-id itself.
 
 use crate::error::{io_err, JavaError, Result};
-use crate::models::JavaInstance;
+use crate::models::{InstanceSettings, JavaInstance, ModLoaderKind};
 use crate::util::{slug, write_atomic};
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
@@ -127,11 +132,61 @@ impl InstanceService {
             updated_at: now,
             max_ram_mb: 0,
             min_ram_mb: 0,
+            ..Default::default()
         };
         ensure_layout(&instance)?;
         list.push(instance.clone());
         save_index(&self.index_path, &list)?;
         Ok(instance)
+    }
+
+    /// Like [`Self::create`], but also applies a built-in JVM-args template
+    /// (see [`crate::presets`]) by name. An unrecognized/`None` template
+    /// leaves `extra_jvm_args` empty, same as a plain `create`.
+    pub fn create_with_template(
+        &self,
+        name: &str,
+        version_id: &str,
+        template: Option<&str>,
+    ) -> Result<JavaInstance> {
+        let instance = self.create(name, version_id)?;
+        let Some(template) = template else {
+            return Ok(instance);
+        };
+        self.set_instance_jvm_args(&instance.id, crate::presets::args_for(template), Some(template.to_string()))?;
+        self.get(&instance.id)
+            .ok_or_else(|| JavaError::InstanceNotFound(instance.id.clone()))
+    }
+
+    /// Sets the instance's extra JVM args (and, optionally, which built-in
+    /// preset they came from — `None` means "custom"). These are read at
+    /// launch via `LaunchOptions::extra_jvm_args`.
+    pub fn set_instance_jvm_args(
+        &self,
+        id: &str,
+        extra_jvm_args: Vec<String>,
+        preset: Option<String>,
+    ) -> Result<()> {
+        let mut list = self.instances.lock().expect("instance list poisoned");
+        let Some(inst) = list.iter_mut().find(|x| x.id.eq_ignore_ascii_case(id)) else {
+            return Ok(());
+        };
+        inst.extra_jvm_args = extra_jvm_args;
+        inst.jvm_args_preset = preset;
+        inst.updated_at = now_iso();
+        save_index(&self.index_path, &list)
+    }
+
+    /// Sets (or clears, with `None`) the instance's group/folder label,
+    /// following the exact pattern of `rename`/`set_instance_version`.
+    pub fn set_instance_group(&self, id: &str, group: Option<String>) -> Result<()> {
+        let mut list = self.instances.lock().expect("instance list poisoned");
+        let Some(inst) = list.iter_mut().find(|x| x.id.eq_ignore_ascii_case(id)) else {
+            return Ok(());
+        };
+        inst.group = group;
+        inst.updated_at = now_iso();
+        save_index(&self.index_path, &list)
     }
 
     /// Duplicate an existing instance's metadata and copy its directory tree.
@@ -168,6 +223,32 @@ impl InstanceService {
         save_index(&self.index_path, &list)
     }
 
+    /// Sets (or clears, when `color` is `None`/empty) the per-instance accent
+    /// hex color shown as a dot/border on the instance card.
+    pub fn set_accent_color(&self, id: &str, color: Option<String>) -> Result<()> {
+        let mut list = self.instances.lock().expect("instance list poisoned");
+        let Some(inst) = list.iter_mut().find(|x| x.id.eq_ignore_ascii_case(id)) else {
+            return Ok(());
+        };
+        inst.accent_color = color.filter(|c| !c.trim().is_empty());
+        inst.updated_at = now_iso();
+        save_index(&self.index_path, &list)
+    }
+
+    /// Replaces an instance's sync-pack membership list wholesale (mirrors
+    /// `set_instance_group`'s shape). Called by `gl-sync`'s Tauri layer after
+    /// a successful apply/detach, so `JavaInstance.sync_pack_ids` always
+    /// reflects reality without `gl-java` depending on `gl-sync`.
+    pub fn set_instance_sync_packs(&self, id: &str, sync_pack_ids: Vec<String>) -> Result<()> {
+        let mut list = self.instances.lock().expect("instance list poisoned");
+        let Some(inst) = list.iter_mut().find(|x| x.id.eq_ignore_ascii_case(id)) else {
+            return Ok(());
+        };
+        inst.sync_pack_ids = sync_pack_ids;
+        inst.updated_at = now_iso();
+        save_index(&self.index_path, &list)
+    }
+
     /// Delete an instance and its directory. Returns `Ok(false)` (mirroring
     /// the C# `bool` return) if the instance doesn't exist or is the last
     /// remaining instance; the latter case is also exposed as
@@ -192,6 +273,53 @@ impl InstanceService {
             return Ok(());
         };
         inst.version_id = version_id.to_string();
+        inst.updated_at = now_iso();
+        save_index(&self.index_path, &list)
+    }
+
+    /// Replaces an instance's per-instance settings overrides wholesale.
+    /// Callers that want to patch a single field should read
+    /// `get(id).settings`, mutate the clone, and call this with the result.
+    pub fn set_instance_settings(&self, id: &str, settings: InstanceSettings) -> Result<()> {
+        let mut list = self.instances.lock().expect("instance list poisoned");
+        let Some(inst) = list.iter_mut().find(|x| x.id.eq_ignore_ascii_case(id)) else {
+            return Ok(());
+        };
+        inst.settings = settings;
+        inst.updated_at = now_iso();
+        save_index(&self.index_path, &list)
+    }
+
+    /// Sets (or clears, with `None` loader) the instance's mod loader and
+    /// loader version, plus the `versions/<id>` profile directory name the
+    /// loader installer produced.
+    pub fn set_instance_loader(
+        &self,
+        id: &str,
+        loader: Option<ModLoaderKind>,
+        loader_version: Option<String>,
+        loader_profile_id: Option<String>,
+    ) -> Result<()> {
+        let mut list = self.instances.lock().expect("instance list poisoned");
+        let Some(inst) = list.iter_mut().find(|x| x.id.eq_ignore_ascii_case(id)) else {
+            return Ok(());
+        };
+        inst.loader = loader;
+        inst.loader_version = loader_version;
+        inst.loader_profile_id = loader_profile_id;
+        inst.updated_at = now_iso();
+        save_index(&self.index_path, &list)
+    }
+
+    /// Sets (or clears) the instance's preferred account id, an opaque
+    /// reference into `gl_settings::LauncherSettings.java_accounts` — this
+    /// crate has no dependency on gl-settings, so it stores the id blind.
+    pub fn set_instance_account(&self, id: &str, account_id: Option<String>) -> Result<()> {
+        let mut list = self.instances.lock().expect("instance list poisoned");
+        let Some(inst) = list.iter_mut().find(|x| x.id.eq_ignore_ascii_case(id)) else {
+            return Ok(());
+        };
+        inst.preferred_account_id = account_id;
         inst.updated_at = now_iso();
         save_index(&self.index_path, &list)
     }

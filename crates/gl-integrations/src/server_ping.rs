@@ -4,6 +4,21 @@
 //! - Java Edition: raw TCP handshake + status request (SLP), used when
 //!   `port == 25565`.
 //! - Bedrock Edition: RakNet "unconnected ping" over UDP, used otherwise.
+//!
+//! ## Resource pack pre-download (feature 32) — not implemented, by design
+//!
+//! The Server List Ping status response (this module's `ping_java`) carries
+//! only MOTD/players/version — vanilla Java servers do not advertise forced
+//! resource packs, a pack URL, or a pack hash at the ping stage. That
+//! information (`Resource Pack Send` / `Resource Pack Info` for 1.20.3+, or
+//! the pre-1.20.3 plugin-message packet) is only sent by the server *after*
+//! a full login handshake (encryption, compression negotiation, and joining
+//! the play state) — i.e. after the client has actually authenticated and
+//! is joining. Implementing real pre-download would mean speaking the full
+//! login protocol (including session-server auth) just to peek at pack
+//! metadata, which is a materially different and much larger feature than a
+//! ping. We do not attempt that here; a genuine pre-download would need to
+//! be built as part of the join flow instead.
 
 use std::time::{Duration, Instant};
 

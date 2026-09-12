@@ -20,7 +20,7 @@
 
   let autoScroll = $state(true)
   let wrap = $state(false)
-  let autoClose = $state(true)
+  let autoClose = $state(false)
   let autoCloseSecondsLeft = $state<number | null>(null)
   let footerNote = $state('')
   let sharing = $state(false)
@@ -159,7 +159,18 @@
     if (!autoClose) cancelAutoClose()
   }
 
+  let confirmingStop = $state(false)
+
+  function requestStopGame() {
+    confirmingStop = true
+  }
+
+  function cancelStopGame() {
+    confirmingStop = false
+  }
+
   function stopGame() {
+    confirmingStop = false
     append('Stop requested — killing process tree…', 'info')
     invoke('console_stop_game')
   }
@@ -187,7 +198,13 @@
       <button class="pill" onclick={shareLog} disabled={sharing} title="Upload log to mclo.gs and copy the link">
         {sharing ? 'Uploading…' : 'mclo.gs'}
       </button>
-      <button class="pill danger" onclick={stopGame}>Stop</button>
+      {#if confirmingStop}
+        <span class="stop-confirm-label">Stop the running game?</span>
+        <button class="pill danger" onclick={stopGame}>Confirm</button>
+        <button class="pill" onclick={cancelStopGame}>Cancel</button>
+      {:else}
+        <button class="pill danger" onclick={requestStopGame}>Stop</button>
+      {/if}
     </div>
   </header>
 
@@ -318,6 +335,13 @@
   .pill:disabled {
     opacity: 0.6;
     cursor: default;
+  }
+
+  .stop-confirm-label {
+    font-size: 11px;
+    color: #fecaca;
+    margin-right: 2px;
+    white-space: nowrap;
   }
 
   .log {

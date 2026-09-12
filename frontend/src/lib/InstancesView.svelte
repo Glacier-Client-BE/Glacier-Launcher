@@ -15,7 +15,6 @@
   import { invoke } from '@tauri-apps/api/core'
   import PanelHeader from './components/PanelHeader.svelte'
   import SubTabs from './components/SubTabs.svelte'
-  import EditionTabs from './components/EditionTabs.svelte'
   import type { BedrockInstance } from './settings'
 
   let {
@@ -24,7 +23,7 @@
     onToast,
   }: {
     onBack?: () => void
-    onNavigate?: (view: string) => void
+    onNavigate?: (view: string, strip?: string) => void
     onToast?: (message: string, kind?: string) => void
   } = $props()
 
@@ -50,6 +49,9 @@
     return v.channel === 'Preview' ? `${baseName} Preview` : baseName
   }
 
+  // TODO(UI polish feature 38 - drag-and-drop instance reordering): skipped —
+  // no drag library (e.g. svelte-dnd-action) is a dependency in package.json,
+  // and the spec says only attempt this if one is already present.
   let instances = $state<BedrockInstance[]>([])
   let activeInstanceId = $state('')
   let mcVersionsList = $state<VanillaVersion[]>([])
@@ -145,6 +147,16 @@
     }
   }
 
+  /** Feature 40: per-instance accent color, shown as a small dot on the card. */
+  async function onBedrockInstanceAccentChanged(id: string, color: string) {
+    try {
+      await invoke('set_bedrock_instance_accent_color', { id, color: color || null })
+      await loadInstances()
+    } catch (e) {
+      toast(String(e), 'error')
+    }
+  }
+
   function beginRenameBedrockInstance(id: string, current: string) {
     renamingBedrockInstanceId = id
     renameBedrockInstanceValue = current
@@ -225,23 +237,30 @@
   {/snippet}
 </PanelHeader>
 
-<SubTabs strip="versions-instances" active="instances" onNavigate={(k) => onNavigate?.(k)} />
+<SubTabs strip="versions-instances" active="instances" onNavigate={(k, s) => onNavigate?.(k, s)} />
 
 <div class="panel-body">
-  <div class="empty-state" style="padding:14px 16px 4px; text-align:left; align-items:flex-start;">
-    <small
-      >Each instance keeps its own worlds, packs, and local settings. Switching copies the active
-      instance's data out and the new one's data in — give it a moment on large worlds. Optionally
-      pin a downloaded game version per instance in <a
-        href="javascript:void(0)"
-        onclick={() => onNavigate?.('versions')}
-        onmousedown={(e) => e.stopPropagation()}>MC Versions</a
-      > — switching to that instance registers it too.</small
-    >
-  </div>
+  <div class="empty-state align-left">
+  <small
+    >Each instance keeps its own worlds, packs, and local settings. Switching copies the active
+    instance's data out and the new one's data in — give it a moment on large worlds. Optionally
+    pin a downloaded game version per instance in <button
+      type="button"
+      class="link-button"
+      onclick={() => onNavigate?.('versions')}
+      onmousedown={(e) => e.stopPropagation()}>MC Versions</button
+    > — switching to that instance registers it too.</small
+  >
+</div>
   {#each instances as inst (inst.id)}
     {@const isActive = inst.id === activeInstanceId}
-    <div class="instance-row {isActive ? 'active' : ''}">
+    <div
+      class="instance-row {isActive ? 'active' : ''}"
+      style={inst.accent_color ? `--instance-accent: ${inst.accent_color};` : ''}
+    >
+      {#if inst.accent_color}
+        <span class="instance-accent-dot" style="background: var(--instance-accent);"></span>
+      {/if}
       {#if renamingBedrockInstanceId === inst.id}
         <input
           class="setting-input instance-rename"
@@ -282,6 +301,15 @@
             <option value={v.version}>{displayName(v)}</option>
           {/each}
         </select>
+        <input
+          type="color"
+          class="instance-accent-input"
+          value={inst.accent_color || '#7289da'}
+          oninput={(e) => onBedrockInstanceAccentChanged(inst.id, e.currentTarget.value)}
+          onclick={(e) => e.stopPropagation()}
+          data-tooltip="Instance accent color"
+          aria-label="Instance accent color"
+        />
         <button
           type="button"
           class="instance-icon-btn"
@@ -329,4 +357,3 @@
   {/each}
 </div>
 
-<EditionTabs edition="bedrock" active="mcversions" onNavigate={(v) => onNavigate?.(v)} />

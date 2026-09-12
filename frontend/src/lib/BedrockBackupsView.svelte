@@ -12,8 +12,9 @@
  */
 import { invoke } from '@tauri-apps/api/core'
 import SubTabs from './components/SubTabs.svelte'
-import EditionTabs from './components/EditionTabs.svelte'
+import IconBtn from './components/IconBtn.svelte'
 import type { BedrockInstance } from './settings'
+import { formatSize, formatRelativeTime, parentDir } from './format'
 
 let {
   instance,
@@ -44,43 +45,56 @@ let _confirmDeleteBackupPath = $state('')
 let _confirmRestoreBackupPath = $state('')
 let backupLabelInput = $state('')
 
-/** Port of Home.razor.cs:692 `FormatSize`. */
-function formatSize(bytes: number): string {
-  if (!bytes || bytes <= 0) return '0 B'
-  const units = ['B', 'KB', 'MB', 'GB']
-  let value = bytes
-  let unit = 0
-  while (value >= 1024 && unit < units.length - 1) {
-    value /= 1024
-    unit++
-  }
-  return `${value.toFixed(2).replace(/\.?0+$/, '')} ${units[unit]}`
-}
+// Feature 20 — auto-backup-every-N-launches. `0` disables it.
+let autoBackupInterval = $state(0)
+let isSavingAutoBackupInterval = $state(false)
 
-/** Port of Home.razor.cs:677 `FormatRelativeTime`. */
-function formatRelativeTime(iso: string): string {
+// Feature 23 — one-time dismissible marketplace-content reminder.
+let marketplaceReminderDismissed = $state(true)
+
+async function loadAutoBackupInterval() {
   try {
-    const dt = new Date(iso)
-    if (Number.isNaN(dt.getTime())) return ''
-    const diffMs = Date.now() - dt.getTime()
-    const minutes = diffMs / 60000
-    if (minutes < 2) return 'just now'
-    const hours = minutes / 60
-    if (hours < 1) return `${Math.floor(minutes)}m ago`
-    const days = hours / 24
-    if (days < 1) return `${Math.floor(hours)}h ago`
-    if (days < 7) return `${Math.floor(days)}d ago`
-    return dt.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+    autoBackupInterval = await invoke<number>('bedrock_auto_backup_interval')
   } catch {
-    return ''
+    // Best-effort — leave the control at its default.
   }
 }
 
-function parentDir(path: string): string {
-  const idx = Math.max(path.lastIndexOf('\\'), path.lastIndexOf('/'))
-  return idx > 0 ? path.slice(0, idx) : ''
+async function saveAutoBackupInterval() {
+  isSavingAutoBackupInterval = true
+  try {
+    await invoke('set_bedrock_auto_backup_interval', { everyNLaunches: autoBackupInterval })
+    onToast?.(
+      autoBackupInterval > 0
+        ? `Auto-backup will run every ${autoBackupInterval} launch${autoBackupInterval === 1 ? '' : 'es'}.`
+        : 'Auto-backup disabled.',
+      'success',
+    )
+  } catch (e) {
+    onToast?.(String(e), 'error')
+  } finally {
+    isSavingAutoBackupInterval = false
+  }
 }
 
+async function loadMarketplaceReminderDismissed() {
+  try {
+    marketplaceReminderDismissed = await invoke<boolean>('bedrock_marketplace_reminder_dismissed')
+  } catch {
+    marketplaceReminderDismissed = true
+  }
+}
+
+async function dismissMarketplaceReminder() {
+  marketplaceReminderDismissed = true
+  try {
+    await invoke('dismiss_bedrock_marketplace_reminder')
+  } catch (e) {
+    onToast?.(String(e), 'error')
+  }
+}
+
+/** Port of Home.razor.cs:692 `FormatSize`. */
 /**
  * `BedrockBackupService.OpenBackupsFolder` had the backups directory to hand;
  * no Tauri command exposes it, so it is recovered from a listed backup's file
@@ -117,7 +131,6 @@ async function createBedrockBackup() {
       label: label ? label : null,
     })
     onToast?.(`'${path.split(/[\\/]/).pop()}' saved.`, 'success')
-    onToast?.('Backup created.', 'success')
     await refreshBedrockBackups()
   } catch (e) {
     onToast?.(String(e), 'error')
@@ -164,7 +177,6 @@ async function restoreBedrockBackup(backup: BedrockBackup) {
       instanceDir: instance?.directory ?? '',
     })
     onToast?.(`'${backup.name}' was restored. Worlds and packs are back in place.`, 'success')
-    onToast?.('Backup restored.', 'success')
   } catch (e) {
     onToast?.(String(e), 'error')
   }
@@ -184,22 +196,37 @@ $effect(() => {
   instance
   refreshBedrockBackups()
 })
+
+loadAutoBackupInterval()
+loadMarketplaceReminderDismissed()
 </script>
 
 <!-- `.panel-overlay` and `.panel-handle` are supplied once by App.svelte
    around whichever panel is active, so this panel must not emit its own
    or the two nest and render a panel inside a panel. -->
-<div class="panel-header">
+<div class="panel-header has-back">
+  <button
+    type="button"
+    class="panel-back-btn"
+    onclick={onBack}
+    onmousedown={(e) => e.stopPropagation()}
+    data-tooltip="Back"
+    aria-label="Back"
+  >
+    <i class="fa-solid fa-arrow-left"></i>
+  </button>
   <div class="panel-title-wrap">
     <span class="panel-title">Backups</span>
     <div class="panel-title-underline"></div>
   </div>
+  <div class="panel-header-spacer"></div>
   <div class="panel-header-actions">
     <button
       class="panel-icon-btn"
       onclick={openBedrockBackupsFolder}
       onmousedown={(e) => e.stopPropagation()}
       data-tooltip="Open folder"
+      aria-label="Open folder"
     >
       <i class="fa-solid fa-folder-open"></i>
     </button>
@@ -209,16 +236,9 @@ $effect(() => {
       onclick={refreshBedrockBackups}
       onmousedown={(e) => e.stopPropagation()}
       data-tooltip="Refresh"
+      aria-label="Refresh"
     >
       <i class="fa-solid fa-rotate"></i>
-    </button>
-    <button
-      class="panel-back-btn"
-      onclick={onBack}
-      onmousedown={(e) => e.stopPropagation()}
-      data-tooltip="Back"
-    >
-      <i class="fa-solid fa-chevron-down"></i>
     </button>
   </div>
 </div>
@@ -226,6 +246,29 @@ $effect(() => {
 <SubTabs strip="utilities" active="backups" {onNavigate} />
 
 <div class="panel-body">
+  {#if !marketplaceReminderDismissed}
+    <!-- Feature 23: one-time reminder, static UI/copy — no backend beyond a
+         dismissed flag persisted in settings. -->
+    <div
+      class="warning-text"
+      style="display:flex; align-items:center; gap:8px; padding:10px 14px; margin:10px 14px 0;"
+    >
+      <i class="fa-solid fa-circle-info"></i>
+      <span style="flex:1;"
+        >Heads up: marketplace-purchased content (maps, skin packs, texture packs bought in-game)
+        isn't included when you export or back up a world locally — only your own saves and
+        installed add-ons are.</span
+      >
+      <IconBtn
+        ghost
+        icon="fa-solid fa-xmark"
+        title="Dismiss"
+        onClick={dismissMarketplaceReminder}
+        onMouseDown={(e) => e.stopPropagation()}
+      />
+    </div>
+  {/if}
+
   <div style="display:flex; gap:8px; padding:12px 14px 4px;">
     <input
       class="modal-input"
@@ -249,6 +292,30 @@ $effect(() => {
     </button>
   </div>
 
+  <!-- Feature 20: auto-backup-every-N-launches. -->
+  <div style="display:flex; align-items:center; gap:8px; padding:4px 14px 12px;">
+    <label for="auto-backup-interval" class="version-sub">Auto-backup every</label>
+    <input
+      id="auto-backup-interval"
+      class="modal-input"
+      type="number"
+      min="0"
+      step="1"
+      bind:value={autoBackupInterval}
+      onkeydown={(e) => e.stopPropagation()}
+      style="width:70px;"
+    />
+    <span class="version-sub">launch(es) — 0 disables it</span>
+    <button
+      class="btn-sm"
+      disabled={isSavingAutoBackupInterval}
+      onclick={saveAutoBackupInterval}
+      onmousedown={(e) => e.stopPropagation()}
+    >
+      Save
+    </button>
+  </div>
+
   {#if isLoadingBackups}
     <div class="versions-loading"><span class="spinner"></span><span>Loading backups…</span></div>
   {:else if bedrockBackups.length === 0}
@@ -268,63 +335,56 @@ $effect(() => {
         </div>
         <div class="version-actions">
           {#if _confirmRestoreBackupPath === backup.file_path}
-            <button
-              class="icon-btn icon-btn-ghost"
-              data-tooltip="Confirm restore (overwrites current worlds/packs)"
-              onclick={() => restoreBedrockBackup(backup)}
-              onmousedown={(e) => e.stopPropagation()}
-            >
-              <i class="fa-solid fa-check"></i>
-            </button>
-            <button
-              class="icon-btn icon-btn-ghost"
-              data-tooltip="Cancel"
-              onclick={cancelRestoreBackup}
-              onmousedown={(e) => e.stopPropagation()}
-            >
-              <i class="fa-solid fa-xmark"></i>
-            </button>
+            <span class="warning-text">This overwrites your current worlds &amp; packs.</span>
+            <IconBtn
+              ghost
+              icon="fa-solid fa-check"
+              title="Confirm restore (overwrites current worlds/packs)"
+              onClick={() => restoreBedrockBackup(backup)}
+              onMouseDown={(e) => e.stopPropagation()}
+            />
+            <IconBtn
+              ghost
+              icon="fa-solid fa-xmark"
+              title="Cancel"
+              onClick={cancelRestoreBackup}
+              onMouseDown={(e) => e.stopPropagation()}
+            />
           {:else}
-            <button
-              class="icon-btn icon-btn-ghost"
-              data-tooltip="Restore"
-              onclick={() => confirmRestoreBackup(backup.file_path)}
-              onmousedown={(e) => e.stopPropagation()}
-            >
-              <i class="fa-solid fa-clock-rotate-left"></i>
-            </button>
+            <IconBtn
+              ghost
+              icon="fa-solid fa-clock-rotate-left"
+              title="Restore"
+              onClick={() => confirmRestoreBackup(backup.file_path)}
+              onMouseDown={(e) => e.stopPropagation()}
+            />
           {/if}
           {#if _confirmDeleteBackupPath === backup.file_path}
-            <button
-              class="icon-btn icon-btn-ghost"
-              data-tooltip="Confirm delete"
-              onclick={() => deleteBedrockBackup(backup)}
-              onmousedown={(e) => e.stopPropagation()}
-            >
-              <i class="fa-solid fa-check"></i>
-            </button>
-            <button
-              class="icon-btn icon-btn-ghost"
-              data-tooltip="Cancel"
-              onclick={cancelDeleteBackup}
-              onmousedown={(e) => e.stopPropagation()}
-            >
-              <i class="fa-solid fa-xmark"></i>
-            </button>
+            <IconBtn
+              ghost
+              icon="fa-solid fa-check"
+              title="Confirm delete"
+              onClick={() => deleteBedrockBackup(backup)}
+              onMouseDown={(e) => e.stopPropagation()}
+            />
+            <IconBtn
+              ghost
+              icon="fa-solid fa-xmark"
+              title="Cancel"
+              onClick={cancelDeleteBackup}
+              onMouseDown={(e) => e.stopPropagation()}
+            />
           {:else}
-            <button
-              class="icon-btn icon-btn-ghost"
-              data-tooltip="Delete"
-              onclick={() => confirmDeleteBackup(backup.file_path)}
-              onmousedown={(e) => e.stopPropagation()}
-            >
-              <i class="fa-solid fa-trash"></i>
-            </button>
+            <IconBtn
+              ghost
+              icon="fa-solid fa-trash"
+              title="Delete"
+              onClick={() => confirmDeleteBackup(backup.file_path)}
+              onMouseDown={(e) => e.stopPropagation()}
+            />
           {/if}
         </div>
       </div>
     {/each}
   {/if}
 </div>
-
-<EditionTabs edition="bedrock" active="utilities" {onNavigate} />

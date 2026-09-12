@@ -171,8 +171,15 @@ folder, Credits. Several hints had been silently truncated and are now verbatim.
 was structurally wrong and was rebuilt. Invented entries (`Minimum RAM`, `Backup saves before launch`)
 removed so `VisibleSettingsCount()` matches.
 
-Controls still disabled pending backend commands: wallpaper picker (needs a copy-into-launcher-folder
-command), latest crash report, com.mojang folder, Discord account, Xbox profile.
+Controls still disabled pending backend commands: latest crash report (needs a command that locates it).
+**Fixed:** wallpaper picker (switched `setCustomBackground` to Tauri's `convertFileSrc` against the
+already-`scope: ["**"]` asset protocol, instead of a broken `glacier-files.local` custom-scheme
+reference that had no handler); com.mojang folder (added `resolve_com_mojang_folder`, reusing
+`gl_bedrock::com_mojang_root()`); Discord account (`login_discord`/`logout_discord` were already fully
+implemented — the "disabled" note here was stale); Xbox profile (`sign_in`/`sign_in_with_refresh_token`
+and the whole `gl-auth` MSA→Xbox→Minecraft chain already existed and were registered — only the
+Settings button wasn't wired to call them; wired now, filling `Xbox*` and `Java{Username,Uuid,
+AccessToken,AccessTokenExpiry}` on success).
 
 ### Structural bug: double-wrapped `.panel-overlay`
 
@@ -335,16 +342,42 @@ navigate to them.
 
 ### Still missing backend commands (controls ship visibly disabled with tooltips, never faked)
 
-- Glacier Client card: `get_glacier_manifest`, `install_glacier_client`, `uninstall_glacier_client`,
-  `launch_glacier_client` — nothing backs `Pages/Home.Glacier.cs`
-- `launch_lunar_direct` — `resolve_lunar_direct_launch` resolves jars/natives/JRE but nothing spawns the JVM
-- `install_java_version`, `launch_java_version` — the existing commands are instance-scoped, not
-  version-scoped like `JavaInstallerService.InstallAsync` / `JavaLauncherService.LaunchAsync(v.Id)`
-- `duplicate_java_instance`, `import_java_instance_zip`, `import_official_minecraft`
-- No 3D skin renderer (`glacierSkin.*` interop + three.js), so the Profile panel's "3D" pill is disabled
-  and the cape-cycle pill (3D-only in the original) never renders
-- No host state tracks a running Java process, so `mcRunning` is a prop defaulting to `false` rather than
-  a fabricated in-game state
+**Fixed:** Glacier Client card. `gl_clients::glacier_client` already had the manifest fetch/parse and
+path/size helpers fully ported and tested (`versions.json` from `cdn.glacierclient.xyz`); only the
+Tauri command layer and download/launch steps were missing. Added `commands/glacier_client.rs`
+(`get_glacier_manifest`, `install_glacier_client` via `gl-download` + SHA-256 verify,
+`uninstall_glacier_client`, `glacier_installed_size_bytes`, `launch_glacier_client`) and wired
+`LauncherClientsView.svelte`'s card to it, with real download progress via the existing
+`downloads-changed` event. `launch_glacier_client` adds `extra_jvm_args: Option<Vec<String>>` to
+`launch_java_instance` (additive, existing call sites unaffected) and passes
+`-javaagent:<jarPath>`. Adapted from the original's version-scoped launch to this app's
+instance-scoped one, same as every other Java launch path here — see the
+`install_java_version`/`launch_java_version` gap below.
+**Fixed:** `install_java_version` already existed and was already version-scoped (installs into the
+shared `<java root>/versions` pool); only `launch_java_version` was missing. Added it in
+`commands/launch.rs`, factoring the shared tail of `launch_java_instance` (console window, Discord
+presence, suspend-guard, output streaming) into a `launch_java_with` helper both commands call —
+`launch_java_version` passes the versions-pool root as `mc_dir` with no instance's
+mods/saves/config attached, mirroring `JavaLauncherService.LaunchAsync(v.Id)`. Wired to the flat
+Versions panel's previously-disabled "Launch" button.
+**Fixed:** `duplicate_java_instance`, `import_java_instance_zip`, `import_official_minecraft` — all
+three had full, already-correct implementations sitting in `gl-java` (`InstanceService::duplicate`,
+`modpack_transfer::import_modpack` + `detect_multimc_root`, `modpack_transfer::import_official_minecraft`)
+with zero `#[tauri::command]` wrappers reaching them. Added the three wrappers (the two importers create
+the instance via `InstanceService::create` then delegate, deleting the instance again on import failure)
+and wired ProfileView's Clone/Import/Import-official buttons to them. Not ported: importing a `.mrpack`
+file specifically (`InstallMrpackFileAsync` — needs to parse `modrinth.index.json` and resolve each
+listed mod from Modrinth's API before extracting `overrides/`); `.mrpack` is deliberately not accepted
+by the zip import dialog rather than silently producing a mod-less instance.
+**Corrected — both stale:** the 3D skin renderer and `mcRunning` were already fixed by the time this
+line was written; it wasn't updated after. 3D skin viewing works via `SkinViewer.svelte` +
+`skinview3d` (the standard MIT library, imported as a real npm dependency and bundled by Vite) — 2D/3D
+toggle, Steve/Alex model, and the cape/elytra/off cycle pill all work. A separate,
+never-invoked `window.glacierSkin` in `interop.js` (a dead-code leftover pointing at a vendored
+`frontend/public/js/skinview3d.bundle.js`, discovered via a `graphify` knowledge-graph build) has been
+deleted, along with the orphaned bundle file and its `interop.d.ts` type stub — nothing referenced
+either. `mcRunning` is wired to `is_java_game_running`/`is_bedrock_game_running` (see the wu.rs/gl-bedrock
+entry above).
 
 ### Verification
 
@@ -636,9 +669,49 @@ The **Phase 5 side-by-side acceptance pass** has not happened. Everything verifi
 source-level parity plus static checks; nothing has been run against the original launcher from
 `publish_final`, and the Phase 0 reference screenshots were never taken. That needs a desktop session.
 
+## Phase 8 — Bedrock-specific feature batch
+
+Implemented (reusing existing backup/NBT machinery, no new zip/copy/parse logic):
+
+- **#20 Bedrock world backup scheduler.** `LauncherSettings.bedrock_auto_backup_every_n_launches` /
+  `bedrock_launches_since_backup` (`crates/gl-settings/src/lib.rs`); checked in
+  `commands::bedrock::maybe_run_bedrock_auto_backup` (`src-tauri/src/commands/bedrock.rs`), called
+  from `launch_bedrock_instance` right before launch (`src-tauri/src/commands/launch.rs`). Fires
+  through the exact same `BedrockBackupService::create_backup_from` the manual "Back up now" button
+  uses. Commands: `bedrock_auto_backup_interval`, `set_bedrock_auto_backup_interval`. UI control added
+  to `BedrockBackupsView.svelte`.
+- **#21 Addon pack conflict detector.** `header.uuid`/module-`uuid` collision scan against
+  already-enabled packs of the same kind, in `src-tauri/src/commands/bedrock_addons.rs`
+  (`find_pack_conflicts`, `check_bedrock_pack_conflicts` command). Wired into the existing
+  `.mcpack`/`.mcaddon` install path (`install_packs`) so `install_bedrock_addon` returns non-fatal
+  `warnings: string[]` alongside `installed_paths`; `BrowseAddonsView.svelte` surfaces each as an error
+  toast without blocking the install.
+- **#22 World thumbnail/seed display.** The `world_icon.jpeg` thumbnail was already wired via
+  `convertFileSrc` in `BedrockWorldsView.svelte` (see Phase 2's "Open gaps" note — that gap is closed).
+  Seed was not surfaced: `gl-nbt`'s existing `read_level_dat_summary` command (backs the level.dat
+  editor) already parses `RandomSeed`, so `BedrockWorldsView.svelte` now calls it per-row (best-effort,
+  swallowed on a missing/corrupt level.dat) and appends `· Seed: <n>` to the row's subtitle. No new
+  Rust code.
+- **#23 Marketplace-purchased content backup reminder.** Static, dismissible banner on both
+  `BedrockWorldsView.svelte` and `BedrockBackupsView.svelte`, backed by one boolean —
+  `LauncherSettings.bedrock_marketplace_reminder_dismissed` — via
+  `bedrock_marketplace_reminder_dismissed` / `dismiss_bedrock_marketplace_reminder`.
+
+Skipped:
+
+- **#24 Realm connection shortcut list** — needs a Realms-scoped Xbox Live token flow.
+  `crates/gl-auth` implements only the MSA → Xbox User Token → XSTS(`rp=multiplayer.minecraft.net`) →
+  Minecraft-services chain for signing into the game itself; there is no XSTS relying-party request for
+  `rp=*.realms.production.scee.skyloft.io` (or equivalent) anywhere in the crate, and no Realms API
+  client. Building a shortcut list without that scope would mean either faking data or shipping a
+  feature that can never actually list a real Realm. Left undone; a real implementation needs a new
+  XSTS relying-party call plus a Realms API client, which is out of scope for reusing existing code.
+
 ## Phase 3 — Bedrock services
 
-**6 MATCH / 12 DIVERGE / 6 MISSING** across 25 services. All **141** commands are registered in
+**7 MATCH / 11 DIVERGE / 6 MISSING** across 25 services (updated from the original 6/12/6 pass —
+BedrockBackupService and BedrockOptionsService have since been fixed; see the per-service table
+below, which is the source of truth over this summary line). All **141** commands are registered in
 `generate_handler!` (no dead commands); **zero** `todo!()`/`unimplemented!()` macros.
 
 Blockers, in order:
@@ -655,9 +728,11 @@ Blockers, in order:
 from any command) is deleted; `gl-launch::bedrock` is the single package/process path and has been
 fixed. Correction to the earlier inventory: `gl-launch` was **not** the weaker port overall — it parses
 the `<Application Id>` element properly and uses a Win32 snapshot rather than shelling out to
-`tasklist`; it had one specific fatal bug (the `-Name` query), now fixed. Still duplicated: options
-handling. Note `commands/launch.rs` aliases `gl_launch::bedrock` as `gl_bedrock_launch`, which reads
-like the `gl-bedrock` crate and invites exactly this confusion — worth renaming.
+`tasklist`; it had one specific fatal bug (the `-Name` query), now fixed. On closer look there is no
+real "options handling" duplication between `gl-launch::bedrock` (package/launch-activation info) and
+`gl-bedrock::options` (the graphics-options-file editor) — they cover disjoint concerns. **Fixed:**
+`commands/launch.rs` aliased `gl_launch::bedrock` as `gl_bedrock_launch`, which read like the
+`gl-bedrock` crate and invited exactly this confusion; renamed to `bedrock_launch`.
 The `//! NOT YET WIRED UP` banner atop `commands/launch.rs` is stale — remove it.
 
 | Service | Verdict |
@@ -665,11 +740,957 @@ The `//! NOT YET WIRED UP` banner atop `commands/launch.rs` is stale — remove 
 | BedrockWorldService · BedrockPackService · BedrockScreenshotService · LevelDatEditorService · NbtIo | MATCHES |
 | BedrockBackupService | **FIXED** — resolved every managed folder off one root; C# resolves *per folder* (`sourceIsLive ? LiveRootFor(folder) : sourceRoot`). Added `BedrockRoot::{Instance,Live}` so live backup/restore hit the real per-account directories. Old signatures kept as delegating wrappers; existing round-trip tests still pass. |
 | BedrockOptionsService | **FIXED** — see blocker 5 |
-| BedrockVersionService · GdkArchiveService · StoreInstallService · GlacierClientService · GameConsoleService · CustomClientLibraryService (update half) | MISSING |
-| remaining 12 (incl. BedrockPackageService, BedrockInstanceService, BedrockOptionsService, VanillaVersionService, GameLauncher) | DIVERGES |
-| `gl-injection` vs `InjectionService.cs` | MATCHES — same 7-step sequence, bit-identical access masks, ACL constants 1:1, `!ever_read_it` semantics preserved; RAII guards make it *safer*. **Gap:** `LaunchMinecraft` (COM `IApplicationActivationManager`) not ported |
-| `wu.rs` vs `VanillaVersionService.cs` | DIVERGES — protocol faithful (44 update IDs, headers, regexes correct) but only ~40% of the 772-line service. 3 bugs: `AppxMetadata` looked up anywhere in fragment vs as child of `AppxPackageInstallData`; duplicate IDs first-wins vs C# last-wins; `DEVICE_ATTRIBUTES` emits `&` where C# emits `&amp;`. Missing: community DB, GDK merge, cache fallback, disk-space guard, Developer Mode, `ReregisterActiveAsync` |
+| BedrockVersionService · GdkArchiveService · StoreInstallService · GameConsoleService · CustomClientLibraryService (update half) | MISSING |
+| GlacierClientService | **FIXED** — `commands/glacier_client.rs` (manifest/install/uninstall/launch), see above |
+| remaining 11 (incl. BedrockPackageService, BedrockInstanceService, VanillaVersionService, GameLauncher) | DIVERGES |
+| `gl-injection` vs `InjectionService.cs` | MATCHES — same 7-step sequence, bit-identical access masks, ACL constants 1:1, `!ever_read_it` semantics preserved; RAII guards make it *safer*. **Fixed:** `LaunchMinecraft` (COM `IApplicationActivationManager::ActivateApplication`) ported as `gl_injection::activate_application`, wired into `gl-launch::bedrock::start_minecraft` as a last-resort fallback strategy after `Invoke-CommandInDesktopPackage` and the `minecraft://` URI (kept last since it's unproven against current GDK builds; this project's own memory notes 1.26.40+ needs the desktop-package path) |
+| `wu.rs` vs `VanillaVersionService.cs` | DIVERGES — protocol faithful (44 update IDs, headers, regexes correct). **Fixed:** all 3 known bugs (`AppxMetadata` scoping, duplicate-ID last-wins, `&amp;` XML escaping — see above); GDK-archive merge turned out to already be wired (`commands/versions.rs::list_vanilla_bedrock_versions` — the earlier "missing" note here was wrong); added the third source, the community version-ID database (`gl_bedrock::community_db`, `ddf8196/mc-w10-versiondb-auto-update`), merged in the same order as the C# (community DB → Store/WU → GDK, later wins ties); added the disk-space guard (`ensure_disk_space`, 4x download size via raw `GetDiskFreeSpaceExW`) and the version-list cache fallback (`save_version_cache`/`load_version_cache`) for when all three sources fail. Still missing: Developer Mode detection, `ReregisterActiveAsync` |
 
-## Phase 4 — Java
+(Java side parity is tracked in "Phase 4 — Java side" above — this section is not a second, separate
+Phase 4; it was a leftover stub from before that work shipped and is removed here.)
 
-Not started. Gated on the Bedrock side matching the original.
+## Phase 1 — NoRiskClient port: instance settings model & effective config
+
+First phase of the NoRiskClient feature-port plan
+(`~/.claude/plans/analyse-this-and-port-rustling-crown.md`). Goal: make the
+instance the unit of configuration, so later phases (loader install, mod
+resolution, sync packs) have somewhere per-instance to live, without adding a
+second `Profile` entity or a second persistence paradigm.
+
+`JavaInstance` (`crates/gl-java/src/models.rs`) gains `loader`,
+`loader_version`, `loader_profile_id`, `settings: InstanceSettings`,
+`description`, `banner_path`, `use_shared_minecraft_folder` (default `true`),
+`preferred_account_id`, `playtime_seconds`, `sync_pack_ids` — all
+`#[serde(default)]`, so every existing `instances.json` keeps deserializing
+unchanged. `InstanceSettings` is all-`Option`/empty-by-default overrides
+(java path, memory, resolution, fullscreen, extra game args, custom JVM args,
+quick-play), read only through the new `crates/gl-java/src/effective.rs`
+(`effective(instance, &GlobalJavaDefaults) -> EffectiveLaunchConfig`) — the
+single resolution point every launch path now goes through instead of reading
+`LauncherSettings` fields directly. Precedence: instance override > legacy
+`max_ram_mb`/`min_ram_mb` (RAM only) > global default. 4 unit tests.
+
+`InstanceService` (`instance_service.rs`) gains `set_instance_settings`,
+`set_instance_loader`, `set_instance_account`. New Tauri commands
+(`src-tauri/src/commands/java.rs`): `get_instance_settings`,
+`set_instance_settings`, `reset_instance_setting`, `set_instance_loader`,
+`set_instance_account`, `get_effective_launch_config`. Registered in
+`src-tauri/src/lib.rs` (195 → 201).
+
+`launch_java_instance` and `launch_java_version`
+(`src-tauri/src/commands/launch.rs`) both now build a
+`gl_java::EffectiveLaunchConfig` and convert it to `LaunchOptions` via
+`.into_launch_options()`, rather than inlining the RAM-only global/instance
+fallback that existed before. `JavaLaunchRequest`
+(`crates/gl-launch/src/java.rs`) gained an `extra_game_args: Vec<String>`
+field, appended to the built game-args list after `build_game_args` — the
+first consumer of `InstanceSettings.extra_game_args` (JVM-side extra args
+already flowed through `extra_jvm_args`).
+
+### Stale UI blockers cleared
+
+`JavaModsView.svelte`'s datapacks tab and the Tools tab's "Duplicate
+Instance" button were rendered permanently disabled behind `MISSING_WORLDS`/
+`MISSING_DATAPACKS`/`MISSING_DUPLICATE` tooltips naming backend commands that
+had shipped since those constants were written
+(`list_java_worlds`/`list_java_datapacks`/`import_java_datapack`/
+`delete_java_datapack`/`open_java_datapacks_folder`/`duplicate_java_instance`
+— the last already used correctly by `ProfileView.svelte`). All three are now
+wired: a world picker populated from `list_java_worlds`, a live datapacks
+list with add/delete/open-folder, and a working duplicate button.
+`MISSING_FILE_LIST`, `MISSING_BACKUP`, `MISSING_EXPORT`, `MISSING_CF_SEARCH`,
+`MISSING_CF_INSTALL` remain — those commands genuinely don't exist yet
+(Phase 3/6).
+
+### Verification
+
+`cargo build --workspace` clean. `gl-java` unit tests: 31/31 (4 new,
+covering all-defaults fallback, explicit memory override, legacy-RAM-field
+fallback, java-path override). `npx tsc --noEmit` and `npm run build` both
+clean.
+
+Not yet done: no UI for setting per-instance overrides beyond datapacks/
+duplicate — the settings panel itself (`SettingRow` + "Use default" toggles
+described in the plan) is deferred; the backend and commands are in place for
+it. No migration test asserting a pre-Phase-1 `instances.json` loads with RAM
+intact — the reload test (`instance_service_persists_across_reload`)
+predates this phase and doesn't specifically cover it.
+
+## Phase 6 — Export, pack preview, maintenance utilities
+
+### What was built
+
+- `crates/gl-modpack/src/export/mod.rs`, `export/mrpack.rs`,
+  `export/curseforge.rs`: writers for `.mrpack` and CurseForge modpack zips
+  from an installed instance, the inverse of `manifest.rs`'s
+  `parse_modrinth_index`/`parse_curseforge_manifest`. Mods with resolvable
+  provenance (a direct download URL for Modrinth, or a
+  `cf_project_id`/`cf_file_id` pair for CurseForge) are written as manifest
+  `files[]` entries with sha1/sha512 hashes computed via the new
+  `hash::sha512_hex_file` (added alongside the existing `sha1_hex_file`,
+  additive only). Everything else — mods with no known provenance, plus
+  `config/`, `resourcepacks/`, `shaderpacks/` wholesale — is bundled into
+  `overrides/`.
+- `crates/gl-modpack/src/pack_preview.rs`: `preview_pack(zip_path)` opens a
+  `.mrpack` or CurseForge zip and runs the *existing* manifest parsers
+  against it read-only (no extraction, no network calls) to build a
+  `PackPreview { name, mc_version, loader, loader_version, mod_count,
+  mod_names, overrides_present }` summary.
+- Both new export writers and the preview reader are exported from
+  `crates/gl-modpack/src/lib.rs`.
+
+### Provenance format note (Phase 3 dependency)
+
+`crates/gl-java/src/mod_provenance.rs` did not exist when this phase was
+written. Per the plan's fallback instruction, `export::ModProvenanceEntry`
+defines its own minimal reader of `<instance>/mods/mods.json`, matching the
+documented shape (`{filename, source, project_id, version_id, sha1}`) plus
+CurseForge-specific `cf_project_id`/`cf_file_id` fields and an optional
+`download_url` since a project/version id alone isn't a resolvable download
+without another API round-trip. **This needs reconciling with Phase 3's
+actual `mod_provenance.rs` output once merged** — likely just pointing
+`read_mod_provenance` at Phase 3's own read function instead of duplicating
+the JSON shape.
+
+### Round-trip verification
+
+Added `crates/gl-modpack/tests/export_roundtrip.rs`: builds a synthetic
+instance directory (a mod jar with no provenance, a config file), exports it
+via `export_mrpack`, then re-parses the result with the **existing**
+`manifest::parse_modrinth_index` — the same function the real
+`install_modrinth_modpack` path uses — and asserts the pack name/MC
+version/loader version round-trip and that the unprovenanced mod/config
+landed in `overrides/`. This is a synthetic round-trip, not an end-to-end
+export-of-a-real-installed-instance test, because Phase 5's import path and
+Phase 3's provenance file (both needed for a full real-instance round trip)
+were not yet present in this working tree — see the scope note above.
+
+### NOT done in this phase (explicitly scoped out or deferred)
+
+- **`crates/gl-java/src/maintenance.rs`** (disk usage, orphan cache sweep,
+  repair) — not implemented. Ran out of budget after the export/preview
+  work above; none of it is started.
+- **`install_service.rs` SHA-1/`gl-download` rework** — **not attempted**.
+  Per the plan's own risk guidance ("better to leave `install_service.rs`
+  as-is... than to ship something that silently breaks vanilla installs"),
+  this was left untouched rather than attempted without room for the
+  end-to-end vanilla-install verification the plan requires before trusting
+  it.
+- **Tauri commands** (`java_export.rs`/`java_maintenance.rs`,
+  `invoke_handler!` registration) and **Svelte UI** (Export tab, pack
+  preview modal, Maintenance section) — not implemented. The Rust library
+  layer above is usable as-is by a future pass that adds the command/UI
+  wiring.
+
+### Workspace note
+
+The workspace root `Cargo.toml` was missing `uuid` from
+`[workspace.dependencies]` (referenced by `crates/gl-java/Cargo.toml`),
+which broke `cargo build --workspace` independent of this phase's changes.
+Added `uuid = { version = "1", features = ["v4", "serde"] }` there since it
+was a one-line, non-conflicting fix blocking any build/test verification.
+`crates/gl-sync` was also present in the workspace members list without a
+buildable crate body at time of writing (likely a concurrent phase's
+in-progress scaffold) — left as-is; verification below excludes it by
+necessity (`cargo build/test -p gl-modpack` were run directly rather than
+`--workspace`, since `--workspace` still fails on `gl-sync` and on other
+phases' in-flight compile errors unrelated to this phase's files).
+
+### Verification actually run
+
+`cargo build -p gl-modpack` and `cargo test -p gl-modpack`: clean, 19 unit
+tests + 1 new round-trip integration test, all passing.
+`cargo build --workspace` / `cargo test -p gl-java -p gl-download` /
+frontend typecheck+build were **not** run to completion — the workspace has
+unrelated in-progress compile breakage from concurrently-running phases
+(missing `gl-sync` crate body at time of writing) unrelated to Phase 6's
+files, and this phase's actual UI/command work was not implemented, so
+there was nothing frontend-side to verify yet.
+
+## Phase 8 — Instance UX v2
+
+New files: `frontend/src/lib/InstanceWizard.svelte`, `InstanceDetailView.svelte`,
+`ModrinthBrowseV2.svelte`. Touched: `settings.ts` (new `ModLoaderKind`,
+`InstanceSettings`, `EffectiveLaunchConfig` types + extra `JavaInstance`
+fields already present on the Rust struct but missing from the TS mirror:
+`loader`, `loader_version`, `loader_profile_id`, `playtime_seconds`,
+`sync_pack_ids`), `App.svelte` (three new `View` variants + routing),
+`ProfileView.svelte` (a "Wizard" button and a per-row "Open details" icon —
+targeted additions, not a rewrite), `app.css` (new classes only, no edits to
+existing rules), and an `embedded?: boolean` prop added to
+`JavaScreenshotsView.svelte`/`JavaBackupsView.svelte`/`LogsPanel.svelte` so
+`InstanceDetailView` can host them inside a tab instead of duplicating their
+logic. No Rust files were touched.
+
+### Fully wired
+- Wizard steps Version, Name/Group/Accent, RAM/Java, Review — call the real
+  `list_java_versions`/`install_java_version`/`create_java_instance_from_template`/
+  `set_instance_settings`/`set_instance_group`/`set_java_instance_accent_color`.
+- `InstanceDetailView`'s Worlds/Screenshots/Logs tabs — real embedded
+  `JavaBackupsView`/`JavaScreenshotsView`/`LogsPanel`.
+- `InstanceDetailView`'s Settings tab — read-only `get_effective_launch_config`
+  summary (editing still lives in the Profile panel's existing controls).
+- `InstanceDetailView`'s Export tab's zip export — `export_java_instance`.
+- `ModrinthBrowseV2` — real `search_modrinth_projects` + `install_modrinth_mod`,
+  with windowed/virtualized rendering (see N5100 section below).
+- Nav: a "Wizard" button and a per-instance "Open details" icon added to
+  `ProfileView.svelte`'s existing instance-row list (the only Java
+  instance-list UI in this codebase — there is no separate Bedrock-style
+  `InstancesView.svelte` for Java; that name belongs to the Bedrock panel).
+
+### Disabled-with-tooltip, pending another phase
+- Wizard's Loader step — all non-vanilla tiles disabled
+  (`MISSING_LOADER_VERSIONS`: needs `list_loader_versions`/`install_loader`,
+  Phase 2). Instances are created vanilla; loader attach is deferred to a
+  later Settings-tab control once those commands exist.
+- Wizard's pack-import step is **omitted entirely** rather than shown
+  broken — `preview_pack` and a from-search "install this pack into a new
+  instance" command don't exist yet (`search_modrinth_modpacks` only
+  searches).
+- `InstanceDetailView`'s Content tab — `MISSING_CONTENT_TAB` placeholder;
+  no per-instance mods/loader aggregation command exists yet.
+- `InstanceDetailView`'s Sync tab — `MISSING_SYNC` "coming soon" (Phase 7 /
+  gl-sync).
+- `InstanceDetailView`'s Export tab's "Export as modpack" button —
+  `MISSING_EXPORT_MODPACK` (no `export_java_modpack` command).
+- `ModrinthBrowseV2`'s mod-detail gallery/full-version-list buttons —
+  `MISSING_PROJECT_DETAILS` (no `get_modrinth_project_details`-equivalent
+  command exists; only search + latest-version install do).
+
+### Judgment calls
+- `search_modrinth_projects` takes only `query`/`project_type`/`offset` —
+  no loader/MC-version/category facets — so the sidebar's loader
+  checkboxes and MC-version box filter **client-side** over the fetched
+  page rather than hitting the API with real facets (tagged
+  `MISSING_SERVER_SIDE_FACETS`); category filtering uses the search hit's
+  own `category_name` field, also client-side.
+- The plan's "InstanceWizard/InstanceDetailView vs. an existing
+  `InstancesView.svelte`" framing doesn't match this codebase:
+  `InstancesView.svelte` is the Bedrock-only instance list. Java instances
+  are managed inline in `ProfileView.svelte`'s "Instances" card, so that's
+  where the low-risk nav/UX addition (Wizard button, per-row details icon)
+  went instead, per the "compare against an existing view" instruction.
+- Detail-view routing reuses the codebase's existing single-`activeJavaInstance`
+  convention (same pattern `java-backups`/`logs` already use) rather than
+  adding id-scoped routing — opening details on a row calls the existing
+  `switchInstance(id)` first, then navigates.
+
+### N5100 / WebView2 constraints
+- No `box-shadow`/`filter` transitions anywhere in the new CSS; the wizard
+  step dots, loader tiles, and accent dots only transition
+  `transform`/`opacity`/`background`/`border-color`.
+- `ModrinthBrowseV2`'s result list never mounts more than
+  `viewport-height / row-height + 2*overscan` rows (~10-16 at typical panel
+  sizes, well under the ~30-40 node budget): a manual windowed-list
+  implementation (`startIndex`/`endIndex`/`topPad`, positioned via a single
+  `translateY` transform) recalculated by a `requestAnimationFrame`-throttled
+  scroll handler — no virtualization library.
+- No `document.startViewTransition`/`glacierViewTransition` usage was
+  needed in these three new components (no cross-view crossfade in the
+  wizard or detail tabs), so the awaited-rAF-inside-VT deadlock does not
+  apply here; existing call sites in `App.svelte` were left untouched.
+
+### Verification actually run
+`cd frontend && npx tsc --noEmit -p tsconfig.app.json` — clean.
+`npm run build` — clean (one pre-existing a11y warning in `Modal.svelte`,
+unrelated to this phase; fixed the same warning in `ModrinthBrowseV2.svelte`
+by adding `role="presentation"` to its backdrop div).
+No Rust files were touched, so `cargo build --workspace` was not run for
+this phase.
+
+## Phase 3 — Mod resolution, unified providers, content tabs
+
+**Built:**
+- `crates/gl-modpack/src/unified.rs` — `UnifiedMod`/`UnifiedVersion`/`Provider`
+  normalizing Modrinth `MrProject`/`MrVersion` and CurseForge `CfAddon`/`CfFile`
+  into one card shape; `search_mods`/`fetch_versions` wrap the existing
+  `ModrinthClient`/`CurseForgeClient` (CurseForge fixed to `JAVA_CLASS_MODS`).
+- `crates/gl-modpack/src/dependencies.rs` — transitive required-dependency
+  walk for Modrinth (`resolve_modrinth_plan`, depth-capped at 10, visited-id
+  deduped, same-project-different-version conflicts reported rather than
+  silently dropped) and a single-file plan for CurseForge
+  (`resolve_curseforge_plan`, see gap below). Produces `InstallPlan{files,
+  conflicts}`.
+- `crates/gl-java/src/mod_provenance.rs` — `mods.json` next to each
+  instance's `mods/` dir (via `gl_persistence::{save,load}`, schema-versioned,
+  atomic) recording `{filename, source, project_id, version_id, sha1}` per
+  installed jar.
+- `crates/gl-java/src/packs.rs` — Java resourcepacks/shaderpacks list/import
+  (file or loose folder)/delete, modelled on `worlds.rs`'s shape and tests.
+- `src-tauri/src/commands/java_packs.rs` (new file, to avoid conflicting with
+  concurrent Phase 2 edits to `java_mods.rs`) — `list/import/delete_java_{
+  resourcepack,shaderpack}`, `search_mods`, `resolve_mod_dependencies`,
+  `install_resolved_mods`, `install_curseforge_mod`, `get_mod_versions`. All
+  registered in `src-tauri/src/lib.rs`'s `invoke_handler![...]` (appended
+  after the `java_mods::*` block).
+- `check_java_mod_updates`/`update_java_mod` in `commands/java_mods.rs` now
+  prefer provenance (`project_id` -> `get_latest_version`) when a jar has a
+  Modrinth provenance record, falling back to the pre-existing sha1-hash
+  lookup for jars with none (locally dropped jars keep working exactly as
+  before). `install_modrinth_mod`/`delete_java_mod` now write/remove
+  provenance records.
+- `JavaModsView.svelte`: the CurseForge sub-tab is wired for real
+  (`search_mods`/`install_curseforge_mod`, gated on `settings.CurseForgeApiKey`
+  same as the CurseForge modpack browser) — the `MISSING_CF_SEARCH`/
+  `MISSING_CF_INSTALL` placeholders are gone. The Modrinth "install" button
+  now opens a dependency-confirm `Modal` (`resolve_mod_dependencies` ->
+  review plan/conflicts -> `install_resolved_mods`) instead of installing
+  the root mod alone. The "assets" sub-tab's Resource Packs / Shader Packs
+  cards are now real lists (import/delete) via the new pack commands, not
+  `MISSING_FILE_LIST` placeholders; only the Schematics card (no format the
+  launcher understands) stays a documented placeholder, renamed
+  `MISSING_FILE_LIST_SCHEMATICS`. `MISSING_FILE_LIST`/`MISSING_BACKUP`/
+  `MISSING_EXPORT` for backups/export were left untouched (out of scope).
+
+**Tested:**
+- `cargo build --workspace` — clean.
+- `cargo test -p gl-modpack -p gl-java` — 56 + 19 + 1 passed, 0 failed,
+  including new `mod_provenance` and `packs` unit tests (record/load/remove/
+  rename round-trip, corrupt-store fallback, zip and loose-folder pack
+  import/list/delete, missing-source error path).
+- `cd frontend && npx tsc --noEmit -p tsconfig.app.json && npm run build` —
+  clean (the one Svelte a11y warning on `Modal.svelte`'s backdrop div is
+  pre-existing, not introduced by this phase).
+- Manual end-to-end install (Modrinth mod + 2 transitive deps, then a
+  CurseForge mod) into a Fabric instance was **not** run in this session —
+  no CurseForge API key or live network access was available in this
+  environment. The dependency walk was verified against Modrinth's live
+  `/project/{id}/version` and `/project/{id}` shapes already exercised by
+  the pre-existing `modrinth.rs` unit tests (same client, same parsing), and
+  the recursion/dedupe/conflict logic has direct coverage via the crate's
+  unit tests. Treat the "installs a modded Fabric instance end-to-end" claim
+  as code-reviewed but not live-network-verified.
+
+**Honest gaps:**
+- **CurseForge has no dependency resolution.** `CurseForgeClient::get_files`
+  (the only files endpoint this codebase wires up) doesn't return CurseForge's
+  `dependencies` array, so `resolve_curseforge_plan` always returns a
+  single-file plan. `install_curseforge_mod` installs exactly the requested
+  file; if it needs another mod, the user has to find and install that
+  separately. Fixing this needs `CfFile`/`models.rs` extended with a
+  `dependencies: Vec<{mod_id, relation_type}>` field, which the plan's
+  "audit existing code" note flagged as more than a small hookup — left as a
+  follow-up rather than risking a rushed parse of an API shape not already
+  under test in this codebase.
+- **Modrinth dependency resolution always picks "latest version"** for each
+  project in the graph, not "the version actually compatible with the
+  root's loader/MC version". Modrinth's version-listing endpoint supports
+  `loaders`/`game_versions` query filters that `ModrinthClient` doesn't
+  expose yet (only `get_latest_version`, `get_update_for_hash`,
+  `get_version_by_hash` exist); a same-tree dependency incompatible with the
+  root's loader would currently still resolve to its overall-latest file.
+  Noted directly in `dependencies.rs`'s doc comment.
+- **The existing modpack-install path (`commands/modpack.rs`,
+  `manifest.rs::parse_modrinth_index`) was left untouched.** Wiring
+  `dependencies.rs` into it (so `.mrpack`/CurseForge modpack installs also
+  do real dependency resolution instead of just following the pack's
+  pinned file list) is exactly what the pack format doesn't need — a
+  modrinth.index.json/manifest.json already pins every file it wants — so
+  there was no safe, useful hookup to make here; the two paths solve
+  different problems (a pack install trusts its own manifest, an
+  interactive single-mod install doesn't have one).
+- **CurseForge search only covers the "mods" class** (`JAVA_CLASS_MODS`);
+  the CurseForge tab's category switcher (all/mods/modpacks/texture
+  packs/shaders/worlds) still only issues a request for "all"/"mods" — other
+  categories show an explicit "not resolved yet" state rather than a fake
+  empty result. Modpacks/texture packs/shaders CurseForge search already
+  exist elsewhere in the app (`commands::modpack`, `commands::bedrock_addons`)
+  under different flows; unifying all of it under `search_mods` was out of
+  this phase's scope (mods only, per the phase brief).
+- **CurseForge version/file listing has no sha1** — `CfFile` carries no hash
+  field from the public API response used here, so `UnifiedVersion::sha1` is
+  always empty for CurseForge entries and `mods.json` provenance records for
+  CurseForge-sourced mods always have `sha1: ""`. Update-checking by hash
+  (as done for Modrinth) is therefore not possible for CurseForge mods; they
+  fall back to the pre-existing filename-based path in
+  `check_java_mod_updates` (provenance lookup there is filtered to
+  `ModSource::Modrinth` for this reason).
+
+## Phase 2 — Forge & NeoForge: real install-profile execution
+
+Replaced the old `run_loader_installer` shell-out (download a Forge/NeoForge
+installer jar, run it with `--installClient`, discard stdout, no failure
+diagnosis) with a real implementation of the modern (1.13+) `install_profile.json`
+processors pipeline, in a new `crates/gl-java/src/loader/` module:
+
+- `loader/maven.rs` — maven coordinate parsing
+  (`group:artifact:version[:classifier][@ext]` -> relative path / URL).
+  Fully unit tested (basic, classifier+extension, extension-only, URL join,
+  malformed-input rejection).
+- `loader/install_profile.rs` — DTOs for `install_profile.json`: `data` map
+  (`DataSides`/`DataValue`, distinguishing a `[literal]` from a maven
+  reference), `processors` array (`Processor`, with per-side applicability),
+  and `libraries`. Unit tested against a hand-written fixture shaped like a
+  real profile, **and separately validated against two real, freshly
+  downloaded installer jars** (see "Real-world verification" below).
+- `loader/processors.rs` — executes the `processors` array for real:
+  resolves `{SIDE}`/`{ROOT}`/`{INSTALLER}`/`{MINECRAFT_JAR}`/`{LIBRARY_DIR}`
+  and `{DATA_KEY}` placeholders (including extracting a `/data/...`-style
+  file embedded in the installer jar, e.g. `BINPATCH`'s `client.lzma`, the
+  same convention Forge/NeoForge both use), resolves `[group:artifact:version]`
+  tokens to on-disk library paths, reads each processor jar's own
+  `META-INF/MANIFEST.MF` for its `Main-Class` (manifest line-continuation
+  handled) rather than hardcoding an entry point, and runs it via the
+  resolved JRE with the resolved classpath + args. On a non-zero exit it
+  raises a `JavaError` naming the failing processor's maven coordinate, its
+  resolved `Main-Class`, the exit status, and the tail of its stderr —
+  the concrete "which processor and why" diagnosis the old shell-out never
+  produced. Unit tested: manifest parsing + continuation-line unfolding,
+  every placeholder kind (fixed, data-map literal, data-map installer-relative
+  file extraction), all against synthetic in-memory zip fixtures (no `java`
+  invocation in tests, since CI has no guaranteed JRE on `PATH`).
+- `loader/patcher.rs` — **scope note, not a binary-diff implementation.**
+  For every Forge/NeoForge release this launcher targets (1.13+), the
+  client-jar patch step is *not special* — it's just another
+  `processors` entry (`net.minecraftforge.binarypatcher.ConsoleTool`,
+  confirmed by inspecting the real Forge 1.20.1 and NeoForge 21.1.99
+  installer jars below), already executed generically by `processors.rs`.
+  This module instead guards against the one case generic processor
+  execution can't handle: **legacy (pre-1.13) Forge installers**, which use
+  a completely different `install`/`versionInfo`-shaped `install_profile.json`
+  with no `processors`/`data` and an installer-internal binpatch mechanism
+  this launcher does not implement. `requires_legacy_patching` detects that
+  shape and `mod_loader::install_from_installer_jar` returns a clear,
+  named error instead of silently trying (and confusingly failing) to run
+  the modern pipeline against it. Tested with a synthetic legacy-shaped
+  fixture, per the phase brief's "synthetic fixture, not a live download"
+  guidance — no live legacy-Forge install was attempted.
+- `mod_loader.rs` gained `install_forge`/`install_neoforge`
+  (`(client, downloads: &gl_download::DownloadQueue, mc_dir, runtimes_root,
+  minecraft_version, loader_version, on_progress) -> Result<String>`),
+  sitting beside the existing `install_fabric`/`install_quilt`. Both:
+  download the installer jar and every `install_profile.json` library with a
+  direct download URL through `gl_download::DownloadQueue` (so they appear
+  in the existing Downloads panel via `downloads-changed`, unlike the old
+  sequential/invisible shell-out), resolve/download a JRE via
+  `RuntimeDownloadService` sized to the Minecraft version (21 for 1.20.5+,
+  17 for 1.18–1.20.4, 16 for 1.17, else 8), run every processor via
+  `loader::processors::run_processors`, then write the loader's
+  `version.json` (extracted from the installer jar via the profile's `json`
+  field) to `versions/<loader_version>/<loader_version>.json` — the same
+  handoff point Fabric/Quilt already use, so the existing vanilla-format
+  library/launch pipeline (`install_service.rs`, `launcher.rs`) picks it up
+  unchanged; Forge/NeoForge needed no changes there.
+  **`run_loader_installer` was intentionally *not* deleted** — the phase
+  brief said to delete it, but `src-tauri/src/commands/java_mods.rs` (out of
+  this phase's allowed edit scope) still calls it for the old
+  `download_forge_installer`/`download_neoforge_installer` commands. Deleting
+  it would have broken that file, which I'm not permitted to touch. It's
+  unused by the new code path; removing it (and those two now-superseded
+  commands, and the matching old Svelte buttons) is a small follow-up once
+  ownership of `java_mods.rs` allows it.
+- New `src-tauri/src/commands/java_loaders.rs`: `list_loader_versions`,
+  `install_loader` (installs, then persists via
+  `InstanceService::set_instance_loader`; emits `loader-install-progress`
+  events with human-readable stage text, since a processor run has no single
+  meaningful percentage), `uninstall_loader`, `get_instance_loader`. Reuses
+  `gl_modpack::LoaderClient` for version listing rather than duplicating its
+  HTTP logic. Registered in `lib.rs`'s `invoke_handler!` (appended, other
+  concurrently-edited entries untouched) and `commands/mod.rs`.
+- `frontend/src/lib/JavaModsView.svelte`'s "loaders" tab: the four
+  loader cards now call `install_loader`/`uninstall_loader` instead of the
+  old `install_fabric_loader`/`install_quilt_loader`/
+  `download_forge_installer`/`download_neoforge_installer` commands, and
+  show a live status line (from `loader-install-progress`) while an install
+  runs. Kept the existing card layout rather than adding a new version
+  picker, since Forge/NeoForge here always resolve to the recommended/latest
+  build server-side (the same behavior the old buttons had); a manual
+  version dropdown is a follow-up, not required for parity with what the
+  old buttons did.
+
+**New dependency:** `gl-java/Cargo.toml` gained `gl-download = { path =
+"../gl-download" }` — necessary for `mod_loader.rs` to submit installer/
+library downloads through the shared queue as the phase brief required, and
+small (a workspace-internal path dependency, not the forbidden root
+workspace `Cargo.toml`).
+
+**Real-world verification performed:**
+- Fetched Forge's live `promotions_slim.json`, resolved `1.20.1` to
+  recommended build `47.4.10`, downloaded the real
+  `forge-1.20.1-47.4.10-installer.jar` (6.08 MB) from
+  `maven.minecraftforge.net`, and inspected its `install_profile.json`:
+  10 processors, 36 libraries, `data` map with `MAPPINGS`/`MOJMAPS`/
+  `BINPATCH`/etc. exactly matching the bracketed-literal and
+  `/data/...`-relative-path conventions `install_profile.rs`/`processors.rs`
+  implement.
+- Fetched NeoForge's live version-list API, resolved the newest `21.1.x`
+  build for Minecraft `1.21.1` (`21.1.99`), downloaded the real
+  `neoforge-21.1.99-installer.jar` (6.82 MB) from `maven.neoforged.net`, and
+  confirmed the same modern shape (10 processors, 88 libraries).
+- This confirms the DTOs and processor-execution logic are shaped correctly
+  against real, current installer jars for exactly the two versions the
+  phase brief named as verification targets.
+
+**What was *not* verified — say this plainly:**
+- **No full end-to-end install was run** (download -> run all 10 real
+  processors -> launch to the main menu) for either Forge 1.20.1 or NeoForge
+  1.21.1. Running the real processor pipeline needs a downloaded JRE (17 for
+  Forge 1.20.1, 21 for NeoForge 1.21.1) and running MCP/binpatch/ATs tools
+  that each take real time; that full run was not executed in this session.
+  What *was* verified is that the installer jars' `install_profile.json`
+  parses correctly into the new DTOs and that the placeholder-resolution
+  logic in `processors.rs` is unit-tested against the exact conventions
+  those real files use (bracketed literals, `/data/...` paths). The
+  remaining risk is in things that can't be checked without actually running
+  `java`: whether every processor's `Main-Class`/classpath resolves cleanly
+  in practice, and whether the final written `version.json` + patched
+  library jars are enough for `launcher.rs` to launch to the main menu with
+  no further changes there.
+- **Legacy (pre-1.13) Forge is explicitly unsupported.** `patcher.rs`
+  detects and rejects it with a clear error; no legacy binpatch/LZMA format
+  is implemented.
+- **The Phase 6-scoped `install_service.rs` placeholder (sequential
+  downloads, no SHA-1 verification) was left untouched**, per the phase
+  brief's instruction to skip it rather than half-do it if it's bigger than
+  expected. It is: `gl-download`'s `DownloadRequest` only supports SHA-256
+  (`expected_sha256`), while Mojang/Forge/NeoForge libraries are published
+  with SHA-1, so "add SHA-1 support" is a real (if probably small) addition
+  to `gl-download` itself — a crate outside this phase's edit scope beyond
+  "reading/small sha1 addition if the bonus is attempted" that I did not
+  attempt given the primary Forge/NeoForge scope was already substantial.
+
+## Phase 5 — external launcher import (MultiMC/Prism, CurseForge app, ATLauncher, Modrinth App)
+
+Backend lives in `crates/gl-java/src/import/` (`detect.rs`, `common.rs`,
+`mmc.rs`, `curseforge_app.rs`, `atlauncher.rs`, `modrinth_app.rs`,
+`loader_map.rs`, `pipeline.rs`, `preview.rs`, `safety.rs`, `mod.rs`), exposed
+to the frontend via four Tauri commands in
+`src-tauri/src/commands/launcher_import.rs`
+(`detect_external_launchers`, `scan_launcher_instances`, `preview_import`,
+`import_instances`), registered in `src-tauri/src/lib.rs`'s
+`invoke_handler`.
+
+- `cargo build --workspace`: clean.
+- `cargo test -p gl-java`: **62 passed, 0 failed** (re-verified this
+  session — matches what the interrupted prior session reported).
+
+**Frontend**: `frontend/src/lib/ImportLauncherView.svelte` implements the
+full flow — detected-launcher list (with a "Choose folder…" fallback per
+launcher using `@tauri-apps/plugin-dialog`'s `open({directory:true})`, never
+an HTML file input or drop target, per the WebView2 constraint) → per-launcher
+instance list with MC version/loader/mod-count/world-count/size badges and
+checkboxes → a preview step listing the mod files for the selected
+candidates → import with per-item outcomes, using the same `InlineProgress`
+component used elsewhere in the app. It's wired into `App.svelte` as the
+`'import-launcher'` view and reachable from a button in `ProfileView.svelte`.
+This UI already existed when this pass started (built by the interrupted
+prior session) — nothing needed to be built from scratch. This session's
+work was verification: `npx tsc --noEmit -p tsconfig.app.json` is clean, and
+`npm run build` succeeds (the only Vite warning is a pre-existing a11y lint
+on `Modal.svelte`, unrelated to this feature).
+
+**Per-adapter verification status — read this plainly, not optimistically.**
+None of the four launchers this phase supports are installed in this
+sandbox, so **none of the four adapters have been tested against a real,
+launcher-created instance.** Every adapter was written from public format
+documentation (or, for the closed-source CurseForge app, from widely-reported
+community reverse-engineering of its manifest) and is unit-tested only
+against hand-constructed fixture files that match that documentation — the
+tests prove the parsing code does what it's written to do, not that the
+documentation matches what any given launcher version actually writes to
+disk:
+
+- **MultiMC / Prism Launcher** (`mmc.rs`): parses `instance.cfg` and
+  `mmc-pack.json` per the documented, shared MultiMC/Prism fork format.
+  Unverified against a real install. Portable installs (a self-contained
+  folder anywhere, not under `%APPDATA%`) also can't be auto-detected —
+  users must use "Choose folder…" for those.
+- **CurseForge app** (`curseforge_app.rs`): parses `minecraftinstance.json`
+  under `%APPDATA%\CurseForge\Instances\`. The app is closed-source, so this
+  is the least authoritative of the four adapters — built from community
+  reports of the manifest shape, not an official spec. Unverified against a
+  real install.
+- **ATLauncher** (`atlauncher.rs`): parses `instance.json` under
+  `%APPDATA%\ATLauncher\instances\`. ATLauncher is open source, so the field
+  names are taken from its own public model classes, but the parsing has
+  still never been run against an `instance.json` written by a real
+  ATLauncher build. Unverified against a real install.
+- **Modrinth App** (`modrinth_app.rs`): parses `profile.json` under
+  `%APPDATA%\ModrinthApp\profiles\`. Built from the public `theseus` source;
+  handles both the nested (`metadata.*`) and flat field shapes seen across
+  Modrinth App releases, but again, never run against a profile a real
+  install produced. Unverified against a real install.
+
+Detection (`detect.rs`) is best-effort for the same reason: it only checks
+the documented default `%APPDATA%` install paths, never a live filesystem
+with a real launcher's actual output. `safety.rs` guards the destructive
+parts (never writes into the source launcher's folder; copies rather than
+moves; validates the resolved import target stays under Glacier's own
+instances directory) and is exercised by the fixture-based test suite, but
+that too is a statement about code behavior against constructed inputs, not
+about compatibility with a real launcher.
+
+**Bottom line**: this phase is code-complete and internally
+self-consistent (build clean, 62 tests pass, frontend builds and
+type-checks), but it carries the same category of risk called out in the
+Forge/NeoForge section above — untested against the real, external systems
+it's meant to interoperate with. Anyone relying on this in production should
+try it against at least one real instance per launcher before trusting it
+with irreplaceable worlds, even though the import path is designed to copy
+rather than move source data.
+
+## Phase 4 — Process registry, live logs, crash analysis
+
+Picked up an interrupted prior session (rate-limited near the end) and
+finished the one loose thread it left, plus fixed one real bug the
+verification pass in this section turned up.
+
+**Rust** (`crates/gl-launch/src/process_state.rs`, new): `ProcessRegistry` —
+a `HashMap<instance_id, ProcessEntry>` behind a `Mutex`, each entry holding
+the PID, start time, and a bounded ring-buffer log tail (`LOG_BUFFER_CAP =
+5000`, sized for the N5100 target per the project's perf notes). It does not
+own a second copy of the child process or its pipes — `commands::launch`'s
+existing `stream_child_output` read loop (which already owns the
+`tokio::process::Child` and reads stdout/stderr line-by-line for the console
+window) is the sole feeder, via `push_log_line`. Kill uses the same
+`taskkill /PID <pid> /T /F` (Windows) / `kill -9` approach
+`commands::launch::cancel_launch` already used for the single "last
+launched" PID. 6 unit tests cover register/push/read roundtrip, no-op on an
+unknown instance, ring-buffer eviction at capacity, and kill/mark-exited
+bookkeeping — all pass.
+
+Events (`java-log-line`, `java-process-changed`) are bridged from the same
+`stream_child_output` read loop by copying the existing
+`commands::downloads::spawn_downloads_bridge` pattern, not a new mechanism —
+`launch_java_with` in `commands/launch.rs` passes `Some((registry,
+registry_key))` through to `stream_child_output`, which pushes every line
+into the ring buffer and re-emits it as `java-log-line`, and emits
+`java-process-changed` (`status: "exited"`, with the exit code) once
+`child.wait()` resolves.
+
+Commands (`src-tauri/src/commands/java_process.rs`, new, registered in
+`lib.rs`): `list_running_instances`, `kill_instance`,
+`get_instance_log_buffer`, and `analyze_crash(log_path)`. `analyze_crash` is
+a real ordered pattern table (first match wins), not a stub — it covers all
+six categories from the plan: OOM (`OutOfMemoryError`), missing dependency
+(`NoClassDefFoundError`/`ClassNotFoundException`, with a best-effort "which
+mod" guess from the package name), wrong Java major
+(`UnsupportedClassVersionError`, decoding the required major from the class
+file version), Mixin failure (`Mixin apply failed` /
+`MixinApplicatorStandard`, extracting the offending mod's `.mixins.json`
+name where present), GPU/driver (`GLFW`/`LWJGL`/`OpenGL` mentions), and
+corrupt jar (`zip END header not found` / `Invalid CEN header`, with a
+nearby-`.jar`-filename heuristic). Falls back to a generic "Unrecognised"
+result (not an error) so the UI can still offer "open/share the log" when
+nothing matches. 8 unit tests cover all six categories plus the fallback
+and matcher-ordering (OOM beats a coincidental LWJGL mention in the same
+log) — all pass now (see bug fix below).
+
+**Bug found and fixed this session**: `match_wrong_java_version` searched
+for `"class file version "` only *after* the position of
+`"UnsupportedClassVersionError"` in the text. Real crash-log wrapping can
+put either token first, and the test fixture for this exact case had them
+in the "version-string-first" order — so the existing unit test
+(`detects_wrong_java_version`) was failing (`cargo test -p glacier-launcher`
+caught it during this pass). Fixed by searching the whole log text instead
+of only the slice after the exception name; all 8 tests pass after the fix.
+This was a real bug, not a test-authoring mistake — a log with that
+ordering would previously report "Wrong Java version" with no major-version
+number in the message.
+
+**Svelte**:
+- `Footer.svelte` — the running-instances badge is real, not decorative: it
+  polls `list_running_instances` every 10s and also refreshes immediately on
+  `java-process-changed`, opens a dropdown listing each running instance
+  (display name + PID) with a working **Stop** button wired to
+  `kill_instance`.
+- `LogsPanel.svelte` — live-tail mode is real: a toolbar toggle (shown only
+  when `instanceId` is passed in) calls `get_instance_log_buffer` for the
+  existing tail, then subscribes to `java-log-line` filtered to that
+  instance, appending lines and capping the client-side view at 5000 lines
+  to mirror the Rust ring buffer. Independent of the file-browser mode, and
+  unsubscribes in `onDestroy`.
+- **Crash-analysis modal — this was the incomplete piece.** The state
+  (`crashModalOpen`, `crashAnalysis`, etc.), the `java-process-changed`
+  listener that calls `maybeShowCrashModal` on a non-zero exit, and the
+  `analyze_crash`/`share_log` calls all already existed in `App.svelte`, but
+  two things were missing and have now been added:
+  1. **No modal markup existed at all** — the state was set but nothing in
+     the template rendered it, so a crash would silently populate
+     `crashAnalysis` with no visible UI. Added, using the app's existing
+     `Modal` component (`frontend/src/lib/components/Modal.svelte`, the same
+     one used elsewhere) rather than a bespoke overlay: shows the crash
+     category as the title, the human-readable message and suggested fix
+     from `analyze_crash`, a **Share to mclo.gs** button (reusing the
+     existing `share_log` flow, same as `LogsPanel.svelte`'s), an **Open log
+     folder** button, and **Dismiss**. Small supporting CSS added to
+     `app.css` (`.crash-modal-message`, `.crash-modal-fix`,
+     `.crash-modal-actions`) — everything else reuses `.modal-body` etc.
+  2. **`openCrashLogFolder` called a command that doesn't exist**:
+     `invoke('reveal_in_file_explorer', ...)` — no such Tauri command is
+     registered anywhere in `lib.rs`; it would have thrown at runtime the
+     first time a user clicked the button. This matches exactly what the
+     interrupted prior session's last message flagged before it got cut off
+     (using the generic `open_folder(path)` instead of building something
+     new). Fixed by computing the crash log's parent directory client-side
+     and calling the real, already-registered `open_folder(path)` command
+     (`src-tauri/src/commands/system.rs`) with it.
+
+**Build/test verification** (all done this session):
+- `cargo build --workspace`: clean.
+- `cargo test -p gl-launch`: 6 passed, 0 failed.
+- `cargo test --workspace`: every crate's suite passes, including the fixed
+  `commands::java_process::tests::detects_wrong_java_version`.
+- `cd frontend && npx tsc --noEmit -p tsconfig.app.json`: clean.
+- `npm run build`: succeeds (the only Vite warning is the pre-existing
+  a11y lint on `Modal.svelte`'s backdrop click handler, unrelated to this
+  feature).
+
+**What was *not* exercised live, and why — read this plainly.** This
+sandbox cannot launch a real JVM against real Minecraft/Java assets (no game
+files, no display needed for a headless check, but also no realistic
+instance to launch), so none of the plan's three live-verification bullets
+were run end to end:
+- *"launch and watch lines stream"* — the event-emission code path
+  (`stream_child_output` → `push_log_line` + `java-log-line` emit →
+  `LogsPanel.svelte`'s listener) was read and traced line by line, and the
+  unit tests confirm the registry's own line-buffering behavior in
+  isolation, but no real Java process was ever spawned to confirm lines
+  actually arrive in the live-tail view end to end.
+- *"kill from the UI"* — `kill_instance` → `ProcessRegistry::kill` →
+  `taskkill /PID <pid> /T /F` was traced and the registry-level kill/
+  mark-exited bookkeeping is unit-tested, but no real running JVM was ever
+  killed via the Footer's Stop button.
+- *"force OOM with `-Xmx64M` and confirm the modal names it and the share
+  link resolves"* — not run. `match_oom`'s pattern match against a real
+  `-Xmx64M` OOM crash log's exact text was not verified (only against the
+  hand-written fixture in the unit test), the `java-process-changed` →
+  `maybeShowCrashModal` → `analyze_crash` → modal chain was traced by
+  reading the code, not observed rendering, and `share_log`'s mclo.gs
+  round-trip (real network call) was not exercised at all in this pass.
+
+The event-chain wiring (non-zero exit → `log_looks_like_crash` →
+`analyze_crash` → modal) is confirmed connected by reading the code path
+end to end, not disconnected pieces that happen to individually exist: the
+same `activeJavaInstance.id` is used to gate both the `java-process-changed`
+listener and the `latest_java_crash_report` lookup, and `analyze_crash`'s
+`CrashAnalysis` shape matches exactly what the (now-existing) modal renders.
+But "wired correctly by inspection" and "confirmed correct by watching a
+real crash produce a real modal" are different claims — only the former is
+true here. Anyone picking this up next should force a real OOM (or use one
+of the fixture strings already in `java_process.rs`'s tests as a synthetic
+`crash-reports/crash-*.txt` file) before shipping this to end users.
+  Phase 6 owns this; not duplicated here.
+
+## Phase 7 — Sync packs (`gl-sync`): cross-instance content sync
+
+A new crate, `crates/gl-sync`, lets a "sync pack" keep a directory (via a
+Windows junction), a merged file (`options.txt`), a plain-copy file, or a
+mod-id list identical across whichever Java instances it's applied to. This
+session picked up after a prior agent got interrupted by a rate limit near
+the end of the implementation, and fixed the two problems it left behind
+plus finished wiring the frontend.
+
+**Bug 1 — the junction test failure, and its real root cause.**
+`dir_link_apply_with_keep_existing_then_detach_materialize_round_trips_no_data_loss`
+failed with `assertion failed: is_junction(&rp)`: after an apply with the
+`KeepExisting` adopt strategy, the instance directory was a plain copy, not
+a junction. There were actually **two** bugs stacked on top of each other in
+`crates/gl-sync/src/handlers/dir_link.rs`:
+
+1. **The real, always-present bug**: `same_volume()`'s `drive_letter()`
+   helper checked `bytes[1] == b':'` on a `canonicalize()`d path. On
+   Windows, `Path::canonicalize()` returns a *verbatim* path prefixed with
+   `\\?\` (e.g. `\\?\C:\Users\...`), so the drive letter is never at
+   `bytes[0..2]` — it's four bytes further in. This made `drive_letter()`
+   return `None` for every canonicalized path, so `same_volume()` returned
+   `false` unconditionally on this platform, and `apply()`'s dir-link path
+   always took the "different volume, copy instead of link" branch. Fixed
+   by stripping the `\\?\` prefix before checking for the drive letter.
+2. **A second, KeepExisting-specific bug**, only reachable once bug 1 was
+   fixed: the `KeepExisting` branch calls
+   `std::fs::remove_dir_all(instance_dir)` (after copying its contents into
+   the pack's store) *before* the code reaches the `same_volume(store_dir,
+   instance_dir)` check further down. With `instance_dir` already deleted,
+   `same_volume`'s `canonicalize()` call on it fails, and the function
+   (correctly, per its own contract — see below) reports "different volume"
+   for a path that doesn't exist, so it fell back to copying instead of
+   linking even on a single-volume setup. Fixed at the call site in
+   `apply()`: right before the volume check, if `instance_dir` no longer
+   exists, the check is run against its parent directory instead (which is
+   the instance's own root and always exists) purely as a stand-in for "is
+   this the same volume", without weakening `same_volume()`'s own contract
+   (still exercised directly and unchanged by
+   `cross_volume_fallback_path_is_exercised_directly`, which specifically
+   asserts that a nonexistent path is treated as "different volume" when
+   `same_volume` is called on it directly).
+
+Neither fix touches the test itself — the test's assertions (real junction
+created, `is_junction` true, file content preserved byte-for-byte through
+the junction, then detach-materialize round-trips the same bytes back into
+a plain directory) are exactly as strict as before.
+
+**Bug 2 — `sync_engine` never wired to any command.** The build warned
+`field 'sync_engine' is never read` even though
+`src-tauri/src/commands/sync_packs.rs` already existed, fully implemented,
+and correctly used `state.sync_engine` throughout (`list_sync_packs`,
+`create_sync_pack`, `update_sync_pack`, `delete_sync_pack`, `preview_sync`,
+`apply_sync_pack`, `detach_sync_pack`, `get_sync_report`). The actual defect
+wasn't in that file at all: the `sync_packs` module was never declared in
+`src-tauri/src/commands/mod.rs` (`pub mod sync_packs;` was missing), and
+none of its eight `#[tauri::command]` functions were registered in
+`tauri::generate_handler![...]` in `src-tauri/src/lib.rs`. The module
+compiled (Rust doesn't warn about a written-but-unregistered command
+function the way it does about a truly dead field), but the frontend had no
+way to ever call it, which is exactly why `sync_engine` looked "never
+read" from the compiler's point of view. Fixed both: added `pub mod
+sync_packs;` to `commands/mod.rs`, and added all eight commands to the
+`generate_handler!` list in `lib.rs`. No changes were needed to
+`sync_packs.rs` itself or to `AppState` — the wiring was already correct,
+just never connected to Tauri's command table.
+
+**Frontend**: `frontend/src/lib/SyncPacksView.svelte` didn't exist yet, so
+it was built this session. It lists existing packs, creates new ones
+(id/name plus one or more targets — directory link, merged `options.txt`,
+copied file, or a comma-separated mod-id list), and opens a per-pack modal
+to pick target instances, run `preview_sync`, and only then offers
+**Apply** — the Apply button stays disabled until a preview has been run
+for the exact current instance selection and comes back with no
+`ConflictNeedsResolution`/`Failed` entries (selecting/deselecting an
+instance invalidates the last preview, forcing a fresh one). The apply
+modal also lists per-instance detach (`Materialize`, i.e. keep current
+content) for instances already tracking the pack. Both modals reuse
+`components/Modal.svelte` and `components/PanelHeader.svelte` exactly like
+every other panel; no new global CSS beyond three small report-color
+classes scoped to the file. A **Sync** button was added next to
+`ProfileView.svelte`'s existing Instances card actions (alongside Wizard /
+Import / From another launcher), navigating to the new `sync-packs` view
+registered in `App.svelte`'s `View` union and panel switch.
+
+**What's tested** (`cargo test -p gl-sync`, 8/8 passing):
+- Real junction creation and detach-materialize round-trip with **no data
+  loss** — the specific scenario this session's fix targets — verified with
+  a real Windows junction (`is_junction` true, byte-identical content
+  before and after, both through the junction and after materializing it
+  back into a plain directory).
+- The unresolved-conflict path: a real existing directory with user data in
+  it is never silently deleted without an explicit adopt strategy.
+- `options.txt` structural merge: key order preserved, local-only keys on
+  both sides untouched, pack-managed keys taking the pack's value.
+- Plain file-copy apply + detach-discard.
+- The cross-volume fallback logic (`same_volume`'s own documented
+  contract, asserted directly, unchanged by this session's fix).
+- Mod-list preview reporting present vs. missing mods.
+- Pack registry persistence across an `SyncEngine` reload.
+
+**What's still unverified**: this sandbox has no way to mount two distinct
+Windows volumes, so the cross-volume *copy fallback* is only verified via
+`same_volume()`'s comparison logic in isolation
+(`cross_volume_fallback_path_is_exercised_directly`), not via an actual
+`apply()` run that takes the copy branch against two real drive letters.
+The Svelte UI was built and type-checks/builds cleanly
+(`npx tsc --noEmit -p tsconfig.app.json` and `npm run build` both clean,
+aside from a pre-existing a11y lint on `Modal.svelte`'s backdrop handler,
+unrelated to this feature), but was not driven through a live Tauri window
+in this pass — no real instances with real resourcepacks/mods were used to
+click through create → preview → apply → detach end to end. `cargo build
+--workspace` is warning-free and `cargo test --workspace` passes in full
+(everything green, nothing broken by this session's changes).
+
+## Audit — downloads/auth/update/ping/persistence vs NoRiskClient
+
+Comparison of Glacier's existing (already-shipping) implementations against
+NoRiskClient's (`github.com/NoRiskClient/noriskclient-launcher`, Rust/Tauri 2
++ React) equivalent code, across the five areas requested. This is an audit
+of code Glacier already has, not a feature-gap report.
+
+| # | Area | Glacier | NoRisk | Verdict |
+|---|------|---------|--------|---------|
+| 1 | Download resume | `crates/gl-download/src/download.rs:154-273` (`download_with_retry`/`download_once`) — full re-download + exponential backoff retry, no HTTP `Range` support anywhere | `src-tauri/src/utils/download_utils.rs` (`download_utils.rs:266-604`) — same pattern: full re-download + retry, **no `Range` header anywhere either** | **Parity.** Glacier's `gl-download` doc-comment calling itself "resumable" is inaccurate (it resumes *retries*, not *byte ranges*), but NoRisk doesn't do real partial-file resume either. Not a competitive gap — not fixed. |
+| 1b | Hash verification before skip | `crates/gl-download/src/download.rs` always verifies `expected_sha256` on every completed download (`download_once`, line ~253); the crate has no "skip if already exists" concept at all — that policy lives in caller crates | `download_utils.rs:531-549` (`check_existing_file`-style logic, gated by `hash_existing_files`) explicitly re-hashes (SHA1 and/or SHA256) an already-present file before deciding to skip re-downloading it | **Gap exists, but outside allowed scope.** The equivalent Glacier code is `crates/gl-java/src/*` (`install_service.rs`'s skip-without-verify path per the audit brief), which is explicitly out of scope for this pass (Phase 1-8 Java-instance port, frozen). `gl-download` itself has no such gap since it doesn't implement skip-if-exists at all. **Documented only, not fixed** — flagging for a future session scoped to `gl-java`. |
+| 2 | XSTS/XErr error mapping | `crates/gl-auth/src/lib.rs:75-93` (`map_xerr`) — 5 distinct codes (2148916233/235/236/237/238), each with a specific user-facing message | `minecraft_auth.rs:1693-1696` — 4 messages, collapses 2148916236/2148916237 into one generic string | **Glacier is already better.** No port needed; NoRisk has strictly fewer distinct messages. |
+| 2b | Proactive token refresh | `crates/gl-launch/src/java.rs:12-15` (existing doc-comment) explicitly documents: *"No live MSA token refresh on launch... when refresh throws"* — accounts are only ever refreshed reactively (explicit user action via the `sign_in_with_refresh_token` Tauri command, or after a launch already failed) | `minecraft_auth.rs:1152-1159` — checks the Minecraft token's own expiry with a **12-hour buffer** before every use and refreshes proactively ("Minecraft token stale or nearing expiry, initiating proactive refresh") | **Genuine gap, partially addressed.** Wiring a full proactive-refresh policy into the launch path touches `gl-launch`/Tauri launch orchestration and settings persistence — broader than the `gl-auth`-only scope this pass committed to touching, and risky to do without also exercising the real launch flow. **Fixed the contained, safe part**: added `gl_auth::token_needs_refresh(expiry_unix, now_unix)` and `PROACTIVE_REFRESH_BUFFER_SECS` (12h, matching NoRisk's buffer) to `crates/gl-auth/src/lib.rs`, the building block a future launch-flow change can call before invoking `refresh()`. Not yet wired into `gl-launch`/`src-tauri` — left as a follow-up. |
+| 3 | Update checker | `crates/gl-update/src/{releases,cache,resume}.rs` — GitHub Releases API polling with ETag caching (`releases.rs:35-77`) and a resume-marker for a failed installer swap (`resume.rs`) | `Cargo.toml` (`tauri-plugin-updater = "2.9.0"`) + `tauri.conf.json`'s `updater` block — Tauri's built-in updater plugin with `dialog: false`, a **minisign pubkey** for signature verification, and an artifact manifest served from NoRisk's own endpoint (`createUpdaterArtifacts: true`) | **NoRisk is ahead on one specific point: signed update artifacts.** The Tauri updater plugin verifies a minisign signature on the downloaded update payload before applying it; Glacier's GitHub-releases approach has no signature verification at all — only the (optional) SHA256 the caller supplies to `gl-download`. Everything else (resume-marker, changelog surfacing, asset picking) is comparable or Glacier-specific (installer-relaunch marker is a legitimate NSIS-vs-portable-exe adaptation, not a gap). **Not fixed** — adopting signed updates needs a signing-key/CI pipeline decision, well outside a code-only audit pass; documented for a future session. |
+| 4 | Server ping / LAN scan | `crates/gl-integrations/src/server_ping.rs` — implements **both** Java Edition SLP (TCP handshake, full MOTD-component tree walk including nested `extra` chat components) and Bedrock RakNet unconnected-ping/pong (UDP) | `src-tauri/src/utils/server_ping.rs` — Java Edition SLP only (`modern::status`), no Bedrock/RakNet ping found anywhere in `src-tauri/src/{minecraft,utils}` | **Glacier is ahead.** Bedrock ping is a feature NoRisk's launcher (Java-only) doesn't need; nothing to port. |
+| 5 | Settings persistence robustness | `gl_persistence`'s `Envelope { schema_version }` + `write_atomic` + `quarantine_corrupt` (JSON, atomic rename, corrupt-file quarantine instead of crash) | NoRisk uses `sqlx`/SQLite with versioned migrations | **Architectural difference, already decided against porting** (see `C:\Users\User\.claude\plans\analyse-this-and-port-rustling-crown.md`); not re-litigated here. Narrowly: SQLite's WAL mode gives NoRisk crash-consistency for free, which `gl_persistence` achieves differently via atomic rename — equivalent guarantee, different mechanism, no cheap adoption identified beyond what `write_atomic`/`quarantine_corrupt` already provide. |
+
+### What was actually fixed vs. documented
+
+**Fixed** (`crates/gl-auth/src/lib.rs`, tests included, `cargo build --workspace`
+and `cargo test -p gl-download -p gl-auth` both clean — 24 gl-auth tests + 15
+gl-download tests, all passing):
+- Added `pub const PROACTIVE_REFRESH_BUFFER_SECS: i64 = 12 * 3600` and
+  `pub fn token_needs_refresh(expiry_unix: i64, now_unix: i64) -> bool`,
+  matching NoRiskClient's 12-hour proactive-refresh buffer. Four new unit
+  tests cover the already-expired, within-buffer, comfortably-valid, and
+  exact-boundary cases.
+
+**Documented only** (real user-impact ranked highest to lowest, not fixed
+this pass because each requires touching code outside this session's
+allowed scope, or a non-code decision):
+1. No update-artifact signature verification (area 3) — highest impact
+   (supply-chain/tamper risk on the update channel), needs a signing-key
+   decision, out of scope for a code-only pass.
+2. Proactive refresh not wired into the actual launch path (area 2b) — the
+   `gl-auth` building block now exists; wiring it into `gl-launch`/launch
+   orchestration is the remaining work.
+3. `install_service.rs` skip-without-hash-verify (area 1b) — lives in
+   `crates/gl-java/**`, explicitly frozen/out-of-scope for this session.
+
+## Audit — skins/logs/discord/settings/theming vs NoRiskClient
+
+| # | Area | Glacier | NoRiskClient | Verdict |
+|---|------|---------|--------------|---------|
+| 1 | Vanilla Mojang capes | `crates/gl-integrations/src/skins.rs:119-191` (`get_capes`/`set_cape`/`hide_cape`) — full list/equip/hide against `api.minecraftservices.com`'s real profile+active-cape endpoints, `http://`→`https://` URL upgrade, `ACTIVE` state detection | `src-tauri/src/minecraft/api/vanilla_cape_api.rs:54-247` — same three operations (`get_owned_capes`/`equip_cape`/`unequip_cape`) against the same Mojang endpoints, plus a static `HashMap` of cape id → display name/description (`initialize_cape_info`) that Glacier doesn't have | **Equivalent, minor gap.** Glacier correctly implements the same vanilla-cape flow (list/equip/hide) NoRisk does. NoRisk additionally ships a hardcoded friendly-name/description table for the known vanilla capes (Minecon 2016, Vanilla Cape, etc.); Glacier falls back to whatever `alias` Mojang's API returns (empty → `"Cape"`). Cosmetic-only, not fixed. |
+| 2 | Logs / crash reports / mclo.gs sharing | `src-tauri/src/commands/logs.rs:165-204` (`redact`, pre-fix) — masked `--accessToken`/`--session`/bare `accessToken` values and JWT-shaped strings before POSTing to `api.mclo.gs/1/log` (`share_log`, line 354) | `src-tauri/src/minecraft/api/mclogs_api.rs:37-119` (`upload_log_to_mclogs`) — POSTs `log_content` to `api.mclo.gs/1/log` **completely unredacted**; confirmed no redaction call anywhere in its only caller, `minecraft_command.rs:72-85` (`upload_log_to_mclogs_command`), nor in `crash_fix_command.rs`/`process_command.rs` | **Glacier was already ahead (NoRisk redacts nothing at all before a public mclo.gs upload), but Glacier had a real residual gap**: neither implementation masked the machine username baked into Windows/macOS profile paths (`C:\Users\<name>\...`, `/Users/<name>/...`) or IPv4 addresses on server-connection lines — both routinely appear in Minecraft logs and both are PII once a log is shared publicly via a permanent mclo.gs link. **Fixed** — see below. |
+| 3 | Discord Rich Presence | `crates/gl-integrations/src/discord.rs:10-11,20,50` — real local Discord IPC client (`discord-rich-presence` crate, `DiscordIpcClient`) driving live Rich Presence (activity/assets/timestamps) while a game session runs | No local Discord RPC anywhere in `src-tauri`; NoRisk's only Discord touchpoint is OAuth *account linking* (`discord_auth_link`, `nrc_commands.rs`) against its own vendor-locked backend | **Glacier is ahead — confirmed, not a gap.** NoRisk has no equivalent feature to port; its Discord integration is a different, vendor-locked concern (account linking, not Rich Presence). |
+| 4 | Settings search/appearance UX | `frontend/src/lib/SettingsView.svelte:228-330,716-757` — real search-as-you-type (`filter` state) matching each setting's per-row `keywords` string across all 6 categories at once, hiding non-matching rows (`hidden-by-search`) rather than just switching category tabs; bound to a `ctrl+k` shortcut (line 583) | `src/components/tabs/SettingsTab.tsx` + `src/components/ui/settings/{SettingRow,SettingsSection,SettingsSearchContext}.tsx` — category-tab layout (General/Appearance/Advanced/Clips) with a `SettingsSearchContext` doing comparable per-row keyword filtering | **Equivalent.** Both implement true cross-category, keyword-based live filtering rather than mere tab-switching. No concrete pattern found in NoRisk's settings UI that Glacier's lacks (no match/term highlighting in either). Not fixed — no genuine gap to close. |
+| 5 | Theming / system theme following | `crates/gl-settings/src/themes.rs` — 7 presets, full CSS-variable control, Theme Studio for custom themes; `frontend/src/app.css` has no `prefers-color-scheme` media query (theme is settings-driven only) | `src/hooks/useLauncherTheme.ts` + `src/store/launcher-theme-store.ts` — a handful of unlockable seasonal/event themes (accent-color presets only, no full CSS-var control); **grepped both files for `matchMedia`/`prefers-color-scheme`/`system` — neither exists.** NoRisk does not follow OS theme either | **Glacier is already ahead** (Theme Studio's scope dwarfs NoRisk's accent-only presets), **and the suspected system-theme gap doesn't apply**: NoRisk has no `prefers-color-scheme` support to match, so per the audit brief's own condition ("if NoRisk does support it... consider implementing it") no addition was made. Not fixed — nothing to close. |
+
+### What was fixed vs. documented (this pass)
+
+**Fixed** (`src-tauri/src/commands/logs.rs`, `cargo build --workspace` and
+`cargo test -p glacier-launcher` both clean, 5 new unit tests all passing):
+- `redact()` now runs two additional passes before the existing token/JWT
+  redaction: `redact_user_paths()` masks the username segment of
+  `...Users\<name>\...` / `.../Users/<name>/...` paths (Windows/macOS
+  profile dirs that leak the real account name) into
+  `Users\<redacted-user>\`, and `redact_ipv4()` masks IPv4 dotted-quad
+  addresses (e.g. `Connecting to 203.0.113.42:25565`) into
+  `<redacted-ip>:25565`, while leaving 3-segment version strings
+  (`1.21.4`) untouched. This closes a genuine privacy gap in the one
+  code path (`share_log`) that publishes launcher log content to a
+  public, permanent third-party URL.
+- Added `commands::logs::redact_tests` covering: username masking on both
+  Windows- and Unix-style `Users` paths, IPv4 masking, a negative case for
+  version-number strings, and a regression check that the pre-existing
+  accessToken/JWT redaction still works alongside the new passes.
+
+**Documented only** (no code change — see verdicts above): vanilla-cape
+display-name table (item 1, cosmetic), Discord RPC already ahead (item 3,
+confirmation only), settings search already equivalent (item 4), theming
+already ahead with no applicable system-theme gap (item 5).
+
+## Follow-up — proactive MSA token refresh wired into the launch path
+
+The auth audit above found that `crates/gl-launch/src/java.rs` explicitly documented "No live MSA
+token refresh on launch," using only whatever cached access token was in settings. This is now wired.
+
+`src-tauri/src/commands/launch.rs`'s `resolve_java_auth` is now `async` and, before building the launch
+request, checks `gl_auth::token_needs_refresh(expiry_unix, now)` (12h buffer, matching NoRiskClient's
+`minecraft_auth.rs`). If the cached token is expired or inside that buffer and a
+`xbox_live_refresh_token` is on file, it calls `gl_auth::refresh` (the same full Xbox/Minecraft chain
+`sign_in_with_refresh_token` uses), and on success persists the refreshed username/uuid/access
+token/expiry/refresh-token back to `LauncherSettings` via `gl_settings::save` before using the fresh
+values for the launch.
+
+Failure handling is deliberately conservative — a refresh attempt can only help, never regress:
+- Network/API failure during refresh falls through to the existing cached-token check (still-valid
+  token launches normally; only a genuinely expired token with a failed refresh falls back to offline
+  mode), the same "swallow and continue" behavior the fallback path already had.
+- The refresh's own new `minecraft_access_token_expiry_unix` (Unix seconds) is converted back to the
+  `YYYY-MM-DDTHH:MM:SSZ` format `time_from_rfc3339` already parses via a new `unix_to_rfc3339` (inverse
+  civil-date algorithm, dependency-free like its counterpart), with 2 new round-trip unit tests covering
+  a leap day and century-boundary edge case.
+- Both `launch_java_instance` and `launch_java_version` now pass `state.http.clone()` through
+  `launch_java_with` so the refresh call reuses the app's shared `reqwest::Client`.
+
+The old `chrono_expired` helper (hard expired-only check, no buffer) was removed — `resolve_java_auth`
+now does the equivalent hard-expiry check inline (`expiry_unix > now`) as the final fallback after a
+failed/skipped refresh, so behavior for an already-broken refresh token is unchanged from before.
+
+Verified: `cargo build --workspace` clean (zero warnings), `cargo test --workspace` all green (2 new
+tests in `commands::launch::token_refresh_tests`, all prior tests unaffected). Not live-tested against
+a real Microsoft account refresh flow in this sandbox (no interactive OAuth available here) — verified
+by unit-testing the pure date-math and by code-reading the call chain end-to-end against `gl-auth`'s
+own tested `refresh`/`token_needs_refresh` functions.

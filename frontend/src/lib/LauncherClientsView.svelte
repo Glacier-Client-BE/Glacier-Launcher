@@ -1,7 +1,9 @@
 <script lang="ts">
+  import { onMount, onDestroy } from 'svelte'
   import { invoke } from '@tauri-apps/api/core'
+  import { listen, type UnlistenFn } from '@tauri-apps/api/event'
   import PanelHeader from './components/PanelHeader.svelte'
-  import EditionTabs from './components/EditionTabs.svelte'
+  import InlineProgress from './components/InlineProgress.svelte'
 
   /**
    * 1:1 port of the `javaclients` panel - `Pages/Home.razor:4849-5017`
@@ -15,16 +17,11 @@
    * bottom tab strip with `launchers` active. The original has NO separate
    * Badlion card and NO empty state - a previous rewrite invented both.
    *
-   * Backend reality check - `detect_lunar_badlion` and `launch_client_exe`
-   * exist in `src-tauri/src/lib.rs`; nothing backing `Home.Glacier.cs` does,
-   * and there is no command that spawns the direct-launch JVM. Per the
-   * porting rules those controls are rendered visibly disabled with an
-   * explanatory tooltip rather than faked.
+   * `detect_lunar_badlion`, `launch_client_exe`, `launch_lunar_direct`, and
+   * now `get_glacier_manifest`/`install_glacier_client`/
+   * `uninstall_glacier_client`/`launch_glacier_client` all exist in
+   * `src-tauri/src/lib.rs`.
    */
-  const MISSING_GLACIER =
-    'Unavailable: needs get_glacier_manifest / install_glacier_client / launch_glacier_client commands'
-  const MISSING_LUNAR_DIRECT = 'Unavailable: needs a launch_lunar_direct command'
-
   let {
     onBack,
     onNavigate = () => {},
@@ -34,6 +31,139 @@
     onNavigate?: (view: string) => void
     onToast?: (message: string, kind?: string) => void
   } = $props()
+
+  type GlacierVersion = {
+    id: string
+    name: string
+    releaseDate: string
+    tag: string
+    url: string
+    sha256: string
+    fabric: boolean
+    forge: boolean
+    javaVersion: number
+    changelog: string
+  }
+  type GlacierManifest = {
+    schemaVersion: number
+    latestRelease: string
+    releaseDate: string
+    versions: GlacierVersion[]
+  }
+
+  let glacierManifest = $state<GlacierManifest | null>(null)
+  let glacierLoading = $state(false)
+  let glacierError = $state('')
+  let glacierBusy = $state(false)
+  let glacierInstalled = $state(false)
+
+  const glacierLatest = $derived.by(() => {
+    if (!glacierManifest) return null
+    return (
+      glacierManifest.versions.find((v) => v.id === glacierManifest!.latestRelease) ??
+      glacierManifest.versions[0] ??
+      null
+    )
+  })
+
+  /** Live download queue, for real progress on the Glacier install. */
+  type QueueEntry = { id: string; label: string; status: string; progress: number }
+  let queue = $state<QueueEntry[]>([])
+  let unlistenQueue: UnlistenFn | undefined
+  const glacierProgress = $derived(
+    glacierLatest
+      ? (queue.find((e) => e.label === `Glacier ${glacierLatest!.name}` && e.status === 'Downloading')
+          ?.progress ?? 0)
+      : 0,
+  )
+
+  onMount(() => {
+    listen<QueueEntry[]>('downloads-changed', (e) => {
+      queue = e.payload
+    }).then((fn) => {
+      unlistenQueue = fn
+    })
+  })
+  onDestroy(() => unlistenQueue?.())
+
+  /** Port of `EnsureGlacierManifestAsync`. */
+  async function loadGlacierManifest(force = false) {
+    if (glacierManifest && !force) return
+    glacierLoading = true
+    glacierError = ''
+    try {
+      glacierManifest = await invoke<GlacierManifest>('get_glacier_manifest', { forceRefresh: force })
+      await refreshGlacierInstalled()
+    } catch (e) {
+      glacierError = String(e)
+    } finally {
+      glacierLoading = false
+    }
+  }
+
+  async function refreshGlacierInstalled() {
+    if (!glacierLatest) {
+      glacierInstalled = false
+      return
+    }
+    try {
+      const size = await invoke<number>('glacier_installed_size_bytes')
+      // No per-version installed probe exists; a nonzero total is a good
+      // enough signal for the single "latest" card this panel shows.
+      glacierInstalled = size > 0
+    } catch {
+      glacierInstalled = false
+    }
+  }
+
+  /** Port of `InstallGlacierAsync`. */
+  async function installGlacier() {
+    if (glacierBusy || !glacierLatest) return
+    glacierBusy = true
+    glacierError = ''
+    try {
+      await invoke('install_glacier_client', { version: glacierLatest })
+      glacierInstalled = true
+      onToast(`Glacier ${glacierLatest.name} installed!`, 'success')
+    } catch (e) {
+      glacierError = String(e)
+      onToast('Install failed: ' + String(e), 'error')
+    } finally {
+      glacierBusy = false
+    }
+  }
+
+  /** Port of `UninstallGlacier`. */
+  async function uninstallGlacier() {
+    if (!glacierLatest) return
+    try {
+      await invoke('uninstall_glacier_client', { version: glacierLatest })
+      glacierInstalled = false
+      onToast(`Glacier ${glacierLatest.name} removed.`, 'info')
+    } catch (e) {
+      onToast(String(e), 'error')
+    }
+  }
+
+  /** Port of `LaunchGlacierAsync`. */
+  async function launchGlacier() {
+    if (glacierBusy || !glacierLatest) return
+    glacierBusy = true
+    glacierError = ''
+    try {
+      await invoke('launch_glacier_client', { version: glacierLatest })
+      onToast(`Glacier ${glacierLatest.name} launching…`, 'success')
+    } catch (e) {
+      glacierError = String(e)
+      onToast(String(e), 'error')
+    } finally {
+      glacierBusy = false
+    }
+  }
+
+  loadGlacierManifest()
+
+  let launchingLunarDirect = $state(false)
 
   type LunarBadlionStatus = {
     lunar_installed: boolean
@@ -74,6 +204,21 @@
       onToast('Lunar Client launching…', 'success')
     } catch (e) {
       onToast(String(e), 'error')
+    }
+  }
+
+  /** Port of `LaunchLunarDirect` - spawns the JVM straight against Lunar's
+   *  offline multiversion install, bypassing the Lunar Electron app. */
+  async function launchLunarDirect() {
+    if (!lunarSelectedVersion || launchingLunarDirect) return
+    launchingLunarDirect = true
+    try {
+      await invoke('launch_lunar_direct', { versionId: lunarSelectedVersion })
+      onToast(`Launching Lunar ${lunarSelectedVersion}…`, 'success')
+    } catch (e) {
+      onToast(String(e), 'error')
+    } finally {
+      launchingLunarDirect = false
     }
   }
 
@@ -137,16 +282,42 @@
     <div class="credits-card-meta">
       <span class="credits-card-name">Glacier Client</span>
       <span class="credits-card-sub">
-        <!-- The original renders the manifest here (name · loader · installed
-             state). No backend command exposes the Glacier manifest, so the
-             state is reported honestly rather than faked. -->
-        <span class="client-card-note">{MISSING_GLACIER}</span>
+        {#if glacierLoading}
+          Loading manifest…
+        {:else if glacierError}
+          <span class="client-card-note">{glacierError}</span>
+        {:else if glacierLatest}
+          {glacierLatest.name} · {glacierLatest.fabric ? 'Fabric' : glacierLatest.forge ? 'Forge' : 'Unknown'}
+          {glacierInstalled ? '· Installed' : ''}
+        {:else}
+          No Glacier Client releases published yet.
+        {/if}
       </span>
     </div>
     <div class="credits-card-actions">
-      <button class="vcs-btn vcs-btn-ghost" disabled data-tooltip={MISSING_GLACIER}>
-        <i class="fa-solid fa-rotate"></i> Retry
-      </button>
+      {#if glacierBusy}
+        <InlineProgress progress={glacierProgress} showSpinner />
+      {:else if glacierError}
+        <button class="vcs-btn vcs-btn-ghost" onclick={() => loadGlacierManifest(true)}>
+          <i class="fa-solid fa-rotate"></i> Retry
+        </button>
+      {:else if glacierLatest}
+        {#if glacierInstalled}
+          <button class="vcs-btn" onmousedown={(e) => e.stopPropagation()} onclick={launchGlacier}>
+            <i class="fa-solid fa-play"></i> Launch
+          </button>
+          <button
+            class="vcs-btn vcs-btn-ghost"
+            onmousedown={(e) => e.stopPropagation()}
+            onclick={uninstallGlacier}
+            data-tooltip="Uninstall" aria-label="Uninstall"
+          ><i class="fa-solid fa-trash"></i></button>
+        {:else}
+          <button class="vcs-btn" onmousedown={(e) => e.stopPropagation()} onclick={installGlacier}>
+            <i class="fa-solid fa-download"></i> Install
+          </button>
+        {/if}
+      {/if}
     </div>
   </div>
 
@@ -183,8 +354,19 @@
             <option value={lv}>{lv}</option>
           {/each}
         </select>
-        <button class="vcs-btn" disabled data-tooltip={MISSING_LUNAR_DIRECT}>
-          <i class="fa-solid fa-bolt"></i> Launch
+        <button
+          class="vcs-btn"
+          disabled={launchingLunarDirect}
+          onmousedown={(e) => e.stopPropagation()}
+          onclick={launchLunarDirect}
+          data-tooltip="Direct launch"
+        >
+          {#if launchingLunarDirect}
+            <span class="spinner"></span>
+          {:else}
+            <i class="fa-solid fa-bolt"></i>
+          {/if}
+          Launch
         </button>
       {:else if lbInstalled}
         <button class="vcs-btn" onmousedown={(e) => e.stopPropagation()} onclick={launchLunar}>
@@ -203,4 +385,3 @@
   </div>
 </div>
 
-<EditionTabs edition="java" active="launchers" onNavigate={(view) => onNavigate(view)} />

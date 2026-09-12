@@ -11,7 +11,6 @@
 //!
 //! If any step fails, the original `level.dat` is left untouched and the
 //! `.bak-*` copy (if one was made) is left in place for manual recovery.
-#![allow(dead_code)]
 
 use std::path::{Path, PathBuf};
 

@@ -14,6 +14,14 @@ export interface JavaAccount {
   Id: string
   Username: string
   Uuid: string
+  Gamertag: string
+  Xuid: string
+  GamerPictureUrl: string
+  MinecraftAccessToken: string
+  MinecraftAccessTokenExpiry: string
+  MinecraftSkinUrl: string
+  RefreshToken: string
+  LastUsedAt: string
 }
 
 export interface LauncherSettings {
@@ -39,6 +47,9 @@ export interface LauncherSettings {
   FontFamily: string
   UiScalePct: number
   BackgroundFit: string
+
+  PanelSide: 'left' | 'right'
+  PanelWidthPx: number
 
   WindowWidth: number
   WindowHeight: number
@@ -143,10 +154,19 @@ export interface LauncherSettings {
 
   OnboardingCompleted: boolean
 
+  AccessibilityMode: boolean
+
   Language: string
 
   LastDismissedAnnouncementId: string
+
+  KeyboardShortcuts: string
+  OnboardingChecklistDismissed: boolean
+
+  StarredModIds: string[]
 }
+
+export type ModLoaderKind = 'vanilla' | 'fabric' | 'quilt' | 'forge' | 'neoforge'
 
 export interface JavaInstance {
   id: string
@@ -155,6 +175,59 @@ export interface JavaInstance {
   directory: string
   min_ram_mb: number
   max_ram_mb: number
+  accent_color?: string | null
+  extra_jvm_args?: string[]
+  jvm_args_preset?: string | null
+  group?: string | null
+  loader?: ModLoaderKind | null
+  loader_version?: string | null
+  loader_profile_id?: string | null
+  playtime_seconds?: number
+  sync_pack_ids?: string[]
+}
+
+/** Mirrors `gl_java::InstanceSettings` (Rust). Every field is an override —
+ * `undefined`/`null` means "inherit from the global default". */
+export interface InstanceSettings {
+  java_path?: string | null
+  memory?: [number, number] | null
+  resolution?: [number, number] | null
+  use_custom_resolution?: boolean | null
+  fullscreen?: boolean | null
+  extra_game_args?: string[]
+  custom_jvm_args?: string | null
+  quick_play?: string | null
+}
+
+/** Mirrors `gl_java::EffectiveLaunchConfig` (Rust) — the resolved
+ * global-defaults-layered-with-overrides view used by settings UI. */
+export interface EffectiveLaunchConfig {
+  max_ram_mb: number
+  min_ram_mb: number
+  custom_jvm_args: string
+  extra_game_args: string[]
+  fullscreen: boolean
+  use_custom_resolution: boolean
+  window_width: number
+  window_height: number
+  server_address: string
+  server_port: number
+  java_path?: string | null
+  quick_play?: string | null
+  /** Field names resolved from per-instance overrides rather than global defaults. */
+  overridden: string[]
+}
+
+export interface JvmPreset {
+  id: string
+  label: string
+  description: string
+  args: string[]
+}
+
+export interface PrelaunchWarning {
+  level: string
+  message: string
 }
 
 export interface JavaVersion {
@@ -175,4 +248,5 @@ export interface BedrockInstance {
   name: string
   version_tag: string
   directory: string
+  accent_color?: string | null
 }

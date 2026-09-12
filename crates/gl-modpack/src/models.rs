@@ -49,13 +49,30 @@ pub struct MrProject {
 }
 
 /// A downloadable Modrinth project version file.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 pub struct MrVersion {
     pub id: String,
     pub name: String,
     pub file_name: String,
     pub url: String,
     pub size: i64,
+    pub sha1: String,
+    /// Version-level release notes, when Modrinth provides them (feature 16:
+    /// in-launcher changelog viewer).
+    #[serde(default)]
+    pub changelog: Option<String>,
+    #[serde(default)]
+    pub dependencies: Vec<MrDependency>,
+}
+
+/// One entry of a Modrinth version's `dependencies` array (feature 12:
+/// dependency-resolution warnings).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct MrDependency {
+    pub project_id: Option<String>,
+    pub version_id: Option<String>,
+    /// "required" | "optional" | "incompatible" | "embedded".
+    pub dependency_type: String,
 }
 
 /// Result of a Modrinth search request.

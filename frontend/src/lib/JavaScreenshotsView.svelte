@@ -1,10 +1,9 @@
 <script lang="ts">
   import { invoke } from '@tauri-apps/api/core'
   import { convertFileSrc } from '@tauri-apps/api/core'
-  import EditionTabs from './components/EditionTabs.svelte'
   import PanelHeader from './components/PanelHeader.svelte'
-  import IconBtn from './components/IconBtn.svelte'
   import Spinner from './components/Spinner.svelte'
+  import IconBtn from './components/IconBtn.svelte'
   import type { JavaInstance } from './settings'
 
   // Ported from Home.razor lines 5357-5407 ("Java Screenshots" panel).
@@ -12,8 +11,21 @@
   // `<instance>/screenshots/*.png`, vs. Bedrock's two-source merge in
   // BedrockScreenshotService) so this is a small standalone command
   // (java_screenshots.rs) rather than reusing gl_bedrock's service.
-  let { onBack, onNavigate }: { onBack?: () => void; onNavigate?: (view: string) => void } =
-    $props()
+  let {
+    onBack,
+    onNavigate,
+    embedded = false,
+    instanceId,
+  }: {
+    onBack?: () => void
+    onNavigate?: (view: string) => void
+    /** Phase 8: hosted inside `InstanceDetailView`'s Screenshots tab —
+     * suppress the standalone PanelHeader/back-button. */
+    embedded?: boolean
+    /** When embedded, pin the instance selector to this id instead of
+     * letting the user pick from the multi-instance dropdown. */
+    instanceId?: string
+  } = $props()
 
   type ScreenshotFile = { name: string; path: string; kind: string; size_bytes: number; modified_at: string }
 
@@ -26,7 +38,9 @@
   async function loadInstances() {
     try {
       instances = await invoke<JavaInstance[]>('list_java_instances')
-      if (!activeInstanceId || !instances.some((i) => i.id === activeInstanceId)) {
+      if (instanceId && instances.some((i) => i.id === instanceId)) {
+        activeInstanceId = instanceId
+      } else if (!activeInstanceId || !instances.some((i) => i.id === activeInstanceId)) {
         activeInstanceId = instances[0]?.id ?? ''
       }
     } catch (e) {
@@ -75,11 +89,22 @@
   })
 </script>
 
-<PanelHeader title="Java Screenshots" {onBack}>
-  {#snippet extraActions()}
-    <IconBtn icon="fa-solid fa-folder-open" title="Open screenshots folder" onClick={openFolder} />
-  {/snippet}
-</PanelHeader>
+{#if !embedded}
+  <PanelHeader title="Java Screenshots" {onBack}>
+    {#snippet extraActions()}
+      <button
+        type="button"
+        class="panel-icon-btn"
+        onclick={openFolder}
+        onmousedown={(e) => e.stopPropagation()}
+        data-tooltip="Open screenshots folder"
+        aria-label="Open screenshots folder"
+      >
+        <i class="fa-solid fa-folder-open"></i>
+      </button>
+    {/snippet}
+  </PanelHeader>
+{/if}
 
 <div class="panel-body">
   {#if error}<p class="error-text">{error}</p>{/if}
@@ -113,9 +138,7 @@
           <span class="version-name">{shot.name}</span>
           <span class="version-sub">{(shot.size_bytes / 1024).toFixed(0)} KB</span>
         </div>
-        <button class="icon-btn icon-btn-ghost" data-tooltip="Delete" aria-label="Delete" onclick={() => remove(shot)}>
-          <i class="fa-solid fa-trash"></i>
-        </button>
+        <IconBtn ghost icon="fa-solid fa-trash" title="Delete" onClick={() => remove(shot)} />
       </div>
     {/each}
   {/if}
@@ -123,4 +146,3 @@
 
 <!-- Home.razor:5400-5403: this panel ends with `JavaTabs("photos")`. It had no
      bottom strip at all, which made it a dead end. -->
-<EditionTabs active="photos" edition="java" onNavigate={(v) => onNavigate?.(v)} />

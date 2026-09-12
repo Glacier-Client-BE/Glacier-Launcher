@@ -15,6 +15,9 @@
   import { onDestroy, onMount } from 'svelte'
   import PanelHeader from './components/PanelHeader.svelte'
   import InlineProgress from './components/InlineProgress.svelte'
+  import Spinner from './components/Spinner.svelte'
+  import ViewModeToggle from './components/ViewModeToggle.svelte'
+  import { loadViewMode, saveViewMode, type ViewMode } from './viewMode'
 
   let { onBack, onToast }: { onBack?: () => void; onToast?: (m: string, kind?: string) => void } =
     $props()
@@ -33,6 +36,11 @@
   let levModsSearching = $state(false)
   let levModsError = $state('')
   let levModsResults = $state<LeviLaminaMod[]>([])
+  let levModsViewMode = $state<ViewMode>(loadViewMode('levilamina-mods'))
+  function setLevModsViewMode(m: ViewMode) {
+    levModsViewMode = m
+    saveViewMode('levilamina-mods', m)
+  }
   /**
    * Port of `levModsInstallingRepo` — the original keys this on `RepoName`
    * alone, not on owner/name, so two same-named repos from different owners
@@ -138,7 +146,7 @@
   levModsSearchAsync()
 </script>
 
-<PanelHeader title="LeviLamina Mods" {onBack} backIcon="fa-chevron-left">
+<PanelHeader title="LeviLamina Mods" {onBack}>
   {#snippet extraActions()}
     <button
       type="button"
@@ -151,6 +159,7 @@
     >
       <i class="fa-solid fa-rotate"></i>
     </button>
+    <ViewModeToggle mode={levModsViewMode} onChange={setLevModsViewMode} />
   {/snippet}
 </PanelHeader>
 
@@ -167,10 +176,7 @@
 
 <div class="panel-body">
   {#if levModsSearching}
-    <div style="display:flex; align-items:center; justify-content:center; padding:30px;">
-      <span class="spinner" style="width:18px;height:18px;border-width:2px;"></span>
-      <span style="margin-left:10px; font-size:12px; color:var(--text-dim);">Loading mods...</span>
-    </div>
+    <div class="versions-loading"><Spinner size={18} borderWidth={2} /><span>Loading mods...</span></div>
   {:else if levModsError && levModsResults.length === 0}
     <div style="padding:20px; text-align:center;">
       <span class="error-text">{levModsError}</span>
@@ -194,6 +200,7 @@
     {#if levModsError}
       <span class="error-text" style="display:block; margin-bottom:6px;">{levModsError}</span>
     {/if}
+    <div class="version-list {levModsViewMode === 'grid' ? 'grid-view' : ''}">
     {#each levModsResults as m (key(m))}
       <div class="client-card" style="margin-bottom:6px;">
         <div class="client-card-header">
@@ -249,5 +256,6 @@
         {/if}
       </div>
     {/each}
+    </div>
   {/if}
 </div>

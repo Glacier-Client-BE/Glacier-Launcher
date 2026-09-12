@@ -16,6 +16,9 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use tokio::process::{Child, Command};
+#[cfg(windows)]
+#[cfg(windows)]
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
 #[derive(Debug, Clone)]
 pub struct LibraryEntry {
@@ -601,15 +604,10 @@ pub fn render_command_line(
 
 /// Resolve a `javaw.exe` to launch with, mirroring `ResolveJavaRuntime`.
 ///
-/// Deviation from the C# original: the Windows-registry probe (Eclipse
-/// Adoptium / Microsoft JDK / JavaSoft uninstall keys) is not ported here —
-/// this crate has no registry dependency, and the explicit-path/cached
-/// runtime/`JAVA_HOME`/`PATH` checks below cover the common cases. See the
-/// crate's top-level launch report for this as a known gap.
-///
 /// Order: explicit `explicit_path` setting -> cached Glacier-downloaded
 /// runtime for `min_java_major` -> any javaw.exe under `runtimes_root` ->
-/// `JAVA_HOME` -> `PATH`.
+/// `JAVA_HOME` -> `PATH` -> Windows registry (Eclipse Adoptium / Microsoft
+/// JDK / JavaSoft `JavaHome` values under HKLM then HKCU).
 pub fn resolve_java_runtime(
     explicit_path: &str,
     runtimes_root: &Path,
@@ -661,6 +659,71 @@ pub fn resolve_java_runtime(
         }
     }
 
+    if let Some(p) = find_javaw_in_registry() {
+        return Some(p);
+    }
+
+    None
+}
+
+/// Probe the Windows registry for an installed JDK/JRE, mirroring
+/// `ResolveJavaRuntime`'s registry fallback in the C# original
+/// (`JavaGameLauncher.cs`). Checks, in order, `HKEY_LOCAL_MACHINE` then
+/// `HKEY_CURRENT_USER`, and under each root:
+///   SOFTWARE\Eclipse Adoptium\JDK
+///   SOFTWARE\Eclipse Adoptium\JRE
+///   SOFTWARE\Microsoft\JDK
+///   SOFTWARE\JavaSoft\Java Runtime Environment
+///   SOFTWARE\JavaSoft\JRE
+/// For each subkey found, every version subkey's `JavaHome` string value is
+/// read and `<JavaHome>\bin\javaw.exe` is checked for existence; the first
+/// hit wins.
+#[cfg(windows)]
+fn find_javaw_in_registry() -> Option<PathBuf> {
+    use winreg::enums::{HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE};
+    use winreg::RegKey;
+
+    const SUBKEYS: [&str; 5] = [
+        r"SOFTWARE\Eclipse Adoptium\JDK",
+        r"SOFTWARE\Eclipse Adoptium\JRE",
+        r"SOFTWARE\Microsoft\JDK",
+        r"SOFTWARE\JavaSoft\Java Runtime Environment",
+        r"SOFTWARE\JavaSoft\JRE",
+    ];
+
+    for root_hive in [HKEY_LOCAL_MACHINE, HKEY_CURRENT_USER] {
+        let root = RegKey::predef(root_hive);
+        for sub in SUBKEYS {
+            let Ok(k) = root.open_subkey(sub) else {
+                continue;
+            };
+            let Ok(names) = k.enum_keys().collect::<std::result::Result<Vec<_>, _>>() else {
+                continue;
+            };
+            for ver in names {
+                let Ok(v) = k.open_subkey(&ver) else {
+                    continue;
+                };
+                let jh: std::result::Result<String, std::io::Error> = v.get_value("JavaHome");
+                let Ok(jh) = jh else {
+                    continue;
+                };
+                if jh.is_empty() {
+                    continue;
+                }
+                let p = Path::new(&jh).join("bin").join("javaw.exe");
+                if p.is_file() {
+                    return Some(p);
+                }
+            }
+        }
+    }
+
+    None
+}
+
+#[cfg(not(windows))]
+fn find_javaw_in_registry() -> Option<PathBuf> {
     None
 }
 
@@ -719,6 +782,8 @@ pub fn spawn(
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .stdin(Stdio::null());
+    #[cfg(windows)]
+    cmd.creation_flags(CREATE_NO_WINDOW);
 
     cmd.spawn()
         .map_err(|e| JavaError::Other(format!("failed to spawn {}: {e}", javaw.display())))

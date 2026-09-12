@@ -2,7 +2,6 @@
 //! `Services/ServerPingService.cs` and the `SavedServer` model. The list
 //! itself is persisted as a small JSON file via `gl_persistence`, mirroring
 //! the atomic-write-with-corrupt-quarantine pattern used elsewhere.
-#![allow(dead_code)]
 
 use serde::{Deserialize, Serialize};
 
@@ -25,6 +24,10 @@ pub struct SavedServer {
     pub icon: String,
     #[serde(default)]
     pub icon_color: String,
+    #[serde(default)]
+    pub favorite: bool,
+    #[serde(default)]
+    pub tags: Vec<String>,
 }
 
 fn default_port() -> u16 {
@@ -70,6 +73,8 @@ pub fn add_saved_server(
     port: u16,
     icon: Option<String>,
     icon_color: Option<String>,
+    favorite: Option<bool>,
+    tags: Option<Vec<String>>,
 ) -> Result<SavedServer, String> {
     let mut servers = load_servers();
     let entry = SavedServer {
@@ -79,6 +84,8 @@ pub fn add_saved_server(
         port,
         icon: icon.unwrap_or_default(),
         icon_color: icon_color.unwrap_or_default(),
+        favorite: favorite.unwrap_or(false),
+        tags: tags.unwrap_or_default(),
     };
     servers.push(entry.clone());
     save_servers(&servers)?;
@@ -107,4 +114,18 @@ pub fn remove_saved_server(id: String) -> Result<(), String> {
 #[tauri::command]
 pub async fn ping_server(host: String, port: u16) -> ServerStatus {
     server_ping::ping(&host, port, 2500).await
+}
+
+/// Explicitly pings a server via the Java Edition Server List Ping protocol
+/// (handshake + status request), regardless of port.
+#[tauri::command]
+pub async fn ping_java_server(host: String, port: u16) -> ServerStatus {
+    server_ping::ping_java(&host, port, 2500).await
+}
+
+/// Scans for Java Edition "Open to LAN" worlds broadcast via UDP multicast
+/// on 224.0.2.60:4445 for `scan_ms` milliseconds (default 5000).
+#[tauri::command]
+pub async fn scan_lan_games(scan_ms: Option<u64>) -> Result<Vec<gl_integrations::lan::LanGame>, String> {
+    gl_integrations::lan::scan_lan_games(scan_ms.unwrap_or(5000)).await
 }

@@ -3,17 +3,15 @@
   import { open, save } from '@tauri-apps/plugin-dialog'
   import PanelHeader from './components/PanelHeader.svelte'
   import Toggle from './components/Toggle.svelte'
-  import EditionTabs from './components/EditionTabs.svelte'
   import { t, LANGUAGES } from './i18n'
-  import type { LauncherSettings } from './settings'
+  import type { LauncherSettings, JavaAccount } from './settings'
 
   // 1:1 port of the `settings` panel — Home.razor lines 1013-1928 plus
   // Pages/Home.Settings.cs. Every label, hint and option string below is
   // transcribed from the original; the category strip is the panel's own
-  // inline `.versions-client-switcher` (NOT the shared SubTabs), and the
-  // bottom strip is BedrockTabs("settings") / JavaTabs("settings") via
-  // EditionTabs. No scoped <style> block: every class used here already
-  // exists in app.css, and Svelte scoping would silently outrank it.
+  // inline `.versions-client-switcher` (NOT the shared SubTabs). No scoped
+  // <style> block: every class used here already exists in app.css, and
+  // Svelte scoping would silently outrank it.
 
   let {
     settings,
@@ -31,13 +29,206 @@
     onChange({ ...settings, [key]: value })
   }
 
+  async function toggleDiscordRpc() {
+    const enabling = !settings.DiscordRichPresence
+    try {
+      await invoke(enabling ? 'start_discord_presence' : 'stop_discord_presence')
+    } catch {
+      // best-effort — still flip the persisted preference
+    }
+    update('DiscordRichPresence', enabling)
+  }
+
+  async function connectDiscord() {
+    discordConnecting = true
+    actionMessage = ''
+    try {
+      const profile = await invoke<{ username: string; avatar: string }>('login_discord')
+      onChange({ ...settings, DiscordLoggedIn: true, DiscordUsername: profile.username, DiscordAvatar: profile.avatar })
+      actionMessage = 'Signed in as ' + profile.username
+    } catch (e) {
+      actionMessage = 'Discord login failed: ' + String(e)
+    } finally {
+      discordConnecting = false
+    }
+  }
+
+  async function disconnectDiscord() {
+    discordConnecting = true
+    actionMessage = ''
+    try {
+      await invoke('logout_discord')
+      onChange({ ...settings, DiscordLoggedIn: false, DiscordUsername: '', DiscordAvatar: '' })
+      actionMessage = 'Discord disconnected.'
+    } catch (e) {
+      actionMessage = 'Discord disconnect failed: ' + String(e)
+    } finally {
+      discordConnecting = false
+    }
+  }
+
+  type SignInResult = {
+    xbox_profile: {
+      gamertag: string
+      xuid: string
+      gamer_picture_url: string
+      gamerscore: string
+      account_tier: string
+      bio: string
+    }
+    minecraft_profile: { uuid: string; name: string; skin_url: string }
+    minecraft_access_token: string
+    minecraft_access_token_expiry_unix: number
+    live_refresh_token: string | null
+  }
+
+  let xboxSigningIn = $state(false)
+
+  /** Unix seconds → the RFC-3339-ish string `resolve_java_auth`
+   * (`src-tauri/src/commands/launch.rs`) expects in `JavaAccessTokenExpiry`. */
+  function unixToIso(secs: number): string {
+    return new Date(secs * 1000).toISOString().replace(/\.\d+Z$/, 'Z')
+  }
+
+  /** Port of `PersistAccount`: add-or-update the signed-in account in
+   * `JavaAccounts` (keyed by Minecraft UUID, falling back to the Xbox XUID
+   * when Minecraft auth didn't resolve a profile), and make it active. */
+  function applySignIn(result: SignInResult) {
+    const xbox = result.xbox_profile
+    const mc = result.minecraft_profile
+    const id = mc.uuid || xbox.xuid
+    const expiry = unixToIso(result.minecraft_access_token_expiry_unix)
+
+    const accounts = [...settings.JavaAccounts]
+    const idx = accounts.findIndex((a) => a.Id.toLowerCase() === id.toLowerCase())
+    const account: JavaAccount = {
+      Id: id,
+      Username: mc.name,
+      Uuid: mc.uuid,
+      Gamertag: xbox.gamertag,
+      Xuid: xbox.xuid,
+      GamerPictureUrl: xbox.gamer_picture_url,
+      MinecraftAccessToken: result.minecraft_access_token,
+      MinecraftAccessTokenExpiry: expiry,
+      MinecraftSkinUrl: mc.skin_url,
+      RefreshToken: result.live_refresh_token || accounts[idx]?.RefreshToken || '',
+      LastUsedAt: new Date().toISOString(),
+    }
+    if (idx >= 0) accounts[idx] = account
+    else accounts.push(account)
+
+    onChange({
+      ...settings,
+      XboxGamertag: xbox.gamertag,
+      XboxXuid: xbox.xuid,
+      XboxGamerPictureUrl: xbox.gamer_picture_url,
+      XboxGamerscore: xbox.gamerscore,
+      XboxAccountTier: xbox.account_tier,
+      XboxBio: xbox.bio,
+      XboxLiveRefreshToken: result.live_refresh_token ?? settings.XboxLiveRefreshToken,
+      JavaUsername: mc.name,
+      JavaUuid: mc.uuid,
+      JavaAccessToken: result.minecraft_access_token,
+      JavaAccessTokenExpiry: expiry,
+      JavaSkinUrl: mc.skin_url,
+      JavaOfflineMode: false,
+      JavaAccounts: accounts,
+      ActiveJavaAccountId: id,
+    })
+  }
+
+  /** Adds a new account (or refreshes the current one) via the interactive
+   * Microsoft sign-in popup. Port of `XboxAddAccount`/plain `XboxSignIn`. */
+  async function connectXbox() {
+    xboxSigningIn = true
+    actionMessage = ''
+    try {
+      const result = await invoke<SignInResult>('sign_in')
+      applySignIn(result)
+      actionMessage = `Signed in as ${result.xbox_profile.gamertag}`
+    } catch (e) {
+      actionMessage = 'Xbox sign-in failed: ' + String(e)
+    } finally {
+      xboxSigningIn = false
+    }
+  }
+
+  /** Port of `XboxSignOut`: clears the active profile/tokens but leaves
+   * other saved accounts in `JavaAccounts` untouched. */
+  function disconnectXbox() {
+    onChange({
+      ...settings,
+      XboxGamertag: '',
+      XboxXuid: '',
+      XboxGamerPictureUrl: '',
+      XboxGamerscore: '',
+      XboxAccountTier: '',
+      XboxBio: '',
+      JavaUsername: '',
+      JavaUuid: '',
+      JavaAccessToken: '',
+      JavaAccessTokenExpiry: '',
+      ActiveJavaAccountId: '',
+      JavaOfflineMode: true,
+    })
+    actionMessage = 'Xbox account disconnected.'
+  }
+
+  /** Port of `SwitchJavaAccount`: applies a saved account's tokens without
+   * re-authenticating over the network. */
+  function switchJavaAccount(account: JavaAccount) {
+    onChange({
+      ...settings,
+      ActiveJavaAccountId: account.Id,
+      XboxLiveRefreshToken: account.RefreshToken,
+      XboxGamertag: account.Gamertag,
+      XboxXuid: account.Xuid,
+      XboxGamerPictureUrl: account.GamerPictureUrl,
+      JavaUsername: account.Username,
+      JavaUuid: account.Uuid,
+      JavaAccessToken: account.MinecraftAccessToken,
+      JavaAccessTokenExpiry: account.MinecraftAccessTokenExpiry,
+      JavaSkinUrl: account.MinecraftSkinUrl,
+      JavaOfflineMode: false,
+    })
+    actionMessage = `Switched to ${account.Username}`
+  }
+
+  /** Port of `RemoveJavaAccount`: drops the saved account, signing out if
+   * it was the active one. */
+  function removeJavaAccount(account: JavaAccount) {
+    const accounts = settings.JavaAccounts.filter((a) => a.Id !== account.Id)
+    if (settings.ActiveJavaAccountId === account.Id) {
+      onChange({
+        ...settings,
+        JavaAccounts: accounts,
+        ActiveJavaAccountId: '',
+        XboxGamertag: '',
+        XboxXuid: '',
+        XboxGamerPictureUrl: '',
+        XboxGamerscore: '',
+        XboxAccountTier: '',
+        XboxBio: '',
+        JavaUsername: '',
+        JavaUuid: '',
+        JavaAccessToken: '',
+        JavaAccessTokenExpiry: '',
+        JavaOfflineMode: true,
+      })
+    } else {
+      onChange({ ...settings, JavaAccounts: accounts })
+    }
+    actionMessage = 'Account removed.'
+  }
+
   const isBedrock = $derived(settings.Edition === 'bedrock')
   const isJava = $derived(!isBedrock)
 
   let category = $state<'all' | 'injection' | 'java' | 'appearance' | 'account' | 'system'>('all')
   let filter = $state('')
 
-  const accentSwatches = ['#5865f2', '#3b82f6', '#22c55e', '#eab308', '#f97316', '#ef4444', '#ec4899', '#a855f7']
+  /** Port of `Home.razor.cs`'s `_accentSwatches` — verbatim hex values. */
+  const accentSwatches = ['#7289da', '#5865f2', '#3ba55d', '#faa61a', '#f04747', '#eb459e', '#00d8ff', '#ff7043', '#a855f7', '#22d3ee', '#84cc16', '#f59e0b']
 
   function q() {
     return filter.trim().toLowerCase()
@@ -85,8 +276,10 @@
 
     ['appearance', 'Accent colour', 'accent color theme'],
     ['appearance', 'Theme preset', 'theme dark midnight slate ocean forest sunset light'],
+    ['appearance', 'Panel side', 'panel side left right sidebar position'],
     ['appearance', 'Compact mode', 'compact dense small'],
     ['appearance', 'Animations', 'animations smooth motion'],
+    ['appearance', 'Accessibility features', 'accessibility a11y reduced motion focus outline screen reader'],
     ['appearance', 'Animation speed', 'animation speed motion fast slow multiplier'],
     ['appearance', 'Background blur', 'blur background'],
     ['appearance', 'Remember window size', 'window size remember'],
@@ -142,10 +335,14 @@
   let resetting = $state(false)
   let resetConfirmOpen = $state(false)
   let checkingUpdatesManual = $state(false)
-  let lastUpdateCheckLabel = $state(
-    settings.LastUpdateCheck ? 'Last checked ' + formatRelativeTime(settings.LastUpdateCheck) : 'Never checked',
+  let availableUpdate = $state<{ tag: string; download_url: string; changelog: string; asset_size: number } | null>(null)
+  let downloadingUpdate = $state(false)
+  let installingUpdate = $state(false)
+  let lastUpdateCheckLabel = $derived(
+    settings.LastUpdateCheck ? 'Last checked ' + formatRelativeTime(settings.LastUpdateCheck) : 'Never checked'
   )
   let actionMessage = $state('')
+  let discordConnecting = $state(false)
 
   /** Port of `FormatRelativeTime` (Home.razor.cs:677-690). */
   function formatRelativeTime(isoTimestamp: string): string {
@@ -174,10 +371,44 @@
     }
   }
 
+  type CrashReportInfo = { name: string; path: string; modified_at: string }
+  let latestCrash = $state<CrashReportInfo | null>(null)
+
+  const latestCrashLabel = $derived(
+    latestCrash
+      ? `${latestCrash.name} · ${formatRelativeTime(new Date(Number(latestCrash.modified_at) * 1000).toISOString())}`
+      : 'No crash reports yet',
+  )
+
+  $effect(() => {
+    const dir = settings.JavaMinecraftDir
+    if (!dir) {
+      latestCrash = null
+      return
+    }
+    invoke<CrashReportInfo | null>('latest_java_crash_report', { minecraftDir: dir })
+      .then((info) => (latestCrash = info))
+      .catch(() => (latestCrash = null))
+  })
+
+  function openLatestCrash() {
+    if (!latestCrash) return
+    invoke('open_path', { path: latestCrash.path }).catch((e) => (actionMessage = String(e)))
+  }
+
   async function openLauncherFolder() {
     try {
       const root = await invoke<string>('get_launcher_root')
       await openFolder(root)
+    } catch (e) {
+      actionMessage = String(e)
+    }
+  }
+
+  async function openMinecraftDataFolder() {
+    try {
+      const path = await invoke<string>('resolve_com_mojang_folder')
+      await openFolder(path)
     } catch (e) {
       actionMessage = String(e)
     }
@@ -239,14 +470,45 @@
   async function manualUpdateCheck() {
     checkingUpdatesManual = true
     try {
-      await invoke('check_launcher_update')
+      const update = await invoke<{ tag: string; download_url: string; changelog: string; asset_size: number } | null>(
+        'check_launcher_update',
+      )
+      availableUpdate = update
       const now = new Date().toISOString()
       onChange({ ...settings, LastUpdateCheck: now })
-      lastUpdateCheckLabel = 'Just now'
+      lastUpdateCheckLabel = update ? `Update ${update.tag} available` : "You're up to date"
     } catch (e) {
       actionMessage = String(e)
     } finally {
       checkingUpdatesManual = false
+    }
+  }
+
+  // Downloads the update installer through the same DownloadQueue every
+  // other download in the app uses, then launches it and closes the
+  // launcher so the installer can take over — mirrors
+  // AutoUpdateService's download-then-relaunch flow (see gl-update::resume
+  // for why "swap" is "run the NSIS installer" rather than a raw exe copy
+  // in this Tauri build).
+  async function downloadAndInstallUpdate() {
+    if (!availableUpdate) return
+    downloadingUpdate = true
+    try {
+      const installerPath = await invoke<string>('download_launcher_update', {
+        downloadUrl: availableUpdate.download_url,
+        tag: availableUpdate.tag,
+      })
+      downloadingUpdate = false
+      installingUpdate = true
+      // On success this exits the app; on failure the installer path is
+      // preserved (gl_update's pending-update marker) so the next launch
+      // retries automatically before showing any UI.
+      await invoke('install_launcher_update', { installerPath })
+    } catch (e) {
+      actionMessage = String(e)
+    } finally {
+      downloadingUpdate = false
+      installingUpdate = false
     }
   }
 
@@ -299,9 +561,80 @@
     window.setCompactMode?.(on)
   }
 
+  function setPanelSide(side: 'left' | 'right') {
+    update('PanelSide', side)
+    window.setPanelSide?.(side)
+  }
+
   function setAnimationsEnabled(on: boolean) {
     update('AnimationsEnabled', on)
     window.setAnimationsEnabled?.(on)
+  }
+
+  function setAccessibilityMode(on: boolean) {
+    update('AccessibilityMode', on)
+    window.setAccessibilityMode?.(on)
+  }
+
+  // Feature 37: rebindable keyboard shortcuts. `KeyboardShortcuts` is a JSON
+  // string ({} by default) mapping action -> normalized combo, mirroring the
+  // format `interop.js`'s `comboFromEvent`/`setKeyboardShortcuts` use.
+  const REBINDABLE_SHORTCUTS: { action: string; label: string; defaultCombo: string }[] = [
+    { action: 'search', label: 'Open search', defaultCombo: 'ctrl+k' },
+    { action: 'launch', label: 'Launch game', defaultCombo: 'ctrl+l' },
+    { action: 'fullscreen', label: 'Toggle fullscreen', defaultCombo: 'f11' },
+  ]
+
+  let capturingShortcut = $state<string | null>(null)
+
+  function parsedShortcuts(): Record<string, string> {
+    try {
+      return JSON.parse(settings.KeyboardShortcuts || '{}') ?? {}
+    } catch {
+      return {}
+    }
+  }
+
+  function shortcutFor(action: string, defaultCombo: string): string {
+    return parsedShortcuts()[action] || defaultCombo
+  }
+
+  function comboLabel(combo: string): string {
+    return combo
+      .split('+')
+      .map((p) => (p.length === 1 ? p.toUpperCase() : p[0].toUpperCase() + p.slice(1)))
+      .join('+')
+  }
+
+  function startCaptureShortcut(action: string) {
+    capturingShortcut = action
+  }
+
+  function captureShortcutKeydown(e: KeyboardEvent, action: string) {
+    e.preventDefault()
+    e.stopPropagation()
+    if (e.key === 'Escape') {
+      capturingShortcut = null
+      return
+    }
+    if (['Control', 'Alt', 'Shift', 'Meta'].includes(e.key)) return
+    const parts: string[] = []
+    if (e.ctrlKey) parts.push('ctrl')
+    if (e.altKey) parts.push('alt')
+    if (e.shiftKey) parts.push('shift')
+    parts.push(e.key.length === 1 ? e.key.toLowerCase() : e.key)
+    const combo = parts.join('+')
+    const next = { ...parsedShortcuts(), [action]: combo }
+    update('KeyboardShortcuts', JSON.stringify(next))
+    window.setKeyboardShortcuts?.(JSON.stringify(next))
+    capturingShortcut = null
+  }
+
+  function resetShortcut(action: string) {
+    const next = { ...parsedShortcuts() }
+    delete next[action]
+    update('KeyboardShortcuts', JSON.stringify(next))
+    window.setKeyboardShortcuts?.(JSON.stringify(next))
   }
 
   function resetWallpaper() {
@@ -309,23 +642,30 @@
     window.setCustomBackground?.('')
   }
 
+  async function chooseWallpaper() {
+    try {
+      const picked = await open({
+        multiple: false,
+        filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'webp', 'bmp', 'gif'] }],
+      })
+      if (typeof picked !== 'string') return
+      update('CustomBackgroundPath', picked)
+      window.setCustomBackground?.(picked)
+    } catch (e) {
+      actionMessage = String(e)
+    }
+  }
+
   function fileName(path: string): string {
     return path.replace(/\\/g, '/').split('/').pop() ?? path
   }
 
-  // Missing-backend tooltips. These controls stay visibly disabled rather
-  // than faking the original behaviour (see report).
-  const WALLPAPER_DISABLED = 'Unavailable: needs a backend command to copy a chosen image into the launcher folder'
-  const CRASH_DISABLED = 'Unavailable: needs a backend command that locates the latest crash report'
-  const MOJANG_DISABLED = 'Unavailable: needs a backend command that resolves the com.mojang folder'
-  const DISCORD_DISABLED = 'Unavailable: no Discord account command in this build'
-  const XBOX_DISABLED = 'Unavailable: no Xbox sign-in command in this build'
   const MINECRAFT_DIR_DISABLED = 'Unavailable: set a custom Minecraft folder above, or add a backend command that resolves it'
 </script>
 
 <PanelHeader title="Settings" {onBack} />
 
-<div class="versions-client-switcher">
+<div class="versions-client-switcher switcher-wrap">
   <button
     class="vcs-btn {category === 'all' ? 'active' : ''}"
     onclick={() => setCategory('all')}
@@ -390,16 +730,16 @@
 
 <div class="panel-body settings-body">
   {#if visibleCount === 0}
-    <div class="settings-empty">
+    <div class="empty-state">
       <i class="fa-solid fa-folder-open"></i>
-      <span class="settings-empty-title">No matching settings</span>
-      <span class="settings-empty-sub">
+      <span>No matching settings</span>
+      <small>
         {#if filter.trim()}
           Nothing matches "{filter}".
         {:else}
           This category is empty.
         {/if}
-      </span>
+      </small>
       {#if filter.trim()}
         <button class="vcs-btn" onclick={clearFilter} onmousedown={(e) => e.stopPropagation()}>
           <i class="fa-solid fa-xmark"></i> Clear filter
@@ -425,7 +765,7 @@
           <option value="Latite Client">Latite Client</option>
           <option value="Flarial Client">Flarial Client</option>
           <option value="OderSo Client">OderSo Client</option>
-          <option value="LeviLamina Client">LeviLamina Client</option>
+          <option value="LeviLamina">LeviLamina</option>
           {#if settings.CustomDllPath || settings.DefaultCustomClientId}
             <option value="Custom DLL">Custom DLL</option>
           {/if}
@@ -913,9 +1253,9 @@
       <div class="setting-row {hidden('Latest crash report', 'crash report log latest open view java') ? 'hidden-by-search' : ''}">
         <div class="setting-meta">
           <span class="setting-label">Latest crash report</span>
-          <span class="setting-hint">No crash reports yet</span>
+          <span class="setting-hint">{latestCrashLabel}</span>
         </div>
-        <button class="btn-sm" disabled data-tooltip={CRASH_DISABLED}>
+        <button class="btn-sm" onclick={openLatestCrash} onmousedown={(e) => e.stopPropagation()} disabled={!latestCrash}>
           <i class="fa-solid fa-bug"></i> Open
         </button>
       </div>
@@ -924,7 +1264,7 @@
 
   {#if categoryVisible('appearance')}
     <div class="settings-section">
-      {#if sectionVisible(['Accent colour', 'accent color theme'], ['Theme preset', 'theme dark midnight slate ocean forest sunset light'], ['Compact mode', 'compact dense small'], ['Animations', 'animations smooth motion'], ['Background blur', 'blur background'], ['Remember window size', 'window size remember'], ['Custom background wallpaper', 'background wallpaper image custom'])}
+      {#if sectionVisible(['Accent colour', 'accent color theme'], ['Theme preset', 'theme dark midnight slate ocean forest sunset light'], ['Panel side', 'panel side left right sidebar position'], ['Compact mode', 'compact dense small'], ['Animations', 'animations smooth motion'], ['Accessibility features', 'accessibility a11y reduced motion focus outline screen reader'], ['Background blur', 'blur background'], ['Remember window size', 'window size remember'], ['Custom background wallpaper', 'background wallpaper image custom'])}
         <span class="panel-section-label">Appearance</span>
       {/if}
 
@@ -941,7 +1281,8 @@
               data-tooltip={c}
               role="button"
               tabindex="0"
-              aria-label={c}
+              aria-label={`Accent color ${c}`}
+              aria-pressed={settings.AccentColor === c}
               onclick={() => setAccent(c)}
               onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setAccent(c) } }}
               onmousedown={(e) => e.stopPropagation()}
@@ -972,6 +1313,22 @@
         </select>
       </div>
 
+      <div class="setting-row {hidden('Panel side', 'panel side left right sidebar position') ? 'hidden-by-search' : ''}">
+        <div class="setting-meta">
+          <span class="setting-label">Panel side</span>
+          <span class="setting-hint">Which edge of the window panels slide in from</span>
+        </div>
+        <select
+          class="setting-select"
+          value={settings.PanelSide}
+          onchange={(e) => setPanelSide((e.currentTarget as HTMLSelectElement).value as 'left' | 'right')}
+          onclick={(e) => e.stopPropagation()}
+        >
+          <option value="right">Right</option>
+          <option value="left">Left</option>
+        </select>
+      </div>
+
       <div
         class="setting-row clickable {hidden('Compact mode', 'compact dense small') ? 'hidden-by-search' : ''}"
         role="button"
@@ -998,6 +1355,20 @@
           <span class="setting-hint">Disable for low-end devices or reduced motion</span>
         </div>
         <Toggle on={settings.AnimationsEnabled} onChanged={(v) => setAnimationsEnabled(v)} />
+      </div>
+
+      <div
+        class="setting-row clickable {hidden('Accessibility features', 'accessibility a11y reduced motion focus outline screen reader') ? 'hidden-by-search' : ''}"
+        role="button"
+        tabindex="0"
+        onclick={() => setAccessibilityMode(!settings.AccessibilityMode)}
+        onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') setAccessibilityMode(!settings.AccessibilityMode) }}
+      >
+        <div class="setting-meta">
+          <span class="setting-label">Accessibility features</span>
+          <span class="setting-hint">Reduced motion, stronger focus outlines, larger click targets</span>
+        </div>
+        <Toggle on={settings.AccessibilityMode} onChanged={(v) => setAccessibilityMode(v)} />
       </div>
 
       {#if settings.AnimationsEnabled}
@@ -1081,7 +1452,7 @@
               <i class="fa-solid fa-rotate-left"></i> Default
             </button>
           {/if}
-          <button class="btn-sm" disabled data-tooltip={WALLPAPER_DISABLED}>
+          <button class="btn-sm" onclick={chooseWallpaper} onmousedown={(e) => e.stopPropagation()}>
             <i class="fa-solid fa-image"></i> Choose
           </button>
         </div>
@@ -1238,8 +1609,8 @@
         class="setting-row clickable {hidden('Discord Rich Presence', 'discord rpc social') ? 'hidden-by-search' : ''}"
         role="button"
         tabindex="0"
-        onclick={() => update('DiscordRichPresence', !settings.DiscordRichPresence)}
-        onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') update('DiscordRichPresence', !settings.DiscordRichPresence) }}
+        onclick={toggleDiscordRpc}
+        onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') toggleDiscordRpc() }}
       >
         <span class="setting-label">Discord Rich Presence</span>
         <div
@@ -1248,8 +1619,8 @@
           aria-checked={settings.DiscordRichPresence}
           aria-label="Discord Rich Presence"
           tabindex="0"
-          onclick={(e) => { e.stopPropagation(); update('DiscordRichPresence', !settings.DiscordRichPresence) }}
-          onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); update('DiscordRichPresence', !settings.DiscordRichPresence) } }}
+          onclick={(e) => { e.stopPropagation(); toggleDiscordRpc() }}
+          onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); toggleDiscordRpc() } }}
         ></div>
       </div>
 
@@ -1260,9 +1631,17 @@
             {settings.DiscordLoggedIn ? 'Connected as ' + settings.DiscordUsername : 'Not connected'}
           </span>
         </div>
-        <button class="btn-sm" disabled data-tooltip={DISCORD_DISABLED}>
+        <button
+          class="btn-sm"
+          disabled={discordConnecting}
+          onclick={() => (settings.DiscordLoggedIn ? disconnectDiscord() : connectDiscord())}
+        >
           <i class="fa-brands fa-discord"></i>
-          {settings.DiscordLoggedIn ? 'Manage' : 'Connect'}
+          {#if discordConnecting}
+            Working...
+          {:else}
+            {settings.DiscordLoggedIn ? 'Manage' : 'Connect'}
+          {/if}
         </button>
       </div>
 
@@ -1273,11 +1652,44 @@
             {settings.XboxGamertag ? 'Signed in as ' + settings.XboxGamertag : 'Not connected'}
           </span>
         </div>
-        <button class="btn-sm" disabled data-tooltip={XBOX_DISABLED}>
+        <button
+          class="btn-sm"
+          disabled={xboxSigningIn}
+          onclick={() => (settings.XboxGamertag ? disconnectXbox() : connectXbox())}
+        >
           <i class="fa-solid fa-gamepad" style="color:#107c10;"></i>
-          {settings.XboxGamertag ? 'Manage' : 'Sign in'}
+          {#if xboxSigningIn}
+            Working...
+          {:else}
+            {settings.XboxGamertag ? 'Disconnect' : 'Sign in'}
+          {/if}
         </button>
       </div>
+
+      {#if settings.JavaAccounts.length > 0}
+        <div class="setting-row" style="flex-direction:column; align-items:stretch; gap:8px;">
+          <div style="display:flex; align-items:center; justify-content:space-between;">
+            <span class="setting-label">Saved accounts</span>
+            <button class="btn-sm" disabled={xboxSigningIn} onclick={connectXbox}>
+              <i class="fa-solid fa-plus"></i> Add account
+            </button>
+          </div>
+          {#each settings.JavaAccounts as account (account.Id)}
+            {@const isActive = account.Id === settings.ActiveJavaAccountId}
+            <div class="instance-row {isActive ? 'active' : ''}">
+              <button class="instance-name-btn" onclick={() => switchJavaAccount(account)} disabled={isActive}>
+                {#if isActive}<i class="fa-solid fa-circle-check"></i>{:else}<i class="fa-regular fa-circle"></i>{/if}
+                <span>{account.Username || account.Gamertag || account.Id}</span>
+              </button>
+              <button
+                class="instance-icon-btn"
+                onclick={() => removeJavaAccount(account)}
+                data-tooltip="Remove" aria-label="Remove account"
+              ><i class="fa-solid fa-trash"></i></button>
+            </div>
+          {/each}
+        </div>
+      {/if}
     </div>
   {/if}
 
@@ -1410,6 +1822,36 @@
           Check
         </button>
       </div>
+
+      {#if availableUpdate}
+        <div class="setting-row">
+          <div class="setting-meta">
+            <span class="setting-label">Update {availableUpdate.tag} available</span>
+            <span class="setting-hint">
+              {#if installingUpdate}
+                Launching installer…
+              {:else if downloadingUpdate}
+                Downloading…
+              {:else}
+                Download and install now
+              {/if}
+            </span>
+          </div>
+          <button
+            class="btn-sm"
+            onclick={downloadAndInstallUpdate}
+            onmousedown={(e) => e.stopPropagation()}
+            disabled={downloadingUpdate || installingUpdate}
+          >
+            {#if downloadingUpdate || installingUpdate}
+              <span class="spinner" style="width:11px;height:11px;border-width:1.5px;"></span>
+            {:else}
+              <i class="fa-solid fa-download"></i>
+            {/if}
+            Update
+          </button>
+        </div>
+      {/if}
     </div>
 
     <div class="settings-section">
@@ -1432,7 +1874,7 @@
           <span class="setting-label">Minecraft data folder</span>
           <span class="setting-hint">com.mojang — resource packs, worlds, behaviour packs</span>
         </div>
-        <button class="btn-sm" disabled data-tooltip={MOJANG_DISABLED}>
+        <button class="btn-sm" onclick={openMinecraftDataFolder} onmousedown={(e) => e.stopPropagation()}>
           <i class="fa-solid fa-cubes"></i> Open
         </button>
       </div>
@@ -1550,10 +1992,48 @@
       <div class="setting-row {hidden('Keyboard shortcuts', 'shortcuts keyboard help') ? 'hidden-by-search' : ''}">
         <div class="setting-meta">
           <span class="setting-label">Keyboard shortcuts</span>
-          <span class="setting-hint">Ctrl+K search · Ctrl+L launch · Ctrl+1/2/3/4/5 panels · Ctrl+, settings · Ctrl+Tab cycle · F11 fullscreen · Esc close</span>
+          <span class="setting-hint">Ctrl+1/2/3/4/5 panels · Ctrl+, settings · Ctrl+Tab cycle · Esc close — the three below can be rebound</span>
         </div>
         <div class="kbs"><kbd>?</kbd></div>
       </div>
+
+      {#each REBINDABLE_SHORTCUTS as { action, label, defaultCombo } (action)}
+        <div class="setting-row {hidden(label, 'shortcut rebind keybind ' + action) ? 'hidden-by-search' : ''}">
+          <div class="setting-meta">
+            <span class="setting-label">{label}</span>
+            <span class="setting-hint">
+              {#if capturingShortcut === action}
+                Press a key… (Esc to cancel)
+              {:else}
+                Click to rebind
+              {/if}
+            </span>
+          </div>
+          <div style="display:flex; align-items:center; gap:6px;">
+            <button
+              type="button"
+              class="kbs-rebind-btn {capturingShortcut === action ? 'capturing' : ''}"
+              onclick={() => startCaptureShortcut(action)}
+              onkeydown={(e) => { if (capturingShortcut === action) captureShortcutKeydown(e, action) }}
+              onmousedown={(e) => e.stopPropagation()}
+            >
+              <kbd>{capturingShortcut === action ? 'Press key…' : comboLabel(shortcutFor(action, defaultCombo))}</kbd>
+            </button>
+            {#if shortcutFor(action, defaultCombo) !== defaultCombo}
+              <button
+                type="button"
+                class="btn-sm"
+                onclick={() => resetShortcut(action)}
+                onmousedown={(e) => e.stopPropagation()}
+                data-tooltip="Reset to default"
+                aria-label="Reset to default"
+              >
+                <i class="fa-solid fa-rotate-left"></i>
+              </button>
+            {/if}
+          </div>
+        </div>
+      {/each}
 
       <div class="setting-row {hidden('Credits', 'credits about launcher') ? 'hidden-by-search' : ''}">
         <span class="setting-label">Credits</span>
@@ -1565,4 +2045,3 @@
   {/if}
 </div>
 
-<EditionTabs edition={isBedrock ? 'bedrock' : 'java'} active="settings" {onNavigate} />

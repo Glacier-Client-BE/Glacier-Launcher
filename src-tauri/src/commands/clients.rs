@@ -205,6 +205,28 @@ pub fn delete_oderso_dll(state: State<'_, AppState>, name: String) -> Result<(),
     Ok(())
 }
 
+/// Whether the active OderSo entry's sha still matches the newest listed
+/// entry. Mirrors `OderSoService.IsUpToDateAsync`: nothing active or nothing
+/// downloaded reports not-up-to-date, and a listing failure fails open
+/// (reports up-to-date) so a network hiccup doesn't nag the user, exactly
+/// like the C# `catch { return true; }`.
+#[tauri::command]
+pub async fn check_oderso_up_to_date(state: State<'_, AppState>) -> Result<bool, String> {
+    let Some((name, sha)) = oderso_stored_entry(&state) else {
+        return Ok(false);
+    };
+    if !oderso_entry_path(&state, &name).is_file() {
+        return Ok(false);
+    }
+    let up_to_date = gl_clients::oderso::list_dlls(&state.http)
+        .await
+        .ok()
+        .and_then(|entries| entries.into_iter().next())
+        .map(|latest| latest.sha == sha)
+        .unwrap_or(true);
+    Ok(up_to_date)
+}
+
 /// Lists the `.dll` releases published in the OderSo data repo, newest first.
 /// Mirrors `OderSoService.ListDllsAsync`.
 #[tauri::command]
@@ -290,7 +312,7 @@ pub async fn download_levilamina_client(state: State<'_, AppState>) -> Result<St
     let zip_path = dir.join(format!("{}.zip", release.tag));
 
     let req = gl_download::DownloadRequest::new(&release.zip_url, &zip_path)
-        .with_label("LeviLamina Client");
+        .with_label("LeviLamina");
     let handle = state.downloads.submit(req);
     handle.join().await.map_err(|e| e.to_string())?;
 
@@ -308,13 +330,34 @@ pub fn levilamina_client_installed(state: State<'_, AppState>) -> bool {
     levilamina_dir(&state).join(".version").is_file()
 }
 
+/// Whether the installed LeviLamina's `.version` tag matches the latest
+/// GitHub release tag. Mirrors `LeviLaminaService.IsUpToDateAsync`: not
+/// installed reports not-up-to-date, and a failed release fetch fails
+/// closed (reports not-up-to-date) exactly like the C# `catch { return
+/// false; }` - unlike OderSo's fail-open, this one nags on network errors.
+#[tauri::command]
+pub async fn check_levilamina_up_to_date(state: State<'_, AppState>) -> Result<bool, String> {
+    let dir = levilamina_dir(&state);
+    let version_path = dir.join(".version");
+    if !version_path.is_file() {
+        return Ok(false);
+    }
+    let local_tag = std::fs::read_to_string(&version_path).unwrap_or_default();
+    let local_tag = local_tag.trim();
+
+    Ok(gl_clients::levilamina::fetch_latest_release(&state.http)
+        .await
+        .map(|release| gl_clients::levilamina::is_up_to_date(local_tag, &release.tag))
+        .unwrap_or(false))
+}
+
 /// Returns the on-disk path to the installed LeviLamina loader DLL.
 #[tauri::command]
 pub fn levilamina_client_path(state: State<'_, AppState>) -> Result<String, String> {
     let dir = levilamina_dir(&state);
     gl_clients::levilamina::find_loader_dll(&dir)
         .map(|p| p.to_string_lossy().into_owned())
-        .ok_or_else(|| "LeviLamina client is not installed.".to_string())
+        .ok_or_else(|| "LeviLamina is not installed.".to_string())
 }
 
 #[tauri::command]

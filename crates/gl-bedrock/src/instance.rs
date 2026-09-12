@@ -113,6 +113,7 @@ impl BedrockInstanceService {
             directory: directory.to_string_lossy().into_owned(),
             created_at: now.clone(),
             updated_at: now,
+            accent_color: None,
         };
 
         self.index.instances.push(instance.clone());
@@ -139,6 +140,19 @@ impl BedrockInstanceService {
             .find_mut(id)
             .ok_or_else(|| BedrockError::InstanceNotFound(id.to_string()))?;
         instance.name = new_name.trim().to_string();
+        instance.updated_at = now;
+        self.save_index()
+    }
+
+    /// Sets (or clears, when `color` is `None`/empty) the per-instance accent
+    /// color shown as a dot/border on the instance card (feature 40 in
+    /// PARITY.md's polish pass). Purely cosmetic — no game-data side effects.
+    pub fn set_accent_color(&mut self, id: &str, color: Option<String>) -> Result<()> {
+        let now = now_iso();
+        let instance = self
+            .find_mut(id)
+            .ok_or_else(|| BedrockError::InstanceNotFound(id.to_string()))?;
+        instance.accent_color = color.filter(|c| !c.trim().is_empty());
         instance.updated_at = now;
         self.save_index()
     }

@@ -4,15 +4,19 @@ import { svelte } from '@sveltejs/vite-plugin-svelte'
 
 const host = process.env.TAURI_DEV_HOST
 
-// https://vite.dev/config/
 export default defineConfig({
   plugins: [svelte()],
   clearScreen: false,
   build: {
+    target: 'esnext',
+    minify: 'esbuild',
+    cssMinify: 'esbuild',
+    sourcemap: false,
+    reportCompressedSize: false,
     rollupOptions: {
       input: {
-        main: resolve(__dirname, 'index.html'),
-        console: resolve(__dirname, 'console.html'),
+        main: resolve(import.meta.dirname, 'index.html'),
+        console: resolve(import.meta.dirname, 'console.html'),
       },
     },
   },

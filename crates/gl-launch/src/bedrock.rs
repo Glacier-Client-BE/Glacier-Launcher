@@ -8,17 +8,20 @@
 //!
 //! Scope for this first pass (see crate-level docs / final report for the
 //! full list): package resolution + activation + optional DLL injection are
-//! ported. NOT ported: `PreventSuspend` (AppLifecycleOptOut.exe opt-out),
-//! `AccelerateLoadingAsync` (RuntimeBroker kill), and the
-//! `minecraft://addExternalServer` deep link for direct-connect. These are
-//! cosmetic/QoL extras layered on top of a working launch, not required for
-//! "does Bedrock actually start."
+//! ported. `PreventSuspend` and `AccelerateLoadingAsync` are ported at the
+//! `src-tauri/src/commands/launch.rs` call-site level (power-request /
+//! RuntimeBroker kill respectively) rather than in this module. The
+//! `minecraft://addExternalServer` deep link is ported here as
+//! [`connect_external_server`].
 
 use crate::error::{LaunchError, Result};
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::time::Duration;
 use tokio::process::Command;
+#[cfg(windows)]
+#[cfg(windows)]
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 use tokio::time::sleep;
 
 pub const RELEASE_FAMILY_NAME: &str = "Microsoft.MinecraftUWP_8wekyb3d8bbwe";
@@ -70,18 +73,20 @@ async fn run_powershell(command: &str) -> Result<std::process::Output> {
     if !ps.is_file() {
         return Err(LaunchError::Other("Windows PowerShell not found.".into()));
     }
-    Command::new(&ps)
-        .args([
-            "-NoProfile",
-            "-NonInteractive",
-            "-ExecutionPolicy",
-            "Bypass",
-            "-Command",
-            command,
-        ])
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .output()
+    let mut cmd = Command::new(&ps);
+    cmd.args([
+        "-NoProfile",
+        "-NonInteractive",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-Command",
+        command,
+    ])
+    .stdout(Stdio::piped())
+    .stderr(Stdio::piped());
+    #[cfg(windows)]
+    cmd.creation_flags(CREATE_NO_WINDOW);
+    cmd.output()
         .await
         .map_err(|e| LaunchError::Io(format!("failed to launch PowerShell: {e}")))
 }
@@ -263,13 +268,29 @@ pub async fn invoke_in_desktop_package(info: &BedrockPackageInfo) -> Result<bool
     Ok(out.status.success())
 }
 
+/// Activates Minecraft directly through `IApplicationActivationManager`
+/// (`gl_injection::activate_application`) — the literal port of
+/// `InjectionService.LaunchMinecraft`, and this project's memory notes that
+/// GDK builds (1.26.40+) need `Invoke-CommandInDesktopPackage` instead, so
+/// this is kept as a last-resort fallback rather than the primary strategy.
+async fn activate_via_com(info: &BedrockPackageInfo) -> Result<bool> {
+    let aumid = info.aumid();
+    tokio::task::spawn_blocking(move || gl_injection::activate_application(&aumid, None))
+        .await
+        .map_err(|e| LaunchError::Io(e.to_string()))?
+        .map(|_pid| true)
+        .map_err(|e| LaunchError::Io(e.to_string()))
+}
+
 /// Activates Minecraft via `minecraft:` URI as a fallback strategy.
 async fn launch_via_uri() -> Result<bool> {
-    Command::new("cmd.exe")
-        .args(["/c", "start", "minecraft:"])
+    let mut cmd = Command::new("cmd.exe");
+    cmd.args(["/c", "start", "minecraft:"])
         .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status()
+        .stderr(Stdio::null());
+    #[cfg(windows)]
+    cmd.creation_flags(CREATE_NO_WINDOW);
+    cmd.status()
         .await
         .map(|s| s.success())
         .map_err(|e| LaunchError::Io(e.to_string()))
@@ -292,24 +313,34 @@ async fn start_minecraft(info: &BedrockPackageInfo) -> Result<u32> {
     let is_gdk = info.application_id.eq_ignore_ascii_case("Game");
     let mut failures: Vec<String> = Vec::new();
 
-    let mut strategies: Vec<(&str, bool)> = Vec::new();
-    if is_gdk {
-        strategies.push(("Invoke-CommandInDesktopPackage (GDK)", true));
-    }
-    strategies.push(("minecraft:// URI", false));
-    if !is_gdk {
-        strategies.push(("Invoke-CommandInDesktopPackage", true));
+    enum Strategy {
+        DesktopPackage,
+        Uri,
+        Com,
     }
 
-    for (name, use_desktop_package) in strategies {
+    let mut strategies: Vec<(&str, Strategy)> = Vec::new();
+    if is_gdk {
+        strategies.push(("Invoke-CommandInDesktopPackage (GDK)", Strategy::DesktopPackage));
+    }
+    strategies.push(("minecraft:// URI", Strategy::Uri));
+    if !is_gdk {
+        strategies.push(("Invoke-CommandInDesktopPackage", Strategy::DesktopPackage));
+    }
+    // Last resort: the original's own direct COM activation path
+    // (`InjectionService.LaunchMinecraft`), tried after both of the above
+    // have had a chance since it's unproven against current GDK builds.
+    strategies.push(("IApplicationActivationManager (COM)", Strategy::Com));
+
+    for (name, strategy) in strategies {
         if let Some(pid) = find_game_process_for(family) {
             return Ok(pid);
         }
 
-        let ok = if use_desktop_package {
-            invoke_in_desktop_package(info).await
-        } else {
-            launch_via_uri().await
+        let ok = match strategy {
+            Strategy::DesktopPackage => invoke_in_desktop_package(info).await,
+            Strategy::Uri => launch_via_uri().await,
+            Strategy::Com => activate_via_com(info).await,
         };
 
         match ok {
@@ -336,6 +367,63 @@ async fn start_minecraft(info: &BedrockPackageInfo) -> Result<u32> {
     Err(LaunchError::BedrockActivationFailed(failures.join("; ")))
 }
 
+/// Minimal `Uri.EscapeDataString` equivalent: percent-encodes everything
+/// except RFC 3986 unreserved characters. No crate for this in the
+/// workspace, and the alphabet involved (server names/hostnames) is small
+/// enough that hand-rolling it is simpler than adding a dependency.
+fn escape_data_string(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for b in s.bytes() {
+        match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                out.push(b as char)
+            }
+            _ => out.push_str(&format!("%{:02X}", b)),
+        }
+    }
+    out
+}
+
+/// Fires the `minecraft://?addExternalServer=<name>|<host>:<port>` deep link
+/// so an already-running (or just-launched) Bedrock activates straight into
+/// `host:port`. Mirrors `LaunchServerAsync`'s URI-construction tail (the
+/// launch itself is a separate call to [`launch`], matching the original,
+/// which always launches first and fires this as a follow-up).
+///
+/// Best-effort like the C# original: `Process::Start` via `cmd.exe`
+/// (`ShellExecute` isn't directly available without the `windows` crate)
+/// is the primary path, with the same shell fallback the original used when
+/// direct URI activation is unavailable — here that's simply "try the
+/// direct route, and if spawning fails at all, try the `cmd /c start`
+/// wrapper," since both routes end up shelling out on this platform anyway.
+pub async fn connect_external_server(server_name: &str, host: &str, port: u16) -> Result<()> {
+    let display_name = if server_name.trim().is_empty() {
+        host
+    } else {
+        server_name
+    };
+    let uri = format!(
+        "minecraft://?addExternalServer={}|{}:{}",
+        escape_data_string(display_name),
+        escape_data_string(host),
+        port
+    );
+
+    let direct = Command::new("cmd.exe")
+        .args(["/c", "start", "", uri.as_str()])
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .await;
+
+    match direct {
+        Ok(status) if status.success() => Ok(()),
+        _ => Err(LaunchError::Other(format!(
+            "Failed to activate deep link: {uri}"
+        ))),
+    }
+}
+
 pub struct LaunchedBedrock {
     pub pid: u32,
     pub was_already_running: bool,
@@ -345,10 +433,6 @@ pub struct LaunchedBedrock {
 /// Full Bedrock launch: resolve the package, activate it (or reuse an
 /// already-running instance), and optionally inject a client DLL after
 /// `injection_delay_ms`. Mirrors `LaunchWithPathCoreAsync`.
-///
-/// Deviations: `PreventSuspend` and `AccelerateLoadingAsync` are not ported
-/// (see module docs) — flag as follow-up work if the user wants suspend
-/// prevention / faster loading back.
 pub async fn launch(
     dll_path: Option<PathBuf>,
     injection_delay_ms: u64,

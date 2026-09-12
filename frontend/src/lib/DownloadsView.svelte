@@ -13,6 +13,7 @@
   import { invoke } from '@tauri-apps/api/core'
   import { listen, type UnlistenFn } from '@tauri-apps/api/event'
   import { onDestroy, onMount } from 'svelte'
+  import IconBtn from './components/IconBtn.svelte'
   import PanelHeader from './components/PanelHeader.svelte'
   import PanelTabs from './components/PanelTabs.svelte'
 
@@ -140,13 +141,9 @@
         </div>
         <div class="version-actions">
           {#if entry.status === 'Downloading'}
-            <button class="icon-btn icon-btn-ghost" data-tooltip="Cancel" aria-label="Cancel" onclick={() => cancel(entry)}>
-              <i class="fa-solid fa-xmark"></i>
-            </button>
+            <IconBtn ghost icon="fa-solid fa-xmark" title="Cancel" onClick={() => cancel(entry)} />
           {:else}
-            <button class="icon-btn icon-btn-ghost" data-tooltip="Remove" aria-label="Remove" onclick={() => remove(entry)}>
-              <i class="fa-solid fa-trash"></i>
-            </button>
+            <IconBtn ghost icon="fa-solid fa-trash" title="Remove" onClick={() => remove(entry)} />
           {/if}
         </div>
       </div>

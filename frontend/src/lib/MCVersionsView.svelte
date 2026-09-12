@@ -19,8 +19,14 @@
    * BedrockVanillaVersionsView.svelte.
    */
   import { invoke } from '@tauri-apps/api/core'
+  import { untrack } from 'svelte'
+  import { listen, type UnlistenFn } from '@tauri-apps/api/event'
+  import { onDestroy, onMount } from 'svelte'
   import PanelHeader from './components/PanelHeader.svelte'
-  import EditionTabs from './components/EditionTabs.svelte'
+  import ListSkeleton from './components/ListSkeleton.svelte'
+  import ViewModeToggle from './components/ViewModeToggle.svelte'
+  import { loadViewMode, saveViewMode, type ViewMode } from './viewMode'
+  import InlineProgress from './components/InlineProgress.svelte'
   import type { JavaVersion, LauncherSettings } from './settings'
 
   let {
@@ -38,14 +44,64 @@
   } = $props()
 
   /**
-   * No backend counterpart for `JavaInstallerService.InstallAsync` /
-   * `JavaLauncherService.LaunchAsync(versionId)` exists yet: `lib.rs`
-   * registers `create_java_instance` and `launch_java_instance` (both
-   * instance-scoped), not a per-version install or launch. Per the
-   * established pattern, the controls stay visible but disabled.
+   * `launch_java_version` launches a bare version id directly against the
+   * shared versions pool (no instance's mods/saves attached) - mirrors
+   * `JavaLauncherService.LaunchAsync(v.Id)`. Distinct from
+   * `launch_java_instance`, which the Profile/Instances panel uses for an
+   * instance-scoped launch.
    */
-  const MISSING_INSTALL = 'Unavailable: needs an install_java_version command'
-  const MISSING_LAUNCH = 'Unavailable: needs a launch_java_version command (launch_java_instance is instance-scoped)'
+
+  let installingId = $state<string | null>(null)
+  let installProgress = $state(0)
+  let installStage = $state('')
+  let unlistenInstall: UnlistenFn | undefined
+
+  onMount(() => {
+    listen<{ version_id: string; stage: string; percent: number }>(
+      'java-install-progress',
+      (e) => {
+        if (e.payload.version_id !== installingId) return
+        installStage = e.payload.stage
+        installProgress = e.payload.percent / 100
+      },
+    ).then((fn) => {
+      unlistenInstall = fn
+    })
+  })
+  onDestroy(() => unlistenInstall?.())
+
+  async function installJavaVersion(v: Row) {
+    if (installingId) return
+    installingId = v.id
+    installProgress = 0
+    installStage = 'Starting…'
+    try {
+      await invoke('install_java_version', { version: v })
+      onToast?.(`Minecraft ${v.id} installed.`, 'success')
+      await loadJavaVersions()
+    } catch (e) {
+      onToast?.(String(e), 'error')
+    } finally {
+      installingId = null
+    }
+  }
+
+  let launchingId = $state<string | null>(null)
+
+  /** Port of `JavaLauncherService.LaunchAsync(v.Id)` via `launch_java_version` -
+   * a bare version launch with no instance's mods/saves attached. */
+  async function launchJavaVersion(v: Row) {
+    if (launchingId) return
+    launchingId = v.id
+    try {
+      await invoke('launch_java_version', { versionId: v.id })
+      onToast?.(`Launching Minecraft ${v.id}…`, 'success')
+    } catch (e) {
+      onToast?.(String(e), 'error')
+    } finally {
+      launchingId = null
+    }
+  }
 
   type Row = JavaVersion & { is_active: boolean }
 
@@ -53,12 +109,17 @@
   let isLoading = $state(false)
   let loadError = $state('')
   let versionsFilter = $state('')
+  let mcVersionsViewMode = $state<ViewMode>(loadViewMode('mc-versions'))
+  function setMcVersionsViewMode(m: ViewMode) {
+    mcVersionsViewMode = m
+    saveViewMode('mc-versions', m)
+  }
 
   // Mirrors of the two persisted settings. They are held locally as well
   // because the shell currently mounts this panel without an `onSaveSettings`
   // callback, so the prop object would not re-render on toggle.
-  let showSnapshots = $state(settings?.JavaShowSnapshots ?? false)
-  let showHistorical = $state(settings?.JavaShowHistorical ?? false)
+  let showSnapshots = $state(untrack(() => settings?.JavaShowSnapshots) ?? false)
+  let showHistorical = $state(untrack(() => settings?.JavaShowHistorical) ?? false)
 
   /** Port of `JavaVersion.TypeLabel`. */
   function typeLabel(type: string): string {
@@ -173,11 +234,12 @@
     >
       <i class="fa-solid fa-rotate"></i>
     </button>
+    <ViewModeToggle mode={mcVersionsViewMode} onChange={setMcVersionsViewMode} />
   {/snippet}
 </PanelHeader>
 
 <div class="versions-client-switcher">
-  <button class="vcs-btn active" onmousedown={(e) => e.stopPropagation()}>
+  <button class="vcs-btn active" disabled data-tooltip="Java has one client kind — Vanilla">
     <i class="fa-brands fa-java"></i> Vanilla
   </button>
 </div>
@@ -194,7 +256,7 @@
 
 <div class="panel-body">
   {#if isLoading}
-    <div class="versions-loading"><span class="spinner"></span><span>Fetching Java versions...</span></div>
+    <ListSkeleton rows={6} />
   {:else if versionsList.length === 0 && loadError}
     <div class="versions-loading versions-error">
       <i class="fa-solid fa-triangle-exclamation"></i>
@@ -210,6 +272,7 @@
 
     {#if installed.length > 0}
       <span class="panel-section-label">Installed ({installed.length})</span>
+      <div class="version-list {mcVersionsViewMode === 'grid' ? 'grid-view' : ''}">
       {#each installed as v (v.id)}
         <div class="version-row {v.is_active ? 'mcv-active-row' : ''}">
           <div class="version-meta">
@@ -228,8 +291,8 @@
           </div>
           <button
             class="vcs-btn"
-            disabled
-            data-tooltip={MISSING_LAUNCH}
+            disabled={!v.has_jar || launchingId === v.id}
+            onclick={() => launchJavaVersion(v)}
             onmousedown={(e) => e.stopPropagation()}
           >
             <i class="fa-solid fa-play"></i><span>&nbsp;Launch</span>
@@ -245,10 +308,12 @@
           </button>
         </div>
       {/each}
+      </div>
     {/if}
 
     {#if others.length > 0}
       <span class="panel-section-label">Available ({others.length})</span>
+      <div class="version-list {mcVersionsViewMode === 'grid' ? 'grid-view' : ''}">
       {#each others as v (v.id)}
         <div class="version-row">
           <div class="version-meta">
@@ -258,16 +323,22 @@
               {v.release_time ? `· ${v.release_time.slice(0, 10)}` : ''}</span
             >
           </div>
-          <button
-            class="vcs-btn"
-            disabled
-            data-tooltip={MISSING_INSTALL}
-            onmousedown={(e) => e.stopPropagation()}
-          >
-            <i class="fa-solid fa-download"></i>&nbsp;Install
-          </button>
+          {#if installingId === v.id}
+            <InlineProgress progress={installProgress} showSpinner={false} />
+          {:else}
+            <button
+              class="vcs-btn"
+              disabled={installingId !== null}
+              onclick={() => installJavaVersion(v)}
+              onmousedown={(e) => e.stopPropagation()}
+              data-tooltip="Install"
+            >
+              <i class="fa-solid fa-download"></i>&nbsp;Install
+            </button>
+          {/if}
         </div>
       {/each}
+      </div>
     {/if}
 
     {#if installed.length === 0 && others.length === 0}
@@ -276,4 +347,3 @@
   {/if}
 </div>
 
-<EditionTabs edition="java" active="versions" onNavigate={(view) => onNavigate?.(view)} />

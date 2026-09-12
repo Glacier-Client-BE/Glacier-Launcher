@@ -7,6 +7,14 @@
  * strings. The original has no error state and no per-row delete — the grid is
  * tiles only.
  *
+ * TODO(feature 29, unified screenshot/clip hotkey passthrough): skipped.
+ * There is no existing folder-watch here to extend — this panel lists the
+ * screenshots directory on demand (see `list_bedrock_screenshots` below),
+ * it does not watch it. Building real passthrough (a Win32 hotkey hook plus
+ * an fs watcher over a client-specific output folder, wired through a new
+ * Tauri event) is a new subsystem, not a small addition, so it's left for a
+ * dedicated pass rather than bolted on here.
+ *
  * The screenshot source is always the *live* install: the C# side read the
  * static `BedrockScreenshotService.ComMojangScreenshotsDir`, and the Tauri
  * command ignores its `instanceDir` argument for the same reason. Nothing here
@@ -14,7 +22,9 @@
  */
 import { invoke, convertFileSrc } from '@tauri-apps/api/core'
 import SubTabs from './components/SubTabs.svelte'
-import EditionTabs from './components/EditionTabs.svelte'
+import PanelHeader from './components/PanelHeader.svelte'
+import ListSkeleton from './components/ListSkeleton.svelte'
+import { parentDir } from './format'
 
 let {
   onBack,
@@ -39,11 +49,6 @@ type ScreenshotFile = {
 // Port of Home.BedrockScreenshots.cs:10-11.
 let bedrockScreenshots = $state<ScreenshotFile[]>([])
 let isLoadingBedrockScreenshots = $state(false)
-
-function parentDir(path: string): string {
-  const idx = Math.max(path.lastIndexOf('\\'), path.lastIndexOf('/'))
-  return idx > 0 ? path.slice(0, idx) : ''
-}
 
 /**
  * `BedrockScreenshotService.OpenFolder` had the screenshots directory to hand;
@@ -108,13 +113,10 @@ refreshBedrockScreenshots()
 <!-- `.panel-overlay` and `.panel-handle` are supplied once by App.svelte
    around whichever panel is active, so this panel must not emit its own
    or the two nest and render a panel inside a panel. -->
-<div class="panel-header">
-  <div class="panel-title-wrap">
-    <span class="panel-title">Screenshots</span>
-    <div class="panel-title-underline"></div>
-  </div>
-  <div class="panel-header-actions">
+<PanelHeader title="Screenshots" {onBack}>
+  {#snippet extraActions()}
     <button
+      aria-label="Open folder"
       class="panel-icon-btn"
       onclick={openBedrockScreenshotsFolder}
       onmousedown={(e) => e.stopPropagation()}
@@ -123,6 +125,7 @@ refreshBedrockScreenshots()
       <i class="fa-solid fa-folder-open"></i>
     </button>
     <button
+      aria-label="Refresh"
       class="panel-icon-btn {isLoadingBedrockScreenshots ? 'spinning' : ''}"
       disabled={isLoadingBedrockScreenshots}
       onclick={refreshBedrockScreenshots}
@@ -131,24 +134,14 @@ refreshBedrockScreenshots()
     >
       <i class="fa-solid fa-rotate"></i>
     </button>
-    <button
-      class="panel-back-btn"
-      onclick={onBack}
-      onmousedown={(e) => e.stopPropagation()}
-      data-tooltip="Back"
-    >
-      <i class="fa-solid fa-chevron-down"></i>
-    </button>
-  </div>
-</div>
+  {/snippet}
+</PanelHeader>
 
 <SubTabs strip="utilities" active="photos" {onNavigate} />
 
 <div class="panel-body">
   {#if isLoadingBedrockScreenshots}
-    <div class="versions-loading">
-      <span class="spinner"></span><span>Loading screenshots…</span>
-    </div>
+    <ListSkeleton rows={4} />
   {:else if bedrockScreenshots.length === 0}
     <div class="empty-state">
       <i class="fa-solid fa-image"></i>
@@ -175,4 +168,3 @@ refreshBedrockScreenshots()
   {/if}
 </div>
 
-<EditionTabs edition="bedrock" active="utilities" {onNavigate} />

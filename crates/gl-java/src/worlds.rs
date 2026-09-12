@@ -75,7 +75,7 @@ fn dir_size(dir: &Path) -> u64 {
 /// ISO-8601 UTC timestamp for a path's mtime, matching C# `ToString("o")`.
 /// Sorting is done on this string in the original, so the format has to be
 /// lexicographically ordered — which the `o` format and RFC3339 both are.
-fn modified_at(path: &Path) -> String {
+pub fn modified_at(path: &Path) -> String {
     let Ok(meta) = fs::metadata(path) else {
         return String::new();
     };

@@ -4,7 +4,7 @@
 use serde_json::Value;
 
 use crate::error::{ModpackError, Result};
-use crate::models::{MrProject, MrSearchResult, MrVersion};
+use crate::models::{MrDependency, MrProject, MrSearchResult, MrVersion};
 
 const BASE_URL: &str = "https://api.modrinth.com/v2";
 const USER_AGENT: &str = "GlacierLauncher/1.0 (glacier-launcher)";
@@ -23,6 +23,23 @@ impl ModrinthClient {
             .http
             .get(url)
             .header("User-Agent", USER_AGENT)
+            .send()
+            .await?;
+        if !resp.status().is_success() {
+            return Err(ModpackError::Status {
+                status: resp.status().as_u16(),
+                message: resp.text().await.unwrap_or_default(),
+            });
+        }
+        Ok(resp.json::<Value>().await?)
+    }
+
+    async fn post_json(&self, url: &str, body: &Value) -> Result<Value> {
+        let resp = self
+            .http
+            .post(url)
+            .header("User-Agent", USER_AGENT)
+            .json(body)
             .send()
             .await?;
         if !resp.status().is_success() {
@@ -79,6 +96,50 @@ impl ModrinthClient {
             }
         }
         Ok(None)
+    }
+
+    /// Fetches a project's display title (feature 12: naming dependency
+    /// warnings by a human-readable title rather than a bare project id).
+    pub async fn get_project_title(&self, project_id: &str) -> Result<Option<String>> {
+        let url = format!("{BASE_URL}/project/{project_id}");
+        let json = self.get_json(&url).await?;
+        Ok(json
+            .get("title")
+            .and_then(Value::as_str)
+            .map(|s| html_decode(s)))
+    }
+
+    /// Looks up the exact version matching a jar's sha1 hash (feature 11:
+    /// used to identify which installed jar corresponds to which Modrinth
+    /// version before checking for an update).
+    pub async fn get_version_by_hash(&self, sha1_hex: &str) -> Result<Option<MrVersion>> {
+        let url = format!("{BASE_URL}/version_file/{sha1_hex}?algorithm=sha1");
+        match self.get_json(&url).await {
+            Ok(json) => Ok(parse_version(&json)),
+            Err(ModpackError::Status { status: 404, .. }) => Ok(None),
+            Err(e) => Err(e),
+        }
+    }
+
+    /// Given an installed jar's sha1 hash, asks Modrinth for the newest
+    /// version compatible with the given loaders/game versions (feature 11:
+    /// mod update checker). Empty `loaders`/`game_versions` mean "no filter".
+    pub async fn get_update_for_hash(
+        &self,
+        sha1_hex: &str,
+        loaders: &[String],
+        game_versions: &[String],
+    ) -> Result<Option<MrVersion>> {
+        let url = format!("{BASE_URL}/version_file/{sha1_hex}/update?algorithm=sha1");
+        let body = serde_json::json!({
+            "loaders": loaders,
+            "game_versions": game_versions,
+        });
+        match self.post_json(&url, &body).await {
+            Ok(json) => Ok(parse_version(&json)),
+            Err(ModpackError::Status { status: 404, .. }) => Ok(None),
+            Err(e) => Err(e),
+        }
     }
 }
 
@@ -148,6 +209,12 @@ fn parse_version(ver: &Value) -> Option<MrVersion> {
     let file_name = primary.get("filename").and_then(Value::as_str)?.to_string();
     let url = primary.get("url").and_then(Value::as_str)?.to_string();
     let size = primary.get("size").and_then(Value::as_i64).unwrap_or(0);
+    let sha1 = primary
+        .get("hashes")
+        .and_then(|h| h.get("sha1"))
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .to_string();
     let name = ver
         .get("name")
         .and_then(Value::as_str)
@@ -158,6 +225,34 @@ fn parse_version(ver: &Value) -> Option<MrVersion> {
         .and_then(Value::as_str)
         .unwrap_or("")
         .to_string();
+    let changelog = ver
+        .get("changelog")
+        .and_then(Value::as_str)
+        .filter(|s| !s.trim().is_empty())
+        .map(str::to_string);
+    let dependencies = ver
+        .get("dependencies")
+        .and_then(Value::as_array)
+        .map(|arr| {
+            arr.iter()
+                .map(|d| MrDependency {
+                    project_id: d
+                        .get("project_id")
+                        .and_then(Value::as_str)
+                        .map(str::to_string),
+                    version_id: d
+                        .get("version_id")
+                        .and_then(Value::as_str)
+                        .map(str::to_string),
+                    dependency_type: d
+                        .get("dependency_type")
+                        .and_then(Value::as_str)
+                        .unwrap_or("")
+                        .to_string(),
+                })
+                .collect()
+        })
+        .unwrap_or_default();
 
     Some(MrVersion {
         id,
@@ -165,6 +260,9 @@ fn parse_version(ver: &Value) -> Option<MrVersion> {
         file_name,
         url,
         size,
+        sha1,
+        changelog,
+        dependencies,
     })
 }
 

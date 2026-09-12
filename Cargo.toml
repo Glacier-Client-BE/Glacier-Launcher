@@ -16,6 +16,7 @@ members = [
     "crates/gl-settings",
     "crates/gl-update",
     "crates/gl-launch",
+    "crates/gl-sync",
 ]
 
 [workspace.package]
@@ -30,3 +31,26 @@ tokio = { version = "1", features = ["full"] }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "stream"] }
 thiserror = "2"
 tracing = "0.1"
+uuid = { version = "1", features = ["v4", "serde"] }
+
+# Optimization profiles for faster compilation speed
+[profile.release]
+opt-level = 2         # Fast execution speed without slow max-optimization passes
+lto = false           # Disables Link-Time Optimization (cuts linking time across 15 crates)
+codegen-units = 16    # Compiles code units in parallel using multiple CPU threads
+panic = "abort"       # Removes unwind tables to reduce binary size and link overhead
+strip = true          # Automatically strips debug symbols during build
+incremental = true    # Reuses per-crate work across repeat builds (first build is unaffected)
+
+[profile.dev]
+opt-level = 0
+debug = 1             # Faster linking in dev mode by generating line tables only
+
+# Shippable build profile: full optimization for real releases. Slower to
+# build than [profile.release] (which stays tuned for fast dev iteration) —
+# use with `cargo build --profile dist` when producing a build to distribute.
+[profile.dist]
+inherits = "release"
+lto = "thin"
+codegen-units = 1
+incremental = false

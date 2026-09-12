@@ -27,6 +27,17 @@ pub struct AppState {
     pub http: reqwest::Client,
     pub downloads: gl_download::DownloadQueue,
     pub clients_dir: std::path::PathBuf,
+    /// Previous-sample baseline for `commands::utilities::get_live_sample`'s
+    /// delta-based CPU% calculation (ported from `HardwareMonitorService`'s
+    /// `_prevIdle`/`_prevKernel`/`_prevUser`/`_haveBaseline` instance fields).
+    pub live_sample_baseline: Mutex<crate::commands::utilities::LiveSampleBaseline>,
+    /// Registry of currently-running Java child processes, keyed by instance
+    /// id (see `commands::java_process` and `gl_launch::process_state`).
+    pub java_processes: gl_launch::ProcessRegistry,
+    /// Sync-pack engine (Phase 7): shared content (dir links, merged
+    /// files, mod lists) kept consistent across Java instances. See
+    /// `commands::sync_packs`.
+    pub sync_engine: gl_sync::SyncEngine,
 }
 
 impl AppState {
@@ -64,6 +75,10 @@ impl AppState {
             http,
             downloads,
             clients_dir: root.join("clients"),
+            live_sample_baseline: Mutex::new(Default::default()),
+            java_processes: gl_launch::ProcessRegistry::new(),
+            sync_engine: gl_sync::SyncEngine::new(root.join("sync"))
+                .map_err(|e| format!("failed to initialize sync packs: {e}"))?,
         })
     }
 }

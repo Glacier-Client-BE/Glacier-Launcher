@@ -1,0 +1,50 @@
+name: Build
+
+# Produces the actual installable app (exe + NSIS/MSI bundles) — ci.yml only
+# lints/tests. Manually triggerable for a one-off build, and runs
+# automatically on version tags so a `git tag vX.Y.Z && git push --tags`
+# publishes artifacts without a local build.
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      # Caches the Cargo registry, git deps, and `target/` keyed on
+      # Cargo.lock — this is what turns a ~40 minute cold `cargo build` into
+      # a couple of minutes when only a few crates actually changed.
+      - uses: Swatinem/rust-cache@v2
+        with:
+          # This workflow only runs on tags/workflow_dispatch (rarely), so
+          # cache churn isn't a concern — always saving means the *next*
+          # manual build on a feature branch is warm too, not just main's.
+          save-if: true
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend deps
+        working-directory: frontend
+        run: npm ci
+
+      - name: Build (frontend + Tauri release bundle)
+        run: npm run build
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: glacier-launcher-windows
+          path: |
+            target/release/glacier-launcher.exe
+            target/release/bundle/nsis/*.exe
+            target/release/bundle/msi/*.msi
+          if-no-files-found: error

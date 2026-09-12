@@ -1,10 +1,20 @@
 <script lang="ts">
   import { invoke } from '@tauri-apps/api/core'
+  import { listen } from '@tauri-apps/api/event'
+  import { onDestroy } from 'svelte'
   import PanelHeader from './components/PanelHeader.svelte'
   import Spinner from './components/Spinner.svelte'
 
   // Ported from Components/LogsPanel.razor + Services/LogService.cs.
-  let { instanceDir, onBack }: { instanceDir: string; onBack?: () => void } = $props()
+  // `instanceId` (Phase 4, optional) enables the "Live" tail toggle below —
+  // without it (e.g. the flat Versions-tab log view) the panel is
+  // file-browsing only, same as before.
+  let {
+    instanceDir,
+    instanceId,
+    onBack,
+    embedded = false,
+  }: { instanceDir: string; instanceId?: string; onBack?: () => void; embedded?: boolean } = $props()
 
   type LogFile = { name: string; path: string; size: number; modified_at: string; is_crash: boolean }
 
@@ -43,6 +53,13 @@
     openLoading = true
     try {
       openText = await invoke<string>('read_log', { path: f.path })
+      // `list_logs` only flags a crash by directory (crash-reports/); a
+      // regular .log can still contain an uncaught exception, so re-check
+      // the actual content once it's loaded and upgrade the row's icon.
+      if (!f.is_crash && (await invoke<boolean>('log_looks_like_crash', { text: openText }))) {
+        f.is_crash = true
+        files = files
+      }
     } catch (e) {
       openText = `Could not read log: ${e}`
     } finally {
@@ -64,18 +81,92 @@
   }
 
   load()
+
+  // --- Phase 4: live-tail mode ----------------------------------------------
+  // Subscribes to `java-log-line` (emitted by the Rust launch-streaming loop,
+  // see `commands::launch::stream_child_output`) filtered to `instanceId`,
+  // appending lines to a view instead of a static file read. Independent of
+  // the file browser above — toggling it doesn't affect `openFile`.
+  type JavaLogLine = { instance_id: string; line: string; level: string }
+  let liveTailing = $state(false)
+  let liveLines = $state<string[]>([])
+  const LIVE_TAIL_MAX_LINES = 5000 // mirrors the Rust ring-buffer cap
+  let unlistenLogLine: (() => void) | undefined
+
+  async function toggleLiveTail() {
+    if (liveTailing) {
+      liveTailing = false
+      unlistenLogLine?.()
+      unlistenLogLine = undefined
+      return
+    }
+    if (!instanceId) return
+    liveLines = []
+    try {
+      liveLines = await invoke<string[]>('get_instance_log_buffer', { instanceId })
+    } catch {
+      // best-effort — start tailing from empty if the buffer read fails
+    }
+    liveTailing = true
+    unlistenLogLine = await listen<JavaLogLine>('java-log-line', (evt) => {
+      if (evt.payload.instance_id !== instanceId) return
+      liveLines = [...liveLines, evt.payload.line]
+      if (liveLines.length > LIVE_TAIL_MAX_LINES) {
+        liveLines = liveLines.slice(liveLines.length - LIVE_TAIL_MAX_LINES)
+      }
+    })
+  }
+
+  onDestroy(() => {
+    unlistenLogLine?.()
+  })
 </script>
 
-<PanelHeader title="Logs" {onBack}>
-  {#snippet extraActions()}
+{#if !embedded}
+  <PanelHeader title="Logs" {onBack}>
+    {#snippet extraActions()}
+      {#if instanceId}
+        <button
+          type="button"
+          class="panel-icon-btn {liveTailing ? 'active' : ''}"
+          onclick={toggleLiveTail}
+          data-tooltip={liveTailing ? 'Stop live tail' : 'Live tail this instance'}
+          aria-label="Live tail"
+        >
+          <i class="fa-solid {liveTailing ? 'fa-satellite-dish' : 'fa-tower-broadcast'}"></i>
+        </button>
+      {/if}
+      <button type="button" class="panel-icon-btn {loading ? 'spinning' : ''}" onclick={load} data-tooltip="Refresh" aria-label="Refresh">
+        <i class="fa-solid fa-rotate"></i>
+      </button>
+    {/snippet}
+  </PanelHeader>
+{:else}
+  <div class="panel-body-inline-actions">
+    {#if instanceId}
+      <button
+        type="button"
+        class="panel-icon-btn {liveTailing ? 'active' : ''}"
+        onclick={toggleLiveTail}
+        data-tooltip={liveTailing ? 'Stop live tail' : 'Live tail this instance'}
+        aria-label="Live tail"
+      >
+        <i class="fa-solid {liveTailing ? 'fa-satellite-dish' : 'fa-tower-broadcast'}"></i>
+      </button>
+    {/if}
     <button type="button" class="panel-icon-btn {loading ? 'spinning' : ''}" onclick={load} data-tooltip="Refresh" aria-label="Refresh">
       <i class="fa-solid fa-rotate"></i>
     </button>
-  {/snippet}
-</PanelHeader>
+  </div>
+{/if}
 
 <div class="panel-body">
-  {#if loading}
+  {#if liveTailing}
+    <div class="logs-toolbar">
+      <span class="logs-open-name"><i class="fa-solid fa-satellite-dish"></i> Live: {instanceId}</span>
+    </div>
+    <div class="logs-view">{liveLines.join('\n')}</div>
+  {:else if loading}
     <div class="versions-loading"><Spinner size={16} /><span>Scanning logs…</span></div>
   {:else if error}
     <span class="error-text">{error}</span>

@@ -11,19 +11,29 @@
 //! original.
 
 pub mod download;
+pub mod effective;
 pub mod error;
+pub mod import;
 pub mod install_service;
 pub mod instance_service;
 pub mod launcher;
+pub mod loader;
 pub mod mod_analyzer;
 pub mod mod_loader;
+pub mod mod_provenance;
+pub mod modpack_transfer;
 pub mod models;
+pub mod packs;
+pub mod prelaunch;
+pub mod presets;
 pub mod runtime_download;
 pub mod util;
 pub mod version_service;
 pub mod worlds;
 
+pub use effective::{effective, EffectiveLaunchConfig, GlobalJavaDefaults};
 pub use error::{JavaError, Result};
+pub use import::{DetectedLauncher, ImportCandidate, SourceLauncher};
 pub use install_service::{InstallProgress, InstallService};
 pub use instance_service::InstanceService;
 pub use launcher::{
@@ -32,7 +42,15 @@ pub use launcher::{
     VersionProfile,
 };
 pub use mod_analyzer::{ModInfo, ModReport};
-pub use models::{JavaInstance, JavaVersion};
+pub use mod_loader::{install_forge, install_neoforge, install_fabric, install_quilt, run_loader_installer};
+pub use mod_provenance::{ModProvenance, ModSource, ProvenanceStore};
+pub use packs::{delete_pack, import_pack, list_packs, PackKind};
+pub use modpack_transfer::{
+    export_instance, export_modpack, extract_overrides, import_modpack, import_official_minecraft,
+};
+pub use models::{InstanceSettings, JavaInstance, JavaVersion, ModLoaderKind};
+pub use prelaunch::PrelaunchWarning;
+pub use presets::{JvmPreset, PRESETS as JVM_PRESETS};
 pub use runtime_download::RuntimeDownloadService;
 pub use version_service::VersionService;
 

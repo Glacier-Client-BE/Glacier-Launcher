@@ -9,8 +9,9 @@
  */
 import { invoke, convertFileSrc } from '@tauri-apps/api/core'
 import SubTabs from './components/SubTabs.svelte'
-import EditionTabs from './components/EditionTabs.svelte'
+import IconBtn from './components/IconBtn.svelte'
 import type { BedrockInstance } from './settings'
+import { formatSize, formatRelativeTime, parentDir } from './format'
 
 let {
   instance,
@@ -41,38 +42,30 @@ let bedrockWorlds = $state<BedrockWorld[]>([])
 let isLoadingBedrockWorlds = $state(false)
 let _confirmDeleteWorldPath = $state('')
 
-/** Port of Home.razor.cs:692 `FormatSize`. */
-function formatSize(bytes: number): string {
-  if (!bytes || bytes <= 0) return '0 B'
-  const units = ['B', 'KB', 'MB', 'GB']
-  let value = bytes
-  let unit = 0
-  while (value >= 1024 && unit < units.length - 1) {
-    value /= 1024
-    unit++
-  }
-  return `${value.toFixed(2).replace(/\.?0+$/, '')} ${units[unit]}`
-}
+/**
+ * Feature 22 — seed display. `read_level_dat_summary` already exists (backs
+ * the level.dat editor's NBT parsing) and reads `RandomSeed` directly, so
+ * this reuses it rather than adding a second NBT reader. Keyed by
+ * folder_path and fetched best-effort per row: a world with an unreadable
+ * or missing level.dat simply shows no seed instead of failing the list.
+ */
+let worldSeeds = $state<Record<string, string>>({})
 
-/** Port of Home.razor.cs:677 `FormatRelativeTime`. */
-function formatRelativeTime(iso: string): string {
+async function loadWorldSeed(world: BedrockWorld) {
   try {
-    const dt = new Date(iso)
-    if (Number.isNaN(dt.getTime())) return ''
-    const diffMs = Date.now() - dt.getTime()
-    const minutes = diffMs / 60000
-    if (minutes < 2) return 'just now'
-    const hours = minutes / 60
-    if (hours < 1) return `${Math.floor(minutes)}m ago`
-    const days = hours / 24
-    if (days < 1) return `${Math.floor(hours)}h ago`
-    if (days < 7) return `${Math.floor(days)}d ago`
-    return dt.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+    const summary = await invoke<{ random_seed: number; has_random_seed: boolean }>(
+      'read_level_dat_summary',
+      { worldDir: world.folder_path },
+    )
+    if (summary.has_random_seed) {
+      worldSeeds[world.folder_path] = String(summary.random_seed)
+    }
   } catch {
-    return ''
+    // Best-effort — no seed shown for this row.
   }
 }
 
+/** Port of Home.razor.cs:692 `FormatSize`. */
 /**
  * Port of `FileToMojangUrl` (Home.QuickActions.cs:286). The WPF build served
  * world icons over a custom `glacier-mojang.local` scheme; the Tauri
@@ -85,11 +78,6 @@ function worldIconUrl(path: string | null): string {
   } catch {
     return ''
   }
-}
-
-function parentDir(path: string): string {
-  const idx = Math.max(path.lastIndexOf('\\'), path.lastIndexOf('/'))
-  return idx > 0 ? path.slice(0, idx) : ''
 }
 
 /**
@@ -111,6 +99,10 @@ async function refreshBedrockWorlds() {
     bedrockWorlds = await invoke<BedrockWorld[]>('list_bedrock_worlds', {
       instanceDir: instance?.directory ?? '',
     })
+    worldSeeds = {}
+    for (const world of bedrockWorlds) {
+      loadWorldSeed(world)
+    }
   } catch (e) {
     bedrockWorlds = []
     onToast?.(String(e), 'error')
@@ -178,16 +170,50 @@ $effect(() => {
   instance
   refreshBedrockWorlds()
 })
+
+// Feature 23 — one-time dismissible marketplace-content reminder, shared
+// with BedrockBackupsView via the same two settings-backed commands.
+let marketplaceReminderDismissed = $state(true)
+
+async function loadMarketplaceReminderDismissed() {
+  try {
+    marketplaceReminderDismissed = await invoke<boolean>('bedrock_marketplace_reminder_dismissed')
+  } catch {
+    marketplaceReminderDismissed = true
+  }
+}
+
+async function dismissMarketplaceReminder() {
+  marketplaceReminderDismissed = true
+  try {
+    await invoke('dismiss_bedrock_marketplace_reminder')
+  } catch (e) {
+    onToast?.(String(e), 'error')
+  }
+}
+
+loadMarketplaceReminderDismissed()
 </script>
 
 <!-- `.panel-overlay` and `.panel-handle` are supplied once by App.svelte
    around whichever panel is active, so this panel must not emit its own
    or the two nest and render a panel inside a panel. -->
-<div class="panel-header">
+<div class="panel-header has-back">
+  <button
+    type="button"
+    class="panel-back-btn"
+    onclick={onBack}
+    onmousedown={(e) => e.stopPropagation()}
+    data-tooltip="Back"
+    aria-label="Back"
+  >
+    <i class="fa-solid fa-arrow-left"></i>
+  </button>
   <div class="panel-title-wrap">
     <span class="panel-title">Worlds</span>
     <div class="panel-title-underline"></div>
   </div>
+  <div class="panel-header-spacer"></div>
   <div class="panel-header-actions">
     <button
       class="panel-icon-btn"
@@ -197,6 +223,7 @@ $effect(() => {
       data-tooltip={worldsDir
         ? 'Open folder'
         : 'Open folder — unavailable until worlds are listed'}
+      aria-label="Open folder"
     >
       <i class="fa-solid fa-folder-open"></i>
     </button>
@@ -206,16 +233,9 @@ $effect(() => {
       onclick={refreshBedrockWorlds}
       onmousedown={(e) => e.stopPropagation()}
       data-tooltip="Refresh"
+      aria-label="Refresh"
     >
       <i class="fa-solid fa-rotate"></i>
-    </button>
-    <button
-      class="panel-back-btn"
-      onclick={onBack}
-      onmousedown={(e) => e.stopPropagation()}
-      data-tooltip="Back"
-    >
-      <i class="fa-solid fa-chevron-down"></i>
     </button>
   </div>
 </div>
@@ -223,6 +243,26 @@ $effect(() => {
 <SubTabs strip="worlds-servers" active="worlds" {onNavigate} />
 
 <div class="panel-body">
+  {#if !marketplaceReminderDismissed}
+    <div
+      class="warning-text"
+      style="display:flex; align-items:center; gap:8px; padding:10px 14px; margin:10px 14px 0;"
+    >
+      <i class="fa-solid fa-circle-info"></i>
+      <span style="flex:1;"
+        >Heads up: marketplace-purchased content (maps, skin packs, texture packs bought in-game)
+        isn't included when you export or back up a world locally — only your own saves and
+        installed add-ons are.</span
+      >
+      <IconBtn
+        ghost
+        icon="fa-solid fa-xmark"
+        title="Dismiss"
+        onClick={dismissMarketplaceReminder}
+        onMouseDown={(e) => e.stopPropagation()}
+      />
+    </div>
+  {/if}
   {#if isLoadingBedrockWorlds}
     <div class="versions-loading"><span class="spinner"></span><span>Loading worlds…</span></div>
   {:else if bedrockWorlds.length === 0}
@@ -243,65 +283,61 @@ $effect(() => {
         <div class="version-meta">
           <span class="version-name">{world.name}</span>
           <span class="version-sub"
-            >{formatSize(world.size_bytes)} · {formatRelativeTime(world.modified_at)}</span
+            >{formatSize(world.size_bytes)} · {formatRelativeTime(world.modified_at)}{worldSeeds[
+              world.folder_path
+            ]
+              ? ` · Seed: ${worldSeeds[world.folder_path]}`
+              : ''}</span
           >
         </div>
         <div class="version-actions">
-          <button
-            class="icon-btn icon-btn-ghost"
-            data-tooltip="Open folder"
-            onclick={() => openBedrockWorldFolder(world)}
-            onmousedown={(e) => e.stopPropagation()}
-          >
-            <i class="fa-solid fa-folder-open"></i>
-          </button>
-          <button
-            class="icon-btn icon-btn-ghost"
-            data-tooltip="Export as .mcworld"
-            onclick={() => exportBedrockWorld(world)}
-            onmousedown={(e) => e.stopPropagation()}
-          >
-            <i class="fa-solid fa-file-export"></i>
-          </button>
-          <button
-            class="icon-btn icon-btn-ghost"
-            data-tooltip="Edit level.dat"
-            onclick={() => onEditLevelDat(world.folder_path)}
-            onmousedown={(e) => e.stopPropagation()}
-          >
-            <i class="fa-solid fa-sliders"></i>
-          </button>
+          <IconBtn
+            ghost
+            icon="fa-solid fa-folder-open"
+            title="Open folder"
+            onClick={() => openBedrockWorldFolder(world)}
+            onMouseDown={(e) => e.stopPropagation()}
+          />
+          <IconBtn
+            ghost
+            icon="fa-solid fa-file-export"
+            title="Export as .mcworld"
+            onClick={() => exportBedrockWorld(world)}
+            onMouseDown={(e) => e.stopPropagation()}
+          />
+          <IconBtn
+            ghost
+            icon="fa-solid fa-sliders"
+            title="Edit level.dat"
+            onClick={() => onEditLevelDat(world.folder_path)}
+            onMouseDown={(e) => e.stopPropagation()}
+          />
           {#if _confirmDeleteWorldPath === world.folder_path}
-            <button
-              class="icon-btn icon-btn-ghost"
-              data-tooltip="Confirm delete"
-              onclick={() => deleteBedrockWorld(world)}
-              onmousedown={(e) => e.stopPropagation()}
-            >
-              <i class="fa-solid fa-check"></i>
-            </button>
-            <button
-              class="icon-btn icon-btn-ghost"
-              data-tooltip="Cancel"
-              onclick={cancelDeleteWorld}
-              onmousedown={(e) => e.stopPropagation()}
-            >
-              <i class="fa-solid fa-xmark"></i>
-            </button>
+            <IconBtn
+              ghost
+              icon="fa-solid fa-check"
+              title="Confirm delete"
+              onClick={() => deleteBedrockWorld(world)}
+              onMouseDown={(e) => e.stopPropagation()}
+            />
+            <IconBtn
+              ghost
+              icon="fa-solid fa-xmark"
+              title="Cancel"
+              onClick={cancelDeleteWorld}
+              onMouseDown={(e) => e.stopPropagation()}
+            />
           {:else}
-            <button
-              class="icon-btn icon-btn-ghost"
-              data-tooltip="Delete"
-              onclick={() => confirmDeleteWorld(world.folder_path)}
-              onmousedown={(e) => e.stopPropagation()}
-            >
-              <i class="fa-solid fa-trash"></i>
-            </button>
+            <IconBtn
+              ghost
+              icon="fa-solid fa-trash"
+              title="Delete"
+              onClick={() => confirmDeleteWorld(world.folder_path)}
+              onMouseDown={(e) => e.stopPropagation()}
+            />
           {/if}
         </div>
       </div>
     {/each}
   {/if}
 </div>
-
-<EditionTabs edition="bedrock" active="worlds" {onNavigate} />

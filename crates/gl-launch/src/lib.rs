@@ -9,5 +9,7 @@
 pub mod bedrock;
 pub mod error;
 pub mod java;
+pub mod process_state;
 
 pub use error::{LaunchError, Result};
+pub use process_state::{ProcessRegistry, RunningProcess};

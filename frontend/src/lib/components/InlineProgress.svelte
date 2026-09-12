@@ -14,6 +14,8 @@
    * spinner-only button shows while `showSpinner` is true. Percentages are
    * whole numbers, matching the original's "F0" formatting.
    */
+  import IconBtn from './IconBtn.svelte'
+
   let {
     progress = 0,
     showSpinner = true,
@@ -41,18 +43,18 @@
     <span class="dl-pct">{pct}%</span>
   {/if}
   {#if onCancel}
-    <button
-      type="button"
-      class="icon-btn icon-btn-cancel"
-      onclick={() => onCancel?.()}
-      onmousedown={(e) => e.stopPropagation()}
-      data-tooltip="Cancel"
-      aria-label="Cancel download"
+    <IconBtn
+      class="icon-btn-cancel"
+      title="Cancel"
+      onClick={() => onCancel?.()}
+      onMouseDown={(e) => e.stopPropagation()}
     >
-      <span class="spinner"></span>
-      <i class="fa-solid fa-xmark"></i>
-    </button>
+      {#snippet children()}
+        <span class="spinner"></span>
+        <i class="fa-solid fa-xmark"></i>
+      {/snippet}
+    </IconBtn>
   {:else if showSpinner}
-    <button type="button" class="icon-btn" disabled aria-busy="true"><span class="spinner"></span></button>
+    <IconBtn loading disabled title="Working" />
   {/if}
 </div>

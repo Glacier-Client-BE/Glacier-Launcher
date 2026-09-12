@@ -19,8 +19,11 @@ declare global {
     setBlurIntensity?: (px: number) => void
     setCustomBackground?: (filePath: string) => void
     setCompactMode?: (enabled: boolean) => void
+    setPanelSide?: (side: 'left' | 'right') => void
+    setPanelWidth?: (px: number) => void
     setAnimationsEnabled?: (enabled: boolean) => void
     setAnimationSpeed?: (speed: number) => void
+    setAccessibilityMode?: (enabled: boolean) => void
     applyStoredSettings?: (...args: unknown[]) => void
     setFont?: (family: string) => void
     setCustomCss?: (css: string) => void
@@ -29,6 +32,7 @@ declare global {
     setBackgroundFit?: (fit: string, opacity: number) => void
     openDiscordOAuth?: (clientId: string) => void
     focusSearchInput?: () => void
-    glacierSkin?: unknown
+    setKeyboardShortcuts?: (json: string) => void
+    _glacierCapturingShortcut?: boolean
   }
 }

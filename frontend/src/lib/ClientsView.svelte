@@ -1,8 +1,9 @@
 <script lang="ts">
+  import { onMount, onDestroy } from 'svelte'
   import { invoke } from '@tauri-apps/api/core'
+  import { listen, type UnlistenFn } from '@tauri-apps/api/event'
   import { open } from '@tauri-apps/plugin-dialog'
   import PanelHeader from './components/PanelHeader.svelte'
-  import EditionTabs from './components/EditionTabs.svelte'
   import InlineProgress from './components/InlineProgress.svelte'
   import type { LauncherSettings } from './settings'
 
@@ -10,12 +11,11 @@
    * 1:1 port of the `clients` panel - Home.razor lines 1932-2188, with
    * behaviour from Pages/Home.Clients.cs.
    *
-   * Backend gaps (rendered as visibly disabled controls, never faked):
-   *  - no `check_oderso_up_to_date` / `check_levilamina_up_to_date`
-   *    commands, so those two cards cannot show "Update available".
-   *  - client downloads report no progress and cannot be cancelled
-   *    (no progress event, no cancel command), so InlineProgress renders
-   *    its spinner-only form.
+   * Client downloads go through the same `state.downloads` queue as every
+   * other panel, so they already carry real progress + cancel support at
+   * the backend - this panel just wasn't listening to `downloads-changed`
+   * yet (see LeviLaminaModsView/TweaksView for the same pattern), so
+   * InlineProgress rendered its spinner-only form.
    */
   let {
     settings,
@@ -24,6 +24,7 @@
     onOpenVersions,
     onNavigate,
     versionsHasBadge = false,
+    breadcrumb = [],
   }: {
     settings: LauncherSettings
     onChange: (s: LauncherSettings) => void
@@ -31,6 +32,7 @@
     onOpenVersions?: () => void
     onNavigate?: (view: string) => void
     versionsHasBadge?: boolean
+    breadcrumb?: string[]
   } = $props()
 
   type ClientState = {
@@ -47,6 +49,61 @@
   let flarial = $state(freshState())
   let oderso = $state(freshState())
   let levilamina = $state(freshState())
+
+  /**
+   * Feature 26 — client compatibility matrix.
+   *
+   * Static, hand-maintained (client version, MC version) pairs known to
+   * work together. This is informational only (a tooltip/badge), never a
+   * launch gate — clients are notoriously fast-moving and a stale entry
+   * here must never block a play session.
+   *
+   * NOTE: the specific version numbers below are PLACEHOLDERS, not
+   * verified compatibility data. Replace with real (client version, MC
+   * version) pairs sourced from each client's own changelog/Discord before
+   * relying on this for anything user-facing.
+   */
+  type CompatEntry = { clientVersion: string; mcVersion: string; note?: string }
+  const COMPAT_MATRIX: Record<string, CompatEntry[]> = {
+    'Flarial Client': [
+      { clientVersion: 'example-0.0.0', mcVersion: 'example-1.0.0', note: 'PLACEHOLDER — fill in real data' },
+    ],
+    'OderSo Client': [
+      { clientVersion: 'example-0.0.0', mcVersion: 'example-1.0.0', note: 'PLACEHOLDER — fill in real data' },
+    ],
+    LeviLamina: [
+      { clientVersion: 'example-0.0.0', mcVersion: 'example-1.0.0', note: 'PLACEHOLDER — fill in real data' },
+    ],
+  }
+
+  let installedMcVersion = $state('')
+
+  /** Known-good if the matrix has no entries for this client (nothing to warn about yet), or an entry names the currently-installed MC version. */
+  function isKnownCompatible(clientName: string): boolean {
+    const entries = COMPAT_MATRIX[clientName]
+    if (!entries || entries.length === 0) return true
+    if (!installedMcVersion) return true
+    return entries.some((e) => e.mcVersion === installedMcVersion)
+  }
+
+  function compatTooltip(clientName: string): string {
+    const entries = COMPAT_MATRIX[clientName]
+    if (!entries || entries.length === 0) return ''
+    if (isKnownCompatible(clientName)) return ''
+    const known = entries.map((e) => `${e.clientVersion} ↔ MC ${e.mcVersion}`).join(', ')
+    return `Not in the known-compatible list for MC ${installedMcVersion || '?'}. Known-good pairs: ${known}. Informational only — launching is not blocked.`
+  }
+
+  async function refreshInstalledMcVersion() {
+    try {
+      const v = await invoke<{ installed: boolean; display_version: string; is_preview: boolean }>(
+        'installed_bedrock_version',
+      )
+      installedMcVersion = v.installed ? v.display_version : ''
+    } catch {
+      installedMcVersion = ''
+    }
+  }
 
   const customDllPath = $derived(settings.CustomDllPath ?? '')
   let copiedDllPath = $state(false)
@@ -80,8 +137,9 @@
   async function refreshOderso() {
     try {
       oderso.downloaded = await invoke<boolean>('oderso_client_installed')
-      // No up-to-date probe exists for OderSo; assume current when present.
       oderso.upToDate = oderso.downloaded
+        ? await invoke<boolean>('check_oderso_up_to_date')
+        : false
     } catch (e) {
       oderso.error = String(e)
     }
@@ -91,6 +149,8 @@
     try {
       levilamina.downloaded = await invoke<boolean>('levilamina_client_installed')
       levilamina.upToDate = levilamina.downloaded
+        ? await invoke<boolean>('check_levilamina_up_to_date')
+        : false
     } catch (e) {
       levilamina.error = String(e)
     }
@@ -99,6 +159,29 @@
   function selectClient(name: string) {
     onChange({ ...settings, SelectedClient: name })
   }
+
+  /** Live download queue, for real per-download progress and cancel. */
+  type QueueEntry = { id: string; label: string; status: string; progress: number }
+  let queue = $state<QueueEntry[]>([])
+  let unlistenQueue: UnlistenFn | undefined
+
+  function activeEntry(label: string): QueueEntry | undefined {
+    return queue.find((e) => e.label === label && e.status === 'Downloading')
+  }
+
+  async function cancelDownload(label: string) {
+    const entry = activeEntry(label)
+    if (entry) await invoke('cancel_download', { id: entry.id }).catch(() => {})
+  }
+
+  onMount(() => {
+    listen<QueueEntry[]>('downloads-changed', (e) => {
+      queue = e.payload
+    }).then((fn) => {
+      unlistenQueue = fn
+    })
+  })
+  onDestroy(() => unlistenQueue?.())
 
   async function handleFlarialDownload() {
     if (flarial.downloading) return
@@ -167,7 +250,7 @@
     try {
       await invoke('delete_levilamina_client')
       levilamina = freshState()
-      if (settings.SelectedClient === 'LeviLamina Client') selectClient('Latite Client')
+      if (settings.SelectedClient === 'LeviLamina') selectClient('Latite Client')
     } catch (e) {
       levilamina.error = String(e)
     }
@@ -195,9 +278,10 @@
   refreshFlarial()
   refreshOderso()
   refreshLevilamina()
+  refreshInstalledMcVersion()
 </script>
 
-<PanelHeader title="Clients" {onBack}>
+<PanelHeader title="Clients" {onBack} {breadcrumb}>
   {#snippet extraActions()}
     <button
       type="button"
@@ -220,7 +304,12 @@
     <div class="client-card-header">
       <div class="client-card-icon client-card-icon-img"><img src="/images/clients/flarial.svg" alt="Flarial Client" /></div>
       <div class="client-card-meta">
-        <span class="client-card-name">Flarial Client</span>
+        <span class="client-card-name">
+          Flarial Client
+          {#if flarial.downloaded && !isKnownCompatible('Flarial Client')}
+            <i class="fa-solid fa-circle-info compat-warn-icon" data-tooltip={compatTooltip('Flarial Client')} aria-label="Compatibility notice"></i>
+          {/if}
+        </span>
         <span class="client-card-sub">
           {#if flarial.downloaded}
             {#if flarial.upToDate}
@@ -248,7 +337,7 @@
           </button>
         {/if}
         {#if flarial.downloading}
-          <InlineProgress progress={0} showSpinner />
+          <InlineProgress progress={activeEntry('Flarial Client')?.progress ?? 0} showSpinner onCancel={() => cancelDownload('Flarial Client')} />
         {:else}
           {#if !flarial.downloaded || !flarial.upToDate}
             <button
@@ -317,7 +406,12 @@
     <div class="client-card-header">
       <div class="client-card-icon client-card-icon-img"><img src="/images/clients/oderso.png" alt="OderSo Client" /></div>
       <div class="client-card-meta">
-        <span class="client-card-name">OderSo Client</span>
+        <span class="client-card-name">
+          OderSo Client
+          {#if oderso.downloaded && !isKnownCompatible('OderSo Client')}
+            <i class="fa-solid fa-circle-info compat-warn-icon" data-tooltip={compatTooltip('OderSo Client')} aria-label="Compatibility notice"></i>
+          {/if}
+        </span>
         <span class="client-card-sub">
           {#if oderso.downloaded}
             {#if oderso.upToDate}
@@ -345,7 +439,7 @@
           </button>
         {/if}
         {#if oderso.downloading}
-          <InlineProgress progress={0} showSpinner />
+          <InlineProgress progress={activeEntry('OderSo Client')?.progress ?? 0} showSpinner onCancel={() => cancelDownload('OderSo Client')} />
         {:else}
           {#if !oderso.downloaded || !oderso.upToDate}
             <button
@@ -376,11 +470,16 @@
     <p class="client-card-desc">OderSo Client — curated Minecraft Bedrock experience by MasonOderSo.</p>
   </div>
 
-  <div class="client-card" class:client-active={settings.SelectedClient === 'LeviLamina Client'}>
+  <div class="client-card" class:client-active={settings.SelectedClient === 'LeviLamina'}>
     <div class="client-card-header">
-      <div class="client-card-icon"><i class="fa-solid fa-layer-group"></i></div>
+    <div class="client-card-icon client-card-icon-img"><img src="/images/clients/levi-lamina.png" alt="Vanilla" /></div>
       <div class="client-card-meta">
-        <span class="client-card-name">LeviLamina Client</span>
+        <span class="client-card-name">
+          LeviLamina
+          {#if levilamina.downloaded && !isKnownCompatible('LeviLamina')}
+            <i class="fa-solid fa-circle-info compat-warn-icon" data-tooltip={compatTooltip('LeviLamina')} aria-label="Compatibility notice"></i>
+          {/if}
+        </span>
         <span class="client-card-sub">
           {#if levilamina.downloaded}
             {#if levilamina.upToDate}
@@ -407,19 +506,19 @@
             <i class="fa-solid fa-puzzle-piece"></i>
           </button>
         {/if}
-        {#if settings.SelectedClient !== 'LeviLamina Client' && levilamina.downloaded}
+        {#if settings.SelectedClient !== 'LeviLamina' && levilamina.downloaded}
           <button
             class="icon-btn"
             data-tooltip="Select"
             aria-label="Select"
-            onclick={() => selectClient('LeviLamina Client')}
+            onclick={() => selectClient('LeviLamina')}
             onmousedown={(e) => e.stopPropagation()}
           >
             <i class="fa-solid fa-check"></i>
           </button>
         {/if}
         {#if levilamina.downloading}
-          <InlineProgress progress={0} showSpinner />
+          <InlineProgress progress={activeEntry('LeviLamina')?.progress ?? 0} showSpinner onCancel={() => cancelDownload('LeviLamina')} />
         {:else}
           {#if !levilamina.downloaded || !levilamina.upToDate}
             <button
@@ -452,9 +551,7 @@
 
   <div class="client-card" class:client-active={settings.SelectedClient === 'Vanilla'}>
     <div class="client-card-header">
-      <div class="client-card-icon" style="background:rgba(67,181,129,0.15); color:var(--green);">
-        <i class="fa-solid fa-cube"></i>
-      </div>
+    <div class="client-card-icon client-card-icon-img"><img src="/images/mc-logo.png" alt="Vanilla" /></div>
       <div class="client-card-meta">
         <span class="client-card-name">Vanilla</span>
         <span class="client-card-sub client-card-note">Launches Minecraft with no DLL injection</span>
@@ -540,4 +637,3 @@
 
 </div>
 
-<EditionTabs edition="bedrock" active="clients" onNavigate={(v) => onNavigate?.(v)} />

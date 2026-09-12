@@ -1,5 +1,13 @@
 //! Ported from `FlarialService.cs`: fetches the expected SHA-256 hash for
 //! the Flarial client DLL and verifies a local copy against it.
+//!
+//! TODO(feature 25, client config profile switching): skipped here. This
+//! module (and the rest of gl-clients) has no record of where Flarial (or
+//! any other client) keeps its own settings/config file on disk — nothing
+//! in this codebase names a real path, and guessing one and shipping
+//! save/restore against it risks silently corrupting or missing the user's
+//! actual config. Implement this once a verified config path is confirmed
+//! (e.g. from the client's own docs) rather than fabricating one.
 
 use reqwest::Client;
 use serde_json::Value;

@@ -18,6 +18,10 @@
   import { onDestroy, onMount } from 'svelte'
   import PanelHeader from './components/PanelHeader.svelte'
   import InlineProgress from './components/InlineProgress.svelte'
+  import IconBtn from './components/IconBtn.svelte'
+  import ViewModeToggle from './components/ViewModeToggle.svelte'
+  import { loadViewMode, saveViewMode, type ViewMode } from './viewMode'
+  import ListSkeleton from './components/ListSkeleton.svelte'
   import type { LauncherSettings } from './settings'
 
   let {
@@ -27,6 +31,7 @@
     onSelectClient,
     onLaunchDll,
     onToast,
+    breadcrumb = [],
   }: {
     settings: LauncherSettings | null
     onBack?: () => void
@@ -35,6 +40,7 @@
     /** Home's `HandleVersionLaunch` / `HandleOderSoEntryLaunch` tail: go home, inject, report. */
     onLaunchDll?: (dllPath: string, label: string) => void
     onToast?: (message: string, kind?: string) => void
+    breadcrumb?: string[]
   } = $props()
 
   type LatiteVersion = {
@@ -65,6 +71,11 @@
 
   let versionsClient = $state<'Latite' | 'OderSo'>('Latite')
   let versionsFilter = $state('')
+  let versionsViewMode = $state<ViewMode>(loadViewMode('client-versions'))
+  function setVersionsViewMode(m: ViewMode) {
+    versionsViewMode = m
+    saveViewMode('client-versions', m)
+  }
 
   let isLoadingVersions = $state(false)
   let latiteFetchError = $state('')
@@ -368,7 +379,7 @@
   loadVersions()
 </script>
 
-<PanelHeader title="Versions" {onBack} backIcon="fa-chevron-left">
+<PanelHeader title="Versions" {onBack} {breadcrumb}>
   {#snippet extraActions()}
     <button
       type="button"
@@ -401,6 +412,7 @@
     >
       <i class="fa-solid fa-rotate"></i>
     </button>
+    <ViewModeToggle mode={versionsViewMode} onChange={setVersionsViewMode} />
   {/snippet}
 </PanelHeader>
 
@@ -439,7 +451,7 @@
       <div class="cache-notice"><i class="fa-solid fa-circle-info"></i><span>{latiteFetchError}</span></div>
     {/if}
     {#if isLoadingVersions}
-      <div class="versions-loading"><span class="spinner"></span><span>Fetching versions...</span></div>
+      <ListSkeleton rows={6} />
     {:else if versions.length === 0 && latiteFetchError}
       <div class="versions-loading versions-error">
         <i class="fa-solid fa-triangle-exclamation"></i>
@@ -482,16 +494,10 @@
                     <i class="fa-solid fa-copy"></i>
                   </button>
                   {#if v.downloaded}
-                    <button class="icon-btn icon-btn-ghost" title="Delete" onclick={() => handleVersionDelete(v)}>
-                      <i class="fa-solid fa-trash"></i>
-                    </button>
-                    <button class="icon-btn" title="Launch" onclick={() => handleVersionLaunch(v)}>
-                      <i class="fa-solid fa-play"></i>
-                    </button>
+                    <IconBtn ghost icon="fa-solid fa-trash" title="Delete" onClick={() => handleVersionDelete(v)} />
+                    <IconBtn icon="fa-solid fa-play" title="Launch" onClick={() => handleVersionLaunch(v)} />
                   {:else}
-                    <button class="icon-btn" title="Download" onclick={() => handleVersionDownload(v)}>
-                      <i class="fa-solid fa-download"></i>
-                    </button>
+                    <IconBtn icon="fa-solid fa-download" title="Download" onClick={() => handleVersionDownload(v)} />
                   {/if}
                 </div>
               {/if}
@@ -505,6 +511,7 @@
         <div class="versions-loading"><span style="opacity:0.5;">No results for "{versionsFilter}"</span></div>
       {/if}
 
+      <div class="version-list {versionsViewMode === 'grid' ? 'grid-view' : ''}">
       {#each unpinnedList as v (v.tag)}
         <div class="version-row {v.error ? 'error-row' : ''}">
           <div class="version-meta">
@@ -534,22 +541,17 @@
                   <i class="fa-solid fa-copy"></i>
                 </button>
                 {#if v.downloaded}
-                  <button class="icon-btn icon-btn-ghost" title="Delete" onclick={() => handleVersionDelete(v)}>
-                    <i class="fa-solid fa-trash"></i>
-                  </button>
-                  <button class="icon-btn" title="Launch" onclick={() => handleVersionLaunch(v)}>
-                    <i class="fa-solid fa-play"></i>
-                  </button>
+                  <IconBtn ghost icon="fa-solid fa-trash" title="Delete" onClick={() => handleVersionDelete(v)} />
+                  <IconBtn icon="fa-solid fa-play" title="Launch" onClick={() => handleVersionLaunch(v)} />
                 {:else}
-                  <button class="icon-btn" title="Download" onclick={() => handleVersionDownload(v)}>
-                    <i class="fa-solid fa-download"></i>
-                  </button>
+                  <IconBtn icon="fa-solid fa-download" title="Download" onClick={() => handleVersionDownload(v)} />
                 {/if}
               </div>
             {/if}
           {/if}
         </div>
       {/each}
+      </div>
     {/if}
   {/if}
 
@@ -558,7 +560,7 @@
       <div class="cache-notice"><i class="fa-solid fa-circle-info"></i><span>{oderSoFetchError}</span></div>
     {/if}
     {#if isLoadingOderSoVersions}
-      <div class="versions-loading"><span class="spinner"></span><span>Fetching OderSo versions...</span></div>
+      <ListSkeleton rows={5} />
     {:else if oderSoFetchError && oderSoVersions.length === 0}
       <div class="versions-loading versions-error">
         <i class="fa-solid fa-triangle-exclamation"></i>
@@ -574,6 +576,7 @@
         <div class="versions-loading"><span style="opacity:0.5;">No results for "{versionsFilter}"</span></div>
       {/if}
 
+      <div class="version-list {versionsViewMode === 'grid' ? 'grid-view' : ''}">
       {#each filteredOderSo as state (state.name)}
         <div class="version-row {state.active ? 'oderso-active-row' : ''}">
           <div class="version-meta">
@@ -597,21 +600,16 @@
           {:else}
             <div class="version-actions">
               {#if state.downloaded}
-                <button class="icon-btn icon-btn-ghost" title="Delete" onclick={() => handleOderSoDelete(state)}>
-                  <i class="fa-solid fa-trash"></i>
-                </button>
-                <button class="icon-btn" title="Set active & Launch" onclick={() => handleOderSoLaunch(state)}>
-                  <i class="fa-solid fa-play"></i>
-                </button>
+                <IconBtn ghost icon="fa-solid fa-trash" title="Delete" onClick={() => handleOderSoDelete(state)} />
+                <IconBtn icon="fa-solid fa-play" title="Set active & Launch" onClick={() => handleOderSoLaunch(state)} />
               {:else}
-                <button class="icon-btn" title="Download" onclick={() => handleOderSoDownload(state)}>
-                  <i class="fa-solid fa-download"></i>
-                </button>
+                <IconBtn icon="fa-solid fa-download" title="Download" onClick={() => handleOderSoDownload(state)} />
               {/if}
             </div>
           {/if}
         </div>
       {/each}
+      </div>
     {/if}
   {/if}
 </div>

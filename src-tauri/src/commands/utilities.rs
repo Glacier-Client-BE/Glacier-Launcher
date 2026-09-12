@@ -3,15 +3,17 @@
 //! four original sub-tabs are covered for real here:
 //!
 //! - **options**: full read/write of Bedrock's `options.txt`.
-//! - **system**: RAM + disks via raw `kernel32` calls, plus CPU name read
-//!   straight out of the registry (`winreg`, the one new dependency this
-//!   pass adds). GPU name/VRAM/driver, motherboard, and BIOS all came from
-//!   WMI (`System.Management`) in the C# original; that has no
-//!   dependency-free Rust equivalent, so those fields are intentionally
-//!   left out rather than faked. Live CPU% polling (`LiveSample`) is
-//!   likewise not implemented — it needs a sampled delta over time, which
-//!   is a bigger lift than this pass covers. Live RAM% is derivable
-//!   client-side from `total_ram_bytes`/`used_ram_bytes` above.
+//! - **system**: RAM + disks via raw `kernel32` calls, CPU name/identifier/
+//!   MHz, GPU list, and motherboard/BIOS info all read straight out of the
+//!   registry (`winreg`). The C# original (`HardwareMonitorService.cs`)
+//!   never actually used WMI for any of this — it's all registry reads
+//!   (`HKLM\SYSTEM\...\Control\Class\{4d36e968-...}` for GPUs,
+//!   `HKLM\HARDWARE\DESCRIPTION\System\BIOS` for board/BIOS) and raw
+//!   `kernel32` calls (`GetSystemTimes`/`GetTickCount64` for live CPU% and
+//!   uptime), so this port follows the same technique. Live CPU%/RAM%
+//!   polling (`get_live_sample`) keeps a previous-sample baseline in
+//!   `AppState` and computes the delta the same way `HardwareMonitorService
+//!   .Sample()` did.
 //! - **clients** (the user's own custom DLL/EXE library — distinct from the
 //!   "Client Library" GitHub catalog panel): full list/add/rename/delete,
 //!   built on `gl_clients::custom_client_library`'s pure helpers.
@@ -355,7 +357,7 @@ pub fn restore_bedrock_options_backup(instance_dir: String) -> Result<bool, Stri
 }
 
 // ---------------------------------------------------------------------
-// system snapshot (RAM + disks only — see module docs)
+// system snapshot (RAM + disks + CPU + GPU + board/BIOS)
 // ---------------------------------------------------------------------
 
 #[derive(Debug, Clone, Serialize)]
@@ -366,9 +368,22 @@ pub struct DiskSnapshot {
 }
 
 #[derive(Debug, Clone, Serialize)]
+pub struct GpuInfo {
+    pub name: String,
+    pub vram_bytes: u64,
+    pub driver_version: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
 pub struct SystemSnapshot {
     pub cpu_name: String,
     pub cpu_cores: usize,
+    pub cpu_identifier: String,
+    pub cpu_mhz: u32,
+    pub gpus: Vec<GpuInfo>,
+    pub board_vendor: String,
+    pub board_product: String,
+    pub bios_version: String,
     pub total_ram_bytes: u64,
     pub used_ram_bytes: u64,
     pub os: String,
@@ -376,24 +391,150 @@ pub struct SystemSnapshot {
     pub disks: Vec<DiskSnapshot>,
 }
 
-/// Reads `ProcessorNameString` from the registry — the same source
-/// `HardwareMonitorService.ReadCpu` used, minus the WMI fields (GPU,
-/// motherboard, BIOS) that have no dependency-free Rust equivalent here.
+#[derive(Debug, Clone, Serialize)]
+pub struct LiveSample {
+    pub cpu_percent: f64,
+    pub ram_percent: f64,
+    pub ram_used_bytes: u64,
+    pub ram_total_bytes: u64,
+    pub uptime_ms: u64,
+}
+
+/// Reads `ProcessorNameString` from the registry — matches
+/// `HardwareMonitorService.ReadCpu`.
 #[cfg(windows)]
 fn read_cpu_name() -> String {
-    use winreg::enums::HKEY_LOCAL_MACHINE;
-    use winreg::RegKey;
-
-    RegKey::predef(HKEY_LOCAL_MACHINE)
-        .open_subkey(r"HARDWARE\DESCRIPTION\System\CentralProcessor\0")
-        .and_then(|key| key.get_value::<String, _>("ProcessorNameString"))
-        .map(|s| s.trim().to_string())
-        .unwrap_or_else(|_| "Unknown CPU".to_string())
+    read_cpu_string("ProcessorNameString").unwrap_or_else(|| "Unknown CPU".to_string())
 }
 
 #[cfg(not(windows))]
 fn read_cpu_name() -> String {
     "Unknown CPU".to_string()
+}
+
+#[cfg(windows)]
+fn read_cpu_string(value_name: &str) -> Option<String> {
+    use winreg::enums::HKEY_LOCAL_MACHINE;
+    use winreg::RegKey;
+
+    RegKey::predef(HKEY_LOCAL_MACHINE)
+        .open_subkey(r"HARDWARE\DESCRIPTION\System\CentralProcessor\0")
+        .and_then(|key| key.get_value::<String, _>(value_name))
+        .ok()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+}
+
+#[cfg(windows)]
+fn read_cpu_mhz() -> u32 {
+    use winreg::enums::HKEY_LOCAL_MACHINE;
+    use winreg::RegKey;
+
+    RegKey::predef(HKEY_LOCAL_MACHINE)
+        .open_subkey(r"HARDWARE\DESCRIPTION\System\CentralProcessor\0")
+        .and_then(|key| key.get_value::<u32, _>("~MHz"))
+        .unwrap_or(0)
+}
+
+/// Reads a value under `HKLM\HARDWARE\DESCRIPTION\System\BIOS`. Some
+/// values (notably `BIOSVersion` on many boards) come back as a
+/// `REG_MULTI_SZ` string array rather than a plain string — try both,
+/// matching `HardwareMonitorService.ReadBios`.
+#[cfg(windows)]
+fn read_bios(value_name: &str) -> Option<String> {
+    use winreg::enums::HKEY_LOCAL_MACHINE;
+    use winreg::RegKey;
+
+    let key = RegKey::predef(HKEY_LOCAL_MACHINE)
+        .open_subkey(r"HARDWARE\DESCRIPTION\System\BIOS")
+        .ok()?;
+
+    if let Ok(s) = key.get_value::<String, _>(value_name) {
+        let s = s.trim().to_string();
+        if !s.is_empty() {
+            return Some(s);
+        }
+    }
+    if let Ok(arr) = key.get_value::<Vec<String>, _>(value_name) {
+        let s = arr.join(" ").trim().to_string();
+        if !s.is_empty() {
+            return Some(s);
+        }
+    }
+    None
+}
+
+#[cfg(windows)]
+const DISPLAY_CLASS_KEY: &str =
+    r"SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}";
+
+/// Enumerates installed GPUs from the display adapter class registry key —
+/// matches `HardwareMonitorService.ReadGpus`. Best-effort: any single
+/// unreadable subkey/value is skipped rather than failing the whole scan.
+#[cfg(windows)]
+fn read_gpus() -> Vec<GpuInfo> {
+    use winreg::enums::{HKEY_LOCAL_MACHINE, RegType};
+    use winreg::RegKey;
+
+    let mut out: Vec<GpuInfo> = Vec::new();
+    let root = match RegKey::predef(HKEY_LOCAL_MACHINE).open_subkey(DISPLAY_CLASS_KEY) {
+        Ok(k) => k,
+        Err(_) => return out,
+    };
+
+    for sub_name in root.enum_keys().flatten() {
+        if sub_name.is_empty() || !sub_name.chars().all(|c| c.is_ascii_digit()) {
+            continue;
+        }
+        let sub = match root.open_subkey(&sub_name) {
+            Ok(k) => k,
+            Err(_) => continue,
+        };
+
+        let name = match sub.get_value::<String, _>("DriverDesc") {
+            Ok(s) if !s.trim().is_empty() => s.trim().to_string(),
+            _ => continue,
+        };
+        if out.iter().any(|g| g.name == name) {
+            continue;
+        }
+
+        let vram_bytes = sub
+            .get_raw_value("HardwareInformation.qwMemorySize")
+            .ok()
+            .map(|raw| match raw.vtype {
+                RegType::REG_QWORD if raw.bytes.len() >= 8 => {
+                    u64::from_le_bytes(raw.bytes[..8].try_into().unwrap_or([0; 8]))
+                }
+                RegType::REG_DWORD if raw.bytes.len() >= 4 => {
+                    u32::from_le_bytes(raw.bytes[..4].try_into().unwrap_or([0; 4])) as u64
+                }
+                _ if raw.bytes.len() >= 8 => {
+                    u64::from_le_bytes(raw.bytes[..8].try_into().unwrap_or([0; 8]))
+                }
+                _ if raw.bytes.len() >= 4 => {
+                    u32::from_le_bytes(raw.bytes[..4].try_into().unwrap_or([0; 4])) as u64
+                }
+                _ => 0,
+            })
+            .unwrap_or(0);
+
+        let driver_version = sub
+            .get_value::<String, _>("DriverVersion")
+            .unwrap_or_default();
+
+        out.push(GpuInfo {
+            name,
+            vram_bytes,
+            driver_version,
+        });
+    }
+    out
+}
+
+#[cfg(not(windows))]
+fn read_gpus() -> Vec<GpuInfo> {
+    Vec::new()
 }
 
 #[cfg(windows)]
@@ -430,6 +571,25 @@ mod win {
             total_bytes: *mut u64,
             total_free_bytes: *mut u64,
         ) -> i32;
+        fn GetSystemTimes(idle_time: *mut i64, kernel_time: *mut i64, user_time: *mut i64) -> i32;
+        fn GetTickCount64() -> u64;
+    }
+
+    /// Returns (idle, kernel, user) as raw FILETIME 100ns ticks, matching
+    /// `HardwareMonitorService.GetSystemTimes`.
+    pub fn system_times() -> Option<(i64, i64, i64)> {
+        let mut idle = 0i64;
+        let mut kernel = 0i64;
+        let mut user = 0i64;
+        let ok = unsafe { GetSystemTimes(&mut idle, &mut kernel, &mut user) };
+        if ok == 0 {
+            return None;
+        }
+        Some((idle, kernel, user))
+    }
+
+    pub fn uptime_ms() -> u64 {
+        unsafe { GetTickCount64() }
     }
 
     pub fn memory() -> Option<(u64, u64)> {
@@ -495,14 +655,106 @@ pub fn get_system_snapshot() -> SystemSnapshot {
     let (total_ram_bytes, used_ram_bytes, disks): (u64, u64, Vec<DiskSnapshot>) =
         (0, 0, Vec::new());
 
+    #[cfg(windows)]
+    let cpu_identifier = read_cpu_string("Identifier").unwrap_or_default();
+    #[cfg(not(windows))]
+    let cpu_identifier = String::new();
+
+    #[cfg(windows)]
+    let cpu_mhz = read_cpu_mhz();
+    #[cfg(not(windows))]
+    let cpu_mhz = 0u32;
+
+    #[cfg(windows)]
+    let (board_vendor, board_product, bios_version) = (
+        read_bios("BaseBoardManufacturer")
+            .or_else(|| read_bios("SystemManufacturer"))
+            .unwrap_or_default(),
+        read_bios("BaseBoardProduct")
+            .or_else(|| read_bios("SystemProductName"))
+            .unwrap_or_default(),
+        read_bios("BIOSVersion").unwrap_or_default(),
+    );
+    #[cfg(not(windows))]
+    let (board_vendor, board_product, bios_version) =
+        (String::new(), String::new(), String::new());
+
     SystemSnapshot {
         cpu_name: read_cpu_name(),
         cpu_cores,
+        cpu_identifier,
+        cpu_mhz,
+        gpus: read_gpus(),
+        board_vendor,
+        board_product,
+        bios_version,
         total_ram_bytes,
         used_ram_bytes,
         os: std::env::consts::OS.to_string(),
         arch: std::env::consts::ARCH.to_string(),
         disks,
+    }
+}
+
+/// Baseline for delta-based live CPU% sampling — holds the previous
+/// `GetSystemTimes` sample, matching `HardwareMonitorService`'s
+/// `_prevIdle/_prevKernel/_prevUser/_haveBaseline` instance fields.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct LiveSampleBaseline {
+    pub prev_idle: i64,
+    pub prev_kernel: i64,
+    pub prev_user: i64,
+    pub have_baseline: bool,
+}
+
+#[tauri::command]
+pub fn get_live_sample(state: State<'_, AppState>) -> LiveSample {
+    #[cfg(windows)]
+    let cpu_percent = {
+        let mut baseline = state.live_sample_baseline.lock().unwrap();
+        let mut cpu = 0.0f64;
+        if let Some((idle, kernel, user)) = win::system_times() {
+            if baseline.have_baseline {
+                let idle_delta = idle - baseline.prev_idle;
+                let kernel_delta = kernel - baseline.prev_kernel;
+                let user_delta = user - baseline.prev_user;
+                let total = kernel_delta + user_delta;
+                if total > 0 {
+                    cpu = ((total - idle_delta) as f64 * 100.0 / total as f64).clamp(0.0, 100.0);
+                }
+            }
+            baseline.prev_idle = idle;
+            baseline.prev_kernel = kernel;
+            baseline.prev_user = user;
+            baseline.have_baseline = true;
+        }
+        cpu
+    };
+    #[cfg(not(windows))]
+    let cpu_percent = 0.0f64;
+
+    #[cfg(windows)]
+    let (ram_total_bytes, ram_used_bytes) = win::memory().unwrap_or((0, 0));
+    #[cfg(not(windows))]
+    let (ram_total_bytes, ram_used_bytes): (u64, u64) = (0, 0);
+
+    let ram_percent = if ram_total_bytes > 0 {
+        (ram_used_bytes as f64 * 100.0 / ram_total_bytes as f64).clamp(0.0, 100.0)
+    } else {
+        0.0
+    };
+
+    #[cfg(windows)]
+    let uptime_ms = win::uptime_ms();
+    #[cfg(not(windows))]
+    let uptime_ms = 0u64;
+
+    LiveSample {
+        cpu_percent,
+        ram_percent,
+        ram_used_bytes,
+        ram_total_bytes,
+        uptime_ms,
     }
 }
 

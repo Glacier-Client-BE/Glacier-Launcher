@@ -6,11 +6,12 @@
    * assembly for Bedrock.
    */
   import { invoke } from '@tauri-apps/api/core'
+  import { untrack } from 'svelte'
   import { listen, type UnlistenFn } from '@tauri-apps/api/event'
   import { onDestroy, onMount } from 'svelte'
-  import EditionTabs from './components/EditionTabs.svelte'
   import PanelHeader from './components/PanelHeader.svelte'
   import SubTabs from './components/SubTabs.svelte'
+  import ListSkeleton from './components/ListSkeleton.svelte'
 
   let {
     edition,
@@ -22,7 +23,7 @@
     edition: 'Java' | 'Bedrock'
     minecraftDir: string
     onBack?: () => void
-    onNavigate?: (view: string) => void
+    onNavigate?: (view: string, strip?: string) => void
     onToast?: (message: string, kind?: string) => void
   } = $props()
 
@@ -103,10 +104,7 @@
   async function resolveIcon(url: string) {
     if (!url || iconCache.has(url)) return
     try {
-      const bytes = await invoke<number[]>('fetch_image_bytes', { url })
-      let binary = ''
-      for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i])
-      const dataUrl = `data:image/png;base64,${btoa(binary)}`
+      const dataUrl = await invoke<string>('fetch_image_bytes', { url })
       iconCache = new Map(iconCache).set(url, dataUrl)
     } catch {
       // Leave unresolved — the CSS fallback icon behind it stays visible.
@@ -248,7 +246,7 @@
 
   // Bedrock needs no version, so it can load immediately; Java waits for the
   // version list above.
-  if (!isJava) load()
+  if (!untrack(() => isJava)) load()
 </script>
 
 <PanelHeader title={tweaksTitle} {onBack}>
@@ -304,12 +302,12 @@
 <!-- Home.razor:3156-3159: the Bedrock edition gets the shared
      Packs/Addons cross-nav strip here; Java does not. -->
 {#if !isJava}
-  <SubTabs strip="packs-addons" active="tweaks" onNavigate={(k) => onNavigate?.(k)} />
+  <SubTabs strip="packs-addons" active="tweaks" onNavigate={(k, s) => onNavigate?.(k, s)} />
 {/if}
 
 <div class="panel-body">
   {#if loading}
-    <div class="versions-loading"><span class="spinner"></span><span>Loading tweaks…</span></div>
+    <ListSkeleton rows={5} />
   {:else if error && categories.length === 0}
     <div class="empty-state">
       <i class="fa-solid fa-triangle-exclamation"></i>
@@ -410,10 +408,3 @@
   </div>
 {/if}
 
-<!-- Home.razor:3253-3262: Bedrock shows the *addons* tab as active here,
-     Java shows *tweaks*. -->
-<EditionTabs
-  active={isJava ? 'tweaks' : 'addons'}
-  edition={isJava ? 'java' : 'bedrock'}
-  onNavigate={(v) => onNavigate?.(v)}
-/>

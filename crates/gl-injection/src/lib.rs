@@ -14,6 +14,15 @@
 //! class — see doc comments on each function for the exact Win32 call
 //! sequence it mirrors.
 //!
+//! TODO(feature 28, client resource usage overlay): skipped. A per-process
+//! CPU/memory readout is easy to bolt on via `GetProcessTimes` /
+//! `GetProcessMemoryInfo` on the handles this crate already opens, but a
+//! *polling loop* driving a live UI overlay is more surface area than "low
+//! risk" — it means holding process handles open longer, a new Tauri event
+//! stream, and periodic timer work, none of which touches injection safety
+//! directly but all of which is easy to get wrong under review pressure.
+//! Left for a dedicated, reviewed pass instead of squeezing it in here.
+//!
 //! Real-process injection cannot be meaningfully unit-tested (it requires an
 //! actual running Win32 process and, for the full end-to-end path, a real
 //! Minecraft Bedrock process). Per the rewrite plan's risk mitigations, this
@@ -49,6 +58,9 @@ use windows::Win32::System::Diagnostics::ToolHelp::{
 use windows::Win32::System::LibraryLoader::{GetModuleHandleW, GetProcAddress};
 use windows::Win32::System::Memory::{
     VirtualAllocEx, VirtualFreeEx, MEM_COMMIT, MEM_RELEASE, MEM_RESERVE, PAGE_READWRITE,
+};
+use windows::Win32::System::Power::{
+    SetThreadExecutionState, ES_CONTINUOUS, ES_DISPLAY_REQUIRED, ES_SYSTEM_REQUIRED,
 };
 use windows::Win32::System::Threading::{
     CreateRemoteThread, GetCurrentProcess, GetExitCodeThread, OpenProcess, OpenProcessToken,
@@ -664,6 +676,125 @@ pub fn wait_for_target_window(
         }
         std::thread::sleep(poll_interval);
     }
+}
+
+/// Non-blocking check for whether `process_id` is still running. Uses the
+/// same zero-timeout `WaitForSingleObject` probe as [`wait_for_process_exit`]
+/// — `WAIT_OBJECT_0` (0) means the process has already signaled (exited);
+/// anything else (typically `WAIT_TIMEOUT`) means it's still alive. A PID
+/// that can no longer be opened (already exited and recycled) reports false.
+pub fn process_is_alive(process_id: u32) -> bool {
+    let handle = match unsafe {
+        OpenProcess(
+            PROCESS_SYNCHRONIZE | PROCESS_QUERY_LIMITED_INFORMATION,
+            false,
+            process_id,
+        )
+    } {
+        Ok(h) if !h.is_invalid() => OwnedHandle(h),
+        _ => return false,
+    };
+    unsafe { WaitForSingleObject(handle.0, 0) }.0 != 0
+}
+
+/// Blocks the calling thread until the process `process_id` exits (or is
+/// already gone). Used to know when to release a [`set_prevent_suspend`]
+/// request — run this on a blocking thread, never the async executor.
+pub fn wait_for_process_exit(process_id: u32) {
+    let handle = match unsafe {
+        OpenProcess(
+            PROCESS_SYNCHRONIZE | PROCESS_QUERY_LIMITED_INFORMATION,
+            false,
+            process_id,
+        )
+    } {
+        Ok(h) if !h.is_invalid() => OwnedHandle(h),
+        _ => return, // already gone, or inaccessible — nothing to wait on
+    };
+    unsafe {
+        WaitForSingleObject(handle.0, u32::MAX);
+    }
+}
+
+/// Prevents (or restores) Windows from suspending the process/display while
+/// a launched Minecraft process is running, via `SetThreadExecutionState`.
+/// `ES_CONTINUOUS` makes the state persist until explicitly cleared, rather
+/// than being a one-shot "stay awake for the next call" request.
+///
+/// Call with `prevent = true` once the game is running, and again with
+/// `prevent = false` when it exits to release the request — otherwise the
+/// last-set state stays in effect for the whole launcher process lifetime.
+pub fn set_prevent_suspend(prevent: bool) {
+    let flags = if prevent {
+        ES_CONTINUOUS | ES_SYSTEM_REQUIRED | ES_DISPLAY_REQUIRED
+    } else {
+        ES_CONTINUOUS
+    };
+    unsafe {
+        SetThreadExecutionState(flags);
+    }
+}
+
+/// Kills every running process named `exe_name` (e.g. `"RuntimeBroker.exe"`)
+/// via `taskkill`. Best-effort: RuntimeBroker is a system process that Windows
+/// respawns on demand, so killing it briefly is safe and is the documented
+/// trick behind Bedrock's "accelerate loading" option (stopping RuntimeBroker
+/// mid-boot shortens the UWP app's loading-screen throttle).
+pub fn kill_processes_by_name(exe_name: &str) {
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        let _ = std::process::Command::new("taskkill")
+            .args(["/IM", exe_name, "/F"])
+            .creation_flags(CREATE_NO_WINDOW)
+            .status();
+    }
+}
+
+/// Activates a UWP/GDK app by AUMID via `IApplicationActivationManager`,
+/// mirroring `InjectionService.LaunchMinecraft`. This is the direct COM
+/// activation path the original uses; `gl_launch::bedrock` normally
+/// activates through `Invoke-CommandInDesktopPackage` instead (a
+/// PowerShell-based equivalent chosen to avoid a WinRT/COM dependency), so
+/// this exists as the literal port for parity and as a fallback that
+/// doesn't need to shell out to `powershell.exe`. Returns the new process's
+/// PID.
+pub fn activate_application(aumid: &str, arguments: Option<&str>) -> Result<u32> {
+    use windows::core::HSTRING;
+    use windows::Win32::System::Com::{
+        CoCreateInstance, CoInitializeEx, CoUninitialize, CLSCTX_LOCAL_SERVER,
+        COINIT_APARTMENTTHREADED,
+    };
+    use windows::Win32::UI::Shell::{
+        ApplicationActivationManager, IApplicationActivationManager, AO_NONE,
+    };
+
+    // COM requires the apartment to be initialized on the calling thread.
+    // `CoInitializeEx` returns S_FALSE (a non-error HRESULT `Ok`) if already
+    // initialized on this thread, matching how the C# runtime lazily
+    // initializes COM the first time it's touched — safe to call every time.
+    let init_hr = unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED) };
+    let we_initialized = init_hr.is_ok();
+
+    let result = (|| -> Result<u32> {
+        let manager: IApplicationActivationManager =
+            unsafe { CoCreateInstance(&ApplicationActivationManager, None, CLSCTX_LOCAL_SERVER)? };
+
+        let aumid_h = HSTRING::from(aumid);
+        let args_h = arguments.map(HSTRING::from).unwrap_or_default();
+
+        let pid = unsafe { manager.ActivateApplication(&aumid_h, &args_h, AO_NONE)? };
+        // Interface is released when `manager` drops; explicit for clarity.
+        drop(manager);
+        Ok(pid)
+    })();
+
+    if we_initialized {
+        unsafe { CoUninitialize() };
+    }
+
+    result
 }
 
 #[cfg(test)]
