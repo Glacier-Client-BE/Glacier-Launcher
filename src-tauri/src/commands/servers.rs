@@ -38,12 +38,13 @@ fn servers_path() -> std::path::PathBuf {
     gl_settings::launcher_root().join("servers.json")
 }
 
-fn load_servers() -> Vec<SavedServer> {
+fn load_servers() -> Result<Vec<SavedServer>, String> {
     match gl_persistence::load::<Vec<SavedServer>>(&servers_path()) {
-        Ok(Some(envelope)) => envelope.data,
-        // Missing file or (already-quarantined) corrupt file both fall back
-        // to an empty list rather than surfacing an error to the UI.
-        Ok(None) | Err(_) => Vec::new(),
+        Ok(Some(envelope)) => Ok(envelope.data),
+        // A corrupt file is already quarantined, so starting empty is safe; an
+        // I/O error is not, because the next save would overwrite a good list.
+        Ok(None) | Err(gl_persistence::PersistError::Json(_)) => Ok(Vec::new()),
+        Err(e) => Err(format!("Could not read saved servers: {e}")),
     }
 }
 
@@ -61,12 +62,12 @@ fn new_id() -> String {
     format!("{nanos:032x}")
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn list_saved_servers() -> Vec<SavedServer> {
-    load_servers()
+    load_servers().unwrap_or_default()
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn add_saved_server(
     name: String,
     address: String,
@@ -76,7 +77,7 @@ pub fn add_saved_server(
     favorite: Option<bool>,
     tags: Option<Vec<String>>,
 ) -> Result<SavedServer, String> {
-    let mut servers = load_servers();
+    let mut servers = load_servers()?;
     let entry = SavedServer {
         id: new_id(),
         name,
@@ -92,9 +93,9 @@ pub fn add_saved_server(
     Ok(entry)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn update_saved_server(server: SavedServer) -> Result<(), String> {
-    let mut servers = load_servers();
+    let mut servers = load_servers()?;
     match servers.iter_mut().find(|s| s.id == server.id) {
         Some(existing) => *existing = server,
         None => return Err(format!("no saved server with id {}", server.id)),
@@ -102,11 +103,30 @@ pub fn update_saved_server(server: SavedServer) -> Result<(), String> {
     save_servers(&servers)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn remove_saved_server(id: String) -> Result<(), String> {
-    let mut servers = load_servers();
+    let mut servers = load_servers()?;
     servers.retain(|s| s.id != id);
     save_servers(&servers)
+}
+
+/// QOL: reorders the saved server list to match `ordered_ids` (drag-to-
+/// reorder in the panel). Any id not found is skipped; any existing server
+/// not present in `ordered_ids` is appended after, so a stale/partial id
+/// list can't silently drop entries.
+#[tauri::command(async)]
+pub fn reorder_saved_servers(ordered_ids: Vec<String>) -> Result<(), String> {
+    let servers = load_servers()?;
+    let mut reordered: Vec<SavedServer> = ordered_ids
+        .into_iter()
+        .filter_map(|id| servers.iter().find(|s| s.id == id).cloned())
+        .collect();
+    for s in &servers {
+        if !reordered.iter().any(|r| r.id == s.id) {
+            reordered.push(s.clone());
+        }
+    }
+    save_servers(&reordered)
 }
 
 /// Pings an arbitrary host/port (not necessarily saved), mirroring

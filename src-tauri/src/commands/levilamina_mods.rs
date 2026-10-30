@@ -56,7 +56,7 @@ fn mod_install_dir(state: &AppState, repo_name: &str) -> PathBuf {
 /// `repo_owner` is accepted but unused: the install path is repo-name-only,
 /// matching the original. Keeping the parameter avoids a frontend change and
 /// leaves room to disambiguate later without another signature break.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn levilamina_mod_installed(
     state: State<'_, AppState>,
     repo_owner: String,
@@ -149,13 +149,22 @@ fn extract_zip(zip_path: &std::path::Path, dest_dir: &std::path::Path) -> std::i
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn delete_levilamina_mod(
     state: State<'_, AppState>,
     repo_owner: String,
     repo_name: String,
 ) -> Result<(), String> {
     let _ = repo_owner;
+    // The sanitized folder name must be a single plain path component;
+    // otherwise `..` (or `...`, which Windows reduces to the parent) would
+    // point remove_dir_all at the clients folder itself.
+    let folder = levilamina_mods::sanitize_folder_name(&repo_name);
+    let folder_trimmed = folder.trim_end_matches('.');
+    if folder_trimmed.is_empty() {
+        return Err(format!("Refusing unsafe mod folder name: {repo_name:?}"));
+    }
+    super::safe_file_name(&folder)?;
     let dir = mod_install_dir(&state, &repo_name);
     if dir.exists() {
         std::fs::remove_dir_all(&dir).map_err(|e| e.to_string())?;
@@ -163,7 +172,7 @@ pub fn delete_levilamina_mod(
     Ok(())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn open_levilamina_mods_folder(state: State<'_, AppState>) -> Result<(), String> {
     let dir = state.clients_dir.join("LeviLaminaMods");
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;

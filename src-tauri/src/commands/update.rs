@@ -304,7 +304,7 @@ pub async fn download_launcher_update(
 /// can retry on the next launch before any UI is shown, instead of silently
 /// discarding a good download because of a transient spawn failure (e.g. AV
 /// briefly locking the just-written file).
-#[tauri::command]
+#[tauri::command(async)]
 pub fn install_launcher_update(app: AppHandle, installer_path: String) -> Result<(), String> {
     match std::process::Command::new(&installer_path).spawn() {
         Ok(_) => {
@@ -329,7 +329,7 @@ pub fn install_launcher_update(app: AppHandle, installer_path: String) -> Result
 /// file has since disappeared (matches the C# swallowing that case to
 /// `false`) or whose installer still fails to spawn (marker is left in place
 /// for the next attempt rather than lost).
-#[tauri::command]
+#[tauri::command(async)]
 pub fn resume_pending_launcher_update(app: AppHandle) -> Result<bool, String> {
     let Some(installer_path) = gl_update::take_pending_update().map_err(|e| e.to_string())?
     else {

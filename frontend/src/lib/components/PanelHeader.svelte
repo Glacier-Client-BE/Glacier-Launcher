@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../i18nStore.svelte'
   import type { Snippet } from 'svelte'
 
   /**
@@ -14,6 +15,7 @@
     extraActions,
     backIcon = 'fa-arrow-left',
     breadcrumb = [],
+    onBreadcrumbJump,
   }: {
     title: string
     onBack?: () => void
@@ -22,12 +24,17 @@
     /** Optional trail e.g. ['Home', 'Utilities', 'Shaders']. Empty/omitted
      * renders nothing, so panels that don't opt in look exactly as before. */
     breadcrumb?: string[]
+    /** QOL: jump back multiple levels at once instead of clicking Back
+     *  repeatedly. Called with the clicked segment's index; omitted (the
+     *  default) keeps every non-current segment as inert text, exactly as
+     *  before this existed. */
+    onBreadcrumbJump?: (index: number) => void
   } = $props()
 </script>
 
 <div class="panel-header {onBack ? 'has-back' : ''}">
   {#if onBack}
-    <button type="button" class="panel-back-btn" data-tooltip="Back" aria-label="Back" onclick={onBack}>
+    <button type="button" class="panel-back-btn" data-tooltip={t('tt.back')} aria-label={t('tt.back')} onclick={onBack}>
       <i class="fa-solid {backIcon}"></i>
     </button>
   {/if}
@@ -36,7 +43,16 @@
       <div class="panel-breadcrumb">
         {#each breadcrumb as segment, i (i)}
           {#if i > 0}<i class="fa-solid fa-chevron-right panel-breadcrumb-sep"></i>{/if}
-          <span class="panel-breadcrumb-seg {i === breadcrumb.length - 1 ? 'current' : ''}">{segment}</span>
+          {#if onBreadcrumbJump && i < breadcrumb.length - 1}
+            <button
+              type="button"
+              class="panel-breadcrumb-seg panel-breadcrumb-seg-btn"
+              onclick={() => onBreadcrumbJump(i)}
+              onmousedown={(e) => e.stopPropagation()}
+            >{segment}</button>
+          {:else}
+            <span class="panel-breadcrumb-seg {i === breadcrumb.length - 1 ? 'current' : ''}">{segment}</span>
+          {/if}
         {/each}
       </div>
     {/if}

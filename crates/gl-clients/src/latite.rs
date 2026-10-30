@@ -27,13 +27,7 @@ pub struct LatiteVersion {
 
 /// Fetches and parses the Latite releases list. Mirrors `GameLauncher.GetVersionsAsync`.
 pub async fn list_versions(http: &Client) -> Result<Vec<LatiteVersion>> {
-    let body = http
-        .get(RELEASES_API_URL)
-        .header("User-Agent", "GlacierLauncher")
-        .send()
-        .await?
-        .text()
-        .await?;
+    let body = crate::github::get_text_cached(http, RELEASES_API_URL).await?;
     parse_versions(&body)
 }
 

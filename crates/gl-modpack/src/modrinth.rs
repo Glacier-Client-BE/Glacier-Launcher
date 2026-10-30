@@ -98,6 +98,25 @@ impl ModrinthClient {
         Ok(None)
     }
 
+    /// Fetches the newest version of a project built for one game version and
+    /// loader, so a mod is never installed into an instance it can't load in.
+    pub async fn get_latest_version_for(
+        &self,
+        project_id: &str,
+        game_version: &str,
+        loader: &str,
+    ) -> Result<Option<MrVersion>> {
+        let url = format!(
+            "{BASE_URL}/project/{project_id}/version?game_versions={}&loaders={}",
+            urlencoding_encode(&format!("[\"{game_version}\"]")),
+            urlencoding_encode(&format!("[\"{loader}\"]")),
+        );
+        let json = self.get_json(&url).await?;
+        Ok(json
+            .as_array()
+            .and_then(|versions| versions.iter().find_map(parse_version)))
+    }
+
     /// Fetches a project's display title (feature 12: naming dependency
     /// warnings by a human-readable title rather than a bare project id).
     pub async fn get_project_title(&self, project_id: &str) -> Result<Option<String>> {

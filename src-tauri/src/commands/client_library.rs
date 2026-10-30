@@ -13,7 +13,7 @@ use tauri::State;
 use crate::state::AppState;
 
 #[tauri::command]
-pub fn client_library_site_url() -> String {
+pub async fn client_library_site_url() -> String {
     lib::site_url()
 }
 
@@ -40,7 +40,7 @@ pub async fn get_client_library_packs(
 }
 
 #[tauri::command]
-pub fn client_library_versions(packs: Vec<ClientLibraryPack>) -> Vec<String> {
+pub async fn client_library_versions(packs: Vec<ClientLibraryPack>) -> Vec<String> {
     lib::versions(&packs)
 }
 
@@ -61,7 +61,7 @@ fn installed_path(instance_dir: &str, download: &ClientLibraryDownload) -> PathB
 }
 
 #[tauri::command]
-pub fn is_client_library_download_installed(
+pub async fn is_client_library_download_installed(
     instance_dir: String,
     download: ClientLibraryDownload,
 ) -> bool {
@@ -99,7 +99,7 @@ pub async fn install_client_library_download(
 }
 
 #[tauri::command]
-pub fn uninstall_client_library_download(
+pub async fn uninstall_client_library_download(
     instance_dir: String,
     download: ClientLibraryDownload,
 ) -> Result<(), String> {

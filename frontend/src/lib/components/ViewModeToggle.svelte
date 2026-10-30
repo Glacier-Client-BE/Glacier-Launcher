@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../i18nStore.svelte'
   // New addition — no counterpart in the original WPF app. A two-button
   // segmented control for switching a list panel between its row layout and
   // a grid of cards, in the spirit of the toggle in Pepe's Portfolio (a
@@ -8,14 +9,14 @@
   let { mode, onChange }: { mode: ViewMode; onChange: (m: ViewMode) => void } = $props()
 </script>
 
-<div class="view-mode-toggle" role="group" aria-label="Toggle view layout">
+<div class="view-mode-toggle" role="group" aria-label={t('tt.toggleViewLayout')}>
   <button
     type="button"
     class="view-mode-btn {mode === 'list' ? 'active' : ''}"
     onclick={() => onChange('list')}
     onmousedown={(e) => e.stopPropagation()}
-    data-tooltip="List view"
-    aria-label="List view"
+    data-tooltip={t('tt.listView')}
+    aria-label={t('tt.listView')}
     aria-pressed={mode === 'list'}
   >
     <i class="fa-solid fa-list"></i>
@@ -25,8 +26,8 @@
     class="view-mode-btn {mode === 'grid' ? 'active' : ''}"
     onclick={() => onChange('grid')}
     onmousedown={(e) => e.stopPropagation()}
-    data-tooltip="Grid view"
-    aria-label="Grid view"
+    data-tooltip={t('tt.gridView')}
+    aria-label={t('tt.gridView')}
     aria-pressed={mode === 'grid'}
   >
     <i class="fa-solid fa-table-cells"></i>

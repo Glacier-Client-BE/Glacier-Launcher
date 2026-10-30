@@ -1,11 +1,26 @@
 mod commands;
 mod state;
 
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        // Must be the first plugin registered (Tauri's own requirement) -
+        // it's what makes a second `glacier://...` launch hand the URL to
+        // *this* already-running process instead of spawning a duplicate
+        // one (which would then fight the first over settings.json, the
+        // downloads dir, etc.).
+        .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
+            if let Some(url) = argv.iter().skip(1).find(|a| a.starts_with("glacier://")) {
+                let _ = app.emit("deep-link-open", url.clone());
+            }
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.show();
+                let _ = window.unminimize();
+                let _ = window.set_focus();
+            }
+        }))
         .invoke_handler(tauri::generate_handler![
             commands::settings::get_settings,
             commands::settings::set_settings,
@@ -24,6 +39,7 @@ pub fn run() {
             commands::java::set_instance_jvm_args,
             commands::java::set_instance_jvm_preset,
             commands::java::set_instance_group,
+            commands::java::set_instance_pinned,
             commands::java::get_instance_settings,
             commands::java::set_instance_settings,
             commands::java::reset_instance_setting,
@@ -81,9 +97,13 @@ pub fn run() {
             commands::bedrock::list_bedrock_backups,
             commands::bedrock::create_bedrock_backup,
             commands::bedrock::restore_bedrock_backup,
+            commands::bedrock::restore_bedrock_backup_to_new_instance,
+            commands::bedrock::diff_bedrock_backups,
             commands::bedrock::delete_bedrock_backup,
             commands::bedrock::list_bedrock_screenshots,
             commands::bedrock::delete_bedrock_screenshot,
+            commands::bedrock::list_favorite_screenshots,
+            commands::bedrock::toggle_favorite_screenshot,
             commands::bedrock::import_bedrock_content,
             commands::bedrock::resolve_com_mojang_folder,
             commands::bedrock::bedrock_auto_backup_interval,
@@ -114,6 +134,7 @@ pub fn run() {
             commands::java_mods::download_neoforge_installer,
             commands::java_mods::search_modrinth_projects,
             commands::java_mods::install_modrinth_mod,
+            commands::java_mods::ensure_client_mod_installed,
             commands::java_mods::check_java_mod_updates,
             commands::java_mods::update_java_mod,
             commands::java_mods::update_all_java_mods,
@@ -170,6 +191,7 @@ pub fn run() {
             commands::clients::delete_levilamina_client,
             commands::clients::check_levilamina_up_to_date,
             commands::glacier_client::get_glacier_manifest,
+            commands::glacier_client::get_glacier_download_counts,
             commands::glacier_client::install_glacier_client,
             commands::glacier_client::uninstall_glacier_client,
             commands::glacier_client::glacier_installed_size_bytes,
@@ -216,6 +238,7 @@ pub fn run() {
             commands::servers::add_saved_server,
             commands::servers::update_saved_server,
             commands::servers::remove_saved_server,
+            commands::servers::reorder_saved_servers,
             commands::servers::ping_server,
             commands::servers::ping_java_server,
             commands::servers::scan_lan_games,
@@ -226,6 +249,8 @@ pub fn run() {
             commands::logs::latest_java_crash_report,
             commands::logs::log_looks_like_crash,
             commands::logs::share_log,
+            commands::logs::export_support_bundle,
+            commands::ai::explain_crash_log,
             commands::logs::record_play_session,
             commands::logs::get_stats_summary,
             commands::java_process::list_running_instances,
@@ -244,8 +269,15 @@ pub fn run() {
             commands::launchers::launch_client_exe,
             commands::launchers::resolve_lunar_direct_launch,
             commands::launchers::launch_lunar_direct,
+            commands::launchers::horizon_status,
+            commands::launchers::horizon_install,
+            commands::launchers::horizon_update,
+            commands::launchers::horizon_rollback,
+            commands::launchers::horizon_launch,
+            commands::launchers::horizon_uninstall,
             commands::system::get_launcher_root,
             commands::system::close_launcher_window,
+            commands::system::force_quit,
             commands::system::open_folder,
             commands::system::open_path,
             commands::system::open_url,
@@ -259,8 +291,18 @@ pub fn run() {
             commands::skins::set_cape,
             commands::skins::hide_cape,
             commands::system::export_settings,
+            commands::system::auto_export_settings_if_due,
+            commands::system::write_text_file,
+            commands::system::copy_file,
+            commands::system::set_quick_launch_hotkey,
+            commands::system::list_config_profiles,
+            commands::system::save_config_profile,
+            commands::system::load_config_profile,
+            commands::system::delete_config_profile,
+            commands::system::take_pending_deep_link,
             commands::system::import_latest_settings,
             commands::system::reset_settings,
+            commands::system::delete_all_data,
             commands::utilities::get_bedrock_options,
             commands::utilities::bedrock_options_exist,
             commands::utilities::bedrock_options_has_backup,
@@ -285,6 +327,11 @@ pub fn run() {
             commands::downloads::cancel_download,
             commands::downloads::remove_download,
             commands::downloads::clear_finished_downloads,
+            commands::downloads::retry_failed_downloads,
+            commands::downloads::retry_download,
+            commands::downloads::pause_download,
+            commands::downloads::resume_download,
+            commands::downloads::sweep_old_downloads,
             commands::update::resume_pending_launcher_update,
             commands::launcher_import::detect_external_launchers,
             commands::launcher_import::scan_launcher_instances,
@@ -296,10 +343,33 @@ pub fn run() {
             commands::sync_packs::delete_sync_pack,
             commands::sync_packs::preview_sync,
             commands::sync_packs::apply_sync_pack,
+            commands::sync_packs::resolve_sync_conflict,
+            commands::sync_packs::clear_sync_conflict_override,
             commands::sync_packs::detach_sync_pack,
             commands::sync_packs::get_sync_report,
         ])
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_deep_link::init())
+        .plugin(
+            // QOL: global (system-wide) quick-launch hotkey. The handler
+            // only acts on the key-down edge (`ShortcutState::Pressed`) -
+            // without that check it fires again on release too, which would
+            // double-trigger launch on every press.
+            tauri_plugin_global_shortcut::Builder::new()
+                .with_handler(|app, _shortcut, event| {
+                    if event.state() != tauri_plugin_global_shortcut::ShortcutState::Pressed {
+                        return;
+                    }
+                    if let Some(window) = app.get_webview_window("main") {
+                        let _ = window.show();
+                        let _ = window.unminimize();
+                        let _ = window.set_focus();
+                    }
+                    let _ = app.emit("quick-launch-hotkey", ());
+                })
+                .build(),
+        )
         .setup(|app| {
             if cfg!(debug_assertions) {
                 app.handle().plugin(
@@ -307,6 +377,36 @@ pub fn run() {
                         .level(log::LevelFilter::Info)
                         .build(),
                 )?;
+            }
+
+            // QOL "copy panel link": handles the deep link both when a
+            // `glacier://...` URL launches the app cold, and (on the
+            // platforms where the OS calls this directly instead of just
+            // re-invoking the process with argv, e.g. macOS) while it's
+            // already running. The single-instance handler above covers
+            // the Windows re-invoke-with-argv case; both funnel into the
+            // same `deep-link-open` event so the frontend only needs one
+            // listener.
+            {
+                use tauri_plugin_deep_link::DeepLinkExt;
+                let handle = app.handle().clone();
+                app.deep_link().on_open_url(move |event| {
+                    for url in event.urls() {
+                        let _ = handle.emit("deep-link-open", url.to_string());
+                    }
+                });
+
+                // The single-instance handler above only fires for a
+                // *second* launch attempt; a cold start via the link (no
+                // instance running yet) never goes through it, so this
+                // process's own argv needs checking too. Stashed rather
+                // than just emitted: at this point in `setup` no frontend
+                // listener exists yet to catch an event fired right now,
+                // so `take_pending_deep_link` lets the frontend pull it
+                // once at its own startup instead of racing an emit.
+                if let Some(url) = std::env::args().find(|a| a.starts_with("glacier://")) {
+                    let _ = commands::system::PENDING_DEEP_LINK.set(std::sync::Mutex::new(Some(url)));
+                }
             }
 
             let app_state = state::AppState::new().map_err(|e| -> Box<dyn std::error::Error> {
@@ -318,6 +418,25 @@ pub fn run() {
             );
             app.manage(app_state);
 
+            // QOL: restore the persisted global quick-launch hotkey, if any.
+            // Best-effort - a stale/now-invalid combo (or one already taken
+            // by another app) shouldn't stop the launcher from starting.
+            let startup_settings = gl_settings::load().ok();
+            if let Some(settings) = &startup_settings {
+                if !settings.quick_launch_hotkey.is_empty() {
+                    use tauri_plugin_global_shortcut::GlobalShortcutExt;
+                    if let Err(e) = app
+                        .global_shortcut()
+                        .register(settings.quick_launch_hotkey.as_str())
+                    {
+                        log::warn!(
+                            "failed to register quick-launch hotkey '{}': {e}",
+                            settings.quick_launch_hotkey
+                        );
+                    }
+                }
+            }
+
             // Mirrors `AutoUpdateService.TryResumePendingUpdate` being called
             // at startup before any UI is shown: if a prior
             // `install_launcher_update` call downloaded the installer but
@@ -326,6 +445,15 @@ pub fn run() {
             // point runs in that case.
             let _ = commands::update::resume_pending_launcher_update(app.handle().clone());
 
+            // Mirrors the `minWidth`/`minHeight` in tauri.conf.json. Kept as
+            // a hard floor here too because the borderless custom resize
+            // hit-testing (`install_resize_hittest`) manipulates the HWND
+            // directly and can drag the window below Tauri's configured
+            // minimum, producing a sliver-sized window that then gets
+            // persisted and restored on every subsequent launch.
+            const MIN_WINDOW_WIDTH: f64 = 720.0;
+            const MIN_WINDOW_HEIGHT: f64 = 480.0;
+
             if let Some(window) = app.get_webview_window("main") {
                 apply_native_window_chrome(&window);
 
@@ -333,11 +461,24 @@ pub fn run() {
                 // before first paint, and persist future resizes back to
                 // settings. `MinimizeToTray`: hide instead of closing on the
                 // window's close button when enabled.
-                if let Ok(settings) = gl_settings::load() {
+                //
+                // The programmatic `set_size` below still triggers a
+                // `Resized` event once the native chrome/DWM has settled on
+                // an actual client rect, which can differ from the requested
+                // logical size by a fractional pixel or two (DPI rounding,
+                // the borderless resize-hitbox margins `install_resize_hittest`
+                // installs). Saving that adjusted value back would feed into
+                // the next launch's `set_size`, drifting a little further
+                // every run and never converging on a stable size. `suppress_save`
+                // ignores that one synthetic resize so only genuine
+                // user-initiated resizes are persisted.
+                let suppress_save = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+                if let Some(settings) = &startup_settings {
                     if settings.remember_window_size
-                        && settings.window_width > 0.0
-                        && settings.window_height > 0.0
+                        && settings.window_width >= MIN_WINDOW_WIDTH
+                        && settings.window_height >= MIN_WINDOW_HEIGHT
                     {
+                        suppress_save.store(true, std::sync::atomic::Ordering::SeqCst);
                         let _ = window.set_size(tauri::Size::Logical(tauri::LogicalSize {
                             width: settings.window_width,
                             height: settings.window_height,
@@ -351,14 +492,60 @@ pub fn run() {
                             if settings.minimize_to_tray {
                                 api.prevent_close();
                                 let _ = tray_close_window.hide();
+                                return;
                             }
+                        }
+                        // QOL: don't let closing the window silently kill
+                        // in-flight downloads (a version/mod/pack install
+                        // half-written to disk on next launch is a worse
+                        // outcome than a two-click confirm). Prevent the
+                        // close and let the frontend decide via a confirm
+                        // dialog + `force_quit` rather than blocking here,
+                        // since a native blocking prompt inside a window
+                        // event handler isn't available.
+                        let active = tray_close_window
+                            .app_handle()
+                            .state::<state::AppState>()
+                            .downloads
+                            .active_entries()
+                            .iter()
+                            .any(|e| {
+                                matches!(
+                                    e.status,
+                                    gl_download::DownloadStatus::Downloading
+                                        | gl_download::DownloadStatus::Queued
+                                )
+                            });
+                        if active {
+                            api.prevent_close();
+                            let _ = tray_close_window.emit("confirm-quit-downloads", ());
                         }
                     }
                     tauri::WindowEvent::Resized(size) => {
+                        // Windows fires `Resized` with a near-zero size when
+                        // minimizing and with the full monitor size when
+                        // maximizing; persisting either would make the next
+                        // launch open at a bogus (effectively random) size.
+                        if size.width == 0 || size.height == 0 {
+                            return;
+                        }
+                        if tray_close_window.is_minimized().unwrap_or(false)
+                            || tray_close_window.is_maximized().unwrap_or(false)
+                        {
+                            return;
+                        }
+                        if suppress_save.swap(false, std::sync::atomic::Ordering::SeqCst) {
+                            return;
+                        }
                         if let Ok(mut settings) = gl_settings::load() {
                             if settings.remember_window_size {
                                 let scale = tray_close_window.scale_factor().unwrap_or(1.0);
                                 let logical = size.to_logical::<f64>(scale);
+                                // Never persist a size below the window's own
+                                // configured minimum - see MIN_WINDOW_WIDTH/HEIGHT.
+                                if logical.width < MIN_WINDOW_WIDTH || logical.height < MIN_WINDOW_HEIGHT {
+                                    return;
+                                }
                                 settings.window_width = logical.width;
                                 settings.window_height = logical.height;
                                 let _ = gl_settings::save(&settings);

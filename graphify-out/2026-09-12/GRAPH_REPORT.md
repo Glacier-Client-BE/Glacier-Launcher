@@ -1,11 +1,11 @@
 # Graph Report - MinecraftLauncher  (2026-09-12)
 
 ## Corpus Check
-- 275 files · ~257,838 words
+- 275 files · ~260,226 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 3554 nodes · 8272 edges · 158 communities (140 shown, 7 thin omitted)
+- 3558 nodes · 8281 edges · 153 communities (136 shown, 6 thin omitted)
 - Extraction: 98% EXTRACTED · 2% INFERRED · 0% AMBIGUOUS · INFERRED: 151 edges (avg confidence: 0.85)
 - Token cost: 0 input · 0 output
 
@@ -72,7 +72,7 @@
 - bedrock_addons.rs
 - SyncEngine
 - []
-- .install
+- collector
 - VersionService
 - jar_inspect.rs
 - ClientLibraryView.svelte
@@ -116,7 +116,7 @@
 - compilerOptions
 - glacier-launcher
 - effective.rs
-- BedrockScreenshotsView.svelte
+- IconBtn.svelte
 - commands/glacier_client.rs
 - OptionsDocument
 - DownloadRequest
@@ -137,7 +137,7 @@
 - package.json
 - presets.rs
 - setup_tray
-- InstallProfile
+- news.rs
 - default.json
 - get_settings
 - JavaInstance
@@ -156,12 +156,7 @@
 - loader_map.rs
 - apply
 - list_jar_names
-- collector
-- processors.rs
-- io_err
 - pipeline.rs
-- get_string
-- patcher.rs
 
 ## God Nodes (most connected - your core abstractions)
 1. `AppState` - 250 edges
@@ -195,7 +190,7 @@
 - **CI/build verification gates for the cutover commit** — github_workflows_ci, github_workflows_build, concept_cutover_commit [EXTRACTED 1.00]
 - **Transcription ledger and its supporting line-range inventories** — parity, docs_inventory_shell, docs_inventory_bedrock_panels, docs_inventory_bedrock_services [EXTRACTED 1.00]
 
-## Communities (158 total, 7 thin omitted)
+## Communities (153 total, 6 thin omitted)
 
 ### Community 0 - "InstanceService"
 Cohesion: 0.09
@@ -206,16 +201,16 @@ Cohesion: 0.20
 Nodes (27): build_classpath(), build_game_args(), build_jvm_args(), detect_java_major(), find_first_javaw_under(), find_javaw_in_registry(), heuristic_major_from_path(), is_jvm_arg_compatible() (+19 more)
 
 ### Community 2 - "launch.rs"
-Cohesion: 0.12
-Nodes (44): available_ram_mb(), cancel_launch(), chrono_expired(), console_content_title(), console_stop_game(), ConsoleExitPayload, ConsoleLogPayload, ConsoleStatusPayload (+36 more)
+Cohesion: 0.11
+Nodes (47): available_ram_mb(), cancel_launch(), console_content_title(), console_stop_game(), ConsoleExitPayload, ConsoleLogPayload, ConsoleStatusPayload, emit_java_log_line() (+39 more)
 
 ### Community 3 - "ShaderService"
 Cohesion: 0.13
 Nodes (28): AppliedShader, Into, Path, PathBuf, Result, Self, String, Vec (+20 more)
 
 ### Community 4 - "ImportLauncherView.svelte"
-Cohesion: 0.11
-Nodes (12): goToPreview(), importingIndex, loading, openLauncher(), pickCustomRoot(), runDetection(), runImport(), string (+4 more)
+Cohesion: 0.12
+Nodes (11): goToPreview(), importingIndex, loading, openLauncher(), pickCustomRoot(), runDetection(), runImport(), string (+3 more)
 
 ### Community 5 - "gl-auth/src/lib.rs"
 Cohesion: 0.05
@@ -258,8 +253,8 @@ Cohesion: 0.06
 Nodes (47): c_void, activate_application(), enable_debug_privilege(), find_process_by_name(), find_processes_by_name(), grant_uwp_access(), inject_dll(), inject_rejects_missing_dll_before_touching_win32() (+39 more)
 
 ### Community 15 - "versions.rs"
-Cohesion: 0.20
-Nodes (29): WuVersion, available_free_space(), delete_latite_version(), delete_vanilla_bedrock_version(), download_latite_version(), download_vanilla_bedrock_version(), ensure_disk_space(), installed_bedrock_version() (+21 more)
+Cohesion: 0.21
+Nodes (28): WuVersion, available_free_space(), delete_latite_version(), delete_vanilla_bedrock_version(), download_latite_version(), download_vanilla_bedrock_version(), ensure_disk_space(), latite_dir() (+20 more)
 
 ### Community 16 - "ImportCandidate"
 Cohesion: 0.19
@@ -311,7 +306,7 @@ Nodes (9): first_seen_wins_on_duplicate_key(), list_versions(), parse_version_db
 
 ### Community 30 - "frontend/package.json"
 Cohesion: 0.05
-Nodes (37): dependencies, skinview3d, @tauri-apps/api, @tauri-apps/plugin-dialog, @tauri-apps/plugin-log, devDependencies, esbuild, svelte (+29 more)
+Nodes (38): dependencies, skinview3d, @tauri-apps/api, @tauri-apps/plugin-dialog, @tauri-apps/plugin-log, devDependencies, esbuild, svelte (+30 more)
 
 ### Community 31 - "AppState"
 Cohesion: 0.16
@@ -354,16 +349,16 @@ Cohesion: 0.17
 Nodes (25): add_from_file(), add_from_username(), base64_decode(), base64_roundtrip_matches_known_vector(), delete_skin(), list_skins(), MojangProfileByName, resolve_skin_texture() (+17 more)
 
 ### Community 41 - "src/bedrock.rs"
-Cohesion: 0.20
-Nodes (24): activate_via_com(), BedrockPackageInfo, connect_external_server(), escape_data_string(), extract_application_id(), find_game_process(), find_game_process_for(), installed_version() (+16 more)
+Cohesion: 0.19
+Nodes (25): activate_via_com(), BedrockPackageInfo, connect_external_server(), escape_data_string(), extract_application_id(), find_game_process(), find_game_process_for(), installed_version() (+17 more)
 
 ### Community 42 - "VersionsView.svelte"
 Cohesion: 0.10
 Nodes (17): cancelFor(), currentSortIcon, displayName(), filteredOderSo, filteredVersions, handleOderSoDownload(), isPinned(), loadOderSoVersions() (+9 more)
 
 ### Community 43 - "mod_loader.rs"
-Cohesion: 0.27
-Nodes (27): download_forge_installer(), download_install_libraries(), download_neoforge_installer(), download_via_queue(), install_fabric(), install_forge(), install_from_installer_jar(), install_neoforge() (+19 more)
+Cohesion: 0.05
+Nodes (75): download_to_file(), get_string(), Client, Path, Result, String, io_err(), JavaError (+67 more)
 
 ### Community 44 - "SyncReport"
 Cohesion: 0.15
@@ -394,8 +389,8 @@ Cohesion: 0.29
 Nodes (12): AppNotification, add_notification(), clear_notifications(), list_notifications(), mark_all_notifications_read(), mark_notification_read(), notification_unread_count(), remove_notification() (+4 more)
 
 ### Community 51 - "DownloadQueue"
-Cohesion: 0.13
-Nodes (16): clear_finished_also_drops_queued_entries(), DownloadQueue, new_entry_starts_queued_with_zero_progress(), queue_caps_concurrency_at_configured_limit(), remove_and_clear_notify_subscribers(), Arc, Duration, Mutex (+8 more)
+Cohesion: 0.16
+Nodes (14): clear_finished_also_drops_queued_entries(), DownloadQueue, new_entry_starts_queued_with_zero_progress(), queue_caps_concurrency_at_configured_limit(), remove_and_clear_notify_subscribers(), Arc, Duration, Mutex (+6 more)
 
 ### Community 52 - "paths.rs"
 Cohesion: 0.22
@@ -417,9 +412,9 @@ Nodes (7): HashMap, Path, PathBuf, Result, Self, String, SyncEngine
 Cohesion: 0.08
 Nodes (22): [], closeServerModal(), _confirmDeleteServerId, deleteServer(), getServerIconStyle(), isServerIconImage(), lanError, lanScanning (+14 more)
 
-### Community 57 - ".install"
-Cohesion: 0.19
-Nodes (19): AssetJob, collect_libraries(), DownloadJob, extract_native_jar(), InstallProgress, InstallService, Client, Default (+11 more)
+### Community 57 - "collector"
+Cohesion: 0.09
+Nodes (37): collector(), enough_time_but_not_enough_delta_is_suppressed(), first_update_always_reported(), reports_once_interval_and_delta_both_satisfied(), Duration, FnMut, Instant, Option (+29 more)
 
 ### Community 58 - "VersionService"
 Cohesion: 0.21
@@ -462,8 +457,8 @@ Cohesion: 0.06
 Nodes (78): BedrockBackup, BedrockInstance, BedrockPack, BedrockWorld, OptionEntry, OptionKind, PackKind, Option (+70 more)
 
 ### Community 68 - "queue.rs"
-Cohesion: 0.30
-Nodes (9): DownloadEntry, DownloadHandle, DownloadStatus, RegistryEntry, CancellationToken, Option, Receiver, JoinHandle (+1 more)
+Cohesion: 0.20
+Nodes (11): DownloadEntry, DownloadHandle, DownloadStatus, RegistryEntry, CancellationToken, Option, Receiver, Result (+3 more)
 
 ### Community 69 - "RuntimeDownloadService"
 Cohesion: 0.21
@@ -538,8 +533,8 @@ Cohesion: 0.18
 Nodes (15): cancel_download(), clear_finished_downloads(), DownloadEntryDto, list_downloads(), remove_download(), AppHandle, From, Option (+7 more)
 
 ### Community 87 - "integrations.rs"
-Cohesion: 0.17
-Nodes (27): NewsPost, decode(), decode_entity(), fetch_client_changelog(), get_news(), html_decode(), parses_fixture_response(), Client (+19 more)
+Cohesion: 0.34
+Nodes (16): accept_oauth_code(), DiscordProfile, get_announcement(), get_news(), login_discord(), logout_discord(), Option, Result (+8 more)
 
 ### Community 88 - "io_err"
 Cohesion: 0.25
@@ -646,7 +641,7 @@ Cohesion: 0.35
 Nodes (10): fetch_versions(), Provider, From, Option, Result, String, Vec, search_mods() (+2 more)
 
 ### Community 115 - "DownloadClient"
-Cohesion: 0.31
+Cohesion: 0.43
 Nodes (4): DownloadClient, Client, Result, Self
 
 ### Community 116 - "GlacierClientVersion"
@@ -673,9 +668,9 @@ Nodes (6): args_for(), find(), JvmPreset, Option, String, Vec
 Cohesion: 0.38
 Nodes (6): apply_native_window_chrome(), AppHandle, Result, run(), setup_tray(), WebviewWindow
 
-### Community 122 - "InstallProfile"
-Cohesion: 0.15
-Nodes (16): DataSides, DataValue, InstallLibrary, InstallProfile, LibraryArtifact, LibraryDownloads, parses_real_shape(), Processor (+8 more)
+### Community 122 - "news.rs"
+Cohesion: 0.33
+Nodes (11): NewsPost, decode(), decode_entity(), fetch_client_changelog(), get_news(), html_decode(), parses_fixture_response(), Client (+3 more)
 
 ### Community 123 - "default.json"
 Cohesion: 0.33
@@ -722,7 +717,7 @@ Cohesion: 0.07
 Nodes (51): kill_errors_for_untracked_instance(), kill_process_tree(), mark_exited_removes_from_list_and_drops_buffer(), pid_of_reflects_registration_and_removal(), ProcessEntry, ProcessRegistry, push_log_line_is_noop_for_unknown_instance(), register_push_and_read_roundtrip() (+43 more)
 
 ### Community 142 - "resolve_modrinth_node"
-Cohesion: 0.21
+Cohesion: 0.23
 Nodes (17): InstallPlan, PlannedFile, resolve_curseforge_plan(), resolve_modrinth_node(), resolve_modrinth_node_inner(), resolve_modrinth_plan(), Box, HashMap (+9 more)
 
 ### Community 146 - "loader_map.rs"
@@ -737,25 +732,9 @@ Nodes (6): apply(), detach(), Option, Path, Result, DetachMode
 Cohesion: 0.60
 Nodes (5): list_jar_names(), mod_filenames(), Path, String, Vec
 
-### Community 151 - "collector"
-Cohesion: 0.18
-Nodes (18): collector(), enough_time_but_not_enough_delta_is_suppressed(), first_update_always_reported(), reports_once_interval_and_delta_both_satisfied(), Duration, FnMut, Instant, Option (+10 more)
-
-### Community 152 - "processors.rs"
-Cohesion: 0.20
-Nodes (14): make_jar_with_manifest(), parse_main_class(), ProcessorContext, read_main_class(), reads_main_class_from_manifest(), resolve_token_extracts_installer_relative_data_file(), Option, Path (+6 more)
-
-### Community 153 - "io_err"
-Cohesion: 0.23
-Nodes (10): io_err(), JavaError, Error, FnOnce, Into, PathBuf, String, ZipError (+2 more)
-
 ### Community 154 - "pipeline.rs"
 Cohesion: 0.35
 Nodes (11): copy_dir_recursive(), import_many(), import_one(), rollback(), JavaInstance, Path, PathBuf, Result (+3 more)
-
-### Community 155 - "get_string"
-Cohesion: 0.43
-Nodes (6): download_to_file(), get_string(), Client, Path, Result, String
 
 ## Ambiguous Edges - Review These
 - `inventory-shell.md` → `scratch.txt (per-file special-character scratch dump)`  [AMBIGUOUS]
@@ -767,8 +746,8 @@ Nodes (6): download_to_file(), get_string(), Client, Path, Result, String
 
 ## Knowledge Gaps
 - **172 isolated node(s):** `gl-auth`, `gl-bedrock`, `gl-clients`, `gl-integrations`, `gl-modpack` (+167 more)
-  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 733 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
-- **7 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 734 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
+- **6 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_

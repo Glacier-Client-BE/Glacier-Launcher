@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from './i18nStore.svelte'
   /**
    * Phase 8 — multi-step "New Instance" wizard.
    *
@@ -18,6 +19,7 @@
   import { invoke } from '@tauri-apps/api/core'
   import Spinner from './components/Spinner.svelte'
   import type { JavaInstance, JavaVersion, InstanceSettings } from './settings'
+  import ListSkeleton from './components/ListSkeleton.svelte'
 
   let {
     onDone,
@@ -60,6 +62,13 @@
     versions.filter((v) => versionFilter === 'all' || v.type === versionFilter),
   )
 
+  function setVersionFilter(f: 'release' | 'snapshot' | 'all') {
+    versionFilter = f
+    if (!filteredVersions.some((v) => v.id === selectedVersionId)) {
+      selectedVersionId = filteredVersions[0]?.id ?? ''
+    }
+  }
+
   async function loadVersions() {
     versionsLoading = true
     try {
@@ -78,7 +87,7 @@
   const selectedVersion = $derived(versions.find((v) => v.id === selectedVersionId) ?? null)
 
   async function ensureVersionInstalled() {
-    if (!selectedVersion || selectedVersion.is_installed) return
+    if (!selectedVersion || selectedVersion.is_installed || installingVersion) return
     installingVersion = true
     try {
       await invoke('install_java_version', { version: selectedVersion })
@@ -97,7 +106,10 @@
   let selectedLoader = $state<LoaderChoice>('vanilla')
 
   // -- step 3: name/icon/group -------------------------------------------
-  let instanceName = $state('New Instance')
+  // Name defaults to the chosen version ("Minecraft 1.21.4") until the user types their own.
+  let customName = $state<string | null>(null)
+  const defaultName = $derived(selectedVersionId ? `Minecraft ${selectedVersionId}` : 'New Instance')
+  const instanceName = $derived(customName ?? defaultName)
   let instanceGroup = $state('')
   const ACCENTS = ['#7289da', '#43b581', '#faa61a', '#f04747', '#c471ed', '#4fc3f7']
   let accentColor = $state(ACCENTS[0])
@@ -174,19 +186,35 @@
   }
 </script>
 
-<div class="wizard-overlay">
-  <div class="wizard-card">
+<svelte:window onkeydown={(e) => { if (e.key === 'Escape' && !creating) onCancel?.() }} />
+
+<div class="wizard-overlay" role="presentation" onclick={(e) => { if (e.target === e.currentTarget && !creating) onCancel?.() }}>
+  <div class="wizard-card" role="dialog" aria-modal="true" aria-label={t('x.newInstance')} onkeydown={(e) => {
+    // Enter in a text field advances (or creates on the last step), like a form submit.
+    if (e.key !== 'Enter' || e.target instanceof HTMLTextAreaElement) return
+    if (!(e.target instanceof HTMLInputElement) || e.target.type === 'radio') return
+    e.preventDefault()
+    if (creating) return
+    if (step === 'review') void create()
+    else void next()
+  }}>
     <div class="wizard-head">
-      <h2>New Instance</h2>
-      <button class="panel-icon-btn" onclick={onCancel} aria-label="Close wizard">
+      <div class="wizard-title">
+        <span class="wizard-eyebrow">Step {stepIndex + 1} of {STEPS.length}</span>
+        <h2>{t('x.newInstance')}</h2>
+      </div>
+      <button class="panel-icon-btn" onclick={onCancel} aria-label={t('tt.closeWizard')}>
         <i class="fa-solid fa-xmark"></i>
       </button>
     </div>
 
-    <div class="wizard-steps">
+    <div class="wizard-steps" aria-label="Progress">
       {#each STEPS as s, i (s.id)}
-        <div class="wizard-step-dot {i === stepIndex ? 'active' : ''} {i < stepIndex ? 'done' : ''}">
-          <span class="wizard-step-num">{i < stepIndex ? '✓' : i + 1}</span>
+        <div
+          class="wizard-step-dot {i === stepIndex ? 'active' : ''} {i < stepIndex ? 'done' : ''}"
+          aria-current={i === stepIndex ? 'step' : undefined}
+        >
+          <span class="wizard-step-num">{#if i < stepIndex}<i class="fa-solid fa-check"></i>{:else}{i + 1}{/if}</span>
           <span class="wizard-step-label">{s.label}</span>
         </div>
       {/each}
@@ -196,41 +224,48 @@
       {#if step === 'version'}
         <div class="wizard-field-row">
           <label>
-            <input type="radio" name="vf" checked={versionFilter === 'release'} onchange={() => (versionFilter = 'release')} />
+            <input type="radio" name="vf" checked={versionFilter === 'release'} onchange={() => setVersionFilter('release')} />
             Releases
           </label>
           <label>
-            <input type="radio" name="vf" checked={versionFilter === 'snapshot'} onchange={() => (versionFilter = 'snapshot')} />
+            <input type="radio" name="vf" checked={versionFilter === 'snapshot'} onchange={() => setVersionFilter('snapshot')} />
             Snapshots
           </label>
           <label>
-            <input type="radio" name="vf" checked={versionFilter === 'all'} onchange={() => (versionFilter = 'all')} />
+            <input type="radio" name="vf" checked={versionFilter === 'all'} onchange={() => setVersionFilter('all')} />
             All
           </label>
         </div>
         {#if versionsLoading}
-          <div class="versions-loading"><Spinner size={18} /><span>Loading versions...</span></div>
+          <ListSkeleton rows={3} />
+        {:else if filteredVersions.length === 0}
+          <div class="empty-state">
+            <i class="fa-solid fa-magnifying-glass"></i>
+            <span>{t('empty.noResultsFound')}</span>
+          </div>
         {:else}
           <div class="wizard-version-list">
             {#each filteredVersions.slice(0, 60) as v (v.id)}
               <button
                 type="button"
                 class="wizard-version-row {selectedVersionId === v.id ? 'active' : ''}"
+                aria-pressed={selectedVersionId === v.id}
                 onclick={() => (selectedVersionId = v.id)}
               >
                 <span>{v.id}</span>
-                {#if v.is_installed}<i class="fa-solid fa-circle-check" title="Installed"></i>{/if}
+                {#if v.is_installed}<i class="fa-solid fa-circle-check" role="img" aria-label="Installed" title="Installed"></i>{/if}
               </button>
             {/each}
           </div>
         {/if}
       {:else if step === 'loader'}
-        <p class="wizard-hint">Choose a mod loader, or stick with vanilla.</p>
+        <p class="wizard-hint">{t('x.chooseAModLoaderOrStickWithVanilla')}</p>
         <div class="wizard-loader-grid">
-          {#each ['vanilla', 'fabric', 'quilt', 'forge', 'neoforge'] as l}
+          {#each ['vanilla', 'fabric', 'quilt', 'forge', 'neoforge'] as l (l)}
             <button
               type="button"
               class="wizard-loader-tile {selectedLoader === l ? 'active' : ''}"
+              aria-pressed={selectedLoader === l}
               disabled={l !== 'vanilla'}
               data-tooltip={l !== 'vanilla' ? MISSING_LOADER_VERSIONS : undefined}
               onclick={() => (selectedLoader = l as LoaderChoice)}
@@ -245,22 +280,24 @@
         </p>
       {:else if step === 'details'}
         <label class="wizard-field">
-          <span>Name</span>
-          <input class="setting-input" bind:value={instanceName} />
+          <span>{t('label.name')}</span>
+          <input class="setting-input" value={instanceName} oninput={(e) => (customName = e.currentTarget.value)} />
+          <small class="wizard-hint">You can change this later in the instance's Settings.</small>
         </label>
         <label class="wizard-field">
           <span>Group (optional)</span>
-          <input class="setting-input" bind:value={instanceGroup} placeholder="Ungrouped" />
+          <input class="setting-input" bind:value={instanceGroup} placeholder={t('ph.ungrouped')} />
         </label>
         <div class="wizard-field">
-          <span>Accent color</span>
+          <span>{t('x.accentColor')}</span>
           <div class="wizard-accent-row">
-            {#each ACCENTS as c}
+            {#each ACCENTS as c (c)}
               <button
                 type="button"
                 class="wizard-accent-dot {accentColor === c ? 'active' : ''}"
                 style="background:{c}"
                 aria-label={`Accent ${c}`}
+                aria-pressed={accentColor === c}
                 onclick={() => (accentColor = c)}
               ></button>
             {/each}
@@ -277,32 +314,126 @@
         </label>
         <label class="wizard-field">
           <span>Custom Java path (optional)</span>
-          <input class="setting-input" bind:value={javaPath} placeholder="Use global default" />
+          <input class="setting-input" bind:value={javaPath} placeholder={t('ph.useGlobalDefault')} />
         </label>
       {:else if step === 'review'}
+        <p class="wizard-hint">Everything here has a sensible default. You can change any of it later in the instance's Settings.</p>
         <div class="wizard-review">
-          <div><strong>Name</strong><span>{instanceName}</span></div>
-          <div><strong>Version</strong><span>{selectedVersionId}</span></div>
-          <div><strong>Loader</strong><span>{selectedLoader}</span></div>
-          <div><strong>Group</strong><span>{instanceGroup || 'Ungrouped'}</span></div>
-          <div><strong>RAM</strong><span>{minRamMb} – {maxRamMb} MB</span></div>
+          <div><strong>{t('label.name')}</strong><span>{instanceName}</span></div>
+          <div><strong>{t('label.version')}</strong><span>{selectedVersionId}</span></div>
+          <div><strong>{t('x.loader')}</strong><span>{selectedLoader}</span></div>
+          <div><strong>{t('label.group')}</strong><span>{instanceGroup || t('ph.ungrouped')}</span></div>
+          <div><strong>{t('label.ram')}</strong><span>{minRamMb} – {maxRamMb} MB</span></div>
         </div>
       {/if}
     </div>
 
     <div class="wizard-footer">
       <button class="btn-sm" onclick={back} disabled={creating || installingVersion}>
-        {stepIndex === 0 ? 'Cancel' : 'Back'}
+        {stepIndex === 0 ? t('common.cancel') : 'Back'}
       </button>
       {#if step === 'review'}
-        <button class="btn-sm btn-primary" onclick={create} disabled={creating}>
+        <button class="btn-sm btn-primary" onclick={create} disabled={creating} aria-busy={creating}>
           {#if creating}<Spinner size={14} />{:else}<i class="fa-solid fa-check"></i>{/if} Create Instance
         </button>
       {:else}
-        <button class="btn-sm btn-primary" onclick={next} disabled={!canAdvance() || installingVersion}>
+        <button class="btn-sm btn-primary" onclick={next} disabled={!canAdvance() || installingVersion} aria-busy={installingVersion}>
           {#if installingVersion}<Spinner size={14} /> Installing…{:else}Next{/if}
         </button>
       {/if}
     </div>
   </div>
 </div>
+
+<style>
+  /* Wizard rhythm: outer gutter/band tokens, field labels above inputs,
+     primary action bottom-right (footer keeps Back left, Next right). */
+  .wizard-head {
+    padding: var(--panel-gutter);
+  }
+  .wizard-title {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+  }
+  .wizard-eyebrow {
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--text-dim);
+  }
+  .wizard-head h2 {
+    margin: 0;
+  }
+  .wizard-steps {
+    padding: var(--panel-band) var(--panel-gutter);
+    gap: var(--panel-band);
+  }
+  .wizard-body {
+    padding: var(--panel-gutter);
+    gap: var(--panel-gutter);
+  }
+  .wizard-field {
+    gap: 8px;
+  }
+  .wizard-field > span {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text);
+  }
+  .wizard-field-row {
+    gap: var(--panel-gutter);
+  }
+  .wizard-version-list,
+  .wizard-loader-grid {
+    gap: var(--panel-band);
+  }
+  .wizard-version-row {
+    padding: var(--row-pad-y) var(--row-pad-x);
+    transition: background-color var(--t), border-color var(--t);
+  }
+  .wizard-version-row:hover {
+    background: var(--bg-item-hover);
+  }
+  .wizard-version-row.active,
+  .wizard-version-row.active:hover {
+    background: var(--accent-bg);
+  }
+  .wizard-loader-tile {
+    padding: var(--row-pad-y) var(--row-pad-x);
+    transition: background-color var(--t), border-color var(--t);
+  }
+  .wizard-loader-tile:hover:not(:disabled) {
+    background: var(--bg-item-hover);
+  }
+  .wizard-loader-tile.active,
+  .wizard-loader-tile.active:hover {
+    background: var(--accent-bg);
+  }
+  .wizard-loader-tile:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  .wizard-review {
+    gap: 0;
+  }
+  .wizard-review > div {
+    padding: var(--row-pad-y) 0;
+  }
+  .wizard-footer {
+    padding: var(--panel-gutter);
+    gap: var(--panel-band);
+  }
+  .wizard-footer button {
+    transition: background-color var(--t), opacity var(--t);
+  }
+  .wizard-footer button:not(.btn-primary):hover:not(:disabled) {
+    background: var(--bg-item-hover);
+  }
+  .wizard-footer button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+</style>

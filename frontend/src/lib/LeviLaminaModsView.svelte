@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from './i18nStore.svelte'
   /**
    * Port of the "levimods" panel — Home.razor:2988-3101 with its code-behind in
    * Home.LeviLaminaMods.cs, backed by `Services/LeviLaminaModsService.cs`
@@ -15,9 +16,9 @@
   import { onDestroy, onMount } from 'svelte'
   import PanelHeader from './components/PanelHeader.svelte'
   import InlineProgress from './components/InlineProgress.svelte'
-  import Spinner from './components/Spinner.svelte'
   import ViewModeToggle from './components/ViewModeToggle.svelte'
   import { loadViewMode, saveViewMode, type ViewMode } from './viewMode'
+  import ListSkeleton from './components/ListSkeleton.svelte'
 
   let { onBack, onToast }: { onBack?: () => void; onToast?: (m: string, kind?: string) => void } =
     $props()
@@ -89,6 +90,7 @@
 
   /** Port of `HandleLevModInstall` — same toast texts. */
   async function handleLevModInstall(m: LeviLaminaMod) {
+    if (levModsInstallingRepo) return
     levModsInstallingRepo = m.repo_name
     try {
       await invoke('download_levilamina_mod', {
@@ -98,9 +100,9 @@
         modName: m.name,
       })
       installed[key(m)] = true
-      onToast?.(`${m.name} installed!`, 'success')
+      onToast?.(t('toast.nameInstalledExcl', { name: m.name }), 'success')
     } catch (e) {
-      onToast?.(`Install failed: ${String(e)}`, 'error')
+      onToast?.(t('toast.installFailed', { error: String(e) }), 'error')
     } finally {
       levModsInstallingRepo = ''
     }
@@ -111,7 +113,7 @@
     try {
       await invoke('delete_levilamina_mod', { repoOwner: m.repo_owner, repoName: m.repo_name })
       installed[key(m)] = false
-      onToast?.(`${m.name} removed.`, 'info')
+      onToast?.(t('toast.nameRemoved', { name: m.name }), 'info')
     } catch (e) {
       onToast?.(String(e), 'error')
     }
@@ -125,6 +127,7 @@
   type QueueEntry = { id: string; label: string; status: string; progress: number }
   let queue = $state<QueueEntry[]>([])
   let unlisten: UnlistenFn | undefined
+  let levDisposed = false
 
   function progressFor(m: LeviLaminaMod): number {
     return queue.find((e) => e.status === 'Downloading' && e.label === m.name)?.progress ?? 0
@@ -134,10 +137,12 @@
     listen<QueueEntry[]>('downloads-changed', (e) => {
       queue = e.payload
     }).then((fn) => {
-      unlisten = fn
+      if (levDisposed) fn()
+      else unlisten = fn
     })
   })
   onDestroy(() => {
+    levDisposed = true
     if (debounceTimer) clearTimeout(debounceTimer)
     unlisten?.()
   })
@@ -146,7 +151,64 @@
   levModsSearchAsync()
 </script>
 
-<PanelHeader title="LeviLamina Mods" {onBack}>
+<style>
+  .lev-list:not(.grid-view) {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .lev-card {
+    margin: 0;
+  }
+  .lev-avatar-wrap {
+    padding: 3px;
+    border-radius: var(--r-sm);
+    overflow: hidden;
+  }
+  .lev-avatar {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 8px;
+  }
+  .lev-fallback-icon {
+    font-size: 18px;
+    color: var(--accent);
+  }
+  .lev-name {
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .lev-sub {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+  }
+  .lev-dim {
+    font-size: 11px;
+    color: var(--text-dim);
+  }
+  .lev-error-block {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    padding: 20px;
+    text-align: center;
+  }
+  .lev-inline-error {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 6px;
+  }
+</style>
+
+<PanelHeader title={t('panel.leviLaminaMods')} {onBack}>
   {#snippet extraActions()}
     <button
       type="button"
@@ -154,8 +216,8 @@
       disabled={levModsSearching}
       onclick={levModsSearchAsync}
       onmousedown={(e) => e.stopPropagation()}
-      data-tooltip="Refresh"
-      aria-label="Refresh"
+      data-tooltip={t('tt.refresh')}
+      aria-label={t('tt.refresh')}
     >
       <i class="fa-solid fa-rotate"></i>
     </button>
@@ -167,7 +229,8 @@
   <i class="fa-solid fa-magnifying-glass"></i>
   <input
     class="panel-search-input"
-    placeholder="Search LeviLamina mods..."
+    aria-label={t('ph.searchLevilamina')}
+    placeholder={t('ph.searchLevilamina')}
     value={levModsQuery}
     oninput={(e) => onLevModsSearchInput(e.currentTarget.value)}
     onkeydown={(e) => e.stopPropagation()}
@@ -176,53 +239,50 @@
 
 <div class="panel-body">
   {#if levModsSearching}
-    <div class="versions-loading"><Spinner size={18} borderWidth={2} /><span>Loading mods...</span></div>
+    <ListSkeleton rows={4} />
   {:else if levModsError && levModsResults.length === 0}
-    <div style="padding:20px; text-align:center;">
-      <span class="error-text">{levModsError}</span>
-      <br />
+    <div class="lev-error-block">
+      <span class="error-text"><i class="fa-solid fa-triangle-exclamation"></i> {levModsError}</span>
       <button
         class="btn-sm"
-        style="margin-top:10px;"
         onclick={levModsSearchAsync}
         onmousedown={(e) => e.stopPropagation()}
       >
-        <i class="fa-solid fa-rotate"></i> Retry
+        <i class="fa-solid fa-rotate"></i> {t('common.retry')}
       </button>
     </div>
   {:else if levModsResults.length === 0}
     <div class="empty-state">
       <i class="fa-solid fa-box-open"></i>
-      <span>No mods found</span>
-      <small>Try a different search term.</small>
+      <span>{t('empty.noModsFound')}</span>
+      <small>{t('empty.tryDifferentSearchTerm')}</small>
     </div>
   {:else}
     {#if levModsError}
-      <span class="error-text" style="display:block; margin-bottom:6px;">{levModsError}</span>
+      <span class="error-text lev-inline-error"><i class="fa-solid fa-triangle-exclamation"></i> {levModsError}</span>
     {/if}
-    <div class="version-list {levModsViewMode === 'grid' ? 'grid-view' : ''}">
+    <div class="version-list lev-list {levModsViewMode === 'grid' ? 'grid-view' : ''}">
     {#each levModsResults as m (key(m))}
-      <div class="client-card" style="margin-bottom:6px;">
+      <div class="client-card lev-card">
         <div class="client-card-header">
-          <div class="client-card-icon" style="padding:3px; border-radius:6px; overflow:hidden;">
+          <div class="client-card-icon lev-avatar-wrap">
             {#if m.avatar_url}
               <img
                 src={m.avatar_url}
-                style="width:100%;height:100%;object-fit:cover;border-radius:4px;"
+                loading="lazy"
+                decoding="async"
+                class="lev-avatar"
                 alt=""
               />
             {:else}
-              <i class="fa-solid fa-puzzle-piece" style="font-size:18px; color:var(--accent);"></i>
+              <i class="fa-solid fa-puzzle-piece lev-fallback-icon"></i>
             {/if}
           </div>
-          <div class="client-card-meta" style="min-width:0;">
-            <span
-              class="client-card-name"
-              style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{m.name}</span
-            >
-            <span class="client-card-sub" style="display:flex; gap:8px; align-items:center;">
-              <span style="opacity:0.6;">v{m.latest_version}</span>
-              <span style="opacity:0.4;"><i class="fa-solid fa-star"></i> {m.stars}</span>
+          <div class="client-card-meta">
+            <span class="client-card-name lev-name">{m.name}</span>
+            <span class="client-card-sub lev-sub">
+              <span class="lev-dim">v{m.latest_version}</span>
+              <span class="lev-dim"><i class="fa-solid fa-star"></i> {m.stars}</span>
             </span>
           </div>
           <div class="client-card-actions">
@@ -231,8 +291,8 @@
             {:else if installed[key(m)]}
               <button
                 class="icon-btn icon-btn-ghost"
-                data-tooltip="Remove"
-                aria-label="Remove"
+                data-tooltip={t('tt.remove')}
+                aria-label={t('tt.remove')}
                 onclick={() => handleLevModDelete(m)}
                 onmousedown={(e) => e.stopPropagation()}
               >
@@ -241,8 +301,8 @@
             {:else}
               <button
                 class="icon-btn"
-                data-tooltip="Install"
-                aria-label="Install"
+                data-tooltip={t('tt.install')}
+                aria-label={t('tt.install')}
                 onclick={() => handleLevModInstall(m)}
                 onmousedown={(e) => e.stopPropagation()}
               >

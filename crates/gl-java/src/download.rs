@@ -24,7 +24,10 @@ pub async fn download_to_file(client: &reqwest::Client, url: &str, dest: &Path) 
         None => "part".to_string(),
     });
 
-    let mut file = tokio::fs::File::create(&tmp).await.map_err(io_err(&tmp))?;
+    let file = tokio::fs::File::create(&tmp).await.map_err(io_err(&tmp))?;
+    // tokio::fs::File dispatches every write to the blocking pool; buffering
+    // coalesces the many small network chunks into fewer blocking writes.
+    let mut file = tokio::io::BufWriter::with_capacity(256 * 1024, file);
     let mut stream = resp.bytes_stream();
     use tokio::io::AsyncWriteExt;
     while let Some(chunk) = stream.next().await {
@@ -34,9 +37,6 @@ pub async fn download_to_file(client: &reqwest::Client, url: &str, dest: &Path) 
     file.flush().await.map_err(io_err(&tmp))?;
     drop(file);
 
-    if dest.exists() {
-        tokio::fs::remove_file(dest).await.map_err(io_err(dest))?;
-    }
     tokio::fs::rename(&tmp, dest).await.map_err(io_err(dest))?;
     Ok(())
 }

@@ -7,8 +7,43 @@ use tauri::State;
 use crate::state::AppState;
 
 #[tauri::command]
-pub fn path_exists(path: String) -> bool {
+pub async fn path_exists(path: String) -> bool {
     PathBuf::from(path).exists()
+}
+
+/// Windows reports `ACCESS_DENIED` (not a sharing violation) when deleting or
+/// overwriting a DLL that's currently mapped into a running process — e.g.
+/// the game is open with this client actively injected. The raw OS error
+/// ("Access is denied. (os error 5)") gives the user no idea what to do
+/// about it; this names the actual, fixable cause instead.
+fn friendly_file_error(e: &std::io::Error, file_name: &str) -> String {
+    if e.kind() == std::io::ErrorKind::PermissionDenied {
+        format!(
+            "Couldn't access {file_name} — it's likely still loaded by a running Minecraft session. Close the game, then try again."
+        )
+    } else {
+        e.to_string()
+    }
+}
+
+/// Same idea as [`friendly_file_error`], for errors surfaced through the
+/// download queue (`gl_download::DownloadError`) rather than a bare
+/// `std::io::Error` — unwraps through `RetriesExhausted` to find the
+/// underlying I/O error, if any.
+fn friendly_download_error(e: &gl_download::DownloadError, file_name: &str) -> String {
+    fn io_source(e: &gl_download::DownloadError) -> Option<&std::io::Error> {
+        match e {
+            gl_download::DownloadError::Io { source, .. } => Some(source),
+            gl_download::DownloadError::RetriesExhausted { source, .. } => io_source(source),
+            _ => None,
+        }
+    }
+    match io_source(e) {
+        Some(io) if io.kind() == std::io::ErrorKind::PermissionDenied => format!(
+            "Couldn't write {file_name} — it's likely still loaded by a running Minecraft session. Close the game, then try again."
+        ),
+        _ => e.to_string(),
+    }
 }
 
 #[tauri::command]
@@ -53,13 +88,16 @@ pub async fn download_flarial_client(state: State<'_, AppState>) -> Result<Strin
         .with_sha256(remote_hash)
         .with_label("Flarial Client");
     let handle = state.downloads.submit(req);
-    handle.join().await.map_err(|e| e.to_string())?;
+    handle
+        .join()
+        .await
+        .map_err(|e| friendly_download_error(&e, gl_clients::flarial::FILE_NAME))?;
 
     Ok(dest.to_string_lossy().into_owned())
 }
 
 #[tauri::command]
-pub fn flarial_client_path(state: State<'_, AppState>) -> Result<String, String> {
+pub async fn flarial_client_path(state: State<'_, AppState>) -> Result<String, String> {
     Ok(flarial_path(&state).to_string_lossy().into_owned())
 }
 
@@ -73,10 +111,11 @@ pub fn flarial_client_installed(state: State<'_, AppState>) -> bool {
 }
 
 #[tauri::command]
-pub fn delete_flarial_client(state: State<'_, AppState>) -> Result<(), String> {
+pub async fn delete_flarial_client(state: State<'_, AppState>) -> Result<(), String> {
     let path = flarial_path(&state);
     if path.exists() {
-        std::fs::remove_file(&path).map_err(|e| e.to_string())?;
+        std::fs::remove_file(&path)
+            .map_err(|e| friendly_file_error(&e, gl_clients::flarial::FILE_NAME))?;
     }
     Ok(())
 }
@@ -153,7 +192,10 @@ pub async fn download_oderso_dll(
         .with_known_total_bytes(entry.size)
         .with_label(format!("OderSo {}", entry.name));
     let handle = state.downloads.submit(req);
-    handle.join().await.map_err(|e| e.to_string())?;
+    handle
+        .join()
+        .await
+        .map_err(|e| friendly_download_error(&e, &entry.name))?;
 
     Ok(dest.to_string_lossy().into_owned())
 }
@@ -192,10 +234,11 @@ pub async fn set_active_oderso_dll(
 /// Port of `DeleteEntry`. A missing file is not an error - the row just ends
 /// up in the state the caller wanted.
 #[tauri::command]
-pub fn delete_oderso_dll(state: State<'_, AppState>, name: String) -> Result<(), String> {
+pub async fn delete_oderso_dll(state: State<'_, AppState>, name: String) -> Result<(), String> {
+    super::safe_file_name(&name)?;
     let path = oderso_entry_path(&state, &name);
     if path.exists() {
-        std::fs::remove_file(&path).map_err(|e| e.to_string())?;
+        std::fs::remove_file(&path).map_err(|e| friendly_file_error(&e, &name))?;
     }
     if let Some((stored, _)) = oderso_stored_entry(&state) {
         if stored == name {
@@ -237,6 +280,16 @@ pub async fn list_oderso_dlls(state: State<'_, AppState>) -> Result<Vec<OderSoDl
 }
 
 /// Downloads the latest OderSo client DLL. Mirrors `OderSoService.DownloadAsync`.
+///
+/// Must also write the `OderSo.ver` active marker, the same as
+/// `set_active_oderso_dll` does — `check_oderso_up_to_date` (the Clients
+/// panel's "Update available" badge) reads that marker via
+/// `oderso_stored_entry`, and reports "not up to date" whenever it's
+/// missing. This is the Clients panel's primary install/update button, so
+/// without writing the marker here, using it left the badge permanently
+/// stuck on "Update available" even immediately after downloading the
+/// newest release - the Versions panel's per-row `set_active_oderso_dll`
+/// was the only path that ever wrote it.
 #[tauri::command]
 pub async fn download_oderso_client(state: State<'_, AppState>) -> Result<String, String> {
     let entries = gl_clients::oderso::list_dlls(&state.http)
@@ -252,7 +305,18 @@ pub async fn download_oderso_client(state: State<'_, AppState>) -> Result<String
         .with_known_total_bytes(entry.size)
         .with_label("OderSo Client");
     let handle = state.downloads.submit(req);
-    handle.join().await.map_err(|e| e.to_string())?;
+    handle
+        .join()
+        .await
+        .map_err(|e| friendly_download_error(&e, &entry.name))?;
+
+    let dir = oderso_dir(&state);
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    std::fs::write(
+        oderso_ver_path(&state),
+        format!("{}|{}", entry.name, entry.sha),
+    )
+    .map_err(|e| e.to_string())?;
 
     Ok(dest.to_string_lossy().into_owned())
 }
@@ -268,7 +332,7 @@ pub fn oderso_client_installed(state: State<'_, AppState>) -> bool {
 
 /// Returns the on-disk path to the installed OderSo client DLL.
 #[tauri::command]
-pub fn oderso_client_path(state: State<'_, AppState>) -> Result<String, String> {
+pub async fn oderso_client_path(state: State<'_, AppState>) -> Result<String, String> {
     let dir = state.clients_dir.join("OderSo");
     let entry = std::fs::read_dir(&dir)
         .map_err(|_| "OderSo client is not installed.".to_string())?
@@ -284,10 +348,10 @@ pub fn oderso_client_path(state: State<'_, AppState>) -> Result<String, String> 
 }
 
 #[tauri::command]
-pub fn delete_oderso_client(state: State<'_, AppState>) -> Result<(), String> {
+pub async fn delete_oderso_client(state: State<'_, AppState>) -> Result<(), String> {
     let dir = state.clients_dir.join("OderSo");
     if dir.exists() {
-        std::fs::remove_dir_all(&dir).map_err(|e| e.to_string())?;
+        std::fs::remove_dir_all(&dir).map_err(|e| friendly_file_error(&e, "OderSo"))?;
     }
     Ok(())
 }
@@ -314,7 +378,10 @@ pub async fn download_levilamina_client(state: State<'_, AppState>) -> Result<St
     let req = gl_download::DownloadRequest::new(&release.zip_url, &zip_path)
         .with_label("LeviLamina");
     let handle = state.downloads.submit(req);
-    handle.join().await.map_err(|e| e.to_string())?;
+    handle
+        .join()
+        .await
+        .map_err(|e| friendly_download_error(&e, "LeviLamina"))?;
 
     extract_zip(&zip_path, &dir).map_err(|e| e.to_string())?;
     let _ = std::fs::remove_file(&zip_path);
@@ -353,7 +420,7 @@ pub async fn check_levilamina_up_to_date(state: State<'_, AppState>) -> Result<b
 
 /// Returns the on-disk path to the installed LeviLamina loader DLL.
 #[tauri::command]
-pub fn levilamina_client_path(state: State<'_, AppState>) -> Result<String, String> {
+pub async fn levilamina_client_path(state: State<'_, AppState>) -> Result<String, String> {
     let dir = levilamina_dir(&state);
     gl_clients::levilamina::find_loader_dll(&dir)
         .map(|p| p.to_string_lossy().into_owned())
@@ -361,10 +428,10 @@ pub fn levilamina_client_path(state: State<'_, AppState>) -> Result<String, Stri
 }
 
 #[tauri::command]
-pub fn delete_levilamina_client(state: State<'_, AppState>) -> Result<(), String> {
+pub async fn delete_levilamina_client(state: State<'_, AppState>) -> Result<(), String> {
     let dir = levilamina_dir(&state);
     if dir.exists() {
-        std::fs::remove_dir_all(&dir).map_err(|e| e.to_string())?;
+        std::fs::remove_dir_all(&dir).map_err(|e| friendly_file_error(&e, "LeviLamina"))?;
     }
     Ok(())
 }

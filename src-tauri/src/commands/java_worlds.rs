@@ -33,14 +33,14 @@ fn active_dir(state: &AppState) -> Result<PathBuf, String> {
 
 /// Port of `ListWorlds`.
 #[tauri::command]
-pub fn list_java_worlds(state: State<'_, AppState>) -> Result<Vec<JavaWorld>, String> {
+pub async fn list_java_worlds(state: State<'_, AppState>) -> Result<Vec<JavaWorld>, String> {
     let dir = active_dir(&state)?;
     worlds::list_worlds(&dir).map_err(|e| e.to_string())
 }
 
 /// Port of `ListBackups`.
 #[tauri::command]
-pub fn list_java_backups(state: State<'_, AppState>) -> Result<Vec<JavaInstanceFile>, String> {
+pub async fn list_java_backups(state: State<'_, AppState>) -> Result<Vec<JavaInstanceFile>, String> {
     let dir = active_dir(&state)?;
     worlds::list_backups(&dir).map_err(|e| e.to_string())
 }
@@ -112,13 +112,13 @@ pub async fn restore_java_backup(
 
 /// Port of `DeleteBackup` — never fails, as the C# swallows its exception.
 #[tauri::command]
-pub fn delete_java_backup(zip_path: String) {
+pub async fn delete_java_backup(zip_path: String) {
     worlds::delete_backup(Path::new(&zip_path));
 }
 
 /// Port of `ListDatapacks`.
 #[tauri::command]
-pub fn list_java_datapacks(
+pub async fn list_java_datapacks(
     state: State<'_, AppState>,
     world_name: String,
 ) -> Result<Vec<JavaInstanceFile>, String> {
@@ -128,7 +128,7 @@ pub fn list_java_datapacks(
 
 /// Port of `ImportDatapackFile`.
 #[tauri::command]
-pub fn import_java_datapack(
+pub async fn import_java_datapack(
     state: State<'_, AppState>,
     world_name: String,
     zip_path: String,
@@ -141,13 +141,13 @@ pub fn import_java_datapack(
 
 /// Port of `DeleteDatapack`.
 #[tauri::command]
-pub fn delete_java_datapack(path: String) -> Result<(), String> {
+pub async fn delete_java_datapack(path: String) -> Result<(), String> {
     worlds::delete_datapack(Path::new(&path)).map_err(|e| e.to_string())
 }
 
 /// Port of `OpenDatapacksFolder`.
 #[tauri::command]
-pub fn open_java_datapacks_folder(
+pub async fn open_java_datapacks_folder(
     state: State<'_, AppState>,
     world_name: String,
 ) -> Result<(), String> {

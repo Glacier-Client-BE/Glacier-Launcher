@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from './i18nStore.svelte'
   // Ported from the "news" panel in Home.razor (lines ~5407-5493) /
   // Home.Announcement.cs + NewsService.cs. Uses the `get_news` /
   // `get_announcement` commands that already exist for the home-screen
@@ -15,8 +16,9 @@
   import { invoke } from '@tauri-apps/api/core'
   import { onMount } from 'svelte'
   import PanelHeader from './components/PanelHeader.svelte'
-  import Spinner from './components/Spinner.svelte'
   import { invokeCached } from './invokeCache'
+  import ListSkeleton from './components/ListSkeleton.svelte'
+  import { formatChangelog } from './format'
 
   const RELEASES_TTL_MS = 10 * 60 * 1000
 
@@ -33,9 +35,21 @@
   let launcherReleases = $state<LauncherRelease[]>([])
   let clientReleases = $state<LauncherRelease[]>([])
   let glacierReleases = $state<LauncherRelease[]>([])
-  let changelogTab = $state<'glacier' | 'latite' | 'launcher'>('glacier')
+  /** Redesign: `.news-row`s restyled as `.client-card`s, single column (not
+   *  a multi-column grid — these are read top-to-bottom, not scanned tile by
+   *  tile) with a real expanding body for the changelog entries. The
+   *  changelog source picker stays tabs (`.mcv-channel-tabs`, one source
+   *  shown at a time), same as before the redesign. */
+  type Section = 'glacier' | 'latite' | 'launcher'
+  let changelogTab = $state<Section>('glacier')
   let expandedTag = $state<string | null>(null)
   let loading = $state(true)
+
+  const CHANGELOG_SECTIONS: { key: Section; label: string }[] = [
+    { key: 'glacier', label: 'Glacier' },
+    { key: 'latite', label: 'Latite' },
+    { key: 'launcher', label: 'Launcher' },
+  ]
 
   const releases = $derived(
     changelogTab === 'glacier' ? glacierReleases :
@@ -51,25 +65,6 @@
     if (url) invoke('open_url', { url }).catch(() => {})
   }
 
-  function escapeHtml(s: string): string {
-    return s
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#39;')
-  }
-
-  function formatChangelog(md: string): string {
-    let html = escapeHtml(md)
-    html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-    html = html.replace(
-      /\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g,
-      '<a href="$2" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:underline;cursor:pointer;">$1</a>',
-    )
-    html = html.replace(/\r\n/g, '<br/>').replace(/\n/g, '<br/>')
-    return html
-  }
 
   function formatDate(iso: string): string {
     if (!iso) return ''
@@ -81,12 +76,17 @@
     expandedTag = expandedTag === tag ? null : tag
   }
 
+  function selectChangelogTab(s: Section) {
+    changelogTab = s
+    expandedTag = null
+  }
+
   async function load() {
     loading = true
     try {
       const [news, ann, glacierRel, clientRel, launcherRel] = await Promise.all([
-        invoke<NewsPost[] | null>('get_news'),
-        invoke<Announcement | null>('get_announcement'),
+        invoke<NewsPost[] | null>('get_news').catch(() => null),
+        invoke<Announcement | null>('get_announcement').catch(() => null),
         invokeCached<LauncherRelease[]>('list_glacier_client_releases', { max: 12 }, RELEASES_TTL_MS).catch(() => []),
         invokeCached<LauncherRelease[]>('list_client_releases', { max: 12 }, RELEASES_TTL_MS).catch(() => []),
         invokeCached<LauncherRelease[]>('list_launcher_releases', { max: 12 }, RELEASES_TTL_MS).catch(() => []),
@@ -104,9 +104,50 @@
   onMount(load)
 </script>
 
-<PanelHeader title="News & Updates" {onBack}>
+<style>
+  .news-announce {
+    margin: 0 0 12px;
+  }
+  .news-card-col {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .client-card-link {
+    cursor: pointer;
+  }
+  .client-card:focus-visible,
+  .news-row:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+  .news-icon-accent {
+    background: var(--accent-bg);
+    color: var(--accent);
+  }
+  .news-ext {
+    opacity: 0.5;
+    flex-shrink: 0;
+    font-size: 12px;
+  }
+  .news-date {
+    font-size: 11px;
+    color: var(--text-dim);
+    font-variant-numeric: tabular-nums;
+  }
+  .news-changelog-body {
+    max-height: 260px;
+    overflow: auto;
+    white-space: normal;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid var(--bg-item-hover);
+  }
+</style>
+
+<PanelHeader title={t('panel.newsAndUpdates')} {onBack}>
   {#snippet extraActions()}
-    <button type="button" class="panel-icon-btn" class:spinning={loading} disabled={loading} data-tooltip="Refresh" aria-label="Refresh" onclick={load}>
+    <button type="button" class="panel-icon-btn" class:spinning={loading} disabled={loading} data-tooltip={t('tt.refresh')} aria-label={t('tt.refresh')} onclick={load}>
       <i class="fa-solid fa-rotate"></i>
     </button>
   {/snippet}
@@ -114,11 +155,10 @@
 
 <div class="panel-body">
   {#if loading}
-    <div class="versions-loading"><Spinner /><span>Loading news…</span></div>
+    <ListSkeleton rows={3} />
   {:else}
     {#if announcement}
-      <span class="panel-section-label">Announcement</span>
-      <div class="news-row" role="link" tabindex="0" onclick={() => announcement && openUrl(announcement.url)} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); announcement && openUrl(announcement.url) } }}>
+      <div class="news-row news-announce" role="link" tabindex="0" onclick={() => announcement && openUrl(announcement.url)} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); announcement && openUrl(announcement.url) } }}>
         <div class="news-icon"><i class="fa-solid fa-bullhorn"></i></div>
         <div class="news-meta">
           <span class="news-title">{announcement.title}</span>
@@ -128,56 +168,73 @@
       </div>
     {/if}
 
-    <span class="panel-section-label">Latest</span>
+    <span class="panel-section-label">{t('x.latest')}</span>
     {#if posts.length > 0}
-      {#each posts as p}
-        <div class="news-row" role="link" tabindex="0" onclick={() => openUrl(p.url)} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openUrl(p.url) } }}>
-          <div class="news-icon"><i class={p.icon || 'fa-solid fa-newspaper'}></i></div>
-          <div class="news-meta">
-            <span class="news-title">{p.title}</span>
-            <span class="news-sub">{p.subtitle}</span>
+      <div class="news-card-col">
+        {#each posts as p}
+          <div
+            class="client-card client-card-link"
+            role="link"
+            tabindex="0"
+            onclick={() => openUrl(p.url)}
+            onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openUrl(p.url) } }}
+          >
+            <div class="client-card-header">
+              <div class="client-card-icon news-icon-accent">
+                <i class={p.icon || 'fa-solid fa-newspaper'}></i>
+              </div>
+              <div class="client-card-meta">
+                <span class="client-card-name">{p.title}</span>
+                <span class="client-card-sub">{p.subtitle}</span>
+              </div>
+              {#if p.url}<i class="fa-solid fa-arrow-up-right-from-square news-ext"></i>{/if}
+            </div>
           </div>
-          {#if p.url}<i class="fa-solid fa-arrow-up-right-from-square news-ext"></i>{/if}
-        </div>
-      {/each}
+        {/each}
+      </div>
     {:else}
       <div class="cache-notice"><i class="fa-solid fa-circle-info"></i><span>No news available (offline or rate-limited).</span></div>
     {/if}
 
-    <span class="panel-section-label">Changelog</span>
+    <span class="panel-section-label">{t('x.changelog')}</span>
     <div class="mcv-channel-tabs">
-      <button
-        type="button"
-        class="mcv-channel-tab {changelogTab === 'glacier' ? 'active' : ''}"
-        onclick={() => { changelogTab = 'glacier'; expandedTag = null }}
-      >Glacier</button>
-      <button
-        type="button"
-        class="mcv-channel-tab {changelogTab === 'latite' ? 'active' : ''}"
-        onclick={() => { changelogTab = 'latite'; expandedTag = null }}
-      >Latite</button>
-      <button
-        type="button"
-        class="mcv-channel-tab {changelogTab === 'launcher' ? 'active' : ''}"
-        onclick={() => { changelogTab = 'launcher'; expandedTag = null }}
-      >Launcher</button>
+      {#each CHANGELOG_SECTIONS as cs (cs.key)}
+        <button
+          type="button"
+          class="mcv-channel-tab {changelogTab === cs.key ? 'active' : ''}"
+          onclick={() => selectChangelogTab(cs.key)}
+        >{cs.label}</button>
+      {/each}
     </div>
 
     {#if releases.length > 0}
-      {#each releases as r (r.tag)}
-        <div class="news-row" role="button" tabindex="0" onclick={() => toggleRelease(r.tag)} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleRelease(r.tag) } }}>
-          <div class="news-icon"><i class="fa-solid fa-code-branch"></i></div>
-          <div class="news-meta">
-            <span class="news-title">{r.tag}</span>
-            <span class="news-sub">{formatDate(r.published_at)}</span>
+      <div class="news-card-col">
+        {#each releases as r (r.tag)}
+          <div
+            class="client-card client-card-link"
+            role="button"
+            tabindex="0"
+            aria-expanded={expandedTag === r.tag}
+            onclick={() => toggleRelease(r.tag)}
+            onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleRelease(r.tag) } }}
+          >
+            <div class="client-card-header">
+              <div class="client-card-icon news-icon-accent">
+                <i class="fa-solid fa-code-branch"></i>
+              </div>
+              <div class="client-card-meta">
+                <span class="client-card-name">{r.tag}</span>
+                <span class="client-card-sub news-date">{formatDate(r.published_at)}</span>
+              </div>
+              <i class="fa-solid {expandedTag === r.tag ? 'fa-chevron-up' : 'fa-chevron-down'} news-ext"></i>
+            </div>
             {#if expandedTag === r.tag}
               <!-- eslint-disable-next-line svelte/no-at-html-tags -->
-              <div class="news-changelog-body">{@html formatChangelog(r.changelog)}</div>
+              <p class="client-card-desc news-changelog-body">{@html formatChangelog(r.changelog)}</p>
             {/if}
           </div>
-          <i class="fa-solid {expandedTag === r.tag ? 'fa-chevron-up' : 'fa-chevron-down'} news-ext"></i>
-        </div>
-      {/each}
+        {/each}
+      </div>
     {:else}
       <div class="cache-notice"><i class="fa-solid fa-circle-info"></i><span>No {changelogTab === 'glacier' ? 'Glacier Client' : changelogTab === 'latite' ? 'Latite' : 'launcher'} changelog available.</span></div>
     {/if}

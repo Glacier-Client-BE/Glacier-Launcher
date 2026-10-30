@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from './i18nStore.svelte'
 /**
  * `bedrockpacks` panel — literal port of Home.razor:3929-4021 plus its
  * code-behind Pages/Home.Packs.cs (whole file).
@@ -15,9 +16,11 @@
  *    DirFor), which is exactly what the Tauri backend accepts — no mapping needed.
  */
 import { invoke, convertFileSrc } from '@tauri-apps/api/core'
+import { untrack } from 'svelte'
 import SubTabs from './components/SubTabs.svelte'
 import IconBtn from './components/IconBtn.svelte'
 import type { BedrockInstance } from './settings'
+  import ListSkeleton from './components/ListSkeleton.svelte'
 
 /** Port of Models/BedrockPack.cs (Rust: gl-bedrock model.rs:52). */
 type BedrockPack = {
@@ -87,7 +90,7 @@ export async function refreshBedrockPacks() {
 
 $effect(() => {
   void instance
-  void refreshBedrockPacks()
+  untrack(() => refreshBedrockPacks())
 })
 
 /**
@@ -137,7 +140,7 @@ async function deleteBedrockPack(pack: BedrockPack) {
     await invoke('delete_bedrock_pack', { packPath: pack.folder_path })
     confirmDeletePackPath = ''
     await refreshBedrockPacks()
-    onToast?.(`Deleted '${pack.name}'.`, 'success')
+    onToast?.(t('toast.deletedName', { name: pack.name }), 'success')
   } catch (e) {
     onToast?.(String(e), 'error')
   }
@@ -187,13 +190,13 @@ function fileToUrl(path: string | null): string {
     class="panel-back-btn"
     onclick={onBack}
     onmousedown={(e) => e.stopPropagation()}
-    data-tooltip="Back"
-    aria-label="Back"
+    data-tooltip={t('tt.back')}
+    aria-label={t('tt.back')}
   >
     <i class="fa-solid fa-arrow-left"></i>
   </button>
   <div class="panel-title-wrap">
-    <span class="panel-title">Packs</span>
+    <span class="panel-title">{t('nav.packs')}</span>
     <div class="panel-title-underline"></div>
   </div>
   <div class="panel-header-spacer"></div>
@@ -206,7 +209,7 @@ function fileToUrl(path: string | null): string {
       data-tooltip={packsFolderPath
         ? 'Open folder'
         : 'Open folder — unavailable: the packs folder path is resolved by the game install and is only known once packs are listed'}
-      aria-label="Open folder"
+      aria-label={t('tt.openFolder')}
     >
       <i class="fa-solid fa-folder-open"></i>
     </button>
@@ -215,79 +218,147 @@ function fileToUrl(path: string | null): string {
       disabled={isLoadingBedrockPacks}
       onclick={refreshBedrockPacks}
       onmousedown={(e) => e.stopPropagation()}
-      data-tooltip="Refresh"
-      aria-label="Refresh"
+      data-tooltip={t('tt.refresh')}
+      aria-label={t('tt.refresh')}
     >
       <i class="fa-solid fa-rotate"></i>
     </button>
   </div>
 </div>
 
-<SubTabs strip="packs-addons" active="packs" {onNavigate} />
+<SubTabs strip="packs-addons" active="packs" edition="bedrock" {onNavigate} />
 
-<div class="panel-body">
-  {#if isLoadingBedrockPacks}
-    <div class="versions-loading"><span class="spinner"></span><span>Loading packs…</span></div>
-  {:else if bedrockPacks.length === 0}
-    <div class="empty-state">
-      <i class="fa-solid fa-boxes-stacked"></i>
-      <span>No {bedrockPacksKind} packs yet</span>
-      <small
-        >Import a .mcpack by dragging it onto the launcher, or install one from
-        CurseForge/Modrinth in Addons.</small
-      >
-    </div>
-  {:else}
-    {#each bedrockPacks as pack (pack.folder_path)}
-      {@const packIconUrl = fileToUrl(pack.icon_path)}
-      <div class="version-row">
-        {#if packIconUrl}
-          <img class="version-icon" src={packIconUrl} alt="" />
-        {:else}
-          <div class="version-icon version-icon-placeholder">
-            <i class="fa-solid fa-boxes-stacked"></i>
-          </div>
-        {/if}
-        <div class="version-meta">
-          <span class="version-name">{pack.name}</span>
-          <span class="version-sub"
-            >{formatSize(pack.size_bytes)} · {formatRelativeTime(pack.modified_at)}</span
+<!--
+  `bedrockPacksKind` and `switchBedrockPacksKind` existed as dead code before
+  this: no caller anywhere in the app ever set `initialKind` or called the
+  exported switcher, so the panel could only ever show resource packs. A
+  first pass added a 3-button strip for Resource/Behavior/Skin, but the
+  "-dev" counterparts of all three (`BedrockPacksKind` already had all 6)
+  stayed just as unreachable as before. With 6 kinds a strip stops being the
+  right shape — same master-detail rail as Settings/Java Mods/Tweaks, so
+  every kind is one click away instead of needing a second control to see
+  the dev variants at all.
+-->
+<div class="settings-layout">
+  <nav class="settings-nav-rail" aria-label={t('tt.packKind')}>
+    <button
+      type="button"
+      class="settings-nav-btn {bedrockPacksKind === 'resource' ? 'active' : ''}"
+      onclick={() => switchBedrockPacksKind('resource')}
+      onmousedown={(e) => e.stopPropagation()}
+    >
+      <i class="fa-solid fa-palette"></i> Resource
+    </button>
+    <button
+      type="button"
+      class="settings-nav-btn {bedrockPacksKind === 'behavior' ? 'active' : ''}"
+      onclick={() => switchBedrockPacksKind('behavior')}
+      onmousedown={(e) => e.stopPropagation()}
+    >
+      <i class="fa-solid fa-gears"></i> Behavior
+    </button>
+    <button
+      type="button"
+      class="settings-nav-btn {bedrockPacksKind === 'skin' ? 'active' : ''}"
+      onclick={() => switchBedrockPacksKind('skin')}
+      onmousedown={(e) => e.stopPropagation()}
+    >
+      <i class="fa-solid fa-shirt"></i> Skin
+    </button>
+    <button
+      type="button"
+      class="settings-nav-btn {bedrockPacksKind === 'resource-dev' ? 'active' : ''}"
+      onclick={() => switchBedrockPacksKind('resource-dev')}
+      onmousedown={(e) => e.stopPropagation()}
+    >
+      <i class="fa-solid fa-palette"></i> Resource (Dev)
+    </button>
+    <button
+      type="button"
+      class="settings-nav-btn {bedrockPacksKind === 'behavior-dev' ? 'active' : ''}"
+      onclick={() => switchBedrockPacksKind('behavior-dev')}
+      onmousedown={(e) => e.stopPropagation()}
+    >
+      <i class="fa-solid fa-gears"></i> Behavior (Dev)
+    </button>
+    <button
+      type="button"
+      class="settings-nav-btn {bedrockPacksKind === 'skin-dev' ? 'active' : ''}"
+      onclick={() => switchBedrockPacksKind('skin-dev')}
+      onmousedown={(e) => e.stopPropagation()}
+    >
+      <i class="fa-solid fa-shirt"></i> Skin (Dev)
+    </button>
+  </nav>
+
+  <div class="settings-content">
+    <div class="panel-body">
+      {#if isLoadingBedrockPacks}
+        <ListSkeleton rows={4} />
+      {:else if bedrockPacks.length === 0}
+        <div class="empty-state">
+          <i class="fa-solid fa-boxes-stacked"></i>
+          <span>No {bedrockPacksKind} packs yet</span>
+          <small
+            >Import a .mcpack by dragging it onto the launcher, or install one from
+            CurseForge/Modrinth in Addons.</small
           >
         </div>
-        <div class="version-actions">
-          <IconBtn
-            ghost
-            icon="fa-solid fa-folder-open"
-            title="Open folder"
-            onClick={() => openBedrockPackFolder(pack)}
-            onMouseDown={(e) => e.stopPropagation()}
-          />
-          {#if confirmDeletePackPath === pack.folder_path}
-            <IconBtn
-              ghost
-              icon="fa-solid fa-check"
-              title="Confirm delete"
-              onClick={() => deleteBedrockPack(pack)}
-              onMouseDown={(e) => e.stopPropagation()}
-            />
-            <IconBtn
-              ghost
-              icon="fa-solid fa-xmark"
-              title="Cancel"
-              onClick={cancelDeletePack}
-              onMouseDown={(e) => e.stopPropagation()}
-            />
-          {:else}
-            <IconBtn
-              ghost
-              icon="fa-solid fa-trash"
-              title="Delete"
-              onClick={() => confirmDeletePack(pack.folder_path)}
-              onMouseDown={(e) => e.stopPropagation()}
-            />
-          {/if}
+      {:else}
+        <div class="version-list grid-view">
+        {#each bedrockPacks as pack (pack.folder_path)}
+          {@const packIconUrl = fileToUrl(pack.icon_path)}
+          <div class="version-row">
+            {#if packIconUrl}
+              <img class="version-icon" src={packIconUrl} alt="" loading="lazy" decoding="async" />
+            {:else}
+              <div class="version-icon version-icon-placeholder">
+                <i class="fa-solid fa-boxes-stacked"></i>
+              </div>
+            {/if}
+            <div class="version-meta">
+              <span class="version-name">{pack.name}</span>
+              <span class="version-sub"
+                >{formatSize(pack.size_bytes)} · {formatRelativeTime(pack.modified_at)}</span
+              >
+            </div>
+            <div class="version-actions">
+              <IconBtn
+                ghost
+                icon="fa-solid fa-folder-open"
+                title="Open folder"
+                onClick={() => openBedrockPackFolder(pack)}
+                onMouseDown={(e) => e.stopPropagation()}
+              />
+              {#if confirmDeletePackPath === pack.folder_path}
+                <IconBtn
+                  ghost
+                  icon="fa-solid fa-check"
+                  title="Confirm delete"
+                  onClick={() => deleteBedrockPack(pack)}
+                  onMouseDown={(e) => e.stopPropagation()}
+                />
+                <IconBtn
+                  ghost
+                  icon="fa-solid fa-xmark"
+                  title="Cancel"
+                  onClick={cancelDeletePack}
+                  onMouseDown={(e) => e.stopPropagation()}
+                />
+              {:else}
+                <IconBtn
+                  ghost
+                  icon="fa-solid fa-trash"
+                  title="Delete"
+                  onClick={() => confirmDeletePack(pack.folder_path)}
+                  onMouseDown={(e) => e.stopPropagation()}
+                />
+              {/if}
+            </div>
+          </div>
+        {/each}
         </div>
-      </div>
-    {/each}
-  {/if}
+      {/if}
+    </div>
+  </div>
 </div>

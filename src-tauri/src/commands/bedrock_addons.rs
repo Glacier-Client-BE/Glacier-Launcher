@@ -367,7 +367,7 @@ fn read_pack_identity(pack_dir: &Path) -> PackIdentity {
 /// same directory resolution and manifest-reading conventions as the rest
 /// of this file rather than re-walking com.mojang independently.
 #[tauri::command]
-pub fn check_bedrock_pack_conflicts(
+pub async fn check_bedrock_pack_conflicts(
     candidate_pack_dir: String,
     kind: String,
 ) -> Result<Vec<PackConflict>, String> {

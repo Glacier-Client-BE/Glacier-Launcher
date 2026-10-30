@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from './i18nStore.svelte'
   /**
    * 1:1 port of the `mcversions` panel ("MC Versions — Vanilla Version
    * Switcher") in `Pages/Home.razor`, together with its code-behind in
@@ -17,12 +18,14 @@
    * make local rules win over it.
    */
   import { invoke } from '@tauri-apps/api/core'
+  import { invokeCached } from './invokeCache'
   import { listen, type UnlistenFn } from '@tauri-apps/api/event'
   import { onDestroy, onMount } from 'svelte'
   import PanelHeader from './components/PanelHeader.svelte'
   import SubTabs from './components/SubTabs.svelte'
   import InlineProgress from './components/InlineProgress.svelte'
   import IconBtn from './components/IconBtn.svelte'
+  import ListSkeleton from './components/ListSkeleton.svelte'
 
   let {
     onBack,
@@ -139,7 +142,8 @@
       active = ''
     }
     try {
-      const versions = await invoke<WuVersion[]>('list_vanilla_bedrock_versions')
+      // Cached briefly: the Windows Update list barely changes between opens.
+      const versions = await invokeCached<WuVersion[]>('list_vanilla_bedrock_versions', undefined, 10 * 60 * 1000)
       mcVersionsList = await Promise.all(
         versions.map(async (v) => ({
           ...v,
@@ -175,14 +179,20 @@
     )
   }
 
+  let downloadsDisposed = false
   onMount(() => {
     listen<DownloadEntry[]>('downloads-changed', (e) => {
       downloadEntries = e.payload
     }).then((fn) => {
-      unlistenDownloads = fn
+      // Destroyed before the listener resolved: release it now, don't leak it.
+      if (downloadsDisposed) fn()
+      else unlistenDownloads = fn
     })
   })
-  onDestroy(() => unlistenDownloads?.())
+  onDestroy(() => {
+    downloadsDisposed = true
+    unlistenDownloads?.()
+  })
 
   /** Port of `HandleMcVersionDownload`. */
   async function handleMcVersionDownload(v: VanillaVersion) {
@@ -290,7 +300,7 @@
   {/if}
 {/snippet}
 
-<PanelHeader title="MC Versions" {onBack}>
+<PanelHeader title={t('panel.mcVersions')} {onBack}>
   {#snippet extraActions()}
     <div style="position:relative;">
       <button
@@ -298,8 +308,8 @@
         class="panel-icon-btn {mcvInfoOpen ? 'active' : ''}"
         onclick={() => (mcvInfoOpen = !mcvInfoOpen)}
         onmousedown={(e) => e.stopPropagation()}
-        data-tooltip="About versions"
-        aria-label="About versions"
+        data-tooltip={t('tt.aboutVersions')}
+        aria-label={t('tt.aboutVersions')}
       >
         <i class="fa-solid fa-circle-info"></i>
       </button>
@@ -308,7 +318,7 @@
           <p>
             <i class="fa-solid fa-circle-info"></i>
             Switch between Minecraft Bedrock versions. Sideloading a specific version
-            requires <b>Developer Mode</b>; the Microsoft Store option below does not.
+            requires <b>{t('x.developerMode')}</b>; the Microsoft Store option below does not.
           </p>
           <p class="mcv-info-pop-warn">
             <i class="fa-solid fa-triangle-exclamation"></i>
@@ -331,8 +341,8 @@
       disabled={isLoadingMcVersions}
       onclick={refreshMcVersionsAsync}
       onmousedown={(e) => e.stopPropagation()}
-      data-tooltip="Refresh"
-      aria-label="Refresh"
+      data-tooltip={t('tt.refresh')}
+      aria-label={t('tt.refresh')}
     >
       <i class="fa-solid fa-rotate"></i>
     </button>
@@ -367,15 +377,15 @@
     type="button"
     class="vcs-btn"
     disabled
-    data-tooltip="Unavailable: needs WinRT AppInstallManager, which has no Rust bindings. Install from the Microsoft Store app instead."
-    onmousedown={(e) => e.stopPropagation()}>Release</button
+    data-tooltip={t('tt.unavailableNeedsWinrtAppinstallmanagerWhichHas')}
+    onmousedown={(e) => e.stopPropagation()}>{t('x.release')}</button
   >
   <button
     type="button"
     class="vcs-btn vcs-btn-ghost"
     disabled
-    data-tooltip="Unavailable: needs WinRT AppInstallManager, which has no Rust bindings. Install from the Microsoft Store app instead."
-    onmousedown={(e) => e.stopPropagation()}>Preview</button
+    data-tooltip={t('tt.unavailableNeedsWinrtAppinstallmanagerWhichHas')}
+    onmousedown={(e) => e.stopPropagation()}>{t('x.preview')}</button
   >
 </div>
 
@@ -383,7 +393,7 @@
   <i class="fa-solid fa-magnifying-glass"></i>
   <input
     class="panel-search-input"
-    placeholder="Filter Minecraft versions..."
+    placeholder={t('ph.filterMcVersions')}
     bind:value={mcVersionsFilter}
     onkeydown={(e) => e.stopPropagation()}
   />
@@ -394,91 +404,101 @@
     type="button"
     class="mcv-channel-tab {mcVersionsChannel === 'all' ? 'active' : ''}"
     onclick={() => (mcVersionsChannel = 'all')}
-    onmousedown={(e) => e.stopPropagation()}>All</button
+    onmousedown={(e) => e.stopPropagation()}>{t('x.all')}</button
   >
   <button
     type="button"
     class="mcv-channel-tab {mcVersionsChannel === 'release' ? 'active' : ''}"
     onclick={() => (mcVersionsChannel = 'release')}
-    onmousedown={(e) => e.stopPropagation()}>Releases</button
+    onmousedown={(e) => e.stopPropagation()}>{t('x.releases')}</button
   >
   <button
     type="button"
     class="mcv-channel-tab {mcVersionsChannel === 'preview' ? 'active' : ''}"
     onclick={() => (mcVersionsChannel = 'preview')}
-    onmousedown={(e) => e.stopPropagation()}>Previews</button
+    onmousedown={(e) => e.stopPropagation()}>{t('x.previews')}</button
   >
 </div>
 
 <div class="panel-body">
   {#if isLoadingMcVersions}
-    <div class="versions-loading"><span class="spinner"></span><span>Fetching Minecraft versions...</span></div>
+    <ListSkeleton rows={6} />
   {:else if mcVersionsList.length === 0 && mcVersionsError}
     <div class="versions-loading versions-error">
       <i class="fa-solid fa-triangle-exclamation"></i>
       <span>{mcVersionsError}</span>
       <button class="vcs-btn" style="margin-top:8px;" onclick={refreshMcVersionsAsync}>
-        <i class="fa-solid fa-rotate"></i> Retry
+        <i class="fa-solid fa-rotate"></i> {t('common.retry')}
       </button>
     </div>
   {:else if mcVersionsList.length === 0}
-    <div class="versions-loading"><span style="opacity:0.5;">No versions found.</span></div>
+    <div class="versions-loading"><span class="version-sub">{t('x.noVersionsFound')}</span></div>
   {:else}
     {#if mcVersionsError && mcVersionsList.length > 0}
       <div class="cache-notice"><i class="fa-solid fa-circle-info"></i><span>{mcVersionsError}</span></div>
     {/if}
 
     {#if filteredMcVersions.length === 0}
-      <div class="versions-loading"><span style="opacity:0.5;">No results for "{mcVersionsFilter}"</span></div>
+      <div class="versions-loading"><span class="version-sub">{t('empty.noResultsFound')}</span></div>
     {/if}
 
     {#if activeList.length > 0}
-      <span class="panel-section-label">Active</span>
+      <span class="panel-section-label">{t('label.active')}</span>
+      <div class="client-card-cols">
       {#each activeList as v (`${v.version}|${v.channel}`)}
-        <div class="version-row mcv-active-row">
-          <div class="version-meta">
-            <div style="display:flex; align-items:center; gap:6px;">
-              <span class="version-name">Minecraft {displayName(v)}</span>
-              <span class="tag-active">Active</span>
-              {#if isGdk(v)}
-                <span class="mcv-source-tag" data-tooltip="Community GDK unpack archive">GDK</span>
-              {/if}
+        <div class="client-card client-active">
+          <div class="client-card-header">
+            <div class="client-card-icon oderso-icon"><img src="images/mc-logo.png" alt=""></div>
+            <div class="client-card-meta">
+              <span class="client-card-name">Minecraft {displayName(v)}</span>
+              <span class="client-card-sub">
+                <span class="tag-active">{t('label.active')}</span>
+                {#if isGdk(v)}
+                  <span class="mcv-source-tag" data-tooltip={t('tt.communityGdkUnpackArchive')}>GDK</span>
+                {/if}
+              </span>
             </div>
-            {#if v.error_message}
-              <span class="error-text">{v.error_message}</span>
-            {:else if v.is_downloaded}
-              <span class="version-sub">Ready · {sizeLabel(v.size_bytes)}</span>
+            {@render mcVersionActions(v)}
+          </div>
+          {#if v.error_message}
+            <p class="client-card-desc error-text">{v.error_message}</p>
+          {:else if v.is_downloaded}
+            <p class="client-card-desc">Ready · {sizeLabel(v.size_bytes)}</p>
+          {/if}
+        </div>
+      {/each}
+      </div>
+      <span class="panel-section-label">{t('x.allVersions')}</span>
+    {/if}
+
+    <div class="client-card-cols">
+    {#each restList as v (`${v.version}|${v.channel}`)}
+      <div class="client-card {v.error_message ? 'error-row' : ''}">
+        <div class="client-card-header">
+          <div class="client-card-icon oderso-icon"><img src="images/mc-logo.png" alt=""></div>
+          <div class="client-card-meta">
+            <span class="client-card-name">Minecraft {displayName(v)}</span>
+            {#if isGdk(v)}
+              <span class="client-card-sub">
+                <span
+                  class="mcv-source-tag"
+                  data-tooltip={t('tt.communityGdkUnpackArchiveVerifiedAgainst')}
+                  >GDK</span
+                >
+              </span>
             {/if}
           </div>
           {@render mcVersionActions(v)}
         </div>
-      {/each}
-      <span class="panel-section-label">All Versions</span>
-    {/if}
-
-    {#each restList as v (`${v.version}|${v.channel}`)}
-      <div class="version-row {v.error_message ? 'error-row' : ''}">
-        <div class="version-meta">
-          <div style="display:flex; align-items:center; gap:6px;">
-            <span class="version-name">Minecraft {displayName(v)}</span>
-            {#if isGdk(v)}
-              <span
-                class="mcv-source-tag"
-                data-tooltip="Community GDK unpack archive — verified against its published SHA-256"
-                >GDK</span
-              >
-            {/if}
-          </div>
-          {#if v.error_message}
-            <span class="error-text">{v.error_message}</span>
-          {:else if v.is_downloaded && !v.is_downloading}
-            <span class="version-sub">Ready · {sizeLabel(v.size_bytes)}</span>
-          {:else if !v.is_downloaded && !v.is_downloading}
-            <span class="version-sub">{sizeLabel(v.size_bytes)}</span>
-          {/if}
-        </div>
-        {@render mcVersionActions(v)}
+        {#if v.error_message}
+          <p class="client-card-desc error-text">{v.error_message}</p>
+        {:else if v.is_downloaded && !v.is_downloading}
+          <p class="client-card-desc">Ready · {sizeLabel(v.size_bytes)}</p>
+        {:else if !v.is_downloaded && !v.is_downloading}
+          <p class="client-card-desc">{sizeLabel(v.size_bytes)}</p>
+        {/if}
       </div>
     {/each}
+    </div>
   {/if}
 </div>

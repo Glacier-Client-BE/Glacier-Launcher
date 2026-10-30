@@ -1,4 +1,4 @@
-<script lang="ts">
+<script module lang="ts">
   /**
    * Cross-panel navigation strips - port of `SubTabs` and its four named
    * configurations in Home.MergedPanels.cs:10-51.
@@ -18,12 +18,32 @@
     | 'packs-addons'
     | 'utilities'
 
-  type SubTab = { key: string; icon: string; label: string }
+  export type SubTab = { key: string; icon: string; img?: string; label: string }
+
+  /**
+   * Port of `UtilitiesTabs`. Exported so the panels it routes to (Bedrock
+   * Backups, Bedrock Screenshots, UtilitiesView itself) can all render the
+   * same vertical `.settings-nav-rail` from one source of truth instead of
+   * three hand-copied arrays drifting apart.
+   */
+  export const UTILITIES: SubTab[] = [
+    { key: 'options', icon: 'fa-solid fa-sliders', label: 'Options' },
+    { key: 'shaders', icon: 'fa-solid fa-droplet', label: 'Shaders' },
+    { key: 'clients', icon: 'fa-solid fa-file-code', label: 'Library' },
+    { key: 'system', icon: 'fa-solid fa-microchip', label: 'System' },
+    { key: 'backups', icon: 'fa-solid fa-clock-rotate-left', label: 'Backups' },
+    { key: 'photos', icon: 'fa-solid fa-images', label: 'Photos' },
+  ]
+</script>
+
+<script lang="ts">
+
 
   let {
     strip,
     active,
     onNavigate,
+    edition,
   }: {
     strip: SubTabKey
     active: string
@@ -33,6 +53,13 @@
      * Clients *panel* in `BedrockTabs` but an internal Utilities tab here.
      */
     onNavigate: (key: string, strip?: string) => void
+    /**
+     * Only meaningful for `packs-addons`: picks the real VanillaTweaks /
+     * BedrockTweaks and LeviLamina brand art for the Tweaks and Clients
+     * pills instead of a generic wand/puzzle glyph. Omit for strips that
+     * don't vary by edition.
+     */
+    edition?: 'java' | 'bedrock'
   } = $props()
 
   /** Port of `WorldsServersTabs`. */
@@ -47,23 +74,40 @@
     { key: 'instances', icon: 'fa-solid fa-layer-group', label: 'Instances' },
   ]
 
-  /** Port of `PacksAddonsTabs`. */
-  const PACKS_ADDONS: SubTab[] = [
-    { key: 'addons', icon: 'fa-solid fa-cloud-arrow-down', label: 'Browse' },
-    { key: 'clientlib', icon: 'fa-solid fa-wand-sparkles', label: 'Clients' },
-    { key: 'tweaks', icon: 'fa-solid fa-wand-magic-sparkles', label: 'Tweaks' },
-    { key: 'packs', icon: 'fa-solid fa-boxes-stacked', label: 'Manage' },
-  ]
-
-  /** Port of `UtilitiesTabs`. */
-  const UTILITIES: SubTab[] = [
-    { key: 'options', icon: 'fa-solid fa-sliders', label: 'Options' },
-    { key: 'shaders', icon: 'fa-solid fa-droplet', label: 'Shaders' },
-    { key: 'clients', icon: 'fa-solid fa-file-code', label: 'Library' },
-    { key: 'system', icon: 'fa-solid fa-microchip', label: 'System' },
-    { key: 'backups', icon: 'fa-solid fa-clock-rotate-left', label: 'Backups' },
-    { key: 'photos', icon: 'fa-solid fa-images', label: 'Photos' },
-  ]
+  /**
+   * Port of `PacksAddonsTabs`. Tweaks and Clients carry the real brand art
+   * for whichever edition is active (VanillaTweaks/BedrockTweaks,
+   * LeviLamina) instead of a generic wand/puzzle glyph - falls back to the
+   * glyph when no edition is given.
+   *
+   * `clientlib` (the Indigo-Tools/ClientLibrary DLL/EXE catalog) and `packs`
+   * ("Manage" — Bedrock's resource/behavior/skin pack manager) are both
+   * Bedrock-only destinations with no Java equivalent to route to;
+   * JavaModsView's own nav rail (Mods/Assets/Loaders/etc.) already covers
+   * both roles for Java internally. Showing them on the Java edition of this
+   * strip sent Java users into Bedrock-only panels — dropped for `edition
+   * === 'java'` instead.
+   */
+  const PACKS_ADDONS: SubTab[] = $derived(
+    [
+      { key: 'addons', icon: 'fa-solid fa-cloud-arrow-down', label: 'Browse' },
+      edition === 'java'
+        ? null
+        : {
+            key: 'clientlib',
+            icon: 'fa-solid fa-wand-sparkles',
+            img: edition === 'bedrock' ? '/images/clients/levi-lamina.png' : undefined,
+            label: 'Clients',
+          },
+      {
+        key: 'tweaks',
+        icon: 'fa-solid fa-wand-magic-sparkles',
+        img: edition === 'java' ? '/images/vanilla-tweaks.png' : edition === 'bedrock' ? '/images/bedrock-tweaks.png' : undefined,
+        label: 'Tweaks',
+      },
+      edition === 'java' ? null : { key: 'packs', icon: 'fa-solid fa-boxes-stacked', label: 'Manage' },
+    ].filter((t): t is SubTab => t !== null),
+  )
 
   const tabs = $derived(
     strip === 'worlds-servers'
@@ -76,13 +120,27 @@
   )
 </script>
 
-<div class="versions-client-switcher">
+<!--
+  interop.js's tab-cycler (prev/next arrow paging) only ever attaches to
+  `.versions-client-switcher:not(.switcher-wrap)` — it exists for strips with
+  more tabs than can ever reasonably fit (Utilities' 6). Every strip here
+  with 4 tabs or fewer should always show all of its tabs in one view rather
+  than being paged behind arrows, so it opts out via `.switcher-wrap`
+  (wrapping to a second row in the rare case it doesn't fit, instead of
+  hiding tabs).
+-->
+<div class="versions-client-switcher {tabs.length <= 4 ? 'switcher-wrap' : ''}">
   {#each tabs as tab (tab.key)}
     <button
       class="vcs-btn {active === tab.key ? 'active' : ''}"
       onclick={() => onNavigate(tab.key, strip)}
     >
-      <i class={tab.icon}></i>&nbsp;{tab.label}
+      {#if tab.img}
+        <img class="vcs-btn-img" src={tab.img} alt="" />
+      {:else}
+        <i class={tab.icon}></i>
+      {/if}
+      &nbsp;{tab.label}
     </button>
   {/each}
 </div>

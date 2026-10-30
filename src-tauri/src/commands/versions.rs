@@ -40,7 +40,7 @@ pub async fn list_latite_versions(
 }
 
 /// Whether a specific Latite release tag has already been downloaded.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn latite_version_installed(state: State<'_, AppState>, tag: String) -> bool {
     latite_dll_path(&state, &tag).is_file()
 }
@@ -70,8 +70,9 @@ pub async fn download_latite_version(
 }
 
 /// Deletes a downloaded Latite release DLL. Mirrors `GameLauncher.DeleteVersion`.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn delete_latite_version(state: State<'_, AppState>, tag: String) -> Result<(), String> {
+    super::safe_file_name(&gl_clients::latite::dll_file_name(&tag))?;
     let path = latite_dll_path(&state, &tag);
     if path.exists() {
         std::fs::remove_file(&path).map_err(|e| e.to_string())?;
@@ -79,7 +80,7 @@ pub fn delete_latite_version(state: State<'_, AppState>, tag: String) -> Result<
     Ok(())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn latite_version_dll_path(state: State<'_, AppState>, tag: String) -> String {
     latite_dll_path(&state, &tag).to_string_lossy().into_owned()
 }
@@ -246,7 +247,7 @@ fn merge_key(v: &WuVersion) -> String {
 
 /// Whether a given vanilla Bedrock build has already been downloaded and
 /// extracted locally.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn vanilla_bedrock_version_installed(version: String) -> bool {
     vanilla_bedrock_version_dir(&version)
         .join("AppxManifest.xml")
@@ -327,7 +328,7 @@ pub async fn download_vanilla_bedrock_version(
 
 /// Deletes a downloaded vanilla Bedrock build's extracted files. Mirrors
 /// `VanillaVersionService.DeleteVersion`.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn delete_vanilla_bedrock_version(version: String) -> Result<(), String> {
     let dir = vanilla_bedrock_version_dir(&version);
     if dir.exists() {
@@ -344,7 +345,7 @@ pub fn delete_vanilla_bedrock_version(version: String) -> Result<(), String> {
 /// `Add-AppxPackage -DevelopmentMode` is left to surface its own error here
 /// if it's off). The caller is responsible for persisting
 /// `ActiveVanillaVersion` via `set_settings` on success.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn switch_vanilla_bedrock_version(version: String) -> Result<(), String> {
     let manifest = vanilla_bedrock_version_dir(&version).join("AppxManifest.xml");
     if !manifest.is_file() {

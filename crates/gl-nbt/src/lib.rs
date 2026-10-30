@@ -43,7 +43,7 @@
 //! length-prefixed header above instead.
 
 use std::collections::HashMap;
-use std::io::{Cursor, Read, Write};
+use std::io::{Read, Write};
 
 use flate2::read::GzDecoder;
 use flate2::write::GzEncoder;
@@ -184,81 +184,76 @@ impl Tag {
 // Raw reader/writer
 // ---------------------------------------------------------------------------
 
+/// Slice-based NBT reader. Bounds are checked against the remaining input
+/// *before* any allocation, so a corrupt length prefix cannot trigger a huge
+/// zeroed `Vec` allocation.
 struct Reader<'a> {
-    cursor: Cursor<&'a [u8]>,
+    data: &'a [u8],
+    pos: usize,
 }
 
 impl<'a> Reader<'a> {
     fn new(data: &'a [u8]) -> Self {
-        Self {
-            cursor: Cursor::new(data),
-        }
+        Self { data, pos: 0 }
+    }
+
+    /// Returns the next `N` bytes as an array, advancing the cursor.
+    #[inline]
+    fn take<const N: usize>(&mut self, context: &'static str) -> Result<[u8; N]> {
+        let end = self
+            .pos
+            .checked_add(N)
+            .filter(|&end| end <= self.data.len())
+            .ok_or(NbtError::UnexpectedEof { context })?;
+        let mut buf = [0u8; N];
+        buf.copy_from_slice(&self.data[self.pos..end]);
+        self.pos = end;
+        Ok(buf)
+    }
+
+    /// Returns the next `len` bytes as a borrowed slice, advancing the cursor.
+    #[inline]
+    fn take_slice(&mut self, len: usize, context: &'static str) -> Result<&'a [u8]> {
+        let end = self
+            .pos
+            .checked_add(len)
+            .filter(|&end| end <= self.data.len())
+            .ok_or(NbtError::UnexpectedEof { context })?;
+        let slice = &self.data[self.pos..end];
+        self.pos = end;
+        Ok(slice)
     }
 
     fn read_u8(&mut self) -> Result<u8> {
-        let mut buf = [0u8; 1];
-        self.cursor
-            .read_exact(&mut buf)
-            .map_err(|_| NbtError::UnexpectedEof { context: "u8" })?;
-        Ok(buf[0])
+        Ok(self.take::<1>("u8")?[0])
     }
 
     fn read_i16(&mut self) -> Result<i16> {
-        let mut buf = [0u8; 2];
-        self.cursor
-            .read_exact(&mut buf)
-            .map_err(|_| NbtError::UnexpectedEof { context: "i16" })?;
-        Ok(i16::from_le_bytes(buf))
+        Ok(i16::from_le_bytes(self.take("i16")?))
     }
 
     fn read_u16(&mut self) -> Result<u16> {
-        let mut buf = [0u8; 2];
-        self.cursor
-            .read_exact(&mut buf)
-            .map_err(|_| NbtError::UnexpectedEof { context: "u16" })?;
-        Ok(u16::from_le_bytes(buf))
+        Ok(u16::from_le_bytes(self.take("u16")?))
     }
 
     fn read_i32(&mut self) -> Result<i32> {
-        let mut buf = [0u8; 4];
-        self.cursor
-            .read_exact(&mut buf)
-            .map_err(|_| NbtError::UnexpectedEof { context: "i32" })?;
-        Ok(i32::from_le_bytes(buf))
+        Ok(i32::from_le_bytes(self.take("i32")?))
     }
 
     fn read_i64(&mut self) -> Result<i64> {
-        let mut buf = [0u8; 8];
-        self.cursor
-            .read_exact(&mut buf)
-            .map_err(|_| NbtError::UnexpectedEof { context: "i64" })?;
-        Ok(i64::from_le_bytes(buf))
+        Ok(i64::from_le_bytes(self.take("i64")?))
     }
 
     fn read_f32(&mut self) -> Result<f32> {
-        let mut buf = [0u8; 4];
-        self.cursor
-            .read_exact(&mut buf)
-            .map_err(|_| NbtError::UnexpectedEof { context: "f32" })?;
-        Ok(f32::from_le_bytes(buf))
+        Ok(f32::from_le_bytes(self.take("f32")?))
     }
 
     fn read_f64(&mut self) -> Result<f64> {
-        let mut buf = [0u8; 8];
-        self.cursor
-            .read_exact(&mut buf)
-            .map_err(|_| NbtError::UnexpectedEof { context: "f64" })?;
-        Ok(f64::from_le_bytes(buf))
+        Ok(f64::from_le_bytes(self.take("f64")?))
     }
 
     fn read_bytes(&mut self, len: usize) -> Result<Vec<u8>> {
-        let mut buf = vec![0u8; len];
-        self.cursor
-            .read_exact(&mut buf)
-            .map_err(|_| NbtError::UnexpectedEof {
-                context: "byte buffer",
-            })?;
-        Ok(buf)
+        Ok(self.take_slice(len, "byte buffer")?.to_vec())
     }
 
     fn read_len(&mut self) -> Result<usize> {
@@ -271,8 +266,8 @@ impl<'a> Reader<'a> {
 
     fn read_string(&mut self) -> Result<String> {
         let len = self.read_u16()? as usize;
-        let bytes = self.read_bytes(len)?;
-        Ok(String::from_utf8(bytes)?)
+        let bytes = self.take_slice(len, "byte buffer")?;
+        Ok(String::from_utf8(bytes.to_vec())?)
     }
 
     fn read_payload(&mut self, tag_type: TagType) -> Result<Tag> {

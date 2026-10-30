@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../i18nStore.svelte'
   import type { Snippet } from 'svelte'
 
   let {
@@ -24,7 +25,16 @@
   function handleBackdropClick() {
     if (closeOnBackdrop) onClose?.()
   }
+
+  function handleKeydown(e: KeyboardEvent) {
+    if (open && e.key === 'Escape' && onClose) {
+      e.preventDefault()
+      onClose()
+    }
+  }
 </script>
+
+<svelte:window onkeydown={handleKeydown} />
 
 {#if open}
   <div class="modal-overlay" role="presentation" onclick={handleBackdropClick}>
@@ -43,7 +53,7 @@
           {/if}
           {title}
         </span>
-        <button type="button" class="modal-close-btn" aria-label="Close" onclick={() => onClose?.()}>
+        <button type="button" class="modal-close-btn" aria-label={t('tt.close')} onclick={() => onClose?.()}>
           <i class="fa-solid fa-xmark"></i>
         </button>
       </div>

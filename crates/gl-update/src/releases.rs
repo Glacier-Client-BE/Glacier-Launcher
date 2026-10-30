@@ -20,7 +20,13 @@ pub struct UpdateChecker {
 
 impl UpdateChecker {
     pub fn new(org: &str, repo: &str) -> Self {
-        Self::with_client(org, repo, reqwest::Client::new())
+        // Bounded timeouts so an unreachable GitHub can't stall the update check.
+        let client = reqwest::Client::builder()
+            .connect_timeout(std::time::Duration::from_secs(10))
+            .timeout(std::time::Duration::from_secs(30))
+            .build()
+            .unwrap_or_else(|_| reqwest::Client::new());
+        Self::with_client(org, repo, client)
     }
 
     pub fn with_client(org: &str, repo: &str, client: reqwest::Client) -> Self {
@@ -46,6 +52,14 @@ impl UpdateChecker {
             req = req.header("If-None-Match", etag);
         }
 
+        // Mirror the C# fallback: serve the last known-good body if a fetch
+        // fails, whether at the transport level or as an HTTP error status
+        // (GitHub's rate limit is a 403, not a transport failure).
+        let fallback = |err: reqwest::Error| match self.cache.get_stale(&self.releases_url) {
+            Some(stale) => Ok(stale.body),
+            None => Err(UpdateError::Request(err)),
+        };
+
         match req.send().await {
             Ok(resp) if resp.status() == reqwest::StatusCode::NOT_MODIFIED => {
                 self.cache.touch(&self.releases_url);
@@ -60,19 +74,18 @@ impl UpdateChecker {
                     .get(reqwest::header::ETAG)
                     .and_then(|v| v.to_str().ok())
                     .map(|s| s.to_string());
-                let body = resp.error_for_status()?.text().await?;
-                self.cache.store(&self.releases_url, body.clone(), new_etag);
-                Ok(body)
-            }
-            Err(err) => {
-                // Mirror the C# fallback: serve the last known-good body if a
-                // fetch attempt fails outright (network error, rate limit, ...).
-                if let Some(stale) = self.cache.get_stale(&self.releases_url) {
-                    Ok(stale.body)
-                } else {
-                    Err(UpdateError::Request(err))
+                match resp.error_for_status() {
+                    Ok(resp) => match resp.text().await {
+                        Ok(body) => {
+                            self.cache.store(&self.releases_url, body.clone(), new_etag);
+                            Ok(body)
+                        }
+                        Err(err) => fallback(err),
+                    },
+                    Err(err) => fallback(err),
                 }
             }
+            Err(err) => fallback(err),
         }
     }
 
@@ -144,17 +157,20 @@ pub fn pick_update(
     })
 }
 
-/// Picks the update asset from a release's asset list: prefer the first
-/// `.exe`, falling back to the first asset otherwise. Mirrors the loop in
-/// `CheckLauncherUpdateAsync`.
+/// Picks the update asset from a release's asset list: the first `.exe`.
+///
+/// Used to fall back to `assets.first()` when no `.exe` was present, which
+/// meant a release whose first uploaded asset was `checksums.txt` or a
+/// `.zip` would get "picked" as the installer, downloaded, and handed
+/// straight to `install_launcher_update`'s `Command::new(...).spawn()` —
+/// silently failing (or, worse, "succeeding" at spawning a non-executable
+/// and reporting a bogus error). An NSIS installer release with no `.exe`
+/// asset at all isn't a usable update, so this now reports "no update"
+/// instead of "update to this checksum file."
 pub fn pick_asset(assets: &[GitHubAsset]) -> Option<&GitHubAsset> {
-    if let Some(exe) = assets
+    assets
         .iter()
         .find(|a| a.name.to_ascii_lowercase().ends_with(".exe"))
-    {
-        return Some(exe);
-    }
-    assets.first()
 }
 
 /// Pure port of the loop in `GetRecentReleasesAsync`: non-draft releases,
@@ -250,7 +266,7 @@ mod tests {
     }
 
     #[test]
-    fn asset_falls_back_to_first_when_no_exe() {
+    fn asset_is_none_when_no_exe_present() {
         let assets = vec![
             GitHubAsset {
                 name: "checksums.txt".into(),
@@ -263,8 +279,7 @@ mod tests {
                 size: 20,
             },
         ];
-        let picked = pick_asset(&assets).expect("asset");
-        assert_eq!(picked.name, "checksums.txt");
+        assert!(pick_asset(&assets).is_none());
     }
 
     #[test]

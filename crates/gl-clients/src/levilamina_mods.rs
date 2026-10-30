@@ -178,21 +178,10 @@ pub async fn resolve_latest_asset(
     for tag in github::tag_candidates(latest_version) {
         let url =
             format!("https://api.github.com/repos/{repo_owner}/{repo_name}/releases/tags/{tag}");
-        let body = match http
-            .get(&url)
-            .header("User-Agent", "GlacierLauncher")
-            .send()
-            .await
-        {
-            Ok(resp) => match resp.text().await {
-                Ok(b) => b,
-                Err(e) => {
-                    last_err = Some(ClientsError::from(e));
-                    continue;
-                }
-            },
+        let body = match github::get_text_cached(http, &url).await {
+            Ok(b) => b,
             Err(e) => {
-                last_err = Some(ClientsError::from(e));
+                last_err = Some(e);
                 continue;
             }
         };

@@ -55,6 +55,14 @@ export interface LauncherSettings {
   WindowHeight: number
   RememberWindowSize: boolean
   MinimizeToTray: boolean
+  AutoClearDownloadsAfterDays: number
+  TooltipDelayMs: number
+  MaxConcurrentDownloads: number
+  MutedNotificationCategories: string[]
+  DesktopNotificationsEnabled: boolean
+  PinnedPanels: string[]
+  QuickLaunchHotkey: string
+  LastSeenChangelogVersion: string
 
   ShowRecentlyLaunched: boolean
   RecentlyLaunched: string[]
@@ -91,6 +99,8 @@ export interface LauncherSettings {
 
   ShowLaunchConsole: boolean
 
+  CollapseInstanceGroups: boolean
+
   JavaShowSnapshots: boolean
   JavaShowHistorical: boolean
 
@@ -126,6 +136,7 @@ export interface LauncherSettings {
   VerifyInjection: boolean
 
   CurseForgeApiKey: string
+  GeminiApiKey: string
 
   CheckUpdatesOnStartup: boolean
   SkippedLauncherVersion: string
@@ -184,6 +195,7 @@ export interface JavaInstance {
   loader_profile_id?: string | null
   playtime_seconds?: number
   sync_pack_ids?: string[]
+  pinned?: boolean
 }
 
 /** Mirrors `gl_java::InstanceSettings` (Rust). Every field is an override —

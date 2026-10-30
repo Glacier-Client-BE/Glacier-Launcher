@@ -240,7 +240,7 @@ pub async fn install_curseforge_modpack(
             .resolve_manifest_file(cf_ref.project_id, cf_ref.file_id)
             .await
         {
-            Ok(Some(resolved)) => {
+            Ok(Some(resolved)) if super::safe_file_name(&resolved.file_name).is_ok() => {
                 let dest = mods_dir.join(&resolved.file_name);
                 reqs.push(
                     DownloadRequest::new(resolved.download_url, dest)
@@ -577,7 +577,7 @@ pub async fn update_modpack(
                     .resolve_manifest_file(cf_ref.project_id, cf_ref.file_id)
                     .await
                 {
-                    Ok(Some(resolved)) => {
+                    Ok(Some(resolved)) if super::safe_file_name(&resolved.file_name).is_ok() => {
                         let dest = mods_dir.join(&resolved.file_name);
                         reqs.push(
                             DownloadRequest::new(resolved.download_url, dest)

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from './i18nStore.svelte'
   /**
    * Phase 8 — Modrinth browse v2. Uses the EXISTING
    * `search_modrinth_projects`/`install_modrinth_mod` commands
@@ -22,6 +23,7 @@
   import { invoke } from '@tauri-apps/api/core'
   import { onMount } from 'svelte'
   import Spinner from './components/Spinner.svelte'
+  import ListSkeleton from './components/ListSkeleton.svelte'
 
   /** Mirrors `gl_modpack::models::MrProject` (Rust). */
   type MrProject = {
@@ -72,7 +74,7 @@
   let results = $state<MrProject[]>([])
   let loading = $state(false)
   let error = $state('')
-  let totalCount = $state(0);
+  let totalCount = $state(0)
   let offset = $state(0)
   const PAGE_SIZE = 20
 
@@ -176,7 +178,10 @@
   onMount(() => {
     measureViewport()
     window.addEventListener('resize', measureViewport)
-    return () => window.removeEventListener('resize', measureViewport)
+    return () => {
+      window.removeEventListener('resize', measureViewport)
+      clearTimeout(debounceTimer)
+    }
   })
 
   async function install(p: MrProject) {
@@ -193,7 +198,7 @@
       toast(`Installed ${res.file_name}.`, 'success')
       const missingDeps = res.dependency_warnings.filter((d) => !d.installed)
       if (missingDeps.length) {
-        toast(`Missing dependencies: ${missingDeps.map((d) => d.title).join(', ')}`, 'warn')
+        toast(`Missing dependencies: ${missingDeps.map((d) => d.title).join(', ')}`, 'warning')
       }
     } catch (e) {
       toast(String(e), 'error')
@@ -203,11 +208,83 @@
   }
 </script>
 
+<style>
+  /* Each row is windowed at ROW_HEIGHT (84px) = 76px card + 8px gap. */
+  .modrinth-v2-card {
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    height: 76px;
+    margin-bottom: 8px;
+    padding: var(--card-pad-y) var(--card-pad-x);
+    background: var(--bg-item);
+    border: none;
+    border-radius: var(--r-md);
+    box-shadow: var(--shadow-sm);
+    color: var(--text);
+    text-align: left;
+    font-family: inherit;
+    cursor: pointer;
+    transition: background var(--t);
+  }
+  .modrinth-v2-card:hover {
+    background: var(--bg-item-hover);
+  }
+  .modrinth-v2-card:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+  .modrinth-v2-icon {
+    width: 40px;
+    height: 40px;
+    flex-shrink: 0;
+    border-radius: var(--r-sm);
+    object-fit: cover;
+    background: var(--bg-inset);
+  }
+  .modrinth-v2-icon-lg {
+    width: 64px;
+    height: 64px;
+    border-radius: var(--r-md);
+    object-fit: cover;
+    background: var(--bg-inset);
+  }
+  .modrinth-v2-card-body {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+  }
+  .modrinth-v2-card-title {
+    font-size: 13px;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .modrinth-v2-card-desc {
+    font-size: 12px;
+    color: var(--text-dim);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .modrinth-v2-card-meta {
+    display: flex;
+    gap: 10px;
+    font-size: 11px;
+    color: var(--text-dim);
+  }
+</style>
+
 <div class="modrinth-v2">
   <div class="modrinth-v2-sidebar">
-    <h3>Filters</h3>
+    <h3>{t('x.filters')}</h3>
     <div class="modrinth-v2-filter-group">
-      <span class="wizard-hint">Loader</span>
+      <span class="wizard-hint">{t('x.loader')}</span>
       {#each LOADERS as l}
         <label class="modrinth-v2-checkbox" data-tooltip={MISSING_SERVER_SIDE_FACETS}>
           <input type="checkbox" checked={selectedLoaders.has(l)} onchange={() => toggleLoader(l)} />
@@ -216,15 +293,15 @@
       {/each}
     </div>
     <label class="wizard-field">
-      <span>MC version</span>
+      <span>{t('x.mcVersion')}</span>
       <input class="setting-input" bind:value={mcVersion} placeholder="e.g. 1.21.1" data-tooltip={MISSING_SERVER_SIDE_FACETS} />
     </label>
     <label class="wizard-field">
-      <span>Category</span>
+      <span>{t('label.category')}</span>
       <input class="setting-input" bind:value={category} placeholder="e.g. adventure" />
     </label>
     <label class="wizard-field">
-      <span>Sort</span>
+      <span>{t('x.sort')}</span>
       <select class="setting-select" bind:value={sort}>
         {#each SORTS as s}
           <option value={s.id}>{s.label}</option>
@@ -237,11 +314,12 @@
     <div class="modrinth-v2-search-row">
       <input
         class="setting-input"
-        placeholder="Search Modrinth mods…"
+        aria-label={t('ph.searchModrinthMods')}
+        placeholder={t('ph.searchModrinthMods')}
         bind:value={query}
         oninput={onQueryInput}
       />
-      {#if onBack}<button class="btn-sm" onclick={onBack}>Close</button>{/if}
+      {#if onBack}<button class="btn-sm" onclick={onBack}>{t('common.close')}</button>{/if}
     </div>
 
     {#if error}<p class="error-text">{error}</p>{/if}
@@ -269,21 +347,23 @@
         </div>
       </div>
       {#if loading}
-        <div class="versions-loading"><Spinner size={16} /><span>Loading…</span></div>
+        <ListSkeleton rows={4} />
       {/if}
       {#if !loading && filtered.length === 0}
-        <div class="empty-state"><p>No results.</p></div>
+        <div class="empty-state"><p>{t('x.noResults')}</p></div>
       {/if}
     </div>
   </div>
 </div>
+
+<svelte:window onkeydown={(e) => { if (e.key === 'Escape' && detailProject) detailProject = null }} />
 
 {#if detailProject}
   <div class="wizard-overlay" role="presentation" onclick={(e) => e.target === e.currentTarget && (detailProject = null)}>
     <div class="wizard-card modrinth-v2-detail">
       <div class="wizard-head">
         <h2>{detailProject.title}</h2>
-        <button class="panel-icon-btn" onclick={() => (detailProject = null)} aria-label="Close">
+        <button class="panel-icon-btn" onclick={() => (detailProject = null)} aria-label={t('tt.close')}>
           <i class="fa-solid fa-xmark"></i>
         </button>
       </div>
@@ -291,10 +371,10 @@
         <img class="modrinth-v2-icon-lg" src={detailProject.icon_url || '/vendor/img/placeholder-mod.png'} alt="" />
         <p>{detailProject.description}</p>
         <div class="wizard-review">
-          <div><strong>Author</strong><span>{detailProject.author}</span></div>
-          <div><strong>Downloads</strong><span>{detailProject.downloads.toLocaleString()}</span></div>
-          <div><strong>Type</strong><span>{detailProject.project_type}</span></div>
-          {#if detailProject.category_name}<div><strong>Category</strong><span>{detailProject.category_name}</span></div>{/if}
+          <div><strong>{t('x.author')}</strong><span>{detailProject.author}</span></div>
+          <div><strong>{t('nav.downloads')}</strong><span>{detailProject.downloads.toLocaleString()}</span></div>
+          <div><strong>{t('x.type')}</strong><span>{detailProject.project_type}</span></div>
+          {#if detailProject.category_name}<div><strong>{t('label.category')}</strong><span>{detailProject.category_name}</span></div>{/if}
         </div>
         <button
           class="btn-sm"
@@ -312,7 +392,7 @@
         </button>
       </div>
       <div class="wizard-footer">
-        <button class="btn-sm" onclick={() => (detailProject = null)}>Close</button>
+        <button class="btn-sm" onclick={() => (detailProject = null)}>{t('common.close')}</button>
         <button class="btn-sm btn-primary" onclick={() => detailProject && install(detailProject)} disabled={installing || !instanceId}>
           {#if installing}<Spinner size={14} />{:else}<i class="fa-solid fa-download"></i>{/if} Install latest
         </button>

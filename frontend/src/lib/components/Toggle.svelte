@@ -6,7 +6,10 @@
   }
 
   function handleKeyDown(e: KeyboardEvent) {
-    if (e.key === ' ' || e.key === 'Enter') handleClick()
+    if (e.key === ' ' || e.key === 'Enter') {
+      e.preventDefault()
+      handleClick()
+    }
   }
 </script>
 

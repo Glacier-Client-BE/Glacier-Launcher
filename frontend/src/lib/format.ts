@@ -34,6 +34,28 @@ export function formatRelativeTime(iso: string): string {
   }
 }
 
+/** Tiny markdown-ish subset (bold, links, line breaks) used to render GitHub
+ * release changelogs — shared by NewsView and the update-available modal so
+ * "what's in this release" renders identically everywhere it's shown. */
+export function formatChangelog(md: string): string {
+  const escapeHtml = (s: string) =>
+    s
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;')
+
+  let html = escapeHtml(md)
+  html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+  html = html.replace(
+    /\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g,
+    '<a href="$2" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:underline;cursor:pointer;">$1</a>',
+  )
+  html = html.replace(/\r\n/g, '<br/>').replace(/\n/g, '<br/>')
+  return html
+}
+
 /** Shared by Bedrock backups/screenshots/worlds views to recover a folder's
  * parent directory from a listed item's file path, since the corresponding
  * Tauri commands don't expose the containing directory directly. */

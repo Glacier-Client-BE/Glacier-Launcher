@@ -137,6 +137,14 @@ impl BedrockBackupService {
             .join(format!("backup_{stamp}{safe_label}.zip"));
 
         let file = File::create(&dest_path).ctx(&dest_path)?;
+        if let Err(err) = Self::write_managed_folders(file, source, &dest_path) {
+            let _ = std::fs::remove_file(&dest_path);
+            return Err(err);
+        }
+        Ok(dest_path)
+    }
+
+    fn write_managed_folders(file: File, source: &BedrockRoot, dest_path: &Path) -> Result<()> {
         let mut archive = ZipWriter::new(file);
         let options = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
 
@@ -159,21 +167,17 @@ impl BedrockBackupService {
                 {
                     continue;
                 }
-                if archive.start_file(entry_name, options).is_err() {
-                    continue;
-                }
-                let _ = archive.write_all(&bytes);
+                archive.start_file(entry_name, options)?;
+                archive.write_all(&bytes).ctx(dest_path)?;
             }
         }
 
         if !found_any {
-            archive.finish()?;
-            let _ = std::fs::remove_file(&dest_path);
             return Err(BedrockError::NothingToBackUp);
         }
 
         archive.finish()?;
-        Ok(dest_path)
+        Ok(())
     }
 
     /// Extracts a backup archive into `target_root`, wiping and replacing
@@ -196,11 +200,14 @@ impl BedrockBackupService {
         let file = File::open(backup_path).ctx(backup_path)?;
         let mut archive = ZipArchive::new(file)?;
 
+        // Only managed folder names are honored: an archive entry naming anything
+        // else (e.g. `..`) would otherwise resolve to a directory outside the
+        // target and be deleted or overwritten.
         let mut top_level_folders = std::collections::BTreeSet::new();
         for i in 0..archive.len() {
             let entry = archive.by_index(i)?;
             if let Some(top) = entry.name().split('/').next() {
-                if !top.is_empty() {
+                if MANAGED_FOLDERS.contains(&top) {
                     top_level_folders.insert(top.to_string());
                 }
             }
@@ -215,16 +222,21 @@ impl BedrockBackupService {
 
         for i in 0..archive.len() {
             let mut entry = archive.by_index(i)?;
-            let name = entry.name().to_string();
-            if name.ends_with('/') {
+            if entry.name().ends_with('/') {
                 continue;
             }
-            // Entry names are `<managed folder>/<relative path>`; the managed
+            let Some(relative) = entry.enclosed_name() else {
+                continue;
+            };
+            // Entry paths are `<managed folder>/<relative path>`; the managed
             // folder decides which root the entry is written under.
-            let top = name.split('/').next().unwrap_or_default();
-            let dest_path = target
-                .root_for(top)
-                .join(name.replace('/', std::path::MAIN_SEPARATOR_STR));
+            let Some(top) = relative.iter().next().and_then(|c| c.to_str()) else {
+                continue;
+            };
+            if !MANAGED_FOLDERS.contains(&top) {
+                continue;
+            }
+            let dest_path = target.root_for(top).join(&relative);
             if let Some(parent) = dest_path.parent() {
                 std::fs::create_dir_all(parent).ctx(parent)?;
             }
@@ -242,6 +254,69 @@ impl BedrockBackupService {
         }
         Ok(())
     }
+
+    /// QOL "backup diff": compares two backup archives entry-by-entry (name
+    /// + uncompressed size, read straight from the zip's central directory -
+    /// no extraction needed) and reports what changed between them, newest
+    /// (`b`) relative to oldest (`a`).
+    pub fn diff_backups(&self, path_a: &Path, path_b: &Path) -> Result<BackupDiff> {
+        let entries_a = Self::zip_entry_sizes(path_a)?;
+        let entries_b = Self::zip_entry_sizes(path_b)?;
+
+        let mut added = Vec::new();
+        let mut removed = Vec::new();
+        let mut changed = Vec::new();
+        let mut unchanged_count = 0usize;
+
+        for (name, size_b) in &entries_b {
+            match entries_a.get(name) {
+                None => added.push(name.clone()),
+                Some(size_a) if size_a != size_b => changed.push(name.clone()),
+                Some(_) => unchanged_count += 1,
+            }
+        }
+        for name in entries_a.keys() {
+            if !entries_b.contains_key(name) {
+                removed.push(name.clone());
+            }
+        }
+        added.sort();
+        removed.sort();
+        changed.sort();
+
+        Ok(BackupDiff {
+            added,
+            removed,
+            changed,
+            unchanged_count,
+        })
+    }
+
+    fn zip_entry_sizes(path: &Path) -> Result<std::collections::HashMap<String, u64>> {
+        let file = File::open(path).ctx(path)?;
+        let mut archive = ZipArchive::new(file)?;
+        let mut out = std::collections::HashMap::with_capacity(archive.len());
+        for i in 0..archive.len() {
+            let entry = archive.by_index(i)?;
+            if entry.name().ends_with('/') {
+                continue;
+            }
+            out.insert(entry.name().to_string(), entry.size());
+        }
+        Ok(out)
+    }
+}
+
+/// Result of [`BedrockBackupService::diff_backups`]: file paths (as stored
+/// in the archive, `<managed folder>/<relative path>`) added, removed, or
+/// changed size between the two backups, plus a count of files identical in
+/// both.
+#[derive(Debug, Clone, Default, serde::Serialize)]
+pub struct BackupDiff {
+    pub added: Vec<String>,
+    pub removed: Vec<String>,
+    pub changed: Vec<String>,
+    pub unchanged_count: usize,
 }
 
 /// `backup_YYYY-MM-DD_HH-MM-SS` style stamp for filenames, derived from the

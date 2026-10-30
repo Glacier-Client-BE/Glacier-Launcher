@@ -158,15 +158,50 @@ impl ProcessRegistry {
     /// Force-kills `instance_id`'s process tree and removes it from the
     /// table. Errors (rather than silently no-op'ing) if nothing is tracked
     /// under that id, so the UI can tell "kill failed" from "already gone".
+    ///
+    /// Guards against PID recycling: `pid` is only actually killed if the
+    /// OS's process-creation timestamp for it still roughly matches when we
+    /// registered it. Between reading `pid` here and the `taskkill` below
+    /// actually running, the real process could have already exited and the
+    /// OS handed that PID to an unrelated process — without this check,
+    /// `taskkill /PID <pid> /T /F` would happily kill whatever now holds it.
     pub fn kill(&self, instance_id: &str) -> Result<(), String> {
-        let pid = self
+        let (pid, started_at) = self
             .inner
             .lock()
             .map_err(|_| "process registry lock poisoned".to_string())?
             .get(instance_id)
-            .map(|e| e.pid)
+            .map(|e| (e.pid, e.started_at))
             .ok_or_else(|| format!("No running process tracked for instance '{instance_id}'."))?;
-        kill_process_tree(pid);
+
+        // A few seconds' tolerance: `started_at` was captured via
+        // `SystemTime::now()` right after spawn returned, which lags the
+        // OS's own process-creation timestamp by a small, variable amount
+        // (scheduling delay) — not an exact match, but recycled PIDs from an
+        // unrelated, much-earlier-or-later process are still reliably
+        // rejected by this window. `gl_injection` (the crate this check
+        // needs) is Windows-only, so this verification only runs there —
+        // elsewhere this falls back to the old trust-the-pid behavior.
+        #[cfg(target_os = "windows")]
+        {
+            match gl_injection::process_start_time_unix(pid) {
+                Some(actual_start) if actual_start.abs_diff(started_at) <= 5 => {
+                    kill_process_tree(pid);
+                }
+                Some(_) | None => {
+                    // Either a different process now owns this PID, or it's
+                    // already exited and unqueryable — nothing to kill
+                    // either way, so just fall through to removing the
+                    // stale entry.
+                }
+            }
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
+            let _ = started_at; // only used for the Windows-only verification above
+            kill_process_tree(pid);
+        }
+
         self.mark_exited(instance_id);
         Ok(())
     }

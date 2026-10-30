@@ -55,15 +55,38 @@ impl AppState {
         let bedrock_instances = BedrockInstanceService::new(root.join("bedrock"), Some(live_root))
             .map_err(|e| format!("failed to initialize Bedrock instances: {e}"))?;
 
+        // Short timeouts here: this client is for API-shaped calls (auth
+        // exchanges, CurseForge/Modrinth/GitHub lookups, Discord OAuth) that
+        // should fail fast rather than hang the UI indefinitely on a stalled
+        // connection. Actual file downloads use their own client
+        // (`gl_download::DownloadClient::new()`, below) with a much longer
+        // timeout suited to large transfers — sharing this one for both
+        // would either make downloads time out early or leave API calls
+        // able to hang for minutes.
         let http = reqwest::Client::builder()
             .user_agent(gl_download::USER_AGENT)
+            .connect_timeout(std::time::Duration::from_secs(10))
+            .timeout(std::time::Duration::from_secs(30))
             .build()
             .map_err(|e| format!("failed to build HTTP client: {e}"))?;
 
-        let downloads = gl_download::DownloadQueue::new(
-            gl_download::DownloadClient::from_client(http.clone()),
-            4,
-        );
+        // QOL: user-configurable concurrent-download limit (Settings ->
+        // Downloads). Read once here rather than made live-adjustable -
+        // shrinking a running `tokio::sync::Semaphore` safely mid-flight
+        // isn't something the crate supports, so a change takes effect on
+        // the next launch, same as e.g. `RememberWindowSize`'s window-size
+        // fields already do.
+        let max_concurrent_downloads = gl_settings::load()
+            .map(|s| s.max_concurrent_downloads)
+            .unwrap_or(4)
+            .max(1) as usize;
+        // Its own client, not `http.clone()`: downloads need a generous
+        // multi-minute per-request timeout for large files, whereas `http`
+        // above is deliberately short-timeout for API calls. See the
+        // comment on `http`'s construction.
+        let download_client = gl_download::DownloadClient::new()
+            .map_err(|e| format!("failed to build download HTTP client: {e}"))?;
+        let downloads = gl_download::DownloadQueue::new(download_client, max_concurrent_downloads);
 
         Ok(Self {
             java_instances: Mutex::new(java_instances),

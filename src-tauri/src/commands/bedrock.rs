@@ -13,7 +13,7 @@ use crate::state::AppState;
 /// the same per-account root resolution the world/pack/screenshot commands
 /// already depend on, rather than a fresh lookup.
 #[tauri::command]
-pub fn resolve_com_mojang_folder() -> String {
+pub async fn resolve_com_mojang_folder() -> String {
     gl_bedrock::com_mojang_root().display().to_string()
 }
 
@@ -21,7 +21,7 @@ pub fn resolve_com_mojang_folder() -> String {
 /// `.mcaddon`) into the given instance's folder. Mirrors the original app's
 /// drag-drop import handling for Bedrock content.
 #[tauri::command]
-pub fn import_bedrock_content(
+pub async fn import_bedrock_content(
     source_path: String,
     instance_dir: String,
 ) -> Result<ImportOutcome, String> {
@@ -84,7 +84,7 @@ fn live_dir(folder_name: &str) -> PathBuf {
 }
 
 #[tauri::command]
-pub fn list_bedrock_worlds(_instance_dir: String) -> Result<Vec<BedrockWorld>, String> {
+pub async fn list_bedrock_worlds(_instance_dir: String) -> Result<Vec<BedrockWorld>, String> {
     // `_instance_dir` is accepted and ignored - see `live_dir`. Kept in the
     // signature so the panels don't all need changing for a backend-side fix.
     let svc = BedrockWorldService::new(live_dir("minecraftWorlds"));
@@ -92,10 +92,11 @@ pub fn list_bedrock_worlds(_instance_dir: String) -> Result<Vec<BedrockWorld>, S
 }
 
 #[tauri::command]
-pub fn delete_bedrock_world(world_path: String) -> Result<(), String> {
-    let svc = BedrockWorldService::new(Path::new(&world_path).parent().unwrap_or(Path::new(".")));
-    svc.delete_world(Path::new(&world_path))
-        .map_err(|e| e.to_string())
+pub async fn delete_bedrock_world(world_path: String) -> Result<(), String> {
+    let worlds = live_dir("minecraftWorlds");
+    let target = super::ensure_direct_child(&worlds, Path::new(&world_path))?;
+    let svc = BedrockWorldService::new(&worlds);
+    svc.delete_world(&target).map_err(|e| e.to_string())
 }
 
 /// Exports a world as a `.mcworld`.
@@ -105,7 +106,7 @@ pub fn delete_bedrock_world(world_path: String) -> Result<(), String> {
 /// always writing to `%USERPROFILE%\Glacier Launcher\exported-worlds`. That
 /// default lives here so callers don't have to guess it.
 #[tauri::command]
-pub fn export_bedrock_world(
+pub async fn export_bedrock_world(
     world_path: String,
     export_dir: Option<String>,
 ) -> Result<String, String> {
@@ -122,14 +123,14 @@ pub fn export_bedrock_world(
 /// The launcher's Bedrock backups directory, so the Backups panel's
 /// "Open folder" action works before any backup has been listed.
 #[tauri::command]
-pub fn bedrock_backups_dir() -> String {
+pub async fn bedrock_backups_dir() -> String {
     backups_dir().to_string_lossy().into_owned()
 }
 
 /// The live Screenshots directory. Always the live install, never a managed
 /// instance - the original's screenshots path is a static property.
 #[tauri::command]
-pub fn bedrock_screenshots_dir() -> String {
+pub async fn bedrock_screenshots_dir() -> String {
     gl_bedrock::screenshots_dir().to_string_lossy().into_owned()
 }
 
@@ -137,12 +138,12 @@ pub fn bedrock_screenshots_dir() -> String {
 /// `BedrockWorldService.WorldsDir` static, used by the Worlds panel's
 /// "Open folder" action.
 #[tauri::command]
-pub fn bedrock_worlds_dir() -> String {
+pub async fn bedrock_worlds_dir() -> String {
     gl_bedrock::worlds_dir().to_string_lossy().into_owned()
 }
 
 #[tauri::command]
-pub fn list_bedrock_packs(_instance_dir: String, kind: String) -> Result<Vec<BedrockPack>, String> {
+pub async fn list_bedrock_packs(_instance_dir: String, kind: String) -> Result<Vec<BedrockPack>, String> {
     let kind = parse_pack_kind(&kind)?;
     let dir_name = match kind {
         PackKind::Resource => "resource_packs",
@@ -158,20 +159,32 @@ pub fn list_bedrock_packs(_instance_dir: String, kind: String) -> Result<Vec<Bed
 }
 
 #[tauri::command]
-pub fn delete_bedrock_pack(pack_path: String) -> Result<(), String> {
+pub async fn delete_bedrock_pack(pack_path: String) -> Result<(), String> {
+    // A pack folder is a direct child of one of the six pack directories.
+    let target = Path::new(&pack_path);
+    let target = [
+        "resource_packs",
+        "behavior_packs",
+        "skin_packs",
+        "development_resource_packs",
+        "development_behavior_packs",
+        "development_skin_packs",
+    ]
+    .iter()
+    .find_map(|dir| super::ensure_direct_child(&live_dir(dir), target).ok())
+    .ok_or_else(|| format!("Refusing to delete {pack_path}: not an installed Bedrock pack."))?;
     let svc = BedrockPackService::new();
-    svc.delete_pack(Path::new(&pack_path))
-        .map_err(|e| e.to_string())
+    svc.delete_pack(&target).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-pub fn list_bedrock_backups() -> Result<Vec<BedrockBackup>, String> {
+pub async fn list_bedrock_backups() -> Result<Vec<BedrockBackup>, String> {
     let svc = BedrockBackupService::new(backups_dir());
     svc.list_backups().map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-pub fn create_bedrock_backup(
+pub async fn create_bedrock_backup(
     instance_dir: String,
     label: Option<String>,
 ) -> Result<String, String> {
@@ -182,17 +195,60 @@ pub fn create_bedrock_backup(
 }
 
 #[tauri::command]
-pub fn restore_bedrock_backup(backup_path: String, instance_dir: String) -> Result<(), String> {
+pub async fn restore_bedrock_backup(backup_path: String, instance_dir: String) -> Result<(), String> {
     let svc = BedrockBackupService::new(backups_dir());
     svc.restore_backup_into(Path::new(&backup_path), &bedrock_root(&instance_dir))
         .map_err(|e| e.to_string())
 }
 
+/// QOL "restore to new world/instance": extracts a backup into a brand-new
+/// Bedrock instance instead of overwriting the live install / an existing
+/// instance. Lets you look at (or cherry-pick from) an old snapshot without
+/// touching what you're currently playing, or recover from a bad restore by
+/// just deleting the new instance. Mirrors `restore_bedrock_backup` but
+/// targets a freshly-created instance directory via
+/// `restore_backup_into_folder` (the same instance-agnostic extraction path
+/// `restore_backup_into` uses under the hood).
 #[tauri::command]
-pub fn delete_bedrock_backup(backup_path: String) -> Result<(), String> {
+pub async fn restore_bedrock_backup_to_new_instance(
+    state: State<'_, AppState>,
+    backup_path: String,
+    name: Option<String>,
+) -> Result<BedrockInstance, String> {
+    let instance = {
+        let mut instances = state.bedrock_instances.lock().map_err(|e| e.to_string())?;
+        instances
+            .create(name.as_deref().unwrap_or("Restored backup"), "")
+            .map_err(|e| e.to_string())?
+    };
+
     let svc = BedrockBackupService::new(backups_dir());
-    svc.delete_backup(Path::new(&backup_path))
+    svc.restore_backup_into_folder(Path::new(&backup_path), Path::new(&instance.directory))
+        .map_err(|e| e.to_string())?;
+
+    Ok(instance)
+}
+
+/// QOL "backup diff": compares two backups' contents (added/removed/changed
+/// files by name+size) so you can see what actually differs before
+/// deciding which one to restore, instead of just eyeballing two timestamps
+/// and total sizes.
+#[tauri::command]
+pub async fn diff_bedrock_backups(
+    path_a: String,
+    path_b: String,
+) -> Result<gl_bedrock::BackupDiff, String> {
+    let svc = BedrockBackupService::new(backups_dir());
+    svc.diff_backups(Path::new(&path_a), Path::new(&path_b))
         .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn delete_bedrock_backup(backup_path: String) -> Result<(), String> {
+    let root = backups_dir();
+    let target = super::ensure_direct_child(&root, Path::new(&backup_path))?;
+    let svc = BedrockBackupService::new(root);
+    svc.delete_backup(&target).map_err(|e| e.to_string())
 }
 
 /// Feature 20 — Bedrock world backup scheduler. Called right before a
@@ -237,7 +293,7 @@ pub fn maybe_run_bedrock_auto_backup() -> Result<Option<String>, String> {
 /// Feature 23 — whether the one-time marketplace-content reminder banner has
 /// been dismissed already.
 #[tauri::command]
-pub fn bedrock_marketplace_reminder_dismissed() -> Result<bool, String> {
+pub async fn bedrock_marketplace_reminder_dismissed() -> Result<bool, String> {
     Ok(gl_settings::load()
         .map_err(|e| e.to_string())?
         .bedrock_marketplace_reminder_dismissed)
@@ -245,7 +301,7 @@ pub fn bedrock_marketplace_reminder_dismissed() -> Result<bool, String> {
 
 /// Persists the dismissal so the banner doesn't come back.
 #[tauri::command]
-pub fn dismiss_bedrock_marketplace_reminder() -> Result<(), String> {
+pub async fn dismiss_bedrock_marketplace_reminder() -> Result<(), String> {
     let mut settings = gl_settings::load().map_err(|e| e.to_string())?;
     settings.bedrock_marketplace_reminder_dismissed = true;
     gl_settings::save(&settings).map_err(|e| e.to_string())
@@ -253,7 +309,7 @@ pub fn dismiss_bedrock_marketplace_reminder() -> Result<(), String> {
 
 /// Reads the auto-backup-every-N-launches setting for the Backups panel.
 #[tauri::command]
-pub fn bedrock_auto_backup_interval() -> Result<i32, String> {
+pub async fn bedrock_auto_backup_interval() -> Result<i32, String> {
     Ok(gl_settings::load()
         .map_err(|e| e.to_string())?
         .bedrock_auto_backup_every_n_launches)
@@ -261,7 +317,7 @@ pub fn bedrock_auto_backup_interval() -> Result<i32, String> {
 
 /// Sets the auto-backup-every-N-launches setting. `0` disables it.
 #[tauri::command]
-pub fn set_bedrock_auto_backup_interval(every_n_launches: i32) -> Result<(), String> {
+pub async fn set_bedrock_auto_backup_interval(every_n_launches: i32) -> Result<(), String> {
     let mut settings = gl_settings::load().map_err(|e| e.to_string())?;
     settings.bedrock_auto_backup_every_n_launches = every_n_launches.max(0);
     // Restarting the count on a settings change avoids an immediate backup
@@ -272,7 +328,7 @@ pub fn set_bedrock_auto_backup_interval(every_n_launches: i32) -> Result<(), Str
 }
 
 #[tauri::command]
-pub fn list_bedrock_screenshots(_instance_dir: String) -> Result<Vec<ScreenshotFile>, String> {
+pub async fn list_bedrock_screenshots(_instance_dir: String) -> Result<Vec<ScreenshotFile>, String> {
     // C# `BedrockScreenshotService.ComMojangScreenshotsDir` is a static
     // property over `CurseForgeService.ComMojangRoot` — screenshots always
     // come from the live install, never from a managed instance folder. The
@@ -285,12 +341,51 @@ pub fn list_bedrock_screenshots(_instance_dir: String) -> Result<Vec<ScreenshotF
 }
 
 #[tauri::command]
-pub fn delete_bedrock_screenshot(path: String) -> Result<(), String> {
+pub async fn delete_bedrock_screenshot(path: String) -> Result<(), String> {
+    let shots = gl_bedrock::screenshots_dir();
+    let captures = dirs_captures_dir();
+    let target = super::ensure_direct_child(&shots, Path::new(&path))
+        .or_else(|_| super::ensure_direct_child(&captures, Path::new(&path)))?;
     let svc = gl_bedrock::BedrockScreenshotService::new(
-        Path::new(&path).parent().unwrap_or(Path::new(".")),
-        dirs_captures_dir(),
+        target.parent().unwrap_or(Path::new(".")),
+        captures,
     );
-    svc.delete_file(Path::new(&path)).map_err(|e| e.to_string())
+    svc.delete_file(&target).map_err(|e| e.to_string())?;
+    // A deleted file can't stay favorited - drop it from the list too rather
+    // than leaving a dangling path that would just silently never match
+    // anything list_bedrock_screenshots returns again.
+    let mut settings = gl_settings::load().map_err(|e| e.to_string())?;
+    settings.bedrock_favorite_screenshots.retain(|p| p != &path);
+    gl_settings::save(&settings).map_err(|e| e.to_string())
+}
+
+/// The set of screenshot paths the user has starred, for the Photos panel to
+/// mark tiles and sort/filter by.
+#[tauri::command]
+pub async fn list_favorite_screenshots() -> Result<Vec<String>, String> {
+    Ok(gl_settings::load()
+        .map_err(|e| e.to_string())?
+        .bedrock_favorite_screenshots)
+}
+
+/// Toggles one screenshot's favorite state and returns the new state, so the
+/// frontend doesn't need a separate read-then-write round trip.
+#[tauri::command]
+pub async fn toggle_favorite_screenshot(path: String) -> Result<bool, String> {
+    let mut settings = gl_settings::load().map_err(|e| e.to_string())?;
+    let now_favorited = if let Some(idx) = settings
+        .bedrock_favorite_screenshots
+        .iter()
+        .position(|p| p == &path)
+    {
+        settings.bedrock_favorite_screenshots.remove(idx);
+        false
+    } else {
+        settings.bedrock_favorite_screenshots.push(path);
+        true
+    };
+    gl_settings::save(&settings).map_err(|e| e.to_string())?;
+    Ok(now_favorited)
 }
 
 fn dirs_captures_dir() -> std::path::PathBuf {
@@ -302,7 +397,7 @@ fn dirs_captures_dir() -> std::path::PathBuf {
 }
 
 #[tauri::command]
-pub fn list_bedrock_instances(state: State<'_, AppState>) -> Result<Vec<BedrockInstance>, String> {
+pub async fn list_bedrock_instances(state: State<'_, AppState>) -> Result<Vec<BedrockInstance>, String> {
     let svc = state
         .bedrock_instances
         .lock()
@@ -311,7 +406,7 @@ pub fn list_bedrock_instances(state: State<'_, AppState>) -> Result<Vec<BedrockI
 }
 
 #[tauri::command]
-pub fn create_bedrock_instance(
+pub async fn create_bedrock_instance(
     state: State<'_, AppState>,
     name: String,
     version_tag: String,
@@ -324,7 +419,7 @@ pub fn create_bedrock_instance(
 }
 
 #[tauri::command]
-pub fn rename_bedrock_instance(
+pub async fn rename_bedrock_instance(
     state: State<'_, AppState>,
     id: String,
     new_name: String,
@@ -337,7 +432,7 @@ pub fn rename_bedrock_instance(
 }
 
 #[tauri::command]
-pub fn set_bedrock_instance_accent_color(
+pub async fn set_bedrock_instance_accent_color(
     state: State<'_, AppState>,
     id: String,
     color: Option<String>,
@@ -364,7 +459,7 @@ pub fn set_bedrock_instance_accent_color(
 /// is the destructive part and must not be reported as a failure just because
 /// the version switch afterwards didn't take.
 #[tauri::command]
-pub fn switch_bedrock_instance(state: State<'_, AppState>, id: String) -> Result<String, String> {
+pub async fn switch_bedrock_instance(state: State<'_, AppState>, id: String) -> Result<String, String> {
     let live_root = gl_bedrock::com_mojang_root();
 
     let version_tag = {
@@ -407,7 +502,7 @@ pub fn switch_bedrock_instance(state: State<'_, AppState>, id: String) -> Result
 /// Archives the live com.mojang state into the active instance without
 /// switching. Port of `SaveActiveAsync`.
 #[tauri::command]
-pub fn save_active_bedrock_instance(state: State<'_, AppState>) -> Result<(), String> {
+pub async fn save_active_bedrock_instance(state: State<'_, AppState>) -> Result<(), String> {
     let live_root = gl_bedrock::com_mojang_root();
     let svc = state.bedrock_instances.lock().map_err(|e| e.to_string())?;
     svc.save_active(live_root).map_err(|e| e.to_string())
@@ -415,7 +510,7 @@ pub fn save_active_bedrock_instance(state: State<'_, AppState>) -> Result<(), St
 
 /// Sets the game version tag recorded against an instance.
 #[tauri::command]
-pub fn set_bedrock_instance_version(
+pub async fn set_bedrock_instance_version(
     state: State<'_, AppState>,
     id: String,
     version_tag: String,
@@ -427,13 +522,13 @@ pub fn set_bedrock_instance_version(
 
 /// The id of the currently active Bedrock instance, if any.
 #[tauri::command]
-pub fn active_bedrock_instance_id(state: State<'_, AppState>) -> Result<Option<String>, String> {
+pub async fn active_bedrock_instance_id(state: State<'_, AppState>) -> Result<Option<String>, String> {
     let svc = state.bedrock_instances.lock().map_err(|e| e.to_string())?;
     Ok(svc.active_instance_id().map(str::to_string))
 }
 
 #[tauri::command]
-pub fn delete_bedrock_instance(state: State<'_, AppState>, id: String) -> Result<bool, String> {
+pub async fn delete_bedrock_instance(state: State<'_, AppState>, id: String) -> Result<bool, String> {
     let mut svc = state
         .bedrock_instances
         .lock()

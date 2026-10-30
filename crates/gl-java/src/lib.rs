@@ -26,6 +26,7 @@ pub mod models;
 pub mod packs;
 pub mod prelaunch;
 pub mod presets;
+pub mod reuse;
 pub mod runtime_download;
 pub mod util;
 pub mod version_service;
@@ -208,6 +209,27 @@ mod tests {
     }
 
     #[test]
+    fn build_jvm_args_honors_quoted_values_with_spaces() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mc_dir = tmp.path();
+        setup_version_dir(mc_dir, "1.20.1");
+        let profile = read_version_profile("1.20.1", mc_dir).unwrap();
+
+        let opts = LaunchOptions {
+            custom_jvm_args: r#"-Dfoo="some value" -Dbar=baz"#.to_string(),
+            ..Default::default()
+        };
+
+        let args = build_jvm_args(&profile, mc_dir, "1.20.1", 17, &opts).unwrap();
+
+        // A naive `split_whitespace` would tear `"some value"` into two
+        // separate tokens ("-Dfoo=\"some" and "value\"") — it must survive
+        // as one token with the quotes stripped.
+        assert!(args.contains(&"-Dfoo=some value".to_string()));
+        assert!(args.contains(&"-Dbar=baz".to_string()));
+    }
+
+    #[test]
     fn build_jvm_args_clamps_ram_to_documented_bounds() {
         let tmp = tempfile::tempdir().unwrap();
         let mc_dir = tmp.path();
@@ -353,6 +375,38 @@ mod tests {
             .libraries
             .iter()
             .any(|l| l.path.to_string_lossy().contains("extra-1.0.jar")));
+    }
+
+    #[test]
+    fn inherited_profile_without_jar_uses_vanilla_root_jar() {
+        // A Fabric/Forge-style child ships no jar of its own; the client jar
+        // must come from the inherited vanilla version, not `child/child.jar`.
+        let tmp = tempfile::tempdir().unwrap();
+        let mc_dir = tmp.path();
+
+        let mut parent = sample_version_json();
+        parent["id"] = serde_json::json!("1.20.1");
+        write_json(
+            &mc_dir.join("versions").join("1.20.1").join("1.20.1.json"),
+            &parent,
+        );
+        std::fs::write(
+            mc_dir.join("versions").join("1.20.1").join("1.20.1.jar"),
+            b"vanilla",
+        )
+        .unwrap();
+
+        let child = serde_json::json!({ "inheritsFrom": "1.20.1" });
+        write_json(
+            &mc_dir.join("versions").join("loader").join("loader.json"),
+            &child,
+        );
+
+        let profile = read_version_profile("loader", mc_dir).unwrap();
+        assert_eq!(profile.jar_version_id, "1.20.1");
+        assert!(profile.libraries.iter().any(|l| l
+            .path
+            .ends_with(std::path::Path::new("versions").join("1.20.1").join("1.20.1.jar"))));
     }
 
     #[test]

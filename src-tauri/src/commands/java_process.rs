@@ -27,7 +27,7 @@ pub fn list_running_instances(state: State<'_, AppState>) -> Vec<RunningProcess>
 /// `kill -9` approach `commands::launch::cancel_launch` already uses for the
 /// single "last launched" PID) and removes it from the registry.
 #[tauri::command]
-pub fn kill_instance(state: State<'_, AppState>, instance_id: String) -> Result<(), String> {
+pub async fn kill_instance(state: State<'_, AppState>, instance_id: String) -> Result<(), String> {
     state.java_processes.kill(&instance_id)
 }
 
@@ -65,7 +65,7 @@ const MATCHERS: &[Matcher] = &[
 /// generic "unrecognised" analysis (not an error) when nothing matches —
 /// callers should still let the user open/share the raw log.
 #[tauri::command]
-pub fn analyze_crash(log_path: String) -> Result<CrashAnalysis, String> {
+pub async fn analyze_crash(log_path: String) -> Result<CrashAnalysis, String> {
     let text = std::fs::read_to_string(&log_path)
         .map_err(|e| format!("Couldn't read {log_path}: {e}"))?;
 

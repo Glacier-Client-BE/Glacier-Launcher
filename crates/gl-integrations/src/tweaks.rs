@@ -212,8 +212,13 @@ pub async fn get_bedrock_resource_packs(client: &reqwest::Client) -> Result<Bedr
                         description: strip_html(p.get("description").and_then(Value::as_str)),
                         category_id: cat_id.clone(),
                         category: cat_name.clone(),
+                        // Was a jsdelivr GitHub-raw mirror URL (cdn.jsdelivr.net/gh/…) —
+                        // wrong host entirely, silently 404ing. BedrockTweaks
+                        // serves pack icons from its own static site, confirmed
+                        // working: bedrocktweaks.net/static/resource_packs/files/
+                        // aesthetic/alternate_block_destruction/pack_icon.png.
                         icon_url: format!(
-                            "https://cdn.jsdelivr.net/gh/{BT_REPO}@{BT_BRANCH}/resource_packs/files/{cat_id}/{id}/pack_icon.png"
+                            "https://bedrocktweaks.net/static/resource_packs/files/{cat_id}/{id}/pack_icon.png"
                         ),
                     });
                 }

@@ -15,6 +15,7 @@ tokio.workspace = true
 reqwest.workspace = true
 zip = "2"
 futures-util = "0.3"
+sha1 = "0.10"
 gl-persistence = { path = "../gl-persistence" }
 gl-download = { path = "../gl-download" }
 

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../i18nStore.svelte'
   /**
    * Port of `Components/SkinViewer.razor` (200 lines).
    *
@@ -186,13 +187,13 @@
     <button
       class="skin-pill {model === 'default' ? 'active' : ''}"
       onclick={() => setModel('default')}
-      data-tooltip="Classic model">Steve</button>
+      data-tooltip={t('tt.classicModel')}>{t('x.steve')}</button>
     <button
       class="skin-pill {model === 'slim' ? 'active' : ''}"
       onclick={() => setModel('slim')}
-      data-tooltip="Slim model">Alex</button>
+      data-tooltip={t('tt.slimModel')}>{t('x.alex')}</button>
     {#if capeUrl && mode === '3d'}
-      <button class="skin-pill" onclick={cycleCape} data-tooltip="Cape / Elytra / Off">
+      <button class="skin-pill" onclick={cycleCape} data-tooltip={t('tt.capeElytraOff')}>
         <i class="fa-solid fa-feather"></i> {capeLabel}
       </button>
     {/if}

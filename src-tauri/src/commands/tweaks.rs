@@ -32,17 +32,28 @@ use crate::state::AppState;
 #[tauri::command]
 pub async fn fetch_image_bytes(state: State<'_, AppState>, url: String) -> Result<String, String> {
     use base64::Engine;
+    // A bare reqwest GET (no Accept/Accept-Language, User-Agent aside) reads
+    // as a bot to some CDN-fronted hosts even with a legit UA string — this
+    // was confirmed hitting vanillatweaks.net/BedrockTweaks' jsdelivr icons:
+    // the exact same URL loads fine in a real browser (no Referer either,
+    // so the hotlink-block workaround above is still correct) but silently
+    // fails here, and the frontend's catch swallowed it with no logging, so
+    // it looked like a dead icon rather than a blocked request. Rounding out
+    // the header set to look like an ordinary image request is a cheap,
+    // safe addition that doesn't change behavior for hosts that never cared.
     let bytes = state
         .http
         .get(&url)
+        .header("Accept", "image/avif,image/webp,image/png,image/*,*/*;q=0.8")
+        .header("Accept-Language", "en-US,en;q=0.9")
         .send()
         .await
-        .map_err(|e| e.to_string())?
+        .map_err(|e| format!("request failed: {e}"))?
         .error_for_status()
-        .map_err(|e| e.to_string())?
+        .map_err(|e| format!("bad status: {e}"))?
         .bytes()
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| format!("failed to read body: {e}"))?;
     let mime = sniff_image_mime(&bytes);
     let b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
     Ok(format!("data:{mime};base64,{b64}"))

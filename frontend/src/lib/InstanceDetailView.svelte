@@ -8,11 +8,14 @@
    * placeholders instead of faking functionality.
    */
   import { invoke } from '@tauri-apps/api/core'
+  import { untrack } from 'svelte'
+  import { t } from './i18nStore.svelte'
   import PanelHeader from './components/PanelHeader.svelte'
   import PanelTabs from './components/PanelTabs.svelte'
   import JavaScreenshotsView from './JavaScreenshotsView.svelte'
   import JavaBackupsView from './JavaBackupsView.svelte'
   import LogsPanel from './LogsPanel.svelte'
+  import ListSkeleton from './components/ListSkeleton.svelte'
   import type { EffectiveLaunchConfig } from './settings'
 
   type DetailInstance = {
@@ -63,7 +66,7 @@
     'Unavailable: needs an export_java_modpack command'
 
   let effective = $state<EffectiveLaunchConfig | null>(null)
-  let loadingEffective = $state(false);
+  let loadingEffective = $state(false)
 
   async function loadEffective() {
     loadingEffective = true
@@ -79,9 +82,7 @@
   }
 
   $effect(() => {
-    if (activeTab === 'settings' && !effective && !loadingEffective) {
-      loadEffective()
-    }
+    if (activeTab === 'settings') untrack(() => { if (!effective && !loadingEffective) loadEffective() })
   })
 
   function fmtPlaytime(seconds: number): string {
@@ -92,7 +93,11 @@
     return 'Just started'
   }
 
+  let exporting = $state(false)
+
   async function exportZip() {
+    if (exporting) return
+    exporting = true
     try {
       const { save } = await import('@tauri-apps/plugin-dialog')
       const dest = await save({ defaultPath: `${instance.name ?? "instance"}.zip` })
@@ -101,6 +106,8 @@
       toast('Instance exported.', 'success')
     } catch (e) {
       toast(String(e), 'error')
+    } finally {
+      exporting = false
     }
   }
 </script>
@@ -112,11 +119,11 @@
     <div class="instance-detail-icon">
       <i class="fa-solid fa-cube"></i>
     </div>
-    <div class="instance-detail-name">{instance.name ?? "Instance"}</div>
+    <div class="instance-detail-name" title={instance.name ?? 'Instance'}>{instance.name ?? "Instance"}</div>
     {#if instance.loader && instance.loader !== 'vanilla'}
       <span class="instance-loader-badge">{instance.loader}{instance.loader_version ? ` ${instance.loader_version}` : ''}</span>
     {/if}
-    <div class="instance-detail-version">{instance.version_id ?? ''}</div>
+    <div class="instance-detail-version" title={instance.version_id ?? ''}>{instance.version_id ?? ''}</div>
     <button type="button" class="btn-sm btn-primary instance-detail-play" onclick={() => onLaunch?.(instance.id)}>
       <i class="fa-solid fa-play"></i> Play
     </button>
@@ -124,7 +131,7 @@
       <div class="instance-detail-playtime">{fmtPlaytime(instance.playtime_seconds)}</div>
     {/if}
     {#if instance.group}
-      <div class="instance-detail-group"><i class="fa-solid fa-folder"></i> {instance.group}</div>
+      <div class="instance-detail-group" title={instance.group}><i class="fa-solid fa-folder"></i> {instance.group}</div>
     {/if}
   </div>
 
@@ -135,9 +142,8 @@
       {#if activeTab === 'content'}
         <div class="empty-state">
           <i class="fa-solid fa-cubes"></i>
-          <p data-tooltip={MISSING_CONTENT_TAB} style="opacity:0.6;">
-            Content browser coming soon — pending a per-instance mods/loader aggregation command.
-          </p>
+          <span>Content browser coming soon</span>
+          <small data-tooltip={MISSING_CONTENT_TAB}>Pending a per-instance mods and loader list.</small>
         </div>
       {:else if activeTab === 'worlds'}
         <JavaBackupsView instanceName={instance.name ?? ''} embedded onToast={toast} />
@@ -148,34 +154,40 @@
       {:else if activeTab === 'settings'}
         <div class="instance-settings-summary">
           {#if loadingEffective}
-            <p>Loading effective settings…</p>
+            <ListSkeleton rows={4} />
           {:else if effective}
             <div class="wizard-review">
-              <div><strong>RAM</strong><span>{effective.min_ram_mb} – {effective.max_ram_mb} MB</span></div>
+              <div><strong>{t('label.ram')}</strong><span>{effective.min_ram_mb} – {effective.max_ram_mb} MB</span></div>
               <div><strong>Java path</strong><span>{effective.java_path ?? 'Global default'}</span></div>
-              <div><strong>Fullscreen</strong><span>{effective.fullscreen ? 'Yes' : 'No'}</span></div>
+              <div><strong>{t('label.fullscreen')}</strong><span>{effective.fullscreen ? 'Yes' : 'No'}</span></div>
               <div>
-                <strong>Resolution</strong>
+                <strong>{t('x.resolution')}</strong>
                 <span>{effective.use_custom_resolution ? `${effective.window_width}×${effective.window_height}` : 'Global default'}</span>
               </div>
-              <div><strong>Overridden</strong><span>{effective.overridden.length ? effective.overridden.join(', ') : 'None'}</span></div>
+              <div><strong>{t('x.overridden')}</strong><span>{effective.overridden.length ? effective.overridden.join(', ') : 'None'}</span></div>
             </div>
             <p class="wizard-hint">
-              Full editable settings live in the Profile panel's per-instance controls today; this
-              tab currently shows the resolved read-only view (`get_effective_launch_config`).
+              Read-only view of the resolved settings. Edit them in the Profile panel's per-instance
+              controls.
             </p>
           {:else}
-            <p class="error-text">Could not load settings.</p>
+            <div class="empty-state">
+              <i class="fa-solid fa-triangle-exclamation"></i>
+              <span>{t('x.couldNotLoadSettings')}</span>
+            </div>
           {/if}
         </div>
       {:else if activeTab === 'sync'}
         <div class="empty-state">
           <i class="fa-solid fa-rotate"></i>
-          <p data-tooltip={MISSING_SYNC} style="opacity:0.6;">Coming soon — sync packs ship in a later phase.</p>
+          <span>Sync is coming soon</span>
+          <small data-tooltip={MISSING_SYNC}>Sync packs ship in a later release.</small>
         </div>
       {:else if activeTab === 'export'}
         <div class="instance-export-tab">
-          <button class="btn-sm" onclick={exportZip}><i class="fa-solid fa-file-zipper"></i> Export as .zip</button>
+          <button class="btn-sm btn-primary" onclick={exportZip} disabled={exporting} aria-busy={exporting}>
+            <i class="fa-solid fa-file-zipper"></i> Export as .zip
+          </button>
           <button class="btn-sm" disabled data-tooltip={MISSING_EXPORT_MODPACK}>
             <i class="fa-solid fa-box-archive"></i> Export as modpack
           </button>
@@ -184,3 +196,57 @@
     </div>
   </div>
 </div>
+
+<style>
+  /* Detail rhythm: section gutter, band gaps between stacked blocks,
+     card padding on the left rail. Disabled export button dims to .5. */
+  .instance-detail {
+    gap: var(--panel-gutter);
+  }
+  .instance-detail-rail {
+    padding: var(--card-pad-y) var(--card-pad-x);
+    gap: var(--panel-band);
+    min-width: 0;
+  }
+  .instance-detail-name,
+  .instance-detail-version,
+  .instance-detail-group {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .instance-detail-version,
+  .instance-detail-group {
+    color: var(--text-dim);
+    opacity: 1;
+  }
+  .instance-detail-play {
+    margin-top: var(--panel-band);
+    transition: background-color var(--t), opacity var(--t);
+  }
+  .instance-detail-play:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  .instance-detail-main {
+    gap: var(--panel-band);
+  }
+  .instance-export-tab {
+    gap: var(--panel-band);
+    flex-wrap: wrap;
+  }
+  .instance-export-tab button:not(.btn-primary):hover:not(:disabled) {
+    background: var(--bg-item-hover);
+  }
+  .instance-export-tab button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  .instance-settings-summary .wizard-review > div {
+    padding: var(--row-pad-y) 0;
+  }
+  .instance-settings-summary .wizard-hint {
+    margin-top: var(--panel-band);
+  }
+</style>

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from './i18nStore.svelte'
   import { onMount, onDestroy } from 'svelte'
   import { invoke } from '@tauri-apps/api/core'
   import { listen, type UnlistenFn } from '@tauri-apps/api/event'
@@ -25,6 +26,7 @@
     onNavigate,
     versionsHasBadge = false,
     breadcrumb = [],
+    onBreadcrumbJump,
   }: {
     settings: LauncherSettings
     onChange: (s: LauncherSettings) => void
@@ -33,6 +35,7 @@
     onNavigate?: (view: string) => void
     versionsHasBadge?: boolean
     breadcrumb?: string[]
+    onBreadcrumbJump?: (index: number) => void
   } = $props()
 
   type ClientState = {
@@ -91,7 +94,7 @@
     if (!entries || entries.length === 0) return ''
     if (isKnownCompatible(clientName)) return ''
     const known = entries.map((e) => `${e.clientVersion} ↔ MC ${e.mcVersion}`).join(', ')
-    return `Not in the known-compatible list for MC ${installedMcVersion || '?'}. Known-good pairs: ${known}. Informational only — launching is not blocked.`
+    return t('client.compatNotInList', { mc: installedMcVersion || '?', pairs: known })
   }
 
   async function refreshInstalledMcVersion() {
@@ -122,6 +125,10 @@
   }
 
   async function refreshFlarial() {
+    // Clear any stale error from a previous failed action before
+    // re-checking state — otherwise a successful refresh can leave a
+    // contradictory "Up to date" badge sitting next to an old red error.
+    flarial.error = ''
     try {
       const path = await invoke<string>('flarial_client_path')
       const downloaded = await invoke<boolean>('path_exists', { path }).catch(() => false)
@@ -135,6 +142,7 @@
   }
 
   async function refreshOderso() {
+    oderso.error = ''
     try {
       oderso.downloaded = await invoke<boolean>('oderso_client_installed')
       oderso.upToDate = oderso.downloaded
@@ -146,6 +154,7 @@
   }
 
   async function refreshLevilamina() {
+    levilamina.error = ''
     try {
       levilamina.downloaded = await invoke<boolean>('levilamina_client_installed')
       levilamina.upToDate = levilamina.downloaded
@@ -174,19 +183,28 @@
     if (entry) await invoke('cancel_download', { id: entry.id }).catch(() => {})
   }
 
+  let queueDisposed = false
   onMount(() => {
     listen<QueueEntry[]>('downloads-changed', (e) => {
       queue = e.payload
     }).then((fn) => {
-      unlistenQueue = fn
+      if (queueDisposed) fn()
+      else unlistenQueue = fn
     })
   })
-  onDestroy(() => unlistenQueue?.())
+  onDestroy(() => {
+    queueDisposed = true
+    unlistenQueue?.()
+  })
 
   async function handleFlarialDownload() {
     if (flarial.downloading) return
     flarial.downloading = true
     flarial.error = ''
+    // A previous attempt's error (e.g. "file is loaded by a running
+    // Minecraft session") must not linger once the user retries — otherwise
+    // a successful refresh below can leave a stale "Up to date" badge next
+    // to a now-irrelevant red error line.
     try {
       await invoke('download_flarial_client')
       await refreshFlarial()
@@ -198,6 +216,7 @@
   }
 
   async function handleFlarialDelete() {
+    flarial.error = ''
     try {
       await invoke('delete_flarial_client')
       flarial = freshState()
@@ -222,6 +241,7 @@
   }
 
   async function handleOderSoDelete() {
+    oderso.error = ''
     try {
       await invoke('delete_oderso_client')
       oderso = freshState()
@@ -247,6 +267,7 @@
   }
 
   async function handleLeviLaminaDelete() {
+    levilamina.error = ''
     try {
       await invoke('delete_levilamina_client')
       levilamina = freshState()
@@ -281,25 +302,53 @@
   refreshInstalledMcVersion()
 </script>
 
-<PanelHeader title="Clients" {onBack} {breadcrumb}>
+<style>
+  .cv-surface { background: var(--bg-item); }
+  .cv-end { margin-left: auto; }
+</style>
+
+<PanelHeader title={t('panel.clients')} {onBack} {breadcrumb} {onBreadcrumbJump}>
   {#snippet extraActions()}
     <button
       type="button"
       class="panel-icon-btn versions-sort-btn"
       onclick={openVersions}
       onmousedown={(e) => e.stopPropagation()}
-      data-tooltip="Browse Latite/OderSo versions"
-      aria-label="Browse Latite/OderSo versions"
+      data-tooltip={t('tt.browseLatiteOdersoVersions')}
+      aria-label={t('tt.browseLatiteOdersoVersions')}
     >
       <i class="fa-solid fa-clock-rotate-left"></i>
-      <span>Versions</span>
+      <span>{t('label.versions')}</span>
       {#if versionsHasBadge}<span class="notification-badge"></span>{/if}
     </button>
   {/snippet}
 </PanelHeader>
 
 <div class="panel-body">
-
+  <div class="client-card" class:client-active={settings.SelectedClient === 'Vanilla'}>
+    <div class="client-card-header">
+    <div class="client-card-icon client-card-icon-img"><img src="/images/mc-logo.png" alt="Vanilla" /></div>
+      <div class="client-card-meta">
+        <span class="client-card-name">{t('x.vanilla')}</span>
+        <span class="client-card-sub client-card-note">Launches Minecraft with no DLL injection</span>
+      </div>
+      <div class="client-card-actions">
+        {#if settings.SelectedClient !== 'Vanilla'}
+          <button
+            class="icon-btn"
+            data-tooltip={t('tt.select')}
+            aria-label={t('tt.select')}
+            onclick={() => selectClient('Vanilla')}
+            onmousedown={(e) => e.stopPropagation()}
+          >
+            <i class="fa-solid fa-check"></i>
+          </button>
+        {/if}
+      </div>
+    </div>
+    <p class="client-card-desc">{t('client.vanillaDesc')}</p>
+  </div>
+  
   <div class="client-card" class:client-active={settings.SelectedClient === 'Flarial Client'}>
     <div class="client-card-header">
       <div class="client-card-icon client-card-icon-img"><img src="/images/clients/flarial.svg" alt="Flarial Client" /></div>
@@ -307,7 +356,7 @@
         <span class="client-card-name">
           Flarial Client
           {#if flarial.downloaded && !isKnownCompatible('Flarial Client')}
-            <i class="fa-solid fa-circle-info compat-warn-icon" data-tooltip={compatTooltip('Flarial Client')} aria-label="Compatibility notice"></i>
+            <i class="fa-solid fa-circle-info compat-warn-icon" data-tooltip={compatTooltip('Flarial Client')} aria-label={t('tt.compatibilityNotice')}></i>
           {/if}
         </span>
         <span class="client-card-sub">
@@ -320,7 +369,7 @@
               <span class="tag-outdated"><i class="fa-solid fa-triangle-exclamation"></i> Update available</span>
             {/if}
           {:else}
-            <span class="client-card-note">Not downloaded</span>
+            <span class="client-card-note">{t('x.notDownloaded')}</span>
           {/if}
         </span>
       </div>
@@ -328,8 +377,8 @@
         {#if settings.SelectedClient !== 'Flarial Client' && flarial.downloaded}
           <button
             class="icon-btn"
-            data-tooltip="Select"
-            aria-label="Select"
+            data-tooltip={t('tt.select')}
+            aria-label={t('tt.select')}
             onclick={() => selectClient('Flarial Client')}
             onmousedown={(e) => e.stopPropagation()}
           >
@@ -342,8 +391,8 @@
           {#if !flarial.downloaded || !flarial.upToDate}
             <button
               class="icon-btn"
-              data-tooltip={flarial.downloaded ? 'Update' : 'Download'}
-              aria-label={flarial.downloaded ? 'Update' : 'Download'}
+              data-tooltip={flarial.downloaded ? t('tt.update') : t('tt.download')}
+              aria-label={flarial.downloaded ? t('tt.update') : t('tt.download')}
               onclick={handleFlarialDownload}
               onmousedown={(e) => e.stopPropagation()}
             >
@@ -353,8 +402,8 @@
           {#if flarial.downloaded}
             <button
               class="icon-btn icon-btn-ghost"
-              data-tooltip="Delete"
-              aria-label="Delete"
+              data-tooltip={t('tt.delete')}
+              aria-label={t('tt.delete')}
               onclick={handleFlarialDelete}
               onmousedown={(e) => e.stopPropagation()}
             >
@@ -379,8 +428,8 @@
         {#if settings.SelectedClient !== 'Latite Client'}
           <button
             class="icon-btn"
-            data-tooltip="Select"
-            aria-label="Select"
+            data-tooltip={t('tt.select')}
+            aria-label={t('tt.select')}
             onclick={() => selectClient('Latite Client')}
             onmousedown={(e) => e.stopPropagation()}
           >
@@ -388,10 +437,9 @@
           </button>
         {/if}
         <button
-          class="icon-btn icon-btn-ghost"
-          style="background:var(--bg-item);"
-          data-tooltip="View Versions"
-          aria-label="View Versions"
+          class="icon-btn icon-btn-ghost cv-surface"
+          data-tooltip={t('tt.viewVersions')}
+          aria-label={t('tt.viewVersions')}
           onclick={openVersions}
           onmousedown={(e) => e.stopPropagation()}
         >
@@ -409,7 +457,7 @@
         <span class="client-card-name">
           OderSo Client
           {#if oderso.downloaded && !isKnownCompatible('OderSo Client')}
-            <i class="fa-solid fa-circle-info compat-warn-icon" data-tooltip={compatTooltip('OderSo Client')} aria-label="Compatibility notice"></i>
+            <i class="fa-solid fa-circle-info compat-warn-icon" data-tooltip={compatTooltip('OderSo Client')} aria-label={t('tt.compatibilityNotice')}></i>
           {/if}
         </span>
         <span class="client-card-sub">
@@ -422,7 +470,7 @@
               <span class="tag-outdated"><i class="fa-solid fa-triangle-exclamation"></i> Update available</span>
             {/if}
           {:else}
-            <span class="client-card-note">Not downloaded</span>
+            <span class="client-card-note">{t('x.notDownloaded')}</span>
           {/if}
         </span>
       </div>
@@ -430,8 +478,8 @@
         {#if settings.SelectedClient !== 'OderSo Client' && oderso.downloaded}
           <button
             class="icon-btn"
-            data-tooltip="Select"
-            aria-label="Select"
+            data-tooltip={t('tt.select')}
+            aria-label={t('tt.select')}
             onclick={() => selectClient('OderSo Client')}
             onmousedown={(e) => e.stopPropagation()}
           >
@@ -444,8 +492,8 @@
           {#if !oderso.downloaded || !oderso.upToDate}
             <button
               class="icon-btn"
-              data-tooltip={oderso.downloaded ? 'Update' : 'Download'}
-              aria-label={oderso.downloaded ? 'Update' : 'Download'}
+              data-tooltip={oderso.downloaded ? t('tt.update') : t('tt.download')}
+              aria-label={oderso.downloaded ? t('tt.update') : t('tt.download')}
               onclick={handleOderSoDownload}
               onmousedown={(e) => e.stopPropagation()}
             >
@@ -455,8 +503,8 @@
           {#if oderso.downloaded}
             <button
               class="icon-btn icon-btn-ghost"
-              data-tooltip="Delete"
-              aria-label="Delete"
+              data-tooltip={t('tt.delete')}
+              aria-label={t('tt.delete')}
               onclick={handleOderSoDelete}
               onmousedown={(e) => e.stopPropagation()}
             >
@@ -467,17 +515,17 @@
       </div>
     </div>
     {#if oderso.error}<span class="error-text">{oderso.error}</span>{/if}
-    <p class="client-card-desc">OderSo Client — curated Minecraft Bedrock experience by MasonOderSo.</p>
+    <p class="client-card-desc">{t('client.oderSoDesc')}</p>
   </div>
 
   <div class="client-card" class:client-active={settings.SelectedClient === 'LeviLamina'}>
     <div class="client-card-header">
-    <div class="client-card-icon client-card-icon-img"><img src="/images/clients/levi-lamina.png" alt="Vanilla" /></div>
+    <div class="client-card-icon client-card-icon-img"><img src="/images/clients/levi-lamina.png" alt="LeviLamina" /></div>
       <div class="client-card-meta">
         <span class="client-card-name">
           LeviLamina
           {#if levilamina.downloaded && !isKnownCompatible('LeviLamina')}
-            <i class="fa-solid fa-circle-info compat-warn-icon" data-tooltip={compatTooltip('LeviLamina')} aria-label="Compatibility notice"></i>
+            <i class="fa-solid fa-circle-info compat-warn-icon" data-tooltip={compatTooltip('LeviLamina')} aria-label={t('tt.compatibilityNotice')}></i>
           {/if}
         </span>
         <span class="client-card-sub">
@@ -490,7 +538,7 @@
               <span class="tag-outdated"><i class="fa-solid fa-triangle-exclamation"></i> Update available</span>
             {/if}
           {:else}
-            <span class="client-card-note">Not downloaded</span>
+            <span class="client-card-note">{t('x.notDownloaded')}</span>
           {/if}
         </span>
       </div>
@@ -498,8 +546,8 @@
         {#if levilamina.downloaded}
           <button
             class="icon-btn"
-            data-tooltip="Browse LeviLamina mods"
-            aria-label="Browse LeviLamina mods"
+            data-tooltip={t('tt.browseLevilaminaMods')}
+            aria-label={t('tt.browseLevilaminaMods')}
             onclick={openLeviLaminaMods}
             onmousedown={(e) => e.stopPropagation()}
           >
@@ -509,8 +557,8 @@
         {#if settings.SelectedClient !== 'LeviLamina' && levilamina.downloaded}
           <button
             class="icon-btn"
-            data-tooltip="Select"
-            aria-label="Select"
+            data-tooltip={t('tt.select')}
+            aria-label={t('tt.select')}
             onclick={() => selectClient('LeviLamina')}
             onmousedown={(e) => e.stopPropagation()}
           >
@@ -523,8 +571,8 @@
           {#if !levilamina.downloaded || !levilamina.upToDate}
             <button
               class="icon-btn"
-              data-tooltip={levilamina.downloaded ? 'Update' : 'Download'}
-              aria-label={levilamina.downloaded ? 'Update' : 'Download'}
+              data-tooltip={levilamina.downloaded ? t('tt.update') : t('tt.download')}
+              aria-label={levilamina.downloaded ? t('tt.update') : t('tt.download')}
               onclick={handleLeviLaminaDownload}
               onmousedown={(e) => e.stopPropagation()}
             >
@@ -534,8 +582,8 @@
           {#if levilamina.downloaded}
             <button
               class="icon-btn icon-btn-ghost"
-              data-tooltip="Delete"
-              aria-label="Delete"
+              data-tooltip={t('tt.delete')}
+              aria-label={t('tt.delete')}
               onclick={handleLeviLaminaDelete}
               onmousedown={(e) => e.stopPropagation()}
             >
@@ -546,41 +594,16 @@
       </div>
     </div>
     {#if levilamina.error}<span class="error-text">{levilamina.error}</span>{/if}
-    <p class="client-card-desc">LeviLamina — open-source native Bedrock mod loader by LiteLDev, injected the same way as the other clients here.</p>
-  </div>
-
-  <div class="client-card" class:client-active={settings.SelectedClient === 'Vanilla'}>
-    <div class="client-card-header">
-    <div class="client-card-icon client-card-icon-img"><img src="/images/mc-logo.png" alt="Vanilla" /></div>
-      <div class="client-card-meta">
-        <span class="client-card-name">Vanilla</span>
-        <span class="client-card-sub client-card-note">Launches Minecraft with no DLL injection</span>
-      </div>
-      <div class="client-card-actions">
-        {#if settings.SelectedClient !== 'Vanilla'}
-          <button
-            class="icon-btn"
-            data-tooltip="Select"
-            aria-label="Select"
-            onclick={() => selectClient('Vanilla')}
-            onmousedown={(e) => e.stopPropagation()}
-          >
-            <i class="fa-solid fa-check"></i>
-          </button>
-        {/if}
-      </div>
-    </div>
-    <p class="client-card-desc">Pure stock Minecraft Bedrock — useful for diagnostics, multiplayer realms, or just playing un-modified.</p>
+    <p class="client-card-desc">{t('client.leviLaminaDesc')}</p>
   </div>
 
   {#if customDllPath}
     <div
       class="client-card"
       class:client-active={settings.SelectedClient === 'Custom DLL'}
-      style="border-left-color:var(--accent);"
     >
       <div class="client-card-header">
-        <div class="client-card-icon" style="background:var(--accent-bg); color:var(--accent);">
+        <div class="client-card-icon is-accent">
           <i class="fa-solid fa-file-code"></i>
         </div>
         <div class="client-card-meta">
@@ -591,8 +614,8 @@
           <button
             class="copy-btn"
             class:copied={copiedDllPath}
-            data-tooltip="Copy path"
-            aria-label="Copy path"
+            data-tooltip={t('tt.copyPath')}
+            aria-label={t('tt.copyPath')}
             onclick={copyDllPath}
             onmousedown={(e) => e.stopPropagation()}
           >
@@ -600,8 +623,8 @@
           </button>
           <button
             class="icon-btn"
-            data-tooltip="Select"
-            aria-label="Select"
+            data-tooltip={t('tt.select')}
+            aria-label={t('tt.select')}
             onclick={() => selectClient('Custom DLL')}
             onmousedown={(e) => e.stopPropagation()}
           >
@@ -609,8 +632,8 @@
           </button>
           <button
             class="icon-btn icon-btn-ghost"
-            data-tooltip="Remove"
-            aria-label="Remove"
+            data-tooltip={t('tt.remove')}
+            aria-label={t('tt.remove')}
             onclick={clearCustomDll}
             onmousedown={(e) => e.stopPropagation()}
           >
@@ -618,20 +641,19 @@
           </button>
         </div>
       </div>
-      <p class="client-card-desc">Custom DLL loaded via drag-and-drop or file picker.</p>
+      <p class="client-card-desc">{t('x.customDllLoadedViaDragAndDropOrFilePicke')}</p>
     </div>
   {/if}
 
   <div class="drop-hint-row">
     <i class="fa-solid fa-file-arrow-down"></i>
-    <span>Drag &amp; drop a DLL onto the window</span>
+    <span>{t('client.dragDllHint')}</span>
     <button
-      class="btn-sm"
+      class="btn-sm cv-end"
       onclick={pickDllFile}
       onmousedown={(e) => e.stopPropagation()}
-      style="margin-left:auto;"
     >
-      <i class="fa-solid fa-folder-open"></i> Browse...
+      <i class="fa-solid fa-folder-open"></i> {t('common.browse')}
     </button>
   </div>
 

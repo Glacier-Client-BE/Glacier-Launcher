@@ -33,7 +33,7 @@ pub struct RuntimeDownloadService {
 impl RuntimeDownloadService {
     pub fn new(runtimes_root: PathBuf) -> Self {
         Self {
-            client: reqwest::Client::new(),
+            client: crate::util::http_client(),
             runtimes_root,
         }
     }
@@ -119,8 +119,15 @@ impl RuntimeDownloadService {
         let _ = total_size; // reserved for byte-level progress once gl-download lands
 
         on_progress(&format!("Extracting Java {major}…"), 88.0);
-        extract_zip(&zip_path, &dest_dir)?;
-        let _ = std::fs::remove_file(&zip_path);
+        // Extraction is blocking zip I/O; run it off the async runtime.
+        let (zip_task, out_task) = (zip_path.clone(), dest_dir.clone());
+        tokio::task::spawn_blocking(move || -> Result<()> {
+            extract_zip(&zip_task, &out_task)?;
+            let _ = std::fs::remove_file(&zip_task);
+            Ok(())
+        })
+        .await
+        .map_err(|e| JavaError::Other(format!("extract task failed: {e}")))??;
 
         on_progress(&format!("Java {major} ready."), 100.0);
 

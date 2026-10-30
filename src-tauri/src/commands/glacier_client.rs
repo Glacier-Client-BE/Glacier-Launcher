@@ -36,6 +36,22 @@ pub async fn get_glacier_manifest(
         .map_err(|e| e.to_string())
 }
 
+/// Fetches the live per-version download counts from the same Cloudflare
+/// Worker `glacierclient.xyz` itself calls (`GET /counts`), keyed by the
+/// manifest's own `tag` string (e.g. `"v1.2.0"`). Read-only — never
+/// increments anything, so this can't inflate the public count just by
+/// opening the panel. Best-effort: returns an empty map on any failure
+/// (network down, worker unreachable) rather than erroring the whole panel
+/// over what's a "nice to have" stat.
+#[tauri::command]
+pub async fn get_glacier_download_counts(
+    state: State<'_, AppState>,
+) -> Result<std::collections::HashMap<String, u64>, String> {
+    Ok(gl_clients::glacier_client::fetch_download_counts(&state.http)
+        .await
+        .unwrap_or_default())
+}
+
 /// Downloads and SHA-256-verifies one Glacier Client version's jar into
 /// `~/.glacier/versions/<id>/`. Mirrors `GlacierClientService.InstallAsync`.
 #[tauri::command]
@@ -60,7 +76,9 @@ pub async fn install_glacier_client(
 /// Deletes an installed Glacier Client version's jar. Mirrors
 /// `GlacierClientService.Uninstall`.
 #[tauri::command]
-pub fn uninstall_glacier_client(version: GlacierClientVersion) -> Result<(), String> {
+pub async fn uninstall_glacier_client(version: GlacierClientVersion) -> Result<(), String> {
+    // `id` is joined into the install path, so it must be one plain component.
+    super::safe_file_name(&version.id)?;
     let path = version.jar_path(&user_profile());
     if path.exists() {
         std::fs::remove_file(&path).map_err(|e| e.to_string())?;
@@ -71,7 +89,7 @@ pub fn uninstall_glacier_client(version: GlacierClientVersion) -> Result<(), Str
 /// Total size on disk of every installed Glacier Client jar. Mirrors
 /// `GlacierClientService.GetInstalledSizeBytes`.
 #[tauri::command]
-pub fn glacier_installed_size_bytes() -> u64 {
+pub async fn glacier_installed_size_bytes() -> u64 {
     gl_clients::glacier_client::installed_size_bytes(&user_profile())
 }
 

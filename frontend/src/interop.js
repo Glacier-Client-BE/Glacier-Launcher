@@ -4,7 +4,7 @@
 // to — everything else (scale, theming, panel drag-resize, tab cycler) is
 // pure DOM manipulation and ports unchanged.
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { convertFileSrc } from '@tauri-apps/api/core';
+import { convertFileSrc, invoke } from '@tauri-apps/api/core';
 
 const tauriWindow = getCurrentWindow();
 
@@ -116,6 +116,11 @@ document.addEventListener('keydown', e => {
     if (e.ctrlKey && e.shiftKey && (e.key === 't' || e.key === 'T')) { e.preventDefault(); kb('cycletheme'); return; }
     if (e.ctrlKey && e.shiftKey && (e.key === 'a' || e.key === 'A')) { e.preventDefault(); kb('cycleaccent'); return; }
     if (e.ctrlKey && e.shiftKey && (e.key === 'd' || e.key === 'D')) { e.preventDefault(); kb('diagnostics'); return; }
+    // Ctrl+F focuses the filter box of the open panel (Ctrl+K stays global search).
+    if (e.ctrlKey && !e.shiftKey && !e.altKey && (e.key === 'f' || e.key === 'F')) {
+        const box = [...document.querySelectorAll('.panel-search-input')].find(el => el.offsetParent !== null);
+        if (box) { e.preventDefault(); box.focus(); box.select(); return; }
+    }
     if (e.key === 'Escape')    { kb('escape'); return; }
     if (e.key === 'ArrowDown') { kb('down'); return; }
     if (e.key === 'ArrowUp')   { kb('up'); return; }
@@ -144,6 +149,11 @@ window.setAccentColor = (color) => {
 
 window.setTheme = (preset) => {
     document.documentElement.setAttribute('data-theme', preset);
+};
+
+window.setTooltipDelay = (ms) => {
+    const n = Math.max(0, Number(ms) || 0);
+    document.documentElement.style.setProperty('--tooltip-delay', n + 'ms');
 };
 
 window.setBlurIntensity = (px) => {
@@ -330,10 +340,7 @@ window.cpickCapture = (el, pointerId) => { try { el.setPointerCapture(pointerId)
 window.openDiscordOAuth = (clientId) => {
     const redirect = encodeURIComponent('https://glacierclient.xyz/auth');
     const url = `https://discord.com/api/oauth2/authorize?client_id=${clientId}&redirect_uri=${redirect}&response_type=token&scope=identify`;
-    // TODO: swap for @tauri-apps/plugin-opener once that plugin is added to
-    // src-tauri — window.open works for now since this just needs to launch
-    // the system browser, not embed the OAuth flow.
-    window.open(url, '_blank');
+    invoke('open_url', { url }).catch(() => {});
 };
 
 window.focusSearchInput = () => {
@@ -350,9 +357,15 @@ window.focusSearchInput = () => {
     // a shared guess, so a strip on its own full-width line (like the
     // Client Library version filter) pages fewer times than a narrower one
     // squeezed next to a search box.
+    // `.switcher-wrap` bars (CurseForge/Modrinth category filters, etc.) opt
+    // out of paging entirely — they already handle overflow by wrapping to a
+    // second row via CSS, so adding JS-driven arrows on top of that fights
+    // the wrap and hides tabs that would otherwise just drop to the next
+    // line, which is what made those bars look inconsistent with the ones
+    // that actually page.
     const STRIPS = [
         { bar: '.panel-tabs', item: '.panel-tab' },
-        { bar: '.versions-client-switcher', item: '.vcs-btn' },
+        { bar: '.versions-client-switcher:not(.switcher-wrap)', item: '.vcs-btn' },
         { bar: '.mcv-filter-bar .mcv-channel-tabs', item: '.mcv-channel-tab' },
     ];
 
@@ -367,11 +380,24 @@ window.focusSearchInput = () => {
         if (tabs.length === 0) return 1;
         const barStyle = getComputedStyle(bar);
         const gap = parseFloat(barStyle.columnGap || barStyle.gap || '0') || 0;
-        // A tab hidden by a previous page's refresh reports 0 width, so pick
-        // any currently-visible one (there's always at least one) rather
-        // than assuming tabs[0] is it.
+
+        // .vcs-btn uses flex: 1 1 0, so a tab's rendered width is
+        // bar.clientWidth divided by however many tabs are CURRENTLY
+        // visible — not its true share of all of them. If a previous pass
+        // already (wrongly) hid every tab but one, that lone survivor
+        // stretches to fill the whole bar, gets sampled here, and reports a
+        // width of ~bar.clientWidth. That collapses perPageNoArrows to 1,
+        // which hides all-but-one again — a self-reinforcing lock that nothing
+        // (not even the ResizeObserver below, since the bar's own box never
+        // changes size) could ever break out of. Reset every tab to visible
+        // before measuring so the sample always reflects the honest N-way
+        // split; refreshCyclerButtons re-applies the real per-tab display
+        // right after this returns.
+        const prevDisplay = tabs.map(t => t.style.display);
+        tabs.forEach(t => { t.style.display = ''; });
         const sample = tabs.find(t => t.getBoundingClientRect().width > 0) || tabs[0];
         const tabWidth = sample.getBoundingClientRect().width || 1;
+        tabs.forEach((t, i) => { t.style.display = prevDisplay[i]; });
 
         // First check whether every tab fits on one page with NO arrows at
         // all (bar.clientWidth is the container's own width regardless of
@@ -456,13 +482,36 @@ window.focusSearchInput = () => {
                 bar.insertBefore(prev, bar.firstChild);
                 bar.appendChild(next);
                 refreshCyclerButtons(bar, itemSelector);
+
+                // A bar is often inserted mid slide-in animation (or before
+                // its panel is done laying out), so the very first
+                // measurement can lock in a bogus pageSize (e.g. 1) that
+                // then never corrects itself since nothing but a window
+                // resize used to trigger a re-measure. Watch the bar itself
+                // so it re-pages as soon as its real size settles.
+                sizeObserver.observe(bar);
             });
 
             document.querySelectorAll(barSelector + '.cycler-ready').forEach(bar => refreshCyclerButtons(bar, itemSelector));
         }
     }
 
-    const tabsObserver = new MutationObserver(() => ensureTabCyclers());
+    const sizeObserver = new ResizeObserver(entries => {
+        for (const entry of entries) {
+            const bar = entry.target;
+            const strip = STRIPS.find(s => bar.matches(s.bar));
+            if (strip) refreshCyclerButtons(bar, strip.item);
+        }
+    });
+
+    let cyclerFrame = 0;
+    const tabsObserver = new MutationObserver(() => {
+        if (cyclerFrame) return;
+        cyclerFrame = requestAnimationFrame(() => {
+            cyclerFrame = 0;
+            ensureTabCyclers();
+        });
+    });
     tabsObserver.observe(document.body, { childList: true, subtree: true });
     window.addEventListener('resize', ensureTabCyclers);
     ensureTabCyclers();

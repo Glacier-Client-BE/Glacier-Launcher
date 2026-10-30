@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from './i18nStore.svelte'
   /**
    * 1:1 port of the `javaprofile` panel — `Pages/Home.razor` lines 5166-5354 —
    * plus its code-behind: `Home.BigFeatures.cs` (_instanceMaxRam,
@@ -27,11 +28,12 @@
    * No scoped <style> block: every class below exists in app.css.
    * No `.panel-overlay` / `.panel-handle`: App.svelte supplies those.
    */
-  import { open, save } from '@tauri-apps/plugin-dialog'
+  import { open } from '@tauri-apps/plugin-dialog'
   import { invoke } from '@tauri-apps/api/core'
   import PanelHeader from './components/PanelHeader.svelte'
   import SkinViewer from './components/SkinViewer.svelte'
-  import type { LauncherSettings, JavaInstance, JvmPreset } from './settings'
+  import type { LauncherSettings, JavaInstance } from './settings'
+  import ListSkeleton from './components/ListSkeleton.svelte'
 
   let {
     settings,
@@ -110,7 +112,6 @@
     }
   }
 
-  /** Port of `OpenPlayerNameMc`. */
   /**
    * Port of the panel's Change-skin action. The picker has to originate in the
    * host: WebView2 exposes no real path for a file chosen inside the page.
@@ -127,7 +128,7 @@
     if (!path || typeof path !== 'string') return
     try {
       await invoke('apply_skin', { path, slim: settings?.JavaSkinSlimModel ?? false })
-      onToast?.('Skin applied.', 'success')
+      onToast?.(t('toast.skinApplied'), 'success')
     } catch (e) {
       onToast?.(String(e), 'error')
     }
@@ -136,7 +137,7 @@
   async function resetSkin() {
     try {
       await invoke('reset_skin', {})
-      onToast?.('Skin reset to the default.', 'success')
+      onToast?.(t('toast.skinResetDefault'), 'success')
     } catch (e) {
       onToast?.(String(e), 'error')
     }
@@ -213,12 +214,15 @@
   const activeCapeUrl = $derived(capes.find((c) => c.active)?.url ?? '')
 
   // -------------------------------------------------------------- instances
+  //
+  // Full instance management (rename/clone/export/delete/groups/import/JVM
+  // presets) moved to `JavaInstancesView.svelte`, reachable from MC Versions
+  // via the `versions-instances` cross-nav — same split as Bedrock's
+  // Versions/Instances panels. Only what the stats grid below needs (the
+  // active instance's name and memory setting) stays here.
 
   let instances = $state<JavaInstance[]>([])
   let instanceMaxRam = $state(0)
-  let renamingInstanceId = $state('')
-  let renameInstanceValue = $state('')
-  let confirmDeleteInstanceId = $state('')
 
   /** Port of `JavaInstances.ActiveInstance`. */
   const activeInstance = $derived(
@@ -228,265 +232,18 @@
   async function reloadInstances() {
     try {
       instances = await invoke<JavaInstance[]>('list_java_instances')
-      loadInstanceRam()
+      instanceMaxRam = activeInstance?.max_ram_mb ?? 0
     } catch (e) {
       toast(String(e), 'error')
     }
-  }
-
-  /** Port of `LoadInstanceRam`. */
-  function loadInstanceRam() {
-    instanceMaxRam = activeInstance?.max_ram_mb ?? 0
   }
 
   $effect(() => {
     void reloadInstances()
   })
-
-  /** Port of `OnInstanceMaxRamChange`. */
-  async function onInstanceMaxRamChange(e: Event) {
-    let v = parseInt((e.currentTarget as HTMLInputElement).value, 10)
-    if (Number.isNaN(v)) v = 0
-    if (v !== 0) v = Math.min(16384, Math.max(512, v))
-    instanceMaxRam = v
-    if (activeInstance) {
-      try {
-        await invoke('set_java_instance_ram', { id: activeInstance.id, minMb: 0, maxMb: v })
-      } catch (err) {
-        toast(String(err), 'error')
-        return
-      }
-    }
-    toast(v > 0 ? `This instance: ${v} MB` : 'Using global memory', 'info')
-    await reloadInstances()
-  }
-
-  /** Port of `SwitchInstance`. The rewrite persists the active instance on
-   *  `LauncherSettings.JavaActiveInstanceId` (as App.svelte already reads it). */
-  function switchInstance(id: string) {
-    onChange({ ...settings, JavaActiveInstanceId: id })
-    toast('Instance switched.', 'info')
-  }
-
-  // ------------------------------------------------ templates / JVM presets
-
-  /** Built-in JVM-argument templates ("Vanilla", "Balanced", "Performance",
-   *  "Low-End") — feature 2 (offered at creation) and feature 3 (per-instance
-   *  preset dropdown). JVM flags only, no mod/API downloads. */
-  let jvmPresets = $state<JvmPreset[]>([])
-  let newInstanceTemplate = $state('vanilla')
-
-  async function loadJvmPresets() {
-    try {
-      jvmPresets = await invoke<JvmPreset[]>('list_jvm_presets')
-    } catch {
-      jvmPresets = []
-    }
-  }
-  loadJvmPresets()
-
-  /** Port of `NewJavaInstance`, extended to apply the selected template. */
-  async function newJavaInstance() {
-    try {
-      const instance = await invoke<JavaInstance>('create_java_instance_from_template', {
-        name: 'New Instance',
-        versionId: '',
-        template: newInstanceTemplate || null,
-      })
-      await reloadInstances()
-      onChange({ ...settings, JavaActiveInstanceId: instance.id })
-      toast('Instance created.', 'success')
-    } catch (e) {
-      toast(String(e), 'error')
-    }
-  }
-
-  /** Feature 3: change an instance's JVM-args preset from its row dropdown. */
-  async function onInstancePresetChange(id: string, preset: string) {
-    try {
-      await invoke('set_instance_jvm_preset', { id, preset })
-      await reloadInstances()
-      toast('JVM args preset applied.', 'success')
-    } catch (e) {
-      toast(String(e), 'error')
-    }
-  }
-
-  // ---------------------------------------------------------------- groups
-
-  let editingGroupId = $state('')
-  let editingGroupValue = $state('')
-
-  function beginEditGroup(inst: JavaInstance) {
-    editingGroupId = inst.id
-    editingGroupValue = inst.group ?? ''
-  }
-
-  async function commitGroup() {
-    const id = editingGroupId
-    editingGroupId = ''
-    try {
-      await invoke('set_instance_group', { id, group: editingGroupValue.trim() || null })
-      await reloadInstances()
-    } catch (e) {
-      toast(String(e), 'error')
-    }
-  }
-
-  /** Groups instances by `group` (falling back to "Ungrouped"), preserving
-   *  each group's first-seen order. No drag-and-drop — just collapsible
-   *  `<details>` sections. */
-  const groupedInstances = $derived.by(() => {
-    const groups = new Map<string, JavaInstance[]>()
-    for (const inst of instances) {
-      const key = inst.group?.trim() || 'Ungrouped'
-      if (!groups.has(key)) groups.set(key, [])
-      groups.get(key)!.push(inst)
-    }
-    return Array.from(groups.entries())
-  })
-
-  // ---------------------------------------------------------------- export
-
-  let exportingId = $state('')
-
-  /** Feature 6: export an instance's full directory tree as a zip via the
-   *  same `@tauri-apps/plugin-dialog` picker used for import. `zip` is
-   *  already a workspace dependency in `gl-java`, so this is a real zip, not
-   *  a folder copy. */
-  async function exportInstance(inst: JavaInstance) {
-    if (exportingId) return
-    const dest = await save({
-      title: `Export '${inst.name}'`,
-      defaultPath: `${inst.name}.zip`,
-      filters: [{ name: 'Zip archive', extensions: ['zip'] }],
-    })
-    if (!dest) return
-    exportingId = inst.id
-    try {
-      await invoke('export_java_instance', { id: inst.id, destPath: dest })
-      toast('Instance exported.', 'success')
-    } catch (e) {
-      toast(String(e), 'error')
-    } finally {
-      exportingId = ''
-    }
-  }
-
-  /** Port of `BeginRenameInstance`. */
-  function beginRenameInstance(id: string, current: string) {
-    renamingInstanceId = id
-    renameInstanceValue = current
-  }
-
-  /** Port of `OnRenameInstanceKey`. */
-  function onRenameInstanceKey(e: KeyboardEvent) {
-    if (e.key === 'Enter') void commitRenameInstance()
-  }
-
-  /** Port of `CommitRenameInstance`. */
-  async function commitRenameInstance() {
-    if (renamingInstanceId.trim() && renameInstanceValue.trim()) {
-      try {
-        await invoke('rename_java_instance', { id: renamingInstanceId, newName: renameInstanceValue })
-      } catch (e) {
-        toast(String(e), 'error')
-      }
-    }
-    renamingInstanceId = ''
-    toast('Instance renamed.', 'success')
-    await reloadInstances()
-  }
-
-  /** Port of `ConfirmDeleteInstance` / `CancelDeleteInstance`. */
-  function confirmDeleteInstance(id: string) {
-    confirmDeleteInstanceId = id
-  }
-  function cancelDeleteInstance() {
-    confirmDeleteInstanceId = ''
-  }
-
-  /** Port of `DeleteJavaInstance`. */
-  async function deleteJavaInstance(id: string) {
-    try {
-      const ok = await invoke<boolean>('delete_java_instance', { id })
-      if (ok) {
-        await reloadInstances()
-        toast('Instance deleted.', 'info')
-      } else {
-        toast("Can't delete the last instance.", 'error')
-      }
-    } catch (e) {
-      toast(String(e), 'error')
-    }
-    confirmDeleteInstanceId = ''
-  }
-
-  /** Port of `CloneInstance` - copies the instance's metadata and full
-   * directory tree (mods, saves, config, etc.) into a new "<name> Copy". */
-  async function cloneJavaInstance(id: string) {
-    try {
-      await invoke<JavaInstance>('duplicate_java_instance', { id })
-      await reloadInstances()
-      toast('Instance cloned.', 'success')
-    } catch (e) {
-      toast(String(e), 'error')
-    }
-  }
-
-  let importBusy = $state(false)
-
-  /**
-   * Port of `ImportInstanceZip`'s non-`.mrpack` branch only
-   * (`JavaInstanceService.ImportModpackAsync`): extracts a CurseForge/
-   * Modrinth-`overrides/`-shaped or MultiMC-shaped zip directly.
-   *
-   * A `.mrpack` file needs a different path (`InstallMrpackFileAsync`):
-   * parse `modrinth.index.json`, resolve and download each listed mod from
-   * Modrinth's API, *then* extract `overrides/`. That resolver doesn't
-   * exist in this build yet, so `.mrpack` is intentionally not offered here
-   * — accepting it and only extracting overrides would silently produce an
-   * instance with no mods, which is worse than not offering it at all.
-   */
-  async function importInstanceZip() {
-    if (importBusy) return
-    const path = await open({
-      multiple: false,
-      title: 'Import instance / modpack',
-      filters: [{ name: 'Modpacks & instances', extensions: ['zip'] }],
-    })
-    if (typeof path !== 'string') return
-    importBusy = true
-    try {
-      const instance = await invoke<JavaInstance>('import_java_instance_zip', { zipPath: path })
-      onChange({ ...settings, JavaActiveInstanceId: instance.id })
-      await reloadInstances()
-      toast('Instance imported.', 'success')
-    } catch (e) {
-      toast(String(e), 'error')
-    } finally {
-      importBusy = false
-    }
-  }
-
-  /** Port of `ImportOfficialMinecraft`. */
-  async function importOfficialMinecraft() {
-    if (importBusy) return
-    importBusy = true
-    try {
-      const instance = await invoke<JavaInstance>('import_official_minecraft')
-      onChange({ ...settings, JavaActiveInstanceId: instance.id })
-      await reloadInstances()
-      toast('Imported .minecraft into a new instance.', 'success')
-    } catch (e) {
-      toast(String(e), 'error')
-    } finally {
-      importBusy = false
-    }
-  }
 </script>
 
-<PanelHeader title="Profile" {onBack} />
+<PanelHeader title={t('panel.profile')} {onBack} />
 
 <div class="panel-body">
   {#if !settings.JavaUuid || !settings.JavaUuid.trim()}
@@ -517,45 +274,11 @@
         <div class="profile-name">
           <span>{playerName}</span>
           {#if mcRunning}
-            <span class="profile-online"><span class="profile-online-dot"></span>In game</span>
+            <span class="profile-online"><span class="profile-online-dot" aria-hidden="true"></span>{t('x.inGame')}</span>
           {/if}
         </div>
         <div class="profile-tagline">
           <i class="fa-brands fa-microsoft"></i> Microsoft account · {isJava ? 'Java Edition' : 'Bedrock'}
-        </div>
-
-        <div class="pstat-list">
-          <button class="pstat pstat-click" onclick={copyPlayerUuid} data-tooltip="Copy UUID">
-            <i class="fa-solid fa-fingerprint"></i>
-            <span class="pstat-k">UUID</span>
-            <span class="pstat-v"
-              >{playerCleanUuid.length >= 12 ? playerCleanUuid.slice(0, 12) + '…' : playerCleanUuid}</span
-            >
-          </button>
-          <div class="pstat">
-            <i class="fa-solid fa-stopwatch"></i>
-            <span class="pstat-k">Playtime</span>
-            <span class="pstat-v">{formatPlaytime(settings.TotalPlaytimeSeconds)}</span>
-          </div>
-          <div class="pstat">
-            <i class="fa-solid fa-calendar-day"></i>
-            <span class="pstat-k">Last played</span>
-            <span class="pstat-v"
-              >{!settings.LastPlayed ? '—' : formatRelativeTime(settings.LastPlayed)}</span
-            >
-          </div>
-          <div class="pstat">
-            <i class="fa-solid fa-cubes-stacked"></i>
-            <span class="pstat-k">Instance</span>
-            <span class="pstat-v">{activeInstance?.name ?? ''}</span>
-          </div>
-          <div class="pstat">
-            <i class="fa-solid fa-microchip"></i>
-            <span class="pstat-k">Memory</span>
-            <span class="pstat-v"
-              >{instanceMaxRam > 0 ? instanceMaxRam + ' MB' : settings.JavaMaxRamMb + ' MB'}</span
-            >
-          </div>
         </div>
 
         <div class="profile-actions">
@@ -570,7 +293,7 @@
             ><i class="fa-solid fa-download"></i> Download</button
           >
           <button class="skin-btn skin-btn-ghost" onclick={resetSkin}
-            ><i class="fa-solid fa-eraser"></i> Reset</button
+            ><i class="fa-solid fa-eraser"></i> {t('common.reset')}</button
           >
         </div>
         <div class="profile-actions">
@@ -595,21 +318,61 @@
       </div>
     </div>
 
+    <!--
+      IA change: these five values used to be a column of label:value rows
+      squeezed into the hero card's narrow info column, competing with the
+      name/tagline/actions for the same space. Pulled out into their own
+      full-width dashboard row of stat cards, now that the panel opens wide
+      (see WIDE_DASHBOARD_VIEWS) — each stat gets equal visual weight as a
+      scannable tile instead of a dense list entry.
+    -->
+    <div class="profile-stats-grid">
+      <button class="profile-stat-card" onclick={copyPlayerUuid} data-tooltip={t('tt.copyUuid')}>
+        <i class="fa-solid fa-fingerprint"></i>
+        <span class="profile-stat-v"
+          >{playerCleanUuid.length >= 12 ? playerCleanUuid.slice(0, 12) + '…' : playerCleanUuid}</span
+        >
+        <span class="profile-stat-k">{t('x.uuid')}</span>
+      </button>
+      <div class="profile-stat-card">
+        <i class="fa-solid fa-stopwatch"></i>
+        <span class="profile-stat-v">{formatPlaytime(settings.TotalPlaytimeSeconds)}</span>
+        <span class="profile-stat-k">{t('x.playtime')}</span>
+      </div>
+      <div class="profile-stat-card">
+        <i class="fa-solid fa-calendar-day"></i>
+        <span class="profile-stat-v">{!settings.LastPlayed ? '—' : formatRelativeTime(settings.LastPlayed)}</span>
+        <span class="profile-stat-k">{t('x.lastPlayed')}</span>
+      </div>
+      <div class="profile-stat-card">
+        <i class="fa-solid fa-cubes-stacked"></i>
+        <span class="profile-stat-v">{activeInstance?.name ?? '—'}</span>
+        <span class="profile-stat-k">{t('x.instance')}</span>
+      </div>
+      <div class="profile-stat-card">
+        <i class="fa-solid fa-microchip"></i>
+        <span class="profile-stat-v"
+          >{instanceMaxRam > 0 ? instanceMaxRam + ' MB' : settings.JavaMaxRamMb + ' MB'}</span
+        >
+        <span class="profile-stat-k">{t('label.memory')}</span>
+      </div>
+    </div>
+
     {#if capesLoading || capes.length > 0}
       <div class="capes-card">
         <div class="capes-head">
           <i class="fa-solid fa-feather"></i> Cape wardrobe{capes.length > 0 ? ` (${capes.length})` : ''}
         </div>
         {#if capesLoading}
-          <div class="versions-loading"><span class="spinner"></span><span>Loading capes…</span></div>
+          <ListSkeleton rows={2} />
         {:else}
           <div class="capes-grid">
-            <button class="cape-tile {noCapeActive ? 'active' : ''}" title="No cape">
+            <button class="cape-tile {noCapeActive ? 'active' : ''}" title="No cape" aria-pressed={noCapeActive}>
               <div class="cape-thumb cape-none"><i class="fa-solid fa-ban"></i></div>
-              <span class="cape-label">None</span>
+              <span class="cape-label">{t('x.none')}</span>
             </button>
             {#each capes as c (c.id)}
-              <button class="cape-tile {c.active ? 'active' : ''}" title={c.alias}>
+              <button class="cape-tile {c.active ? 'active' : ''}" title={c.alias} aria-pressed={c.active}>
                 <div class="cape-thumb" style="background-image:url('{c.url}')"></div>
                 <span class="cape-label">{c.alias}</span>
               </button>
@@ -619,153 +382,4 @@
       </div>
     {/if}
   {/if}
-
-  <div class="instance-card">
-    <div class="instance-card-head">
-      <i class="fa-solid fa-microchip"></i> Memory · {activeInstance?.name ?? ''}
-    </div>
-    <div class="instance-ram-row">
-      <input type="number" min="0" max="16384" step="512" value={instanceMaxRam} onchange={onInstanceMaxRamChange} />
-      <span class="instance-ram-unit">MB max</span>
-    </div>
-    <small class="instance-hint">0 = use the global setting ({settings.JavaMaxRamMb} MB).</small>
-  </div>
-
-  <div class="instance-card">
-    <div class="instance-card-head">
-      <span><i class="fa-solid fa-cubes-stacked"></i> Instances</span>
-      <div style="flex:1"></div>
-      <select
-        class="setting-select"
-        bind:value={newInstanceTemplate}
-        data-tooltip="JVM-args template applied to the new instance"
-        aria-label="New instance template"
-      >
-        {#each jvmPresets as p (p.id)}
-          <option value={p.id}>{p.label}</option>
-        {/each}
-      </select>
-      <button class="btn-sm" onclick={newJavaInstance}><i class="fa-solid fa-plus"></i> New</button>
-      <button
-        class="btn-sm"
-        onclick={() => onNavigate?.('instance-wizard')}
-        data-tooltip="Guided setup: version, name, RAM"
-        ><i class="fa-solid fa-wand-magic-sparkles"></i> Wizard</button
-      >
-      <button
-        class="btn-sm"
-        onclick={importInstanceZip}
-        disabled={importBusy}
-        data-tooltip="Import a .zip modpack/instance"
-        ><i class="fa-solid fa-file-import"></i> Import</button
-      >
-      <button
-        class="btn-sm"
-        onclick={importOfficialMinecraft}
-        disabled={importBusy}
-        data-tooltip="Import your official .minecraft" aria-label="Import official .minecraft"
-        ><i class="fa-brands fa-microsoft"></i></button
-      >
-      <button
-        class="btn-sm"
-        onclick={() => onNavigate?.('import-launcher')}
-        data-tooltip="Import instances from MultiMC, Prism, CurseForge, ATLauncher, or Modrinth App"
-        aria-label="Import from another launcher"
-        ><i class="fa-solid fa-right-to-bracket"></i> From another launcher</button
-      >
-      <button
-        class="btn-sm"
-        onclick={() => onNavigate?.('sync-packs')}
-        data-tooltip="Keep resourcepacks, options, or mod lists consistent across instances"
-        ><i class="fa-solid fa-arrows-rotate"></i> Sync</button
-      >
-    </div>
-    {#each groupedInstances as [groupName, groupInstances] (groupName)}
-      <details class="instance-group" open>
-        <summary class="instance-group-summary">{groupName} ({groupInstances.length})</summary>
-        {#each groupInstances as inst (inst.id)}
-          {@const isActive = inst.id === activeInstance?.id}
-          <div class="instance-row {isActive ? 'active' : ''}">
-            {#if renamingInstanceId === inst.id}
-              <input
-                class="setting-input instance-rename"
-                value={renameInstanceValue}
-                oninput={(e) => (renameInstanceValue = e.currentTarget.value)}
-                onkeydown={onRenameInstanceKey}
-              />
-              <button class="vcs-btn" onclick={commitRenameInstance} aria-label="Confirm rename"><i class="fa-solid fa-check"></i></button>
-            {:else if editingGroupId === inst.id}
-              <span class="instance-hint" style="margin-right:6px;">{inst.name} · group:</span>
-              <input
-                class="setting-input instance-rename"
-                placeholder="Ungrouped"
-                value={editingGroupValue}
-                oninput={(e) => (editingGroupValue = e.currentTarget.value)}
-                onkeydown={(e) => { e.stopPropagation(); if (e.key === 'Enter') void commitGroup() }}
-              />
-              <button class="vcs-btn" onclick={commitGroup} aria-label="Confirm group"><i class="fa-solid fa-check"></i></button>
-            {:else}
-              <button class="instance-name-btn" onclick={() => switchInstance(inst.id)}>
-                {#if isActive}<i class="fa-solid fa-circle-check"></i>{:else}<i class="fa-regular fa-circle"></i>{/if}
-                <span>{inst.name}</span>
-              </button>
-              <select
-                class="setting-select instance-version-select"
-                value={inst.jvm_args_preset ?? ''}
-                onchange={(e) => onInstancePresetChange(inst.id, e.currentTarget.value)}
-                onclick={(e) => e.stopPropagation()}
-                data-tooltip="JVM-args preset for this instance"
-                aria-label="JVM-args preset for this instance"
-              >
-                <option value="" disabled>{inst.jvm_args_preset ? '' : 'Custom'}</option>
-                {#each jvmPresets as p (p.id)}
-                  <option value={p.id}>{p.label}</option>
-                {/each}
-              </select>
-              <button
-                class="instance-icon-btn"
-                onclick={() => { switchInstance(inst.id); onNavigate?.('instance-detail') }}
-                data-tooltip="Open details" aria-label="Open details"><i class="fa-solid fa-arrow-up-right-from-square"></i></button
-              >
-              <button
-                class="instance-icon-btn"
-                onclick={() => beginRenameInstance(inst.id, inst.name)}
-                data-tooltip="Rename" aria-label="Rename"><i class="fa-solid fa-pen"></i></button
-              >
-              <button
-                class="instance-icon-btn"
-                onclick={() => beginEditGroup(inst)}
-                data-tooltip="Set group/folder" aria-label="Set group"><i class="fa-solid fa-folder"></i></button
-              >
-              <button
-                class="instance-icon-btn"
-                onclick={() => cloneJavaInstance(inst.id)}
-                data-tooltip="Clone" aria-label="Clone instance"
-                ><i class="fa-solid fa-copy"></i></button
-              >
-              <button
-                class="instance-icon-btn"
-                onclick={() => exportInstance(inst)}
-                disabled={exportingId === inst.id}
-                data-tooltip="Export as .zip" aria-label="Export instance"
-                ><i class="fa-solid fa-file-export"></i></button
-              >
-              {#if confirmDeleteInstanceId === inst.id}
-                <button
-                  class="instance-icon-btn instance-del"
-                  onclick={() => deleteJavaInstance(inst.id)}
-                  data-tooltip="Confirm delete" aria-label="Confirm delete"><i class="fa-solid fa-check"></i></button
-                >
-                <button class="instance-icon-btn" onclick={cancelDeleteInstance} aria-label="Cancel delete"><i class="fa-solid fa-xmark"></i></button>
-              {:else}
-                <button class="instance-icon-btn" onclick={() => confirmDeleteInstance(inst.id)} data-tooltip="Delete" aria-label="Delete"
-                  ><i class="fa-solid fa-trash"></i></button
-                >
-              {/if}
-            {/if}
-          </div>
-        {/each}
-      </details>
-    {/each}
-  </div>
 </div>

@@ -2,44 +2,56 @@
   import { invoke } from '@tauri-apps/api/core'
   import { getCurrentWindow } from '@tauri-apps/api/window'
   import type { LauncherSettings } from './lib/settings'
-  import InstancesView from './lib/InstancesView.svelte'
-  import ThemeStudioView from './lib/ThemeStudioView.svelte'
-  import LevelDatEditorView from './lib/LevelDatEditorView.svelte'
-  import BedrockWorldsView from './lib/BedrockWorldsView.svelte'
-  import BedrockPacksView from './lib/BedrockPacksView.svelte'
-  import BedrockBackupsView from './lib/BedrockBackupsView.svelte'
-  import BedrockScreenshotsView from './lib/BedrockScreenshotsView.svelte'
-  import ClientsView from './lib/ClientsView.svelte'
-  import SettingsView from './lib/SettingsView.svelte'
-  import JavaModsView from './lib/JavaModsView.svelte'
-  import ModpacksView from './lib/ModpacksView.svelte'
-  import VersionsView from './lib/VersionsView.svelte'
-  import TweaksView from './lib/TweaksView.svelte'
-  import ServersView from './lib/ServersView.svelte'
-  import LogsPanel from './lib/LogsPanel.svelte'
-  import StatsPanel from './lib/StatsPanel.svelte'
-  import LeviLaminaModsView from './lib/LeviLaminaModsView.svelte'
-  import MCVersionsView from './lib/MCVersionsView.svelte'
-  import ProfileView from './lib/ProfileView.svelte'
-  import ImportLauncherView from './lib/ImportLauncherView.svelte'
-  import JavaBackupsView from './lib/JavaBackupsView.svelte'
-  import SkinLibraryView from './lib/SkinLibraryView.svelte'
-  import JavaScreenshotsView from './lib/JavaScreenshotsView.svelte'
-  import InstanceWizard from './lib/InstanceWizard.svelte'
-  import InstanceDetailView from './lib/InstanceDetailView.svelte'
-  import ModrinthBrowseV2 from './lib/ModrinthBrowseV2.svelte'
-  import SyncPacksView from './lib/SyncPacksView.svelte'
-  import LauncherClientsView from './lib/LauncherClientsView.svelte'
-  import BedrockVanillaVersionsView from './lib/BedrockVanillaVersionsView.svelte'
-  import UtilitiesView from './lib/UtilitiesView.svelte'
-  import ClientLibraryView from './lib/ClientLibraryView.svelte'
-  import DownloadsView from './lib/DownloadsView.svelte'
-  import NewsView from './lib/NewsView.svelte'
-  import CreditsView from './lib/CreditsView.svelte'
+  import { setLanguage } from './lib/i18nStore.svelte'
+  import PanelHeader from './lib/components/PanelHeader.svelte'
+  // ThemeStudioView is no longer a standalone panel — it's embedded inside
+  // SettingsView's Looks category — but SettingsView itself imports it.
   import Footer from './lib/Footer.svelte'
+  import { formatChangelog } from './lib/format'
   import Modal from './lib/components/Modal.svelte'
+  import LazyView from './lib/components/LazyView.svelte'
+  // Panel views are code-split: each loads on first open (see LazyView).
+  const views = {
+    InstancesView: () => import('./lib/InstancesView.svelte'),
+    JavaInstancesView: () => import('./lib/JavaInstancesView.svelte'),
+    LevelDatEditorView: () => import('./lib/LevelDatEditorView.svelte'),
+    BedrockWorldsView: () => import('./lib/BedrockWorldsView.svelte'),
+    BedrockPacksView: () => import('./lib/BedrockPacksView.svelte'),
+    BrowseAddonsView: () => import('./lib/BrowseAddonsView.svelte'),
+    BedrockBackupsView: () => import('./lib/BedrockBackupsView.svelte'),
+    BedrockScreenshotsView: () => import('./lib/BedrockScreenshotsView.svelte'),
+    ClientsView: () => import('./lib/ClientsView.svelte'),
+    SettingsView: () => import('./lib/SettingsView.svelte'),
+    JavaModsView: () => import('./lib/JavaModsView.svelte'),
+    ModpacksView: () => import('./lib/ModpacksView.svelte'),
+    VersionsView: () => import('./lib/VersionsView.svelte'),
+    TweaksView: () => import('./lib/TweaksView.svelte'),
+    ServersView: () => import('./lib/ServersView.svelte'),
+    LogsPanel: () => import('./lib/LogsPanel.svelte'),
+    StatsPanel: () => import('./lib/StatsPanel.svelte'),
+    LeviLaminaModsView: () => import('./lib/LeviLaminaModsView.svelte'),
+    MCVersionsView: () => import('./lib/MCVersionsView.svelte'),
+    ProfileView: () => import('./lib/ProfileView.svelte'),
+    ImportLauncherView: () => import('./lib/ImportLauncherView.svelte'),
+    JavaBackupsView: () => import('./lib/JavaBackupsView.svelte'),
+    SkinLibraryView: () => import('./lib/SkinLibraryView.svelte'),
+    JavaScreenshotsView: () => import('./lib/JavaScreenshotsView.svelte'),
+    InstanceWizard: () => import('./lib/InstanceWizard.svelte'),
+    InstanceDetailView: () => import('./lib/InstanceDetailView.svelte'),
+    ModrinthBrowseV2: () => import('./lib/ModrinthBrowseV2.svelte'),
+    SyncPacksView: () => import('./lib/SyncPacksView.svelte'),
+    LauncherClientsView: () => import('./lib/LauncherClientsView.svelte'),
+    BedrockVanillaVersionsView: () => import('./lib/BedrockVanillaVersionsView.svelte'),
+    UtilitiesView: () => import('./lib/UtilitiesView.svelte'),
+    ClientLibraryView: () => import('./lib/ClientLibraryView.svelte'),
+    DownloadsView: () => import('./lib/DownloadsView.svelte'),
+    NewsView: () => import('./lib/NewsView.svelte'),
+    CreditsView: () => import('./lib/CreditsView.svelte'),
+  } as const
   import { listen } from '@tauri-apps/api/event'
+  import { isPermissionGranted, requestPermission, sendNotification } from '@tauri-apps/plugin-notification'
   import OnboardingModal from './lib/OnboardingModal.svelte'
+  import UpdateAvailableModal from './lib/components/UpdateAvailableModal.svelte'
   import OnboardingChecklist from './lib/OnboardingChecklist.svelte'
   import { t } from './lib/i18n'
   import type { BedrockInstance } from './lib/settings'
@@ -48,12 +60,13 @@
     | 'home'
     | 'clients'
     | 'instances'
+    | 'java-instances'
     | 'bedrockworlds'
     | 'bedrockpacks'
+    | 'bedrock-addons'
     | 'bedrockbackups'
     | 'bedrockscreenshots'
     | 'leveldat'
-    | 'themestudio'
     | 'settings'
     | 'java-mods'
     | 'modpacks'
@@ -79,6 +92,7 @@
     | 'instance-detail'
     | 'modrinth-browse-v2'
     | 'sync-packs'
+    | 'import-launcher'
 
 
   type JavaInstance = { id: string; directory: string; name?: string }
@@ -98,6 +112,10 @@
   let levelDatWorldDir = $state('')
   /// Sub-tab the Utilities panel should open on (the original's `_utilTab`).
   let utilInitialTab = $state('options')
+  /// Category the Settings panel should open on — set before openPanel('settings')
+  /// by deep links like the search palette's Theme Studio entry (now folded
+  /// into the Looks category rather than its own panel).
+  let settingsInitialCategory = $state<'all' | 'appearance'>('all')
   let status = $state('loading…')
   let activeBedrockInstance = $state<BedrockInstance | null>(null)
   let activeJavaInstance = $state<JavaInstance | null>(null)
@@ -147,17 +165,18 @@
   let currentVersion = $state('')
   let launcherUpdateAvailable = $state(false)
   let isFullscreen = $state(false)
-  let panelExpanded = $state(false)
+  /// Was auto-set per view (wide for dashboard-style panels, narrow for the
+  /// rest) and reset on every navigation, so toggling it by hand never
+  /// stuck — the very next panel switch silently overrode whatever the user
+  /// picked. Now a single manually-controlled preference shared by every
+  /// panel: expand or collapse once and it stays that way across all of
+  /// them until toggled again.
+  let panelExpanded = $state(true)
 
   const panelSide = $derived(settings?.PanelSide ?? 'right')
 
   function togglePanelExpand() {
-    panelExpanded = !panelExpanded
-    if (panelExpanded) {
-      document.documentElement.style.setProperty('--sidebar-w-user', '760px')
-    } else {
-      document.documentElement.style.removeProperty('--sidebar-w-user')
-    }
+    setPanelExpanded(!panelExpanded)
   }
 
   type NewsItem = { icon: string; title: string; subtitle: string; url: string }
@@ -172,15 +191,15 @@
   // (is_java_game_running) since it isn't UWP-packaged.
   const CLIENT_ICONS: Record<string, string> = {
     'Custom DLL': 'fa-solid fa-file-code',
-    Vanilla: 'fa-solid fa-cube',
-    'LeviLamina Client': 'fa-solid fa-layer-group',
   }
   const CLIENT_IMAGES: Record<string, string> = {
     'Flarial Client': '/images/clients/flarial.svg',
     'OderSo Client': '/images/clients/oderso.png',
     'Latite Client': '/images/clients/latite.png',
+    'LeviLamina Client': '/images/clients/levi-lamina.png',
+    Vanilla: '/images/mc-logo.png',
   }
-  const CYCLE_CLIENTS = ['Latite Client', 'Flarial Client', 'OderSo Client', 'LeviLamina Client', 'Vanilla']
+  const CYCLE_CLIENTS = ['Vanilla', 'Flarial Client', 'Latite Client', 'OderSo Client', 'LeviLamina Client' ]
 
   let mcRunning = $state(false)
 
@@ -189,11 +208,24 @@
   /// Toasts - port of `ToastItem` + `ShowToast` (Home.razor.cs:231, 635).
   /// The original holds each toast for 2800ms, flips it to `.closing` for a
   /// 240ms exit animation, then drops it.
-  type ToastItem = { id: number; message: string; kind: string; icon: string; closing: boolean }
+  type ToastAction = { label: string; icon?: string; run: () => void }
+  type ToastItem = { id: number; message: string; kind: string; icon: string; closing: boolean; action?: ToastAction }
   let toasts = $state<ToastItem[]>([])
   let toastSeq = 0
 
-  function showToast(message: string, kind: string = 'info') {
+  /** Same category heuristic as `notificationCategory`, applied to a toast's
+   *  own text before it exists as an `AppNotification` yet — used to honor
+   *  `MutedNotificationCategories` before ever recording the toast, and by
+   *  `notificationCategory` itself once it's a real list entry. */
+  function textCategory(text: string): 'downloads' | 'updates' | 'social' | 'all' {
+    const hay = text.toLowerCase()
+    if (hay.includes('download')) return 'downloads'
+    if (hay.includes('update') || hay.includes('launcher-update') || hay.includes('version')) return 'updates'
+    if (hay.includes('discord') || hay.includes('xbox') || hay.includes('friend') || hay.includes('social')) return 'social'
+    return 'all'
+  }
+
+  function showToast(message: string, kind: string = 'info', action?: ToastAction) {
     const icon =
       kind === 'success'
         ? 'fa-solid fa-circle-check'
@@ -203,13 +235,23 @@
             ? 'fa-solid fa-triangle-exclamation'
             : 'fa-solid fa-circle-info'
     const id = ++toastSeq
-    toasts = [...toasts, { id, message, kind, icon, closing: false }]
+    toasts = [...toasts, { id, message, kind, icon, closing: false, action }]
+    // A toast carrying a next-step button stays up longer so it can be clicked.
     setTimeout(() => {
       toasts = toasts.map((t) => (t.id === id ? { ...t, closing: true } : t))
       setTimeout(() => {
         toasts = toasts.filter((t) => t.id !== id)
       }, 240)
-    }, 2800)
+    }, action ? 6000 : 2800)
+
+    // QOL "toast history": every toast is also recorded into the existing
+    // notification bell/history, unless its inferred category is muted —
+    // toasts previously vanished forever the moment their 2.8s popup ended,
+    // with no way to see what you missed.
+    if (!settings?.MutedNotificationCategories?.includes(textCategory(message))) {
+      const title = kind === 'error' ? 'Error' : kind === 'success' ? 'Success' : kind === 'warning' ? 'Warning' : 'Info'
+      invoke('add_notification', { title, message, kind }).then(() => loadNotifications()).catch(() => {})
+    }
   }
 
   let clientsHasBadge = $state(false)
@@ -227,6 +269,7 @@
   }
 
   async function pollMcRunning() {
+    if (document.hidden) return
     try {
       mcRunning = await invoke<boolean>(
         isBedrock ? 'is_bedrock_game_running' : 'is_java_game_running',
@@ -237,6 +280,55 @@
   }
 
   let clientMenuOpen = $state(false)
+
+  // Java edition's client picker: Vanilla plus the clients Glacier installs
+  // itself as a standalone mod (Essential, Dawn, NoRisk) always; Horizon and
+  // Lunar only when they are actually on this PC. The pick is a per-machine
+  // preference.
+  const JAVA_CLIENT_IMAGES: Record<string, string> = {
+    Vanilla: '/images/mc-java-logo.png',
+    Horizon: '/images/clients/horizon.svg',
+    Lunar: '/images/clients/lunar.png',
+    Essential: '/images/clients/essential.webp',
+    Dawn: '/images/clients/dawn.png',
+    NoRisk: '/images/clients/norisk.png',
+  }
+  const MOD_CLIENTS = ['Essential', 'Dawn', 'NoRisk']
+  let lunarExe = $state<string | null>(null)
+  let horizonInstalled = $state(false)
+  let javaClient = $state(readJavaClient())
+  const javaClients = $derived([
+    'Vanilla',
+    ...(horizonInstalled ? ['Horizon'] : []),
+    ...MOD_CLIENTS,
+    ...(lunarExe ? ['Lunar'] : []),
+  ])
+  const activeJavaClient = $derived(javaClients.includes(javaClient) ? javaClient : 'Vanilla')
+
+  function readJavaClient(): string {
+    try {
+      return localStorage.getItem('glacier.javaClient') ?? 'Vanilla'
+    } catch {
+      return 'Vanilla'
+    }
+  }
+
+  function selectJavaClient(name: string) {
+    clientMenuOpen = false
+    javaClient = name
+    try {
+      localStorage.setItem('glacier.javaClient', name)
+    } catch {}
+  }
+
+  async function refreshJavaClientOptions() {
+    const [lb, hz] = await Promise.allSettled([
+      invoke<{ lunar_exe_path: string | null; badlion_exe_path: string | null }>('detect_lunar_badlion'),
+      invoke<{ installed: boolean }>('horizon_status'),
+    ])
+    lunarExe = lb.status === 'fulfilled' ? (lb.value.lunar_exe_path ?? lb.value.badlion_exe_path) : null
+    horizonInstalled = hz.status === 'fulfilled' && hz.value.installed
+  }
 
   function toggleClientMenu() {
     clientMenuOpen = !clientMenuOpen
@@ -275,11 +367,7 @@
   let notifFilter = $state<NotifCategory>('all')
 
   function notificationCategory(n: AppNotification): NotifCategory {
-    const hay = `${n.Icon} ${n.Title} ${n.Message}`.toLowerCase()
-    if (hay.includes('download')) return 'downloads'
-    if (hay.includes('update') || hay.includes('launcher-update') || hay.includes('version')) return 'updates'
-    if (hay.includes('discord') || hay.includes('xbox') || hay.includes('friend') || hay.includes('social')) return 'social'
-    return 'all'
+    return textCategory(`${n.Icon} ${n.Title} ${n.Message}`)
   }
 
   const filteredNotifications = $derived(
@@ -313,18 +401,56 @@
   }
 
   async function removeNotification(id: string) {
-    await invoke('remove_notification', { id })
-    await loadNotifications()
+    try {
+      await invoke('remove_notification', { id })
+      await loadNotifications()
+    } catch (e) {
+      showToast(`Could not remove notification: ${e}`, 'error')
+    }
   }
 
   async function clearNotifications() {
-    await invoke('clear_notifications')
-    await loadNotifications()
+    try {
+      await invoke('clear_notifications')
+      await loadNotifications()
+    } catch (e) {
+      showToast(`Could not clear notifications: ${e}`, 'error')
+    }
   }
 
   const activeDownloadCount = $derived(downloads.filter((d) => d.status === 'Downloading').length)
   /// Port of the original's `bellBadgeCount` (Home.razor:523).
   const bellBadgeCount = $derived(unreadCount + activeDownloadCount)
+
+  /** QOL: OS-level notification for long operations finishing while the
+   *  window doesn't have focus - opt-in (`DesktopNotificationsEnabled`,
+   *  default off) since it needs an OS permission prompt on first use and
+   *  shouldn't surprise anyone who never asked for it. */
+  async function sendDesktopNotification(title: string, body: string) {
+    if (!settings?.DesktopNotificationsEnabled) return
+    if (document.hasFocus()) return
+    try {
+      let granted = await isPermissionGranted()
+      if (!granted) granted = (await requestPermission()) === 'granted'
+      if (granted) sendNotification({ title, body })
+    } catch {
+      // Best-effort — never let a notification failure surface as an error.
+    }
+  }
+
+  // Live download-queue subscription so a desktop notification can fire on
+  // the "something was downloading, now nothing is" transition, without
+  // polling — the bell panel otherwise only fetches downloads on demand
+  // when opened.
+  let prevActiveDownloads = 0
+  listen<DownloadEntry[]>('downloads-changed', (e) => {
+    downloads = e.payload
+    const activeNow = e.payload.filter((d) => d.status === 'Downloading' || d.status === 'Queued').length
+    if (prevActiveDownloads > 0 && activeNow === 0) {
+      sendDesktopNotification('Downloads complete', 'All downloads have finished.')
+    }
+    prevActiveDownloads = activeNow
+  })
 
   /// Port of `FormatRelativeTime` used by each notification row.
   function formatRelativeTime(iso: string): string {
@@ -367,6 +493,12 @@
   let searchQuery = $state('')
   let searchSelIdx = $state(0)
   let searchInputEl = $state<HTMLInputElement | null>(null)
+  /// Redesign: the empty-query view used to dump all ~36 entries (every
+  /// category at once) into a grid mislabeled "Quick Actions". Now the
+  /// empty-query grid only shows the actual Quick Actions category, and a
+  /// row of category pills lets you jump into any other category (or type
+  /// to search across all of them, same as before).
+  let searchCategoryFilter = $state<string | null>(null)
 
   /// Port of `RecentsForCurrentEdition`: Java entries are prefixed "Java "
   /// and only shown on the Java edition; Bedrock shows everything else.
@@ -395,26 +527,26 @@
     { icon: 'fa-solid fa-box-archive', label: 'MC Versions', category: 'Quick Actions', sub: 'Switch Minecraft Bedrock versions', run: () => { closeSearch(); openPanel('mc-versions') } },
     { icon: 'fa-solid fa-screwdriver-wrench', label: 'Utilities', category: 'Quick Actions', sub: 'Game options, shaders, client library, system info', run: () => { closeSearch(); openPanel('utilities') } },
     { icon: 'fa-solid fa-file-code', label: 'Client Library', category: 'Bedrock', sub: 'Your own DLL / EXE clients with auto-update', run: () => { closeSearch(); openPanel('clientlibrary') } },
-    { icon: 'fa-solid fa-boxes-stacked', label: 'Packs', category: 'Bedrock', sub: 'Resource, behavior and skin packs', run: () => { closeSearch(); openPanel('bedrockpacks') } },
+    { icon: 'fa-solid fa-boxes-stacked', label: 'Packs', category: 'Bedrock', sub: 'Resource, behavior and skin packs', run: () => { closeSearch(); openPanel('bedrock-addons') } },
     { icon: 'fa-solid fa-globe', label: 'Worlds', category: 'Bedrock', sub: 'Manage Bedrock worlds', run: () => { closeSearch(); openPanel('bedrockworlds') } },
     { icon: 'fa-solid fa-layer-group', label: 'LeviLamina Mods', category: 'Bedrock', sub: 'Manage LeviLamina mods', run: () => { closeSearch(); openPanel('levilamina-mods') } },
     { icon: 'fa-solid fa-wand-magic-sparkles', label: 'Tweaks', category: 'Bedrock', sub: 'Vanilla and Bedrock Tweaks packs', run: () => { closeSearch(); openPanel('tweaks') } },
     { icon: 'fa-solid fa-box-archive', label: 'Vanilla Bedrock Versions', category: 'Bedrock', sub: 'Install and switch vanilla Bedrock game versions', run: () => { closeSearch(); openPanel('bedrock-versions') } },
     { icon: 'fa-solid fa-clock-rotate-left', label: 'Bedrock Backups', category: 'Bedrock', sub: 'Back up and restore Bedrock worlds', run: () => { closeSearch(); openPanel('bedrockbackups') } },
     { icon: 'fa-solid fa-camera', label: 'Bedrock Photos', category: 'Bedrock', sub: 'Bedrock screenshots gallery', run: () => { closeSearch(); openPanel('bedrockscreenshots') } },
-    { icon: 'fa-brands fa-java', label: 'Java Versions', category: 'Java', sub: 'Install or launch Java Edition', run: () => { closeSearch(); openPanel('versions') } },
+    { icon: '/images/mc-java-logo.png', label: 'Java Versions', category: 'Java', sub: 'Install or launch Java Edition', run: () => { closeSearch(); openPanel('versions') } },
     { icon: 'fa-solid fa-cubes', label: 'Browse Modpacks', category: 'Java', sub: 'Install CurseForge / Modrinth modpacks into an instance', run: () => { closeSearch(); openPanel('modpacks') } },
     { icon: 'fa-solid fa-puzzle-piece', label: 'Mods', category: 'Java', sub: 'Manage installed mods', run: () => { closeSearch(); openPanel('java-mods') } },
     { icon: 'fa-solid fa-file-lines', label: 'Logs and Crashes', category: 'Java', sub: 'View logs, detect crashes, share to mclo.gs', run: () => { closeSearch(); openPanel('logs') } },
     { icon: 'fa-solid fa-clock-rotate-left', label: 'Java Backups', category: 'Java', sub: 'Back up and restore Java worlds', run: () => { closeSearch(); openPanel('java-backups') } },
     { icon: 'fa-solid fa-chart-simple', label: 'Statistics', category: 'Navigation', sub: 'Playtime, sessions and launch history', run: () => { closeSearch(); openPanel('stats') } },
-    { icon: 'fa-solid fa-cubes', label: 'Instances', category: 'Navigation', sub: 'Manage game instances', run: () => { closeSearch(); openPanel('instances') } },
+    { icon: 'fa-solid fa-cubes', label: 'Instances', category: 'Navigation', sub: 'Manage game instances', run: () => { closeSearch(); openPanel(isBedrock ? 'instances' : 'java-instances') } },
     { icon: 'fa-solid fa-rocket', label: 'Launchers', category: 'Launchers', sub: 'Lunar, Badlion and other launchers', run: () => { closeSearch(); openPanel('launchers') } },
     { icon: 'fa-solid fa-user', label: 'Profile', category: 'Account', sub: 'Your account and skin', run: () => { closeSearch(); openPanel('profile') } },
     { icon: 'fa-solid fa-shirt', label: 'Skin Library', category: 'Account', sub: 'Manage and apply your saved skins', run: () => { closeSearch(); openPanel('skinlibrary') } },
     { icon: 'fa-solid fa-images', label: 'Photos', category: 'Java', sub: 'Java screenshots gallery', run: () => { closeSearch(); openPanel('java-screenshots') } },
     { icon: 'fa-solid fa-download', label: 'Downloads', category: 'Quick Actions', sub: 'Active and recent downloads', run: () => { closeSearch(); openPanel('downloads') } },
-    { icon: 'fa-solid fa-palette', label: 'Theme Studio', category: 'Settings', sub: 'Customize the launcher appearance', run: () => { closeSearch(); openPanel('themestudio') } },
+    { icon: 'fa-solid fa-palette', label: 'Theme Studio', category: 'Settings', sub: 'Customize the launcher appearance', run: () => { closeSearch(); settingsInitialCategory = 'appearance'; openPanel('settings') } },
     { icon: 'fa-solid fa-file-export', label: 'Export Settings', category: 'Settings', sub: 'Save settings as JSON', run: () => { closeSearch(); invoke('export_settings').catch(() => {}) } },
     { icon: 'fa-solid fa-expand', label: 'Toggle Fullscreen', category: 'Quick Actions', sub: 'F11 fullscreen mode', shortcut: 'F11', run: () => { closeSearch(); toggleFullscreen() } },
     { icon: '/images/clients/flarial.svg', label: 'Select Flarial', category: 'Clients', sub: 'Switch active client to Flarial', run: () => { closeSearch(); selectClient('Flarial Client') } },
@@ -433,20 +565,55 @@
     { icon: 'fa-brands fa-discord', label: 'Discord Account', category: 'Account', sub: 'Not available yet', run: () => {}, disabled: true },
   ])
 
-  /// An empty query shows the default Quick Actions list; a query filters
-  /// across label, sub and category, as the original does.
-  const searchMatches = $derived(
-    searchQuery.trim()
-      ? searchIndex.filter((r) => {
-          const q = searchQuery.trim().toLowerCase()
-          return (
-            r.label.toLowerCase().includes(q) ||
-            (r.sub ?? '').toLowerCase().includes(q) ||
-            r.category.toLowerCase().includes(q)
-          )
-        })
-      : [],
+  /// The category pill row's options, in first-seen order.
+  const searchCategories = $derived.by(() => {
+    const seen: string[] = []
+    for (const r of searchIndex) if (!seen.includes(r.category)) seen.push(r.category)
+    return seen
+  })
+
+  const quickActions = $derived(searchIndex.filter((r) => r.category === 'Quick Actions'))
+
+  /// QOL: Home-screen quick-access row — pin/unpin any search-index entry
+  /// (keyed by its label, which is a fixed string per entry) so its own
+  /// panel button is one click away without opening search first.
+  const pinnedPanels = $derived(
+    (settings?.PinnedPanels ?? [])
+      .map((label) => searchIndex.find((r) => r.label === label))
+      .filter((r): r is SearchResult => !!r),
   )
+  function isPinned(r: SearchResult): boolean {
+    return settings?.PinnedPanels?.includes(r.label) ?? false
+  }
+  function togglePinned(r: SearchResult) {
+    if (!settings) return
+    const next = isPinned(r)
+      ? settings.PinnedPanels.filter((l) => l !== r.label)
+      : [...settings.PinnedPanels, r.label]
+    saveSettings({ ...settings, PinnedPanels: next })
+  }
+
+  /// True once there's a reason to show the grouped/filtered list instead of
+  /// the empty-query Quick Actions grid: a typed query, or a category pill.
+  const showingSearchList = $derived(searchQuery.trim().length > 0 || !!searchCategoryFilter)
+
+  /// A query filters across label, sub and category; a category pill narrows
+  /// to that category first. Either (or both) together.
+  const searchMatches = $derived.by(() => {
+    let list = searchCategoryFilter
+      ? searchIndex.filter((r) => r.category === searchCategoryFilter)
+      : searchIndex
+    const q = searchQuery.trim().toLowerCase()
+    if (q) {
+      list = list.filter(
+        (r) =>
+          r.label.toLowerCase().includes(q) ||
+          (r.sub ?? '').toLowerCase().includes(q) ||
+          r.category.toLowerCase().includes(q),
+      )
+    }
+    return list
+  })
 
   /// Results grouped by category, preserving first-seen order - the
   /// original's `_searchGroups`.
@@ -465,12 +632,39 @@
 
   /// Flattened in render order so arrow-key selection tracks what is shown.
   const searchFlat = $derived(
-    searchQuery.trim() ? searchGroups.flatMap((g) => g.results) : searchIndex,
+    showingSearchList ? searchGroups.flatMap((g) => g.results) : quickActions,
   )
+
+  function selectSearchCategory(c: string | null) {
+    searchCategoryFilter = searchCategoryFilter === c ? null : c
+    searchSelIdx = 0
+  }
+
+  /// "More" (home screen) opens a browsable directory of every panel,
+  /// grouped by category — distinct from the command palette (Ctrl+K),
+  /// which is search-first and only shows something once you type or pick
+  /// a pill. This is the opposite: everything visible at once, nothing to
+  /// type, for people who don't already know what screens exist to search
+  /// for. Reuses `searchIndex` — the same data, browsed instead of searched.
+  /// Tabbed by category (one at a time), matching News' changelog tabs.
+  let moreOpen = $state(false)
+  let moreCategory = $state('')
+
+  const moreItems = $derived(searchIndex.filter((r) => r.category === moreCategory))
+
+  function openMore() {
+    moreOpen = true
+    moreCategory = searchCategories[0] ?? ''
+  }
+
+  function closeMore() {
+    moreOpen = false
+  }
 
   function openSearch() {
     searchOpen = true
     searchQuery = ''
+    searchCategoryFilter = null
     searchSelIdx = 0
     queueMicrotask(() => searchInputEl?.focus())
   }
@@ -478,6 +672,7 @@
   function closeSearch() {
     searchOpen = false
     searchQuery = ''
+    searchCategoryFilter = null
     searchSelIdx = 0
   }
 
@@ -537,6 +732,8 @@
     // onDragDropEvent below, which delivers real paths. This handler only
     // exists to prevent the browser's default "navigate to file" action.
     e.preventDefault()
+    dragDepth = 0
+    window.setDropActive?.(false)
   }
 
   const BEDROCK_CONTENT_EXTENSIONS = ['mcworld', 'mctemplate', 'mcpack', 'mcaddon']
@@ -619,7 +816,7 @@
   }
 
   getCurrentWindow().onDragDropEvent((event) => {
-    if (event.payload.type === 'over') {
+    if (event.payload.type === 'enter' || event.payload.type === 'over') {
       window.setDropActive?.(true)
     } else if (event.payload.type === 'drop') {
       window.setDropActive?.(false)
@@ -754,14 +951,34 @@
     }
   }
 
+  // QOL: single-level "undo last settings change" — the snapshot right
+  // before the most recent save, so one click restores it. Deliberately not
+  // reactive state: it's pure bookkeeping nothing renders directly from,
+  // and making it `$state` would mean every settings save (i.e. every
+  // Settings-panel interaction) triggers an extra reactive write for no
+  // visible effect.
+  let lastSettingsSnapshot: LauncherSettings | null = null
+  let canUndoSettings = $state(false)
+
   async function saveSettings(next: LauncherSettings) {
+    if (settings) lastSettingsSnapshot = settings
+    canUndoSettings = lastSettingsSnapshot !== null
     settings = next
     applyTheme()
     try {
       await invoke('set_settings', { settings: next })
     } catch (e) {
       status = `error: ${e}`
+      showToast(`Could not save settings: ${e}`, 'error')
     }
+  }
+
+  function undoLastSettingsChange() {
+    if (!lastSettingsSnapshot) return
+    const restore = lastSettingsSnapshot
+    lastSettingsSnapshot = null
+    canUndoSettings = false
+    saveSettings(restore)
   }
 
   function applyTheme() {
@@ -780,6 +997,40 @@
       settings.AnimationSpeed,
     )
     window.setKeyboardShortcuts?.(settings.KeyboardShortcuts)
+    window.setTooltipDelay?.(settings.TooltipDelayMs)
+    void applyActiveCustomTheme(settings.ActiveThemeId)
+  }
+
+  // A saved custom theme overrides the quick-look preset. Without this the
+  // theme only showed while Theme Studio was open and vanished on restart.
+  let appliedThemeId = ''
+  async function applyActiveCustomTheme(id: string | undefined) {
+    if (!id) {
+      if (appliedThemeId) {
+        appliedThemeId = ''
+        window.clearThemeVars?.()
+        window.setFont?.(settings?.FontFamily ?? '')
+        window.setCustomCss?.('')
+      }
+      return
+    }
+    try {
+      const themes = await invoke<any[]>('list_themes')
+      const theme = themes.find((t) => t.Id === id)
+      if (!theme || settings?.ActiveThemeId !== id) return
+      const vars = await invoke<Record<string, string>>('theme_css_vars', { theme })
+      window.setTheme?.(theme.BasePreset)
+      window.setThemeVars?.(vars)
+      window.setFont?.(theme.FontFamily)
+      window.setBlurIntensity?.(theme.Blur)
+      window.setAnimationSpeed?.(theme.AnimationSpeed)
+      window.setCustomCss?.(theme.CustomCss)
+      window.setBackgroundFit?.(theme.BackgroundFit, theme.BackgroundOpacity)
+      if (theme.BackgroundImage) window.setCustomBackground?.(theme.BackgroundImage)
+      appliedThemeId = id
+    } catch {
+      // A broken theme file must not brick the UI; the preset stays applied.
+    }
   }
 
   function setEdition(ed: string) {
@@ -807,14 +1058,12 @@
   const ORIGINAL_VIEW_MAP: Record<string, View> = {
     settings: 'settings',
     clients: 'clients',
-    addons: 'bedrockpacks',
     packs: 'bedrockpacks',
     mcversions: 'bedrock-versions',
     worlds: 'bedrockworlds',
     servers: 'servers',
     utilities: 'utilities',
     credits: 'credits',
-    instances: 'instances',
     clientlib: 'clientlibrary',
     stats: 'stats',
     skinlibrary: 'skinlibrary',
@@ -824,9 +1073,9 @@
     mods: 'java-mods',
     profile: 'profile',
     levilaminamods: 'levilamina-mods',
-    themestudio: 'themestudio',
     modpacks: 'modpacks',
     levimods: 'levilamina-mods',
+    themestudio: 'settings',
   }
 
   /**
@@ -845,6 +1094,11 @@
   const EDITION_VIEW_MAP: Record<string, { bedrock: View; java: View }> = {
     photos: { bedrock: 'bedrockscreenshots', java: 'java-screenshots' },
     backups: { bedrock: 'bedrockbackups', java: 'java-backups' },
+    // `addons` ("Browse") in the `packs-addons` strip is CurseForge browsing.
+    // Bedrock has a dedicated browser (BrowseAddonsView); Java's CurseForge/
+    // Modrinth browsing already lives inline as tabs on JavaModsView itself,
+    // so the Java side of this key just lands back there.
+    addons: { bedrock: 'bedrock-addons', java: 'java-mods' },
     // `versions` means the Java version browser on the Java edition
     // (JavaTabs:34 and the javaclients panel's Versions button, both
     // OpenJavaVersions) and the Latite/OderSo client-DLL picker on Bedrock
@@ -852,21 +1106,26 @@
     // `mcversions`, and the versions-instances strip's own `versions` key is
     // handled before this map because it means that one instead.
     versions: { bedrock: 'versions', java: 'mc-versions' },
+    // The versions-instances strip's `instances` tab — Bedrock already had
+    // its own InstancesView; Java's equivalent used to be a local tab
+    // buried inside Profile with no cross-nav at all.
+    instances: { bedrock: 'instances', java: 'java-instances' },
   }
 
   /// Human-readable labels for breadcrumbs and navHistory entries. Kept
   /// separate from the i18n `t()` labels used on the Home buttons since
-  /// several views (e.g. leveldat, themestudio) have no Home button at all.
+  /// several views (e.g. leveldat) have no Home button at all.
   const VIEW_LABELS: Record<View, string> = {
     home: 'Home',
     clients: 'Clients',
     instances: 'Instances',
+    'java-instances': 'Instances',
     bedrockworlds: 'Worlds',
     bedrockpacks: 'Packs',
+    'bedrock-addons': 'Browse Addons',
     bedrockbackups: 'Backups',
     bedrockscreenshots: 'Screenshots',
     leveldat: 'Level Editor',
-    themestudio: 'Theme Studio',
     settings: 'Settings',
     'java-mods': 'Mods',
     modpacks: 'Modpacks',
@@ -896,11 +1155,15 @@
       openPanel('utilities')
       return
     }
-    // The versions-instances strip is Bedrock-only and its `versions` tab is
-    // `OpenMcVersions` (Home.MergedPanels.cs:36) - the Bedrock game-version
-    // browser, not the client-DLL picker the bare key otherwise means.
+    // The versions-instances strip's `versions` tab means "the game-version
+    // browser for the current edition" (Bedrock's `OpenMcVersions`,
+    // Home.MergedPanels.cs:36, or Java's own MC Versions panel) - not the
+    // client-DLL picker the bare `versions` key otherwise means. Now that
+    // both editions' Versions panels carry this strip (Java's links to its
+    // own Instances the same way Bedrock's does), this has to branch on
+    // edition instead of hardcoding the Bedrock panel.
     if (strip === 'versions-instances' && originalView === 'versions') {
-      openPanel('bedrock-versions')
+      openPanel(isBedrock ? 'bedrock-versions' : 'mc-versions')
       return
     }
     const perEdition = EDITION_VIEW_MAP[originalView]
@@ -913,6 +1176,56 @@
     }
     const target = ORIGINAL_VIEW_MAP[originalView]
     if (target) openPanel(target)
+  }
+
+  // Applies `panelExpanded` to the CSS var every time it changes, including
+  // the very first render — the effect (not the individual setters) is what
+  // actually keeps the CSS in sync with the shared preference now.
+  // Keeps the reactive i18n module (`i18n.svelte.ts`) in sync with the
+  // persisted setting — every `t()` call anywhere in the app re-renders
+  // once this fires, since `setLanguage` writes a shared `$state`.
+  $effect(() => {
+    setLanguage(settings?.Language ?? 'en')
+  })
+
+  $effect(() => {
+    if (panelExpanded) {
+      document.documentElement.style.setProperty('--sidebar-w-user', '860px')
+    } else {
+      document.documentElement.style.removeProperty('--sidebar-w-user')
+    }
+  })
+
+  function setPanelExpanded(expanded: boolean) {
+    panelExpanded = expanded
+  }
+
+  // QOL "copy panel link": a `glacier://open/<view>` URL for whatever
+  // panel is currently open — pasted anywhere (a chat, a note, a shortcut)
+  // and clicked, it relaunches/refocuses the launcher straight into that
+  // panel. `VIEW_LABELS` is a `Record<View, string>`, so its keys are
+  // exactly every valid `View` — reused here as the validation set rather
+  // than hand-maintaining a second list that could drift out of sync.
+  function copyText(text: string, okMessage: string) {
+    window.copyToClipboard?.(text).then((ok) =>
+      showToast(ok ? okMessage : 'Could not copy to clipboard.', ok ? 'success' : 'error'),
+    )
+  }
+
+  function copyCurrentPanelLink() {
+    copyText(`glacier://open/${currentView}`, 'Panel link copied to clipboard.')
+  }
+
+  function handleDeepLink(url: string) {
+    let target: string
+    try {
+      target = new URL(url).pathname.replace(/^\/+/, '') || new URL(url).hostname
+    } catch {
+      return
+    }
+    if ((Object.keys(VIEW_LABELS) as string[]).includes(target)) {
+      openPanel(target as View)
+    }
   }
 
   function openPanel(v: View, tab?: string) {
@@ -932,11 +1245,8 @@
   }
 
   function closePanel() {
-    if (panelExpanded) {
-      panelExpanded = false
-      document.documentElement.style.removeProperty('--sidebar-w-user')
-    }
     navHistory = []
+    refreshJavaClientOptions()
     navigate(() => {
       currentView = 'home'
     })
@@ -948,6 +1258,7 @@
   /// jumping to Home. Falls back to `closePanel` when the stack is empty,
   /// which is also what a single-level Home -> Panel back button should do.
   function goBack() {
+    refreshClientsBadge()
     if (navHistory.length === 0) {
       closePanel()
       return
@@ -956,6 +1267,25 @@
     navHistory = navHistory.slice(0, -1)
     navigate(() => {
       currentView = prev.view
+    })
+  }
+
+  /// QOL: jump back several levels of `navHistory` at once via a breadcrumb
+  /// segment, instead of clicking Back repeatedly. `index` is the clicked
+  /// segment's position in `breadcrumbTrail` (0 = Home, then one per
+  /// `navHistory` entry) — the current/last segment is never clickable
+  /// (PanelHeader excludes it), so this only ever runs for an actual
+  /// ancestor.
+  function jumpToBreadcrumb(index: number) {
+    if (index === 0) {
+      closePanel()
+      return
+    }
+    const target = navHistory[index - 1]
+    if (!target) return
+    navHistory = navHistory.slice(0, index - 1)
+    navigate(() => {
+      currentView = target.view
     })
   }
 
@@ -991,6 +1321,29 @@
         }
         await invoke('launch_bedrock_instance', { dllPath })
         recordLaunchOutcome(settings.SelectedClient, true)
+      } else if (activeJavaClient === 'Horizon') {
+        await invoke('horizon_launch')
+        showToast('Horizon is starting…', 'success')
+      } else if (activeJavaClient === 'Lunar' && lunarExe) {
+        await invoke('launch_client_exe', { exePath: lunarExe })
+        showToast('Opening Lunar Client…', 'success')
+      } else if (MOD_CLIENTS.includes(activeJavaClient)) {
+        // These clients are standalone mods: put the right jar in the active
+        // instance's mods folder, then launch that instance as usual.
+        const inst = activeJavaInstance
+        const loader = inst?.loader
+        if (!inst || !loader || loader === 'vanilla') {
+          throw new Error(`${activeJavaClient} needs a modded instance (Fabric${activeJavaClient === 'Dawn' ? '' : ', Forge or NeoForge'}). Create one in Versions → Instances first.`)
+        }
+        if (await invoke<boolean>('ensure_client_mod_installed', {
+          instanceId: inst.id,
+          client: activeJavaClient,
+          gameVersion: inst.version_id,
+          loader,
+        })) {
+          showToast(`Added ${activeJavaClient} to ${inst.name}`, 'success')
+        }
+        await invoke('launch_java_instance', { instanceId: inst.id })
       } else {
         await invoke('launch_java_instance', { instanceId: null })
       }
@@ -1053,6 +1406,22 @@
   /// Real launcher version + update availability, replacing a hardcoded
   /// 'v0.1.0' and the missing `launcherUpdateAvailable` branch of the
   /// update pill.
+  ///
+  /// Previously this only ran once at startup, so a launcher session left
+  /// open for hours (very normal for something that sits in the tray while
+  /// you play) would never learn a new release had shipped until the next
+  /// full restart. It now re-checks on an interval and only toasts the
+  /// *first* time a given tag is seen, so it doesn't nag on every poll.
+  ///
+  /// The pill used to route to the News panel's changelog tab — a dead end
+  /// with no way to actually start the update from there. It now opens
+  /// `UpdateAvailableModal` directly with the full release info already in
+  /// hand, so clicking "Update" goes straight to a changelog + one-click
+  /// download-and-install instead of a scavenger hunt through Settings.
+  type UpdateInfo = { tag: string; download_url: string; changelog: string; asset_size: number }
+  let availableUpdateInfo = $state<UpdateInfo | null>(null)
+  let updateModalOpen = $state(false)
+  let lastAnnouncedUpdateTag = ''
   async function loadVersionInfo() {
     try {
       currentVersion = await invoke<string>('launcher_version')
@@ -1060,20 +1429,104 @@
       currentVersion = ''
     }
     try {
-      launcherUpdateAvailable = (await invoke<unknown>('check_launcher_update')) !== null
+      const update = await invoke<UpdateInfo | null>('check_launcher_update')
+      launcherUpdateAvailable = update !== null
+      availableUpdateInfo = update
+      if (update && update.tag !== lastAnnouncedUpdateTag) {
+        lastAnnouncedUpdateTag = update.tag
+        showToast(`Glacier Launcher ${update.tag} is available — click Update to install.`, 'info')
+        sendDesktopNotification('Update available', `Glacier Launcher ${update.tag} is ready to install.`)
+      }
     } catch {
       launcherUpdateAvailable = false
     }
   }
 
-  loadSettings()
-  loadVersionInfo()
+  // QOL "What's new": pops the changelog for the version that was just
+  // installed, once, the first time the launcher runs after an update.
+  // Gated on `OnboardingCompleted` so this can never fire alongside/before
+  // the first-run onboarding modal, and on `LastSeenChangelogVersion`
+  // already being non-empty so upgrading an *existing* install (which has
+  // never set this field before) silently seeds the baseline instead of
+  // popping up for a version the user already has installed and running.
+  let whatsNewOpen = $state(false)
+  let whatsNewChangelog = $state('')
+  const normalizeTag = (t: string) => t.replace(/^v/i, '')
+  async function maybeShowWhatsNew() {
+    if (!settings || !currentVersion || !settings.OnboardingCompleted) return
+    if (settings.LastSeenChangelogVersion === currentVersion) return
+    if (!settings.LastSeenChangelogVersion) {
+      saveSettings({ ...settings, LastSeenChangelogVersion: currentVersion })
+      return
+    }
+    try {
+      const releases = await invoke<{ tag: string; changelog: string }[]>('list_launcher_releases', { max: 20 })
+      const match = releases.find((r) => normalizeTag(r.tag) === normalizeTag(currentVersion))
+      if (match?.changelog) {
+        whatsNewChangelog = match.changelog
+        whatsNewOpen = true
+      }
+    } catch {
+      // Non-fatal — just skip the popup this run.
+    }
+    saveSettings({ ...settings, LastSeenChangelogVersion: currentVersion })
+  }
+
+  Promise.all([loadSettings(), loadVersionInfo()]).then(maybeShowWhatsNew)
+  // Re-check every 30 minutes while the launcher is open, instead of only
+  // ever once at startup.
+  setInterval(loadVersionInfo, 30 * 60 * 1000)
+
+  // Warm the most-used panel chunks after first paint so opening them is
+  // instant, without paying for the rest during startup.
+  setTimeout(() => {
+    for (const k of ['ClientsView', 'InstancesView', 'JavaInstancesView', 'BedrockWorldsView', 'SettingsView'] as const) {
+      void views[k]().catch(() => {})
+    }
+  }, 1500)
+
+  // QOL: auto-clear-finished-downloads sweep. A no-op server-side when the
+  // setting is 0/disabled; run at startup and hourly rather than adding a
+  // backend timer, so it only ever runs while the launcher is open.
+  // Deferred 4s so these housekeeping calls never compete with first paint.
+  setTimeout(() => {
+    invoke('sweep_old_downloads').catch(() => {})
+    invoke('auto_export_settings_if_due').catch(() => {})
+  }, 4000)
+  setInterval(() => invoke('sweep_old_downloads').catch(() => {}), 60 * 60 * 1000)
+
+  // QOL: rolling settings auto-backup, separate from the manual "Export
+  // settings" button — the command itself no-ops until 24h have passed.
+  setInterval(() => invoke('auto_export_settings_if_due').catch(() => {}), 60 * 60 * 1000)
+
+  /// Settings' "Check for updates now" button drives the exact same check
+  /// as the background poll, then opens the same modal regardless of the
+  /// result — `UpdateAvailableModal` renders an "up to date" state when
+  /// `availableUpdateInfo` comes back null, so this is one update UI
+  /// everywhere instead of Settings having its own separate inline
+  /// download/install flow that could drift from the pill's.
+  let checkingUpdatesManual = $state(false)
+  async function checkForUpdatesNow() {
+    checkingUpdatesManual = true
+    try {
+      await loadVersionInfo()
+    } finally {
+      checkingUpdatesManual = false
+      updateModalOpen = true
+    }
+  }
   loadNotifications()
   refreshClientsBadge()
+  refreshJavaClientOptions()
 
   window.addEventListener('glacier:kbshortcut', (e: Event) => {
     const name = (e as CustomEvent<string>).detail
-    if (name === 'escape') { if (isLaunching) forceCloseLaunch(); else goBack() }
+    if (name === 'escape') {
+      if (searchOpen) closeSearch()
+      else if (moreOpen) closeMore()
+      else if (isLaunching) forceCloseLaunch()
+      else goBack()
+    }
     else if (name === 'settings') openPanel('settings')
     else if (name === 'clients' && isBedrock) openPanel('clients')
     else if (name === 'launch') handleLaunch()
@@ -1156,7 +1609,41 @@
       maybeShowCrashModal(instance_id)
     }
   })
+
+  // QOL: confirm before quitting while a download is still in flight — the
+  // Rust `CloseRequested` handler already prevented the close and is
+  // waiting on `force_quit`; this is just the dialog.
+  let confirmQuitDownloadsOpen = $state(false)
+  // QOL: global (system-wide) quick-launch hotkey — the Rust side already
+  // brought the window to front on trigger (see lib.rs's global-shortcut
+  // handler); this just runs the same launch path the button uses.
+  listen('quick-launch-hotkey', () => {
+    if (!isLaunching) handleLaunch()
+  })
+
+  // QOL "copy panel link": a `glacier://` URL opened while this instance is
+  // already running arrives as this event (see lib.rs's single-instance and
+  // deep-link setup); one cold-started with the app arrives instead as
+  // `take_pending_deep_link`, checked once here since no listener existed
+  // yet at the moment Rust would have emitted it.
+  listen<string>('deep-link-open', (e) => handleDeepLink(e.payload))
+  invoke<string | null>('take_pending_deep_link').then((url) => {
+    if (url) handleDeepLink(url)
+  }).catch(() => {})
+
+  listen('confirm-quit-downloads', () => {
+    confirmQuitDownloadsOpen = true
+  })
 </script>
+
+<svelte:window
+  onkeydown={(e) => {
+    // Escape dismisses the top bar's dropdowns (outside click is the backdrop).
+    if (e.key !== 'Escape') return
+    if (clientMenuOpen) clientMenuOpen = false
+    if (notifOpen) notifOpen = false
+  }}
+/>
 
 <div
   class="window"
@@ -1179,96 +1666,131 @@
     <OnboardingModal {settings} onChange={saveSettings} />
   {/if}
 
+  {#snippet directoryCard(r: SearchResult, sel: boolean, onHover: (() => void) | undefined, query: string)}
+    <div
+      class="client-card {sel ? 'client-active' : ''} {r.disabled ? 'disabled' : ''}"
+      role="button"
+      tabindex="0"
+      data-tooltip={r.disabled ? 'Not available yet' : undefined}
+      onclick={() => { if (!r.disabled) r.run() }}
+      onkeydown={(e) => { if (!r.disabled && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); r.run() } }}
+      onmouseenter={onHover}
+      style="cursor:{r.disabled ? 'not-allowed' : 'pointer'};"
+    >
+      <div class="client-card-header">
+        <div class="client-card-icon" style="background:var(--accent-bg); color:var(--accent);">
+          {#if r.icon.startsWith('/images/')}
+            <img src={r.icon} alt="" style="width:16px;height:16px;object-fit:contain;" />
+          {:else}
+            <i class={r.icon}></i>
+          {/if}
+        </div>
+        <div class="client-card-meta">
+          <span class="client-card-name">{@html highlight(r.label, query)}</span>
+          {#if r.sub}<span class="client-card-sub">{@html highlight(r.sub, query)}</span>{/if}
+        </div>
+        {#if !r.disabled}
+          <button
+            type="button"
+            class="panel-icon-btn {isPinned(r) ? 'active' : ''}"
+            data-tooltip={isPinned(r) ? 'Unpin from Home' : 'Pin to Home'}
+            aria-label={isPinned(r) ? 'Unpin from Home' : 'Pin to Home'}
+            onclick={(e) => { e.stopPropagation(); togglePinned(r) }}
+            onmousedown={(e) => e.stopPropagation()}
+          >
+            <i class="{isPinned(r) ? 'fa-solid' : 'fa-regular'} fa-star"></i>
+          </button>
+          <i class="fa-solid fa-arrow-right news-ext" style="opacity:0.5;"></i>
+        {/if}
+      </div>
+    </div>
+  {/snippet}
+
   {#if searchOpen}
-    <div class="search-overlay" role="presentation" onclick={closeSearch}>
-      <div class="search-modal" role="presentation" onclick={(e) => e.stopPropagation()}>
-        <div class="search-modal-input-row">
-          <div class="search-modal-input-icon">
-            <i class="fa-solid fa-magnifying-glass"></i>
-          </div>
-          <!-- svelte-ignore a11y_autofocus -->
-          <input
-            bind:this={searchInputEl}
-            class="search-modal-input"
-            placeholder="Search clients, versions, settings..."
-            bind:value={searchQuery}
-            oninput={() => (searchSelIdx = 0)}
-            onkeydown={onSearchKeydown}
-          />
+    <div class="panel-overlay directory-panel-overlay" role="presentation">
+      <PanelHeader title={t('panel.search', settings?.Language)} onBack={closeSearch}>
+        {#snippet extraActions()}
           {#if searchQuery}
             <span class="search-result-count">{searchFlat.length} result{searchFlat.length === 1 ? '' : 's'}</span>
           {/if}
-          <span class="search-modal-esc">ESC</span>
+        {/snippet}
+      </PanelHeader>
+
+      <div class="panel-search-wrap">
+        <i class="fa-solid fa-magnifying-glass"></i>
+        <!-- svelte-ignore a11y_autofocus -->
+        <input
+          bind:this={searchInputEl}
+          class="panel-search-input"
+          placeholder="Search clients, versions, settings..."
+          bind:value={searchQuery}
+          oninput={() => (searchSelIdx = 0)}
+          onkeydown={onSearchKeydown}
+        />
+      </div>
+
+      <div class="mcv-filter-bar">
+        <div class="mcv-channel-tabs">
+          <button type="button" class="mcv-channel-tab {!searchCategoryFilter ? 'active' : ''}" onclick={() => selectSearchCategory(null)}>All</button>
+          {#each searchCategories as c (c)}
+            <button type="button" class="mcv-channel-tab {searchCategoryFilter === c ? 'active' : ''}" onclick={() => selectSearchCategory(c)}>{c}</button>
+          {/each}
         </div>
-        <div class="search-results">
+      </div>
+
+      <div class="panel-body">
+        {#if showingSearchList}
           {#if searchMatches.length === 0}
-            {#if !searchQuery}
-              <div class="search-category">Quick Actions</div>
-              {#each searchIndex as r, idx (r.label)}
-                <div
-                  class="search-result-item {searchSelIdx === idx ? 'sel' : ''} {r.disabled ? 'disabled' : ''}"
-                  role="presentation"
-                  data-tooltip={r.disabled ? 'Not ported yet' : undefined}
-                  onclick={() => { if (!r.disabled) r.run() }}
-                  onmouseenter={() => (searchSelIdx = idx)}
-                >
-                  <div class="search-result-icon">
-                    {#if r.icon.startsWith('/images/')}
-                      <img src={r.icon} alt="" style="width:16px;height:16px;object-fit:contain;" />
-                    {:else}
-                      <i class={r.icon}></i>
-                    {/if}
-                  </div>
-                  <div class="search-result-text">
-                    <span class="search-result-label">{@html highlight(r.label, searchQuery)}</span>
-                    {#if r.sub}
-                      <span class="search-result-sub">{@html highlight(r.sub, searchQuery)}</span>
-                    {/if}
-                  </div>
-                  {#if r.shortcut}
-                    <div class="kbs"><kbd>{r.shortcut}</kbd></div>
-                  {/if}
-                  {#if !r.disabled}<span class="search-result-enter">&#8629;</span>{/if}
-                </div>
-              {/each}
-            {:else}
-              <div class="search-no-results">No results for "<strong>{searchQuery}</strong>"</div>
-            {/if}
+            <div class="empty-state">
+              <i class="fa-solid fa-magnifying-glass"></i>
+              <span>No results for "{searchQuery}"</span>
+            </div>
           {:else}
             {#each searchGroups as grp (grp.category)}
-              <div class="search-category">{grp.category}</div>
-              {#each grp.results as r (r.label)}
-                {@const fi = searchFlat.indexOf(r)}
-                <div
-                  class="search-result-item {searchSelIdx === fi ? 'sel' : ''} {r.disabled ? 'disabled' : ''}"
-                  role="presentation"
-                  data-tooltip={r.disabled ? 'Not ported yet' : undefined}
-                  onclick={() => { if (!r.disabled) r.run() }}
-                  onmouseenter={() => (searchSelIdx = fi)}
-                >
-                  <div class="search-result-icon">
-                    {#if r.icon.startsWith('/images/')}
-                      <img src={r.icon} alt="" style="width:16px;height:16px;object-fit:contain;" />
-                    {:else}
-                      <i class={r.icon}></i>
-                    {/if}
-                  </div>
-                  <div class="search-result-text">
-                    <span class="search-result-label">{@html highlight(r.label, searchQuery)}</span>
-                    {#if r.sub}
-                      <span class="search-result-sub">{@html highlight(r.sub, searchQuery)}</span>
-                    {/if}
-                  </div>
-                  {#if !r.disabled}<span class="search-result-enter">&#8629;</span>{/if}
-                </div>
-              {/each}
+              <span class="panel-section-label">{grp.category}</span>
+              <div class="news-card-col">
+                {#each grp.results as r (r.label)}
+                  {@const fi = searchFlat.indexOf(r)}
+                  {@render directoryCard(r, searchSelIdx === fi, () => (searchSelIdx = fi), searchQuery)}
+                {/each}
+              </div>
             {/each}
           {/if}
+        {:else}
+          <span class="panel-section-label">Quick Actions</span>
+          <div class="news-card-col">
+            {#each quickActions as r, idx (r.label)}
+              {@render directoryCard(r, searchSelIdx === idx, () => (searchSelIdx = idx), '')}
+            {/each}
+          </div>
+        {/if}
+      </div>
+
+      <div class="search-footer">
+        <span class="search-footer-hint"><kbd>&#8593;</kbd><kbd>&#8595;</kbd> Navigate</span>
+        <span class="search-footer-hint"><kbd>&#8629;</kbd> Select</span>
+        <span class="search-footer-hint"><kbd>ESC</kbd> Close</span>
+      </div>
+    </div>
+  {/if}
+
+  {#if moreOpen}
+    <div class="panel-overlay directory-panel-overlay" role="presentation">
+      <PanelHeader title={t('panel.everyPanel', settings?.Language)} onBack={closeMore} />
+
+      <div class="mcv-filter-bar">
+        <div class="mcv-channel-tabs">
+          {#each searchCategories as c (c)}
+            <button type="button" class="mcv-channel-tab {moreCategory === c ? 'active' : ''}" onclick={() => (moreCategory = c)}>{c}</button>
+          {/each}
         </div>
-        <div class="search-footer">
-          <span class="search-footer-hint"><kbd>&#8593;</kbd><kbd>&#8595;</kbd> Navigate</span>
-          <span class="search-footer-hint"><kbd>&#8629;</kbd> Select</span>
-          <span class="search-footer-hint"><kbd>ESC</kbd> Close</span>
+      </div>
+
+      <div class="panel-body">
+        <div class="news-card-col">
+          {#each moreItems as r (r.label)}
+            {@render directoryCard(r, false, undefined, '')}
+          {/each}
         </div>
       </div>
     </div>
@@ -1284,9 +1806,9 @@
       {#if launcherUpdateAvailable}
         <button
           class="update-pill"
-          onclick={() => openPanel('news')}
+          onclick={() => (updateModalOpen = true)}
           onmousedown={(e) => e.stopPropagation()}
-          data-tooltip="Launcher update available — click to update"
+          data-tooltip={t('tt.launcherUpdateAvailableClickUpdate', settings?.Language)}
         >
           <i class="fa-solid fa-arrow-up"></i>
           <span>Update</span>
@@ -1295,23 +1817,23 @@
         <button
           class="update-pill"
           onclick={() => openPanel('news')}
+          oncontextmenu={(e) => { e.preventDefault(); copyText(currentVersion, 'Version copied to clipboard.') }}
           onmousedown={(e) => e.stopPropagation()}
-          data-tooltip="News & Updates"
+          data-tooltip={t('tt.newsUpdatesRightClickCopyVersion', settings?.Language)}
         >
           <span>v{currentVersion}</span>
         </button>
       {/if}
     </div>
-
     <div class="top-bar-spacer"></div>
 
     {#if settings}
-      <div class="edition-switcher" role="presentation" onmousedown={(e) => e.stopPropagation()} data-tooltip="Switch Minecraft edition">
+      <div class="edition-switcher" role="presentation" onmousedown={(e) => e.stopPropagation()} data-tooltip={t('tt.switchMinecraftEdition', settings?.Language)}>
         <button class="edition-tab" class:active={isBedrock} onclick={() => setEdition('bedrock')}>
-          <i class="fa-solid fa-cube"></i><span>Bedrock</span>
+          <img class="chip-icon" src="images/mc-logo.png" alt="" style="width:14px;height:14px;object-fit:contain;"><span>Bedrock</span>
         </button>
         <button class="edition-tab" class:active={!isBedrock} onclick={() => setEdition('java')}>
-          <i class="fa-brands fa-java"></i><span>Java</span>
+          <img class="chip-icon" src="images/mc-java-logo.png" alt="" style="width:18px;height:18px;object-fit:contain;"><span>Java</span>
         </button>
       </div>
 
@@ -1324,7 +1846,7 @@
             onmousedown={(e) => e.stopPropagation()}
             aria-haspopup="listbox"
             aria-expanded={clientMenuOpen}
-            data-tooltip="Select client ({settings.SelectedClient})"
+            data-tooltip={clientMenuOpen ? undefined : `Select client (${settings.SelectedClient})`}
           >
             <div class="chip-dot" class:live={mcRunning}></div>
             {#if CLIENT_IMAGES[settings.SelectedClient]}
@@ -1359,7 +1881,43 @@
           {/if}
         </div>
       {/if}
-      {#if isBedrock && clientMenuOpen}
+      {#if !isBedrock && javaClients.length > 1}
+        <div class="topbar-client-chip {clientMenuOpen ? 'open' : ''}" style="position:relative;">
+          <button
+            class="topbar-client-chip-btn"
+            style="all:unset; display:flex; align-items:center; gap:inherit; cursor:pointer;"
+            onclick={toggleClientMenu}
+            onmousedown={(e) => e.stopPropagation()}
+            aria-haspopup="listbox"
+            aria-expanded={clientMenuOpen}
+            data-tooltip={clientMenuOpen ? undefined : `Select client (${activeJavaClient})`}
+          >
+            <div class="chip-dot" class:live={mcRunning}></div>
+            <img class="chip-icon" src={JAVA_CLIENT_IMAGES[activeJavaClient]} alt="" style="width:14px;height:14px;object-fit:contain;border-radius:3px;" />
+            <span>{activeJavaClient}</span>
+            <i class="fa-solid fa-chevron-down chip-arrow"></i>
+          </button>
+          {#if clientMenuOpen}
+            <div class="tw-dropdown-menu" role="listbox" tabindex="-1" onmousedown={(e) => e.stopPropagation()}>
+              {#each javaClients as name (name)}
+                <button
+                  class="tw-dropdown-item {activeJavaClient === name ? 'active' : ''}"
+                  role="option"
+                  aria-selected={activeJavaClient === name}
+                  onclick={() => selectJavaClient(name)}
+                >
+                  <img src={JAVA_CLIENT_IMAGES[name]} alt="" style="width:14px;height:14px;object-fit:contain;border-radius:3px;" />
+                  <span style="flex:1;">{name}</span>
+                  {#if activeJavaClient === name}
+                    <i class="fa-solid fa-check"></i>
+                  {/if}
+                </button>
+              {/each}
+            </div>
+          {/if}
+        </div>
+      {/if}
+      {#if clientMenuOpen}
         <div class="notif-backdrop" role="presentation" onclick={() => (clientMenuOpen = false)}></div>
       {/if}
 
@@ -1370,8 +1928,8 @@
           value={activeJavaInstance?.id ?? ''}
           onchange={(e) => quickSwitchInstance(e.currentTarget.value)}
           onmousedown={(e) => e.stopPropagation()}
-          data-tooltip="Quick-switch Java instance"
-          aria-label="Quick-switch Java instance"
+          data-tooltip={t('tt.quickSwitchJavaInstance', settings?.Language)}
+          aria-label={t('tt.quickSwitchJavaInstance', settings?.Language)}
         >
           {#each quickSwitchInstances as inst (inst.id)}
             <option value={inst.id}>{inst.name ?? inst.id}</option>
@@ -1380,19 +1938,31 @@
       {/if}
 
       {#if mcRunning}
-        <div class="mc-running-pill" data-tooltip="Minecraft is currently running">
+        <div class="mc-running-pill" data-tooltip={t('tt.minecraftIsCurrentlyRunning', settings?.Language)}>
           <i class="fa-solid fa-circle"></i>
           <span>MC</span>
         </div>
       {/if}
     {/if}
 
+    {#if currentView !== 'home'}
+      <button
+        class="search-trigger"
+        onclick={copyCurrentPanelLink}
+        onmousedown={(e) => e.stopPropagation()}
+        data-tooltip={t('tt.copyLinkThisPanel', settings?.Language)}
+        aria-label={t('tt.copyPanelLink', settings?.Language)}
+      >
+        <i class="fa-solid fa-link"></i>
+      </button>
+    {/if}
+
     <button
       class="search-trigger"
       onclick={openSearch}
       onmousedown={(e) => e.stopPropagation()}
-      data-tooltip="Search (Ctrl+K)"
-      aria-label="Search"
+      data-tooltip={t('tt.searchCtrlK', settings?.Language)}
+      aria-label={t('tt.search', settings?.Language)}
     >
       <i class="fa-solid fa-magnifying-glass"></i>
     </button>
@@ -1402,7 +1972,7 @@
         <div class="notif-backdrop" role="presentation" onclick={() => (notifOpen = false)}></div>
       {/if}
       <div class="notif-bell-wrap" role="presentation" onmousedown={(e) => e.stopPropagation()}>
-        <button class="notif-bell-btn" onclick={toggleNotifPanel} data-tooltip="Notifications & downloads">
+        <button class="notif-bell-btn" onclick={toggleNotifPanel} data-tooltip={t('tt.notificationsDownloads', settings?.Language)}>
           <i class="fa-solid fa-bell"></i>
           {#if bellBadgeCount > 0}
             <span class="notif-bell-badge">{bellBadgeCount > 9 ? '9+' : bellBadgeCount}</span>
@@ -1442,7 +2012,7 @@
               {/if}
             </div>
             {#if notifications.length > 0}
-              <div class="notif-filter-tabs" role="tablist" aria-label="Filter notifications">
+              <div class="notif-filter-tabs" role="tablist" aria-label={t('tt.filterNotifications', settings?.Language)}>
                 {#each [['all', 'All'], ['downloads', 'Downloads'], ['updates', 'Updates'], ['social', 'Social']] as [value, label] (value)}
                   <button
                     type="button"
@@ -1457,12 +2027,12 @@
             <div class="notif-panel-list">
               {#if notifications.length === 0}
                 <div class="notif-empty">
-                  <i class="fa-regular fa-bell-slash"></i>
+                  <i class="fa-solid fa-bell-slash"></i>
                   <span>No notifications</span>
                 </div>
               {:else if filteredNotifications.length === 0}
                 <div class="notif-empty">
-                  <i class="fa-regular fa-bell-slash"></i>
+                  <i class="fa-solid fa-bell-slash"></i>
                   <span>No notifications in this category</span>
                 </div>
               {:else}
@@ -1477,7 +2047,7 @@
                     <button
                       class="notif-item-remove"
                       onclick={(e) => { e.stopPropagation(); removeNotification(n.Id) }}
-                      aria-label="Dismiss notification"
+                      aria-label={t('tt.dismissNotification', settings?.Language)}
                     >
                       <i class="fa-solid fa-xmark"></i>
                     </button>
@@ -1491,13 +2061,13 @@
     {/if}
 
     <div class="window-controls">
-      <button class="wnd-btn minimize-btn" data-tooltip="Minimize" aria-label="Minimize" onmousedown={(e) => e.stopPropagation()} onclick={() => window.minimizeWindow?.()}>
+      <button class="wnd-btn minimize-btn" data-tooltip={t('tt.minimize', settings?.Language)} aria-label={t('tt.minimize', settings?.Language)} onmousedown={(e) => e.stopPropagation()} onclick={() => window.minimizeWindow?.()}>
         <i class="fa-solid fa-minus"></i>
       </button>
-      <button class="wnd-btn maximize-btn" data-tooltip="Maximize" aria-label="Maximize" onmousedown={(e) => e.stopPropagation()} onclick={() => window.maximizeWindow?.()}>
+      <button class="wnd-btn maximize-btn" data-tooltip={t('tt.maximize', settings?.Language)} aria-label={t('tt.maximize', settings?.Language)} onmousedown={(e) => e.stopPropagation()} onclick={() => window.maximizeWindow?.()}>
         <i class="fa-solid fa-square"></i>
       </button>
-      <button class="wnd-btn close-btn" data-tooltip="Close" aria-label="Close" onmousedown={(e) => e.stopPropagation()} onclick={() => window.closeWindow?.()}>
+      <button class="wnd-btn close-btn" data-tooltip={t('tt.close', settings?.Language)} aria-label={t('tt.close', settings?.Language)} onmousedown={(e) => e.stopPropagation()} onclick={() => window.closeWindow?.()}>
         <i class="fa-solid fa-xmark"></i>
       </button>
     </div>
@@ -1514,7 +2084,7 @@
         <button class="btn-sm" onclick={() => openUrl(announcement?.url ?? '')}>Learn more</button>
       {/if}
       {#if announcement.kind !== 'maintenance'}
-        <button class="announcement-banner-close" onclick={dismissAnnouncement} data-tooltip="Dismiss" aria-label="Dismiss">
+        <button class="announcement-banner-close" onclick={dismissAnnouncement} data-tooltip={t('tt.dismiss', settings?.Language)} aria-label={t('tt.dismiss', settings?.Language)}>
           <i class="fa-solid fa-xmark"></i>
         </button>
       {/if}
@@ -1529,7 +2099,7 @@
           <span class="announcement-banner-msg">{w.message}</span>
         {/each}
       </div>
-      <button class="announcement-banner-close" onclick={() => (prelaunchWarnings = [])} data-tooltip="Dismiss" aria-label="Dismiss">
+      <button class="announcement-banner-close" onclick={() => (prelaunchWarnings = [])} data-tooltip={t('tt.dismiss', settings?.Language)} aria-label={t('tt.dismiss', settings?.Language)}>
         <i class="fa-solid fa-xmark"></i>
       </button>
     </div>
@@ -1537,12 +2107,32 @@
 
   <div class="main-content" class:panel-open={currentView !== 'home'}>
     {#if settings}
+      {#if currentView === 'home' && pinnedPanels.length > 0}
+        <div class="pinned-panels-row">
+          {#each pinnedPanels as r (r.label)}
+            <button
+              type="button"
+              class="vcs-btn"
+              onclick={r.run}
+              onmousedown={(e) => e.stopPropagation()}
+              data-tooltip={r.label}
+            >
+              {#if r.icon.startsWith('/images/')}
+                <img src={r.icon} alt="" style="width:13px;height:13px;object-fit:contain;" />
+              {:else}
+                <i class={r.icon}></i>
+              {/if}
+              {r.label}
+            </button>
+          {/each}
+        </div>
+      {/if}
       <div class="btn-row">
         <button
-          class="action-btn hover-grow launch-btn {isLaunching ? 'btn-wide btn-blue launching' : 'btn-sq'}"
+          class="action-btn launch-btn btn-wide btn-blue {isLaunching ? 'launching' : ''}"
           onclick={handleLaunch}
           disabled={isLaunching}
-          data-tooltip="Launch (Ctrl+L)"
+          data-tooltip={t('tt.launchCtrlL', settings?.Language)}
         >
           {#if isLaunching}
             <span class="spinner"></span><span>Launching...</span>
@@ -1552,21 +2142,10 @@
         </button>
 
         {#if isLaunching}
-          <button class="action-btn btn-sq force-close-btn" onclick={forceCloseLaunch} data-tooltip="Force close launch (Esc)" aria-label="Force close launch">
+          <button class="action-btn btn-sq force-close-btn" onclick={forceCloseLaunch} data-tooltip={t('tt.forceCloseLaunchEsc', settings?.Language)} aria-label={t('tt.forceCloseLaunch', settings?.Language)}>
             <i class="fa-solid fa-stop"></i>
           </button>
         {/if}
-
-        <div class="btn-badge-wrap">
-          <button
-            class="action-btn btn-sq hover-grow"
-            onclick={() => openPanel('settings')}
-            onmousedown={(e) => e.stopPropagation()}
-            data-tooltip="Settings (Ctrl+,)"
-          >
-            <i class="fa-solid fa-gear"></i><span class="btn-label">{t('nav.settings', settings?.Language)}</span>
-          </button>
-        </div>
 
         {#if isBedrock}
           <div class="btn-badge-wrap">
@@ -1574,7 +2153,7 @@
               class="action-btn btn-sq hover-grow"
               onclick={() => openPanel('clients')}
               onmousedown={(e) => e.stopPropagation()}
-              data-tooltip="Clients (Ctrl+1)"
+              data-tooltip={t('tt.clientsCtrl1', settings?.Language)}
             >
               <i class="fa-solid fa-puzzle-piece"></i><span class="btn-label">{t('nav.clients', settings?.Language)}</span>
             </button>
@@ -1584,9 +2163,9 @@
           <div class="btn-badge-wrap">
             <button
               class="action-btn btn-sq hover-grow"
-              onclick={() => openPanel('bedrockpacks')}
+              onclick={() => openPanel('bedrock-addons')}
               onmousedown={(e) => e.stopPropagation()}
-              data-tooltip="Packs (Ctrl+2)"
+              data-tooltip={t('tt.packsCtrl2', settings?.Language)}
             >
               <i class="fa-solid fa-boxes-stacked"></i><span class="btn-label">Packs</span>
             </button>
@@ -1597,7 +2176,7 @@
               class="action-btn btn-sq hover-grow"
               onclick={() => openPanel('bedrockworlds')}
               onmousedown={(e) => e.stopPropagation()}
-              data-tooltip="Worlds & Servers (Ctrl+3)"
+              data-tooltip={t('tt.worldsServersCtrl3', settings?.Language)}
             >
               <i class="fa-solid fa-globe"></i><span class="btn-label">Worlds</span>
             </button>
@@ -1608,7 +2187,7 @@
               class="action-btn btn-sq hover-grow"
               onclick={() => openPanel('bedrock-versions')}
               onmousedown={(e) => e.stopPropagation()}
-              data-tooltip="Versions & Instances (Ctrl+4)"
+              data-tooltip={t('tt.versionsInstancesCtrl4', settings?.Language)}
             >
               <i class="fa-solid fa-box-archive"></i><span class="btn-label">{t('nav.mcversions', settings?.Language)}</span>
             </button>
@@ -1619,7 +2198,7 @@
               class="action-btn btn-sq hover-grow"
               onclick={() => openPanel('tweaks')}
               onmousedown={(e) => e.stopPropagation()}
-              data-tooltip="Bedrock Tweaks"
+              data-tooltip={t('tt.bedrockTweaks', settings?.Language)}
             >
               <i class="fa-solid fa-wand-magic-sparkles"></i><span class="btn-label">Tweaks</span>
             </button>
@@ -1630,9 +2209,31 @@
               class="action-btn btn-sq hover-grow"
               onclick={() => openPanel('utilities')}
               onmousedown={(e) => e.stopPropagation()}
-              data-tooltip="Utilities — game options, shaders, clients, system"
+              data-tooltip={t('tt.utilitiesGameOptionsShadersClientsSystem', settings?.Language)}
             >
               <i class="fa-solid fa-screwdriver-wrench"></i><span class="btn-label">Utilities</span>
+            </button>
+          </div>
+
+          <div class="btn-badge-wrap">
+            <button
+              class="action-btn btn-sq hover-grow"
+              onclick={() => openPanel('settings')}
+              onmousedown={(e) => e.stopPropagation()}
+              data-tooltip={t('tt.settingsCtrl', settings?.Language)}
+            >
+              <i class="fa-solid fa-gear"></i><span class="btn-label">{t('nav.settings', settings?.Language)}</span>
+            </button>
+          </div>
+
+          <div class="btn-badge-wrap">
+            <button
+              class="action-btn btn-sq hover-grow"
+              onclick={openMore}
+              onmousedown={(e) => e.stopPropagation()}
+              data-tooltip={t('tt.everyPanelServersLevilaminaBackupsPhotos', settings?.Language)}
+            >
+              <i class="fa-solid fa-ellipsis"></i><span class="btn-label">More</span>
             </button>
           </div>
         {:else}
@@ -1641,7 +2242,7 @@
               class="action-btn btn-sq hover-grow"
               onclick={() => openPanel('launchers')}
               onmousedown={(e) => e.stopPropagation()}
-              data-tooltip="Launchers (Ctrl+1)"
+              data-tooltip={t('tt.launchersCtrl1', settings?.Language)}
             >
               <i class="fa-solid fa-rocket"></i><span class="btn-label">{t('nav.launchers', settings?.Language)}</span>
             </button>
@@ -1652,7 +2253,7 @@
               class="action-btn btn-sq hover-grow"
               onclick={() => openPanel('java-mods')}
               onmousedown={(e) => e.stopPropagation()}
-              data-tooltip="Mods (Ctrl+2)"
+              data-tooltip={t('tt.modsCtrl2', settings?.Language)}
             >
               <i class="fa-solid fa-puzzle-piece"></i><span class="btn-label">{t('nav.mods', settings?.Language)}</span>
             </button>
@@ -1663,7 +2264,7 @@
               class="action-btn btn-sq hover-grow"
               onclick={() => openPanel('mc-versions')}
               onmousedown={(e) => e.stopPropagation()}
-              data-tooltip="Versions (Ctrl+3)"
+              data-tooltip={t('tt.versionsCtrl3', settings?.Language)}
             >
               <i class="fa-solid fa-box-archive"></i><span class="btn-label">{t('nav.versions', settings?.Language)}</span>
             </button>
@@ -1674,7 +2275,7 @@
               class="action-btn btn-sq hover-grow"
               onclick={() => openPanel('tweaks')}
               onmousedown={(e) => e.stopPropagation()}
-              data-tooltip="Vanilla Tweaks"
+              data-tooltip={t('tt.vanillaTweaks', settings?.Language)}
             >
               <i class="fa-solid fa-wand-magic-sparkles"></i><span class="btn-label">Tweaks</span>
             </button>
@@ -1685,7 +2286,7 @@
               class="action-btn btn-sq hover-grow"
               onclick={() => openPanel('profile')}
               onmousedown={(e) => e.stopPropagation()}
-              data-tooltip="Profile"
+              data-tooltip={t('tt.profile', settings?.Language)}
             >
               <i class="fa-solid fa-user"></i><span class="btn-label">{t('nav.profile', settings?.Language)}</span>
             </button>
@@ -1696,9 +2297,31 @@
               class="action-btn btn-sq hover-grow"
               onclick={() => openPanel('java-screenshots')}
               onmousedown={(e) => e.stopPropagation()}
-              data-tooltip="Screenshots"
+              data-tooltip={t('tt.screenshots', settings?.Language)}
             >
               <i class="fa-solid fa-images"></i><span class="btn-label">{t('nav.photos', settings?.Language)}</span>
+            </button>
+          </div>
+
+          <div class="btn-badge-wrap">
+            <button
+              class="action-btn btn-sq hover-grow"
+              onclick={() => openPanel('settings')}
+              onmousedown={(e) => e.stopPropagation()}
+              data-tooltip={t('tt.settingsCtrl', settings?.Language)}
+            >
+              <i class="fa-solid fa-gear"></i><span class="btn-label">{t('nav.settings', settings?.Language)}</span>
+            </button>
+          </div>
+
+          <div class="btn-badge-wrap">
+            <button
+              class="action-btn btn-sq hover-grow"
+              onclick={openMore}
+              onmousedown={(e) => e.stopPropagation()}
+              data-tooltip={t('tt.everyPanelModpacksInstancesBackupsLogs', settings?.Language)}
+            >
+              <i class="fa-solid fa-ellipsis"></i><span class="btn-label">More</span>
             </button>
           </div>
         {/if}
@@ -1728,26 +2351,42 @@
   </div>
 
   {#if settings}
-    <Footer {settings} onChange={saveSettings} onOpenMcVersions={() => openPanel('mc-versions')} />
+    <!-- The footer chip always shows the installed *Bedrock* build
+         (`installed_bedrock_version`) regardless of which edition is
+         currently active elsewhere in the app, so it must always open the
+         Bedrock versions panel — it was hardcoded to the Java 'mc-versions'
+         panel, so clicking a Bedrock version chip opened the Java version
+         list instead. -->
+    <Footer {settings} onChange={saveSettings} onOpenMcVersions={() => openPanel('bedrock-versions')} />
   {/if}
 
   <div class="toast-container">
     {#each toasts as toast (toast.id)}
-      <div class="toast {toast.kind} {toast.closing ? 'closing' : ''}">
+      <div class="toast {toast.kind} {toast.closing ? 'closing' : ''} {toast.action ? 'has-action' : ''}">
         <i class={toast.icon}></i>
         {toast.message}
+        {#if toast.action}
+          <button
+            type="button"
+            class="toast-action"
+            onclick={() => { toast.action?.run(); toasts = toasts.filter((x) => x.id !== toast.id) }}
+          >
+            {#if toast.action.icon}<i class={toast.action.icon}></i>{/if}
+            {toast.action.label}
+          </button>
+        {/if}
       </div>
     {/each}
   </div>
 
   {#if vanillaFallbackPrompt}
-    <div class="vanilla-fallback-prompt" role="alertdialog" aria-label="Repeated injection failures">
+    <div class="vanilla-fallback-prompt" role="alertdialog" aria-label={t('tt.repeatedInjectionFailures', settings?.Language)}>
       <i class="fa-solid fa-triangle-exclamation"></i>
       <span>{vanillaFallbackPrompt.client} failed to inject 3 times in a row.</span>
       <button class="btn-sm" onclick={launchVanillaFallback} onmousedown={(e) => e.stopPropagation()}>
         Launch Vanilla instead
       </button>
-      <button class="icon-btn icon-btn-ghost" data-tooltip="Dismiss" aria-label="Dismiss" onclick={dismissVanillaFallbackPrompt} onmousedown={(e) => e.stopPropagation()}>
+      <button class="icon-btn icon-btn-ghost" data-tooltip={t('tt.dismiss', settings?.Language)} aria-label={t('tt.dismiss', settings?.Language)} onclick={dismissVanillaFallbackPrompt} onmousedown={(e) => e.stopPropagation()}>
         <i class="fa-solid fa-xmark"></i>
       </button>
     </div>
@@ -1792,22 +2431,31 @@
     </button>
     <div class="panel-overlay">
       {#if currentView === 'clients'}
-        <ClientsView
+        <LazyView loader={views.ClientsView}
           {settings}
           onChange={saveSettings}
           onBack={goBack}
           onOpenVersions={() => openPanel('versions')}
           onNavigate={navigateFromPanel}
           breadcrumb={breadcrumbTrail}
+          onBreadcrumbJump={jumpToBreadcrumb}
         />
       {:else if currentView === 'instances'}
-        <InstancesView
+        <LazyView loader={views.InstancesView}
+          onBack={goBack}
+          onNavigate={navigateFromPanel}
+          onToast={(m, k) => showToast(m, k ?? 'info')}
+        />
+      {:else if currentView === 'java-instances'}
+        <LazyView loader={views.JavaInstancesView}
+          {settings}
+          onChange={saveSettings}
           onBack={goBack}
           onNavigate={navigateFromPanel}
           onToast={(m, k) => showToast(m, k ?? 'info')}
         />
       {:else if currentView === 'bedrockworlds'}
-        <BedrockWorldsView
+        <LazyView loader={views.BedrockWorldsView}
           instance={activeBedrockInstance}
           onBack={goBack}
           onNavigate={navigateFromPanel}
@@ -1815,43 +2463,53 @@
           onToast={showToast}
         />
       {:else if currentView === 'bedrockpacks'}
-        <BedrockPacksView
+        <LazyView loader={views.BedrockPacksView}
           instance={activeBedrockInstance}
           onBack={goBack}
           onNavigate={navigateFromPanel}
           onToast={showToast}
         />
+      {:else if currentView === 'bedrock-addons'}
+        <LazyView loader={views.BrowseAddonsView}
+          {settings}
+          onBack={goBack}
+          onNavigate={navigateFromPanel}
+          onToast={showToast}
+        />
       {:else if currentView === 'bedrockbackups'}
-        <BedrockBackupsView
+        <LazyView loader={views.BedrockBackupsView}
           instance={activeBedrockInstance}
           onBack={goBack}
           onNavigate={navigateFromPanel}
           onToast={showToast}
         />
       {:else if currentView === 'bedrockscreenshots'}
-        <BedrockScreenshotsView
+        <LazyView loader={views.BedrockScreenshotsView}
           onBack={goBack}
           onNavigate={navigateFromPanel}
           onToast={showToast}
         />
-      {:else if currentView === 'themestudio'}
-        <ThemeStudioView
+      {:else if currentView === 'leveldat'}
+        <LazyView loader={views.LevelDatEditorView} worldDir={levelDatWorldDir} onBack={goBack} />
+      {:else if currentView === 'settings'}
+        <LazyView loader={views.SettingsView}
           {settings}
           onChange={saveSettings}
           onBack={goBack}
-          breadcrumb={breadcrumbTrail}
-          onToast={showToast}
+          onNavigate={navigateFromPanel}
+          initialCategory={settingsInitialCategory}
+          onCheckForUpdates={checkForUpdatesNow}
+          checkingUpdates={checkingUpdatesManual}
+          updateAvailable={launcherUpdateAvailable}
+          onUndoLastChange={undoLastSettingsChange}
+          {canUndoSettings}
         />
-      {:else if currentView === 'leveldat'}
-        <LevelDatEditorView worldDir={levelDatWorldDir} onBack={goBack} />
-      {:else if currentView === 'settings'}
-        <SettingsView {settings} onChange={saveSettings} onBack={goBack} onNavigate={navigateFromPanel} />
       {:else if currentView === 'java-mods'}
-        <JavaModsView {settings} onBack={goBack} onNavigate={navigateFromPanel} onToast={showToast} />
+        <LazyView loader={views.JavaModsView} {settings} onBack={goBack} onNavigate={navigateFromPanel} onToast={showToast} />
       {:else if currentView === 'modpacks'}
-        <ModpacksView {settings} onBack={goBack} />
+        <LazyView loader={views.ModpacksView} {settings} onBack={goBack} />
       {:else if currentView === 'versions'}
-        <VersionsView
+        <LazyView loader={views.VersionsView}
           {settings}
           onBack={goBack}
           onSaveSettings={saveSettings}
@@ -1859,9 +2517,10 @@
           onLaunchDll={launchWithDll}
           onToast={showToast}
           breadcrumb={breadcrumbTrail}
+          onBreadcrumbJump={jumpToBreadcrumb}
         />
       {:else if currentView === 'tweaks'}
-        <TweaksView
+        <LazyView loader={views.TweaksView}
           edition={isBedrock ? 'Bedrock' : 'Java'}
           minecraftDir={(isBedrock ? activeBedrockInstance?.directory : activeJavaInstance?.directory) ?? ''}
           onBack={goBack}
@@ -1869,36 +2528,37 @@
           onToast={showToast}
         />
       {:else if currentView === 'servers'}
-        <ServersView
+        <LazyView loader={views.ServersView}
           onBack={goBack}
           onNavigate={navigateFromPanel}
           onToast={(m, k) => showToast(m, k ?? 'info')}
         />
       {:else if currentView === 'logs'}
-        <LogsPanel
+        <LazyView loader={views.LogsPanel}
           instanceDir={(isBedrock ? activeBedrockInstance?.directory : activeJavaInstance?.directory) ?? ''}
           instanceId={isBedrock ? undefined : activeJavaInstance?.id}
+          geminiApiKey={settings?.GeminiApiKey ?? ''}
           onBack={goBack}
         />
       {:else if currentView === 'stats'}
-        <StatsPanel onBack={goBack} />
+        <LazyView loader={views.StatsPanel} onBack={goBack} />
       {:else if currentView === 'skinlibrary'}
-        <SkinLibraryView
+        <LazyView loader={views.SkinLibraryView}
           {settings}
           onBack={goBack}
           onSaveSettings={saveSettings}
           onToast={showToast}
         />
       {:else if currentView === 'java-backups'}
-        <JavaBackupsView
+        <LazyView loader={views.JavaBackupsView}
           instanceName={activeJavaInstance?.name ?? ''}
           onBack={goBack}
           onToast={showToast}
         />
       {:else if currentView === 'levilamina-mods'}
-        <LeviLaminaModsView onBack={goBack} onToast={showToast} />
+        <LazyView loader={views.LeviLaminaModsView} onBack={goBack} onToast={showToast} />
       {:else if currentView === 'mc-versions'}
-        <MCVersionsView
+        <LazyView loader={views.MCVersionsView}
           {settings}
           onBack={goBack}
           onNavigate={navigateFromPanel}
@@ -1906,19 +2566,21 @@
           onToast={showToast}
         />
       {:else if currentView === 'launchers'}
-        <LauncherClientsView
+        <LazyView loader={views.LauncherClientsView}
           onBack={goBack}
           onNavigate={navigateFromPanel}
           onToast={showToast}
+          activeClient={activeJavaClient}
+          onSelectClient={selectJavaClient}
         />
       {:else if currentView === 'bedrock-versions'}
-        <BedrockVanillaVersionsView
+        <LazyView loader={views.BedrockVanillaVersionsView}
           onBack={goBack}
           onNavigate={navigateFromPanel}
           onToast={(m, k) => showToast(m, k ?? 'info')}
         />
       {:else if currentView === 'profile'}
-        <ProfileView
+        <LazyView loader={views.ProfileView}
           {settings}
           {mcRunning}
           onChange={saveSettings}
@@ -1927,26 +2589,30 @@
           onToast={showToast}
         />
       {:else if currentView === 'import-launcher'}
-        <ImportLauncherView
+        <LazyView loader={views.ImportLauncherView}
           onBack={goBack}
           onToast={showToast}
           onImported={() => {}}
         />
       {:else if currentView === 'java-screenshots'}
-        <JavaScreenshotsView onBack={goBack} onNavigate={navigateFromPanel} />
+        <LazyView loader={views.JavaScreenshotsView} onBack={goBack} onNavigate={navigateFromPanel} />
       {:else if currentView === 'instance-wizard'}
-        <InstanceWizard
+        <LazyView loader={views.InstanceWizard}
           onDone={(instance) => {
             goBack()
             activeJavaInstance = instance
-            showToast(`Created "${instance.name}".`, 'success')
+            showToast(`Created "${instance.name}".`, 'success', {
+              label: 'Play',
+              icon: 'fa-solid fa-play',
+              run: () => void handleLaunch(),
+            })
           }}
           onCancel={goBack}
           onToast={showToast}
         />
       {:else if currentView === 'instance-detail'}
         {#if activeJavaInstance}
-          <InstanceDetailView
+          <LazyView loader={views.InstanceDetailView}
             instance={activeJavaInstance}
             onBack={goBack}
             onToast={showToast}
@@ -1956,11 +2622,11 @@
           <div class="panel-body"><p>No instance selected.</p></div>
         {/if}
       {:else if currentView === 'modrinth-browse-v2'}
-        <ModrinthBrowseV2 instanceId={activeJavaInstance?.id} onBack={goBack} onToast={showToast} />
+        <LazyView loader={views.ModrinthBrowseV2} instanceId={activeJavaInstance?.id} onBack={goBack} onToast={showToast} />
       {:else if currentView === 'sync-packs'}
-        <SyncPacksView onBack={goBack} onToast={showToast} />
+        <LazyView loader={views.SyncPacksView} onBack={goBack} onToast={showToast} />
       {:else if currentView === 'utilities'}
-        <UtilitiesView
+        <LazyView loader={views.UtilitiesView}
           instanceDir={activeBedrockInstance?.directory ?? ''}
           initialTab={utilInitialTab}
           onBack={goBack}
@@ -1968,17 +2634,17 @@
           onToast={showToast}
         />
       {:else if currentView === 'clientlibrary'}
-        <ClientLibraryView
+        <LazyView loader={views.ClientLibraryView}
           instanceDir={activeBedrockInstance?.directory ?? ''}
           onBack={goBack}
           onNavigate={navigateFromPanel}
         />
       {:else if currentView === 'downloads'}
-        <DownloadsView onBack={goBack} onOpenSettings={() => openPanel('settings')} onOpenCredits={() => openPanel('credits')} />
+        <LazyView loader={views.DownloadsView} onBack={goBack} onOpenSettings={() => openPanel('settings')} onOpenCredits={() => openPanel('credits')} />
       {:else if currentView === 'news'}
-        <NewsView onBack={goBack} onOpenSettings={() => openPanel('settings')} onOpenCredits={() => openPanel('credits')} />
+        <LazyView loader={views.NewsView} onBack={goBack} onOpenSettings={() => openPanel('settings')} onOpenCredits={() => openPanel('credits')} />
       {:else if currentView === 'credits'}
-        <CreditsView
+        <LazyView loader={views.CreditsView}
           edition={isBedrock ? 'bedrock' : 'java'}
           onBack={goBack}
           onNavigate={navigateFromPanel}
@@ -2021,5 +2687,39 @@
         <button type="button" class="btn-sm" onclick={closeCrashModal}>Dismiss</button>
       </div>
     {/if}
+  </Modal>
+
+  <UpdateAvailableModal
+    open={updateModalOpen}
+    update={availableUpdateInfo}
+    {currentVersion}
+    onClose={() => (updateModalOpen = false)}
+    onToast={showToast}
+  />
+
+  <Modal
+    open={confirmQuitDownloadsOpen}
+    title="Downloads in progress"
+    icon="fa-solid fa-triangle-exclamation"
+    iconColor="var(--orange)"
+    onClose={() => (confirmQuitDownloadsOpen = false)}
+  >
+    <p class="setting-hint">Quitting now will cancel any downloads still in progress. Quit anyway?</p>
+    <div class="modal-footer-actions" style="display:flex; justify-content:flex-end; gap:10px; margin-top:16px;">
+      <button class="modal-btn modal-btn-cancel" onclick={() => (confirmQuitDownloadsOpen = false)}>Keep waiting</button>
+      <button class="onboarding-continue-btn" onclick={() => invoke('force_quit').catch((e) => showToast(`Quit failed: ${e}`, 'error'))}>Quit anyway</button>
+    </div>
+  </Modal>
+
+  <Modal
+    open={whatsNewOpen}
+    title="What's new in v{currentVersion}"
+    icon="fa-solid fa-sparkles"
+    onClose={() => (whatsNewOpen = false)}
+  >
+    <div class="update-modal-changelog">{@html formatChangelog(whatsNewChangelog)}</div>
+    <div class="modal-footer-actions" style="display:flex; justify-content:flex-end; margin-top:16px;">
+      <button class="onboarding-continue-btn" onclick={() => (whatsNewOpen = false)}>Got it</button>
+    </div>
   </Modal>
 </div>

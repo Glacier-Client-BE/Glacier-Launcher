@@ -355,8 +355,10 @@ async fn start_minecraft(info: &BedrockPackageInfo) -> Result<u32> {
             }
         }
 
-        for _ in 0..20 {
-            sleep(Duration::from_millis(500)).await;
+        // Same ~10s budget as before, polled at 250ms so a game that
+        // appears early is picked up sooner.
+        for _ in 0..40 {
+            sleep(Duration::from_millis(250)).await;
             if let Some(pid) = find_game_process_for(family) {
                 return Ok(pid);
             }

@@ -99,7 +99,7 @@ pub struct AppliedShaderView {
     pub size_bytes: u64,
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn list_applied_shaders() -> Vec<AppliedShaderView> {
     service()
         .load_applied()

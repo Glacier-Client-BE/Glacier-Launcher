@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from './i18nStore.svelte'
   /**
    * Literal port of the `servers` panel — Home.razor:3715-3828, with behaviour
    * from Pages/Home.Panels.cs:17-207 and Services/ServerPingService.cs.
@@ -63,7 +64,7 @@
         host: s.address,
         port: s.port,
       })
-      onToast?.(`Launching into ${s.name}…`, 'success')
+      onToast?.(t('toast.launchingIntoName', { name: s.name }), 'success')
     } catch (e) {
       onToast?.(String(e), 'error')
     } finally {
@@ -299,6 +300,17 @@
     onToast?.(wasAdding ? 'Server saved' : 'Server updated', 'success')
   }
 
+  /** "More" menu per saved-server card — Edit/Copy are secondary to
+   *  Launch/Favorite/Delete, same overflow-avoidance pattern used on the
+   *  Instances cards. */
+  let openServerMenuId = $state('')
+  function toggleServerMenu(id: string) {
+    openServerMenuId = openServerMenuId === id ? '' : id
+  }
+  function closeServerMenu() {
+    openServerMenuId = ''
+  }
+
   /** Inline two-step confirm, matching BedrockBackupsView/InstancesView. */
   function confirmDeleteServer(id: string) {
     _confirmDeleteServerId = id
@@ -380,7 +392,7 @@
     } catch {
       /* ignore */
     }
-    onToast?.(`Copied ${text}`, 'info')
+    onToast?.(t('toast.copiedText', { text }), 'info')
   }
 
   const unsavedSuggestions = $derived(_serverSuggestions.filter(isSuggestionUnsaved))
@@ -389,6 +401,33 @@
   const sortedSavedServers = $derived(
     [...savedServers].sort((a, b) => Number(b.favorite) - Number(a.favorite)),
   )
+
+  // QOL: drag-to-reorder. Persists the new order to disk via
+  // `reorder_saved_servers`; the favorite-sort above is stable, so this
+  // reorders within whichever favorite/non-favorite bucket a server is in.
+  let dragServerId = $state<string | null>(null)
+  function handleServerDragStart(id: string) {
+    dragServerId = id
+  }
+  function handleServerDragOver(e: DragEvent) {
+    e.preventDefault()
+  }
+  async function handleServerDrop(targetId: string) {
+    if (!dragServerId || dragServerId === targetId) return
+    const next = [...savedServers]
+    const from = next.findIndex((s) => s.id === dragServerId)
+    const to = next.findIndex((s) => s.id === targetId)
+    if (from < 0 || to < 0) return
+    const [moved] = next.splice(from, 1)
+    next.splice(to, 0, moved)
+    savedServers = next
+    dragServerId = null
+    try {
+      await invoke('reorder_saved_servers', { orderedIds: next.map((s) => s.id) })
+    } catch (e) {
+      onToast?.(String(e), 'error')
+    }
+  }
 
   openServers()
 </script>
@@ -399,13 +438,13 @@
     class="panel-back-btn"
     onclick={onBack}
     onmousedown={(e) => e.stopPropagation()}
-    data-tooltip="Back"
-    aria-label="Back"
+    data-tooltip={t('tt.back')}
+    aria-label={t('tt.back')}
   >
     <i class="fa-solid fa-arrow-left"></i>
   </button>
   <div class="panel-title-wrap">
-    <span class="panel-title">Servers</span>
+    <span class="panel-title">{t('nav.servers')}</span>
     <div class="panel-title-underline"></div>
   </div>
   <div class="panel-header-spacer"></div>
@@ -414,20 +453,20 @@
       class="panel-icon-btn versions-sort-btn"
       onclick={refreshServerStatuses}
       onmousedown={(e) => e.stopPropagation()}
-      data-tooltip="Refresh server status"
+      data-tooltip={t('tt.refreshServerStatus')}
       disabled={refreshing}
     >
       <i class={`fa-solid ${refreshing ? 'fa-spinner fa-spin' : 'fa-rotate'}`}></i>
-      <span>Refresh</span>
+      <span>{t('common.refresh')}</span>
     </button>
     <button
       class="panel-icon-btn versions-sort-btn"
       onclick={openAddServerModal}
       onmousedown={(e) => e.stopPropagation()}
-      data-tooltip="Add a new server"
+      data-tooltip={t('tt.addNewServer')}
     >
       <i class="fa-solid fa-plus"></i>
-      <span>Add</span>
+      <span>{t('x.add')}</span>
     </button>
   </div>
 </div>
@@ -438,8 +477,8 @@
   {#if savedServers.length === 0}
     <div class="empty-state">
       <i class="fa-solid fa-server"></i>
-      <span>No saved servers yet</span>
-      <small>Add a Minecraft Bedrock server to quick-launch into it. The current client will be injected before connecting.</small>
+      <span>{t('empty.noSavedServersYet')}</span>
+      <small>{t('empty.addMinecraftBedrockServerQuickLaunch')}</small>
       <button
         class="btn-sm"
         style="margin-top:8px;"
@@ -450,166 +489,183 @@
       </button>
     </div>
   {:else}
+    <div class="client-card-cols">
     {#each sortedSavedServers as s (s.id)}
       {@const hasStatus = _serverStatus.has(serverKey(s))}
       {@const st = _serverStatus.get(serverKey(s))}
-      <div class="server-row">
-        <div class="server-icon" style={getServerIconStyle(s)}>
-          {#if isServerIconImage(s)}
-            <img src={s.icon} alt="" style="width:20px;height:20px;object-fit:contain;border-radius:4px;" />
-          {:else}
-            <i class={getServerIconClass(s)}></i>
-          {/if}
-        </div>
-        <div class="server-meta">
-          <span class="server-name">{s.name}</span>
-          <span class="server-sub">{s.address}:{s.port}</span>
-          {#if hasStatus}
-            {#if st == null}
-              <span class="server-ping checking">Pinging…</span>
+      <div
+        class="client-card {dragServerId === s.id ? 'dragging' : ''}"
+        draggable="true"
+        ondragstart={() => handleServerDragStart(s.id)}
+        ondragover={handleServerDragOver}
+        ondrop={() => handleServerDrop(s.id)}
+        ondragend={() => (dragServerId = null)}
+      >
+        <div class="client-card-header">
+          <div class="client-card-icon" style={getServerIconStyle(s)}>
+            {#if isServerIconImage(s)}
+              <img src={s.icon} alt="" loading="lazy" decoding="async" style="width:20px;height:20px;object-fit:contain;border-radius:4px;" />
             {:else}
-              <span class="server-ping {st.online ? 'online' : 'offline'}">
-                <span class="ping-dot"></span>{st.online
-                  ? `${n0(st.players_online)}/${n0(st.players_max)} · ${st.latency_ms} ms`
-                  : 'Offline'}
-              </span>
+              <i class={getServerIconClass(s)}></i>
             {/if}
-          {/if}
-          {#if s.tags && s.tags.length > 0}
-            <div class="server-tags">
-              {#each s.tags as tag}
-                <span class="server-tag-chip">{tag}</span>
-              {/each}
+          </div>
+          <div class="client-card-meta">
+            <span class="client-card-name">{s.name}</span>
+            <span class="client-card-sub">{s.address}:{s.port}</span>
+          </div>
+          <div class="client-card-actions">
+            <button
+              class="copy-btn"
+              data-tooltip={s.favorite ? 'Unfavorite' : 'Favorite'}
+              aria-label={s.favorite ? 'Unfavorite' : 'Favorite'}
+              aria-pressed={s.favorite}
+              onclick={() => toggleFavorite(s)}
+              onmousedown={(e) => e.stopPropagation()}
+            >
+              <i class={s.favorite ? 'fa-solid fa-star fav-on' : 'fa-regular fa-star'}></i>
+            </button>
+            {#if _confirmDeleteServerId === s.id}
+              <IconBtn
+                ghost
+                icon="fa-solid fa-check"
+                title="Confirm delete"
+                onClick={() => deleteServer(s)}
+                onMouseDown={(e) => e.stopPropagation()}
+              />
+              <IconBtn
+                ghost
+                icon="fa-solid fa-xmark"
+                title="Cancel"
+                onClick={cancelDeleteServer}
+                onMouseDown={(e) => e.stopPropagation()}
+              />
+            {:else}
+              <IconBtn
+                ghost
+                icon="fa-solid fa-trash"
+                title="Delete"
+                onClick={() => confirmDeleteServer(s.id)}
+                onMouseDown={(e) => e.stopPropagation()}
+              />
+            {/if}
+            <IconBtn
+              icon={`fa-solid ${launchingKey === serverKey(s) ? 'fa-spinner fa-spin' : 'fa-play'}`}
+              title="Launch & connect"
+              disabled={launchingKey !== null}
+              onClick={() => launchAndConnect(s)}
+              onMouseDown={(e) => e.stopPropagation()}
+            />
+            <div style="position:relative;" onmousedown={(e) => e.stopPropagation()}>
+              <IconBtn ghost icon="fa-solid fa-ellipsis-vertical" title="More" onClick={() => toggleServerMenu(s.id)} />
+              {#if openServerMenuId === s.id}
+                <div class="tw-dropdown-menu">
+                  <button type="button" class="tw-dropdown-item" onclick={() => { closeServerMenu(); openEditServerModal(s) }}>
+                    <span><i class="fa-solid fa-pen"></i> Edit</span>
+                  </button>
+                  <button type="button" class="tw-dropdown-item" onclick={() => { closeServerMenu(); copyServerAddress(s) }}>
+                    <span><i class="fa-solid fa-copy"></i> Copy address</span>
+                  </button>
+                </div>
+              {/if}
             </div>
-          {/if}
+          </div>
         </div>
-        <div class="version-actions">
-          <button
-            class="copy-btn"
-            data-tooltip={s.favorite ? 'Unfavorite' : 'Favorite'}
-            aria-label="Favorite"
-            onclick={() => toggleFavorite(s)}
-            onmousedown={(e) => e.stopPropagation()}
-          >
-            <i class={s.favorite ? 'fa-solid fa-star' : 'fa-regular fa-star'} style={s.favorite ? 'color:#f5c518;' : ''}></i>
-          </button>
-          <IconBtn
-            ghost
-            icon="fa-solid fa-pen"
-            title="Edit"
-            onClick={() => openEditServerModal(s)}
-            onMouseDown={(e) => e.stopPropagation()}
-          />
-          {#if _confirmDeleteServerId === s.id}
-            <IconBtn
-              ghost
-              icon="fa-solid fa-check"
-              title="Confirm delete"
-              onClick={() => deleteServer(s)}
-              onMouseDown={(e) => e.stopPropagation()}
-            />
-            <IconBtn
-              ghost
-              icon="fa-solid fa-xmark"
-              title="Cancel"
-              onClick={cancelDeleteServer}
-              onMouseDown={(e) => e.stopPropagation()}
-            />
-          {:else}
-            <IconBtn
-              ghost
-              icon="fa-solid fa-trash"
-              title="Delete"
-              onClick={() => confirmDeleteServer(s.id)}
-              onMouseDown={(e) => e.stopPropagation()}
-            />
-          {/if}
-          <button
-            class="copy-btn"
-            data-tooltip="Copy address"
-            aria-label="Copy address"
-            onclick={() => copyServerAddress(s)}
-            onmousedown={(e) => e.stopPropagation()}
-          >
-            <i class="fa-solid fa-copy"></i>
-          </button>
-          <IconBtn
-            icon={`fa-solid ${launchingKey === serverKey(s) ? 'fa-spinner fa-spin' : 'fa-play'}`}
-            title="Launch & connect"
-            disabled={launchingKey !== null}
-            onClick={() => launchAndConnect(s)}
-            onMouseDown={(e) => e.stopPropagation()}
-          />
-        </div>
+        {#if hasStatus || (s.tags && s.tags.length > 0)}
+          <div style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
+            {#if hasStatus}
+              {#if st == null}
+                <span class="server-ping checking">Pinging…</span>
+              {:else}
+                <span class="server-ping {st.online ? 'online' : 'offline'}">
+                  <span class="ping-dot"></span>{st.online
+                    ? `${n0(st.players_online)}/${n0(st.players_max)} · ${st.latency_ms} ms`
+                    : 'Offline'}
+                </span>
+              {/if}
+            {/if}
+            {#if s.tags && s.tags.length > 0}
+              <div class="server-tags">
+                {#each s.tags as tag}
+                  <span class="server-tag-chip">{tag}</span>
+                {/each}
+              </div>
+            {/if}
+          </div>
+        {/if}
       </div>
     {/each}
+    </div>
   {/if}
 
   {#if unsavedSuggestions.length > 0}
-    <span class="panel-section-label">Popular</span>
+    <span class="panel-section-label">{t('x.popular')}</span>
+    <div class="client-card-cols">
     {#each unsavedSuggestions as s (s.address + ':' + s.port)}
       {@const hasStatus = _serverStatus.has(serverKey(s))}
       {@const st = _serverStatus.get(serverKey(s))}
-      <div class="server-row">
-        <div class="server-icon" style={getServerIconStyle(s)}>
-          {#if isServerIconImage(s)}
-            <img src={s.icon} alt="" style="width:20px;height:20px;object-fit:contain;border-radius:4px;" />
-          {:else}
-            <i class={getServerIconClass(s)}></i>
-          {/if}
-        </div>
-        <div class="server-meta">
-          <span class="server-name">{s.name}</span>
-          <span class="server-sub">{s.address}:{s.port}</span>
-          {#if hasStatus}
-            {#if st == null}
-              <span class="server-ping checking">Pinging…</span>
+      <div class="client-card">
+        <div class="client-card-header">
+          <div class="client-card-icon" style={getServerIconStyle(s)}>
+            {#if isServerIconImage(s)}
+              <img src={s.icon} alt="" loading="lazy" decoding="async" style="width:20px;height:20px;object-fit:contain;border-radius:4px;" />
             {:else}
-              <span class="server-ping {st.online ? 'online' : 'offline'}">
-                <span class="ping-dot"></span>{st.online
-                  ? `${n0(st.players_online)}/${n0(st.players_max)} · ${st.latency_ms} ms`
-                  : 'Offline'}
-              </span>
+              <i class={getServerIconClass(s)}></i>
             {/if}
+          </div>
+          <div class="client-card-meta">
+            <span class="client-card-name">{s.name}</span>
+            <span class="client-card-sub">{s.address}:{s.port}</span>
+          </div>
+          <div class="client-card-actions">
+            <button
+              class="copy-btn"
+              data-tooltip={t('tt.copyAddress')}
+              aria-label={t('tt.copyAddress')}
+              onclick={() => copyServerAddress(s)}
+              onmousedown={(e) => e.stopPropagation()}
+            >
+              <i class="fa-solid fa-copy"></i>
+            </button>
+            <IconBtn
+              icon="fa-solid fa-bookmark"
+              title="Save"
+              onClick={() => saveSuggestedServer(s)}
+              onMouseDown={(e) => e.stopPropagation()}
+            />
+            <IconBtn
+              icon={`fa-solid ${launchingKey === serverKey(s) ? 'fa-spinner fa-spin' : 'fa-play'}`}
+              title="Launch & connect"
+              disabled={launchingKey !== null}
+              onClick={() => launchAndConnect(s)}
+              onMouseDown={(e) => e.stopPropagation()}
+            />
+          </div>
+        </div>
+        {#if hasStatus}
+          {#if st == null}
+            <span class="server-ping checking">Pinging…</span>
+          {:else}
+            <span class="server-ping {st.online ? 'online' : 'offline'}">
+              <span class="ping-dot"></span>{st.online
+                ? `${n0(st.players_online)}/${n0(st.players_max)} · ${st.latency_ms} ms`
+                : 'Offline'}
+            </span>
           {/if}
-        </div>
-        <div class="version-actions">
-          <button
-            class="copy-btn"
-            data-tooltip="Copy address"
-            aria-label="Copy address"
-            onclick={() => copyServerAddress(s)}
-            onmousedown={(e) => e.stopPropagation()}
-          >
-            <i class="fa-solid fa-copy"></i>
-          </button>
-          <IconBtn
-            icon="fa-solid fa-bookmark"
-            title="Save"
-            onClick={() => saveSuggestedServer(s)}
-            onMouseDown={(e) => e.stopPropagation()}
-          />
-          <IconBtn
-            icon={`fa-solid ${launchingKey === serverKey(s) ? 'fa-spinner fa-spin' : 'fa-play'}`}
-            title="Launch & connect"
-            disabled={launchingKey !== null}
-            onClick={() => launchAndConnect(s)}
-            onMouseDown={(e) => e.stopPropagation()}
-          />
-        </div>
+        {/if}
       </div>
     {/each}
+    </div>
   {/if}
 
   <!-- ── LAN GAMES (feature 34) ── new section, no original counterpart. -->
   <div class="panel-section-label-row" style="display:flex;align-items:center;justify-content:space-between;margin-top:10px;">
-    <span class="panel-section-label">LAN Games</span>
+    <span class="panel-section-label">{t('x.lanGames')}</span>
     <button
       class="btn-sm"
       onclick={scanLanGames}
       onmousedown={(e) => e.stopPropagation()}
       disabled={lanScanning}
-      data-tooltip="Scan the local network for open-to-LAN worlds"
+      data-tooltip={t('tt.scanLocalNetworkOpenLanWorlds')}
     >
       <i class={`fa-solid ${lanScanning ? 'fa-spinner fa-spin' : 'fa-magnifying-glass'}`}></i>
       {lanScanning ? 'Scanning…' : 'Scan'}
@@ -622,31 +678,37 @@
       No LAN worlds found yet. Open a world to LAN on this network, then Scan.
     </small>
   {/if}
+  <div class="client-card-cols">
   {#each lanGames as g (g.host + ':' + g.port)}
-    <div class="server-row">
-      <div class="server-icon" style="background:var(--bg-item);">
-        <i class="fa-solid fa-house-signal"></i>
-      </div>
-      <div class="server-meta">
-        <span class="server-name">{g.motd || 'LAN World'}</span>
-        <span class="server-sub">{g.host}:{g.port}</span>
-      </div>
-      <div class="version-actions">
-        <button
-          class="copy-btn"
-          data-tooltip="Copy address"
-          aria-label="Copy address"
-          onclick={() => copyServerAddress({ id: '', name: g.motd, address: g.host, port: g.port, icon: '', icon_color: '', favorite: false, tags: [] })}
-          onmousedown={(e) => e.stopPropagation()}
-        >
-          <i class="fa-solid fa-copy"></i>
-        </button>
+    <div class="client-card">
+      <div class="client-card-header">
+        <div class="client-card-icon" style="background:var(--bg-item);">
+          <i class="fa-solid fa-house-signal"></i>
+        </div>
+        <div class="client-card-meta">
+          <span class="client-card-name">{g.motd || 'LAN World'}</span>
+          <span class="client-card-sub">{g.host}:{g.port}</span>
+        </div>
+        <div class="client-card-actions">
+          <button
+            class="copy-btn"
+            data-tooltip={t('tt.copyAddress')}
+            aria-label={t('tt.copyAddress')}
+            onclick={() => copyServerAddress({ id: '', name: g.motd, address: g.host, port: g.port, icon: '', icon_color: '', favorite: false, tags: [] })}
+            onmousedown={(e) => e.stopPropagation()}
+          >
+            <i class="fa-solid fa-copy"></i>
+          </button>
+        </div>
       </div>
     </div>
   {/each}
+  </div>
 </div>
 
 <!-- ── ADD/EDIT SERVER MODAL ── (Home.razor:4433-4477) -->
+<svelte:window onkeydown={(e) => { if (e.key === 'Escape' && serverModalOpen) closeServerModal() }} />
+
 {#if serverModalOpen}
   <div
     class="modal-overlay"
@@ -657,22 +719,23 @@
       class="modal-box"
       role="presentation"
       onclick={(e) => e.stopPropagation()}
+      onkeydown={(e) => { if (e.key === 'Enter' && e.target instanceof HTMLInputElement) { e.preventDefault(); void saveServerModal() } }}
     >
       <div class="modal-header">
         <span class="modal-title">
           <i class="fa-solid fa-server" style="color:var(--accent);margin-right:8px;"></i>
           {editingServer == null ? 'Add server' : 'Edit server'}
         </span>
-        <button class="modal-close-btn" onclick={closeServerModal} aria-label="Close">
+        <button class="modal-close-btn" onclick={closeServerModal} aria-label={t('tt.close')}>
           <i class="fa-solid fa-xmark"></i>
         </button>
       </div>
       <div class="modal-body">
-        <label class="modal-input-label" for="server-input-name">Display name</label>
+        <label class="modal-input-label" for="server-input-name">{t('label.displayName')}</label>
         <input
           id="server-input-name"
           class="modal-input"
-          placeholder="My Server"
+          placeholder={t('ph.myServer')}
           bind:value={serverInputName}
           onkeydown={(e) => e.stopPropagation()}
         />
@@ -686,7 +749,7 @@
           onkeydown={(e) => e.stopPropagation()}
         />
 
-        <label class="modal-input-label" style="margin-top:8px;" for="server-input-port">Port</label>
+        <label class="modal-input-label" style="margin-top:8px;" for="server-input-port">{t('label.port')}</label>
         <input
           id="server-input-port"
           class="modal-input"
@@ -710,12 +773,16 @@
         {/if}
 
         <div class="modal-btn-row" style="margin-top:14px;">
-          <button class="modal-btn modal-btn-cancel" onclick={closeServerModal}>Cancel</button>
+          <button class="modal-btn modal-btn-cancel" onclick={closeServerModal}>{t('common.cancel')}</button>
           <button class="modal-btn modal-btn-confirm" onclick={saveServerModal}>
-            <i class="fa-solid fa-floppy-disk"></i> Save
+            <i class="fa-solid fa-floppy-disk"></i> {t('common.save')}
           </button>
         </div>
       </div>
     </div>
   </div>
 {/if}
+
+<style>
+  .fav-on { color: var(--orange); }
+</style>

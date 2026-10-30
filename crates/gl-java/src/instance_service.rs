@@ -36,7 +36,7 @@ impl InstanceService {
         std::fs::create_dir_all(Self::shared_libraries_dir_of(&root_dir))
             .map_err(io_err(&root_dir))?;
 
-        let instances = load_index(&index_path);
+        let instances = load_index(&index_path)?;
 
         let svc = Self {
             root_dir,
@@ -189,6 +189,18 @@ impl InstanceService {
         save_index(&self.index_path, &list)
     }
 
+    /// Sets (or clears) whether an instance is pinned, following the exact
+    /// pattern of `set_instance_group`.
+    pub fn set_instance_pinned(&self, id: &str, pinned: bool) -> Result<()> {
+        let mut list = self.instances.lock().expect("instance list poisoned");
+        let Some(inst) = list.iter_mut().find(|x| x.id.eq_ignore_ascii_case(id)) else {
+            return Ok(());
+        };
+        inst.pinned = pinned;
+        inst.updated_at = now_iso();
+        save_index(&self.index_path, &list)
+    }
+
     /// Duplicate an existing instance's metadata and copy its directory tree.
     pub fn duplicate(&self, id: &str) -> Result<JavaInstance> {
         let source = self
@@ -261,9 +273,11 @@ impl InstanceService {
         if list.len() <= 1 {
             return Ok(false);
         }
-        let removed = list.remove(pos);
+        let mut next = list.clone();
+        let removed = next.remove(pos);
+        save_index(&self.index_path, &next)?;
+        *list = next;
         let _ = std::fs::remove_dir_all(&removed.directory);
-        save_index(&self.index_path, &list)?;
         Ok(true)
     }
 
@@ -391,11 +405,22 @@ fn ensure_layout(instance: &JavaInstance) -> Result<()> {
     Ok(())
 }
 
-fn load_index(index_path: &Path) -> Vec<JavaInstance> {
-    let Ok(text) = std::fs::read_to_string(index_path) else {
-        return Vec::new();
+/// A missing index is a fresh install. An unreadable index is an error rather
+/// than an empty list, since the next save would overwrite every instance's
+/// metadata. A corrupt index is quarantined so it isn't silently clobbered.
+fn load_index(index_path: &Path) -> Result<Vec<JavaInstance>> {
+    let text = match std::fs::read_to_string(index_path) {
+        Ok(text) => text,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(e) => return Err(io_err(index_path)(e)),
     };
-    serde_json::from_str(&text).unwrap_or_default()
+    match serde_json::from_str(&text) {
+        Ok(list) => Ok(list),
+        Err(_) => {
+            let _ = std::fs::rename(index_path, index_path.with_extension("json.corrupt"));
+            Ok(Vec::new())
+        }
+    }
 }
 
 fn save_index(index_path: &Path, list: &[JavaInstance]) -> Result<()> {

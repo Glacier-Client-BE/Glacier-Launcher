@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from './i18nStore.svelte'
   import { invoke } from '@tauri-apps/api/core'
   import { listen } from '@tauri-apps/api/event'
   import { onDestroy } from 'svelte'
@@ -95,13 +96,18 @@
   )
 
   const avatarSrc = $derived.by(() => {
+    // Xbox/Discord take priority over the Minecraft skin head on both
+    // editions - a Java install can still have Xbox connected (used for
+    // Bedrock features / cross-play), and previously this branch short-
+    // circuited straight to the skin head for any Java install with a
+    // JavaUuid, so a connected Xbox account's gamerpic never showed there.
+    if (effectiveProfile === 'xbox' && settings.XboxGamerPictureUrl) return settings.XboxGamerPictureUrl
+    if (effectiveProfile === 'discord' && settings.DiscordAvatar) return settings.DiscordAvatar
     if (settings.Edition === 'java' && settings.JavaUuid) {
       const ticks = settings.SkinChangedTicks
       const uuid = settings.JavaUuid.replace(/-/g, '')
       return `https://mc-heads.net/avatar/${uuid}${ticks > 0 ? `?v=${ticks}` : ''}`
     }
-    if (effectiveProfile === 'xbox' && settings.XboxGamerPictureUrl) return settings.XboxGamerPictureUrl
-    if (effectiveProfile === 'discord' && settings.DiscordAvatar) return settings.DiscordAvatar
     return '/favicon.svg'
   })
 
@@ -169,14 +175,19 @@
 
   let unlistenProcessChanged: (() => void) | undefined
   let runningPollHandle: ReturnType<typeof setInterval> | undefined
+  let footerDestroyed = false
 
   refreshRunning()
   runningPollHandle = setInterval(refreshRunning, 10000)
   listen('java-process-changed', () => refreshRunning()).then((un) => {
-    unlistenProcessChanged = un
+    // If the footer was torn down before the listener resolved, release it
+    // immediately instead of leaking it.
+    if (footerDestroyed) un()
+    else unlistenProcessChanged = un
   })
 
   onDestroy(() => {
+    footerDestroyed = true
     if (runningPollHandle) clearInterval(runningPollHandle)
     unlistenProcessChanged?.()
   })
@@ -184,20 +195,21 @@
 
 <div class="footer">
   <div class="footer-profile-area">
-    {#if settings.Edition === 'java' && settings.JavaUuid}
+    {#if settings.Edition === 'java' && settings.JavaUuid && effectiveProfile === 'none'}
       <span class="avatar avatar-mchead" style="background-image:url('{avatarSrc}'), url('{avatarSrc}');"></span>
     {:else}
       <img class="avatar {footerAvatarClass}" src={avatarSrc} alt="" />
     {/if}
 
     <div class="user-info">
-      <span class="username">{footerName}</span>
-      <span class="user-handle">{footerHandle}</span>
+      <span class="username" title={footerName}>{footerName}</span>
+      <span class="user-handle" title={footerHandle}>{footerHandle}</span>
     </div>
 
     <button
       class="profile-switch-btn"
       title={switchTooltip}
+      aria-label={switchTooltip}
       onclick={(e) => {
         e.stopPropagation()
         cycleProfileDisplay()
@@ -209,7 +221,9 @@
     <button
       class="profile-switch-btn"
       class:rpc-active={settings.DiscordRichPresence}
+      aria-pressed={settings.DiscordRichPresence}
       title={settings.DiscordRichPresence ? 'Disable Discord RPC' : 'Enable Discord RPC'}
+      aria-label={settings.DiscordRichPresence ? 'Disable Discord RPC' : 'Enable Discord RPC'}
       onclick={(e) => {
         e.stopPropagation()
         toggleDiscordRpc()
@@ -238,21 +252,21 @@
         {/if}
         <div class="xbox-hover-stats">
           <div class="xbox-hover-stat">
-            <i class="fa-solid fa-trophy" style="color:#f5a623;"></i>
+            <i class="fa-solid fa-trophy xbox-icon-gold"></i>
             <span class="xbox-hover-stat-val">{settings.XboxGamerscore || '0'}</span>
             <span class="xbox-hover-stat-lbl">Gamerscore</span>
           </div>
           <div class="xbox-hover-stat">
-            <i class="fa-solid fa-id-badge" style="color:#107c10;"></i>
+            <i class="fa-solid fa-id-badge xbox-icon-green"></i>
             <span class="xbox-hover-stat-val xbox-hover-xuid">{settings.XboxXuid || '—'}</span>
             <span class="xbox-hover-stat-lbl">XUID</span>
           </div>
         </div>
         <div class="xbox-hover-footer">
-          <i class="fa-solid fa-gamepad" style="color:#107c10;"></i>
+          <i class="fa-solid fa-gamepad xbox-icon-green"></i>
           <span>Xbox Live</span>
           <span class="xbox-hover-dot">•</span>
-          <span>Click to manage</span>
+          <span>{t('x.clickToManage')}</span>
         </div>
       </div>
     {/if}
@@ -268,7 +282,7 @@
             e.stopPropagation()
             showRunningDropdown = !showRunningDropdown
           }}
-          data-tooltip="Running Java instances"
+          data-tooltip={t('tt.runningJavaInstances')}
         >
           <i class="fa-solid fa-circle-play"></i>
           <span>{runningInstances.length} running</span>
@@ -313,8 +327,8 @@
           ? 'Minecraft Preview — click to manage versions'
           : 'Minecraft Bedrock — click to manage versions'}
       >
-        <i class="fa-solid fa-cube"></i>
-        <span>{mcVersion.is_preview ? 'Preview ' : ''}{mcVersion.display_version}</span>
+        <img class="chip-img" src="images/mc-logo.png" alt="" />
+        <span class="footer-mc-text" title={`${mcVersion.is_preview ? 'Preview ' : ''}${mcVersion.display_version}`}>{mcVersion.is_preview ? 'Preview ' : ''}{mcVersion.display_version}</span>
       </div>
     {:else}
       <div
@@ -324,21 +338,104 @@
         onclick={() => onOpenMcVersions?.()}
         onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') onOpenMcVersions?.() }}
         onmousedown={(e) => e.stopPropagation()}
-        data-tooltip="Minecraft Bedrock not detected — click to install a version"
+        data-tooltip={t('tt.minecraftBedrockNotDetectedClickInstall')}
       >
-        <i class="fa-solid fa-cube"></i>
-        <span>Not installed</span>
+        <img class="chip-img" src="images/mc-logo.png" alt="" />
+        <span class="footer-mc-text">{t('x.notInstalled')}</span>
       </div>
     {/if}
     <span class="footer-client-label">
       {#if clientImage}
-        <img class="chip-icon" src={clientImage} alt="" style="width:14px;height:14px;object-fit:contain;" />
+        <img class="chip-img" src={clientImage} alt="" />
       {:else if clientIconClass}
         <i class="chip-icon {clientIconClass}"></i>
       {:else}
         <i class="fa-solid fa-clock"></i>
       {/if}
-      <span>{clientLabel}</span>
+      <span class="footer-client-text" title={clientLabel}>{clientLabel}</span>
     </span>
   </div>
 </div>
+
+<style>
+  /* Footer rhythm: outer gutter and band tokens, compact 32px row. */
+  .footer {
+    gap: var(--panel-band);
+    padding: 0 var(--panel-gutter) var(--panel-gutter);
+    align-items: center;
+  }
+  .footer-right {
+    gap: var(--panel-band);
+    min-width: 0;
+  }
+  .user-info {
+    min-width: 0;
+    flex: 1;
+  }
+  .username,
+  .user-handle,
+  .footer-mc-text,
+  .footer-client-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 180px;
+  }
+  .footer-profile-area {
+    padding: var(--row-pad-y) var(--row-pad-x) var(--row-pad-y) 6px;
+    box-shadow: none;
+    transition: background-color var(--t);
+  }
+  .footer-profile-area:hover {
+    box-shadow: none;
+    background: var(--bg-item-hover);
+  }
+  .profile-switch-btn {
+    transition: background-color var(--t), color var(--t);
+    margin-left: 0;
+  }
+  .profile-switch-btn:hover {
+    background: var(--bg-item-hover);
+    border-color: var(--border);
+    color: var(--text);
+  }
+  .profile-switch-btn.rpc-active {
+    color: var(--accent);
+  }
+  .profile-switch-btn:disabled,
+  .footer-running-stop:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  .footer-mc-version,
+  .footer-client-label {
+    padding: 4px var(--row-pad-x);
+    transition: background-color var(--t), border-color var(--t);
+  }
+  .footer-mc-version:hover {
+    background: var(--bg-item-hover);
+    border-color: var(--border);
+  }
+  .footer-mc-version:focus-visible {
+    outline: 2px solid var(--accent-hover);
+    outline-offset: 2px;
+  }
+  .footer-running-row:hover {
+    background: var(--bg-item-hover);
+  }
+  .avatar.xbox-connected {
+    box-shadow: none;
+  }
+  .chip-img {
+    width: 14px;
+    height: 14px;
+    object-fit: contain;
+    flex-shrink: 0;
+  }
+  .xbox-icon-gold {
+    color: var(--orange);
+  }
+  .xbox-icon-green {
+    color: var(--green);
+  }
+</style>

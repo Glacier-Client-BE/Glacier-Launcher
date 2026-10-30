@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from './i18nStore.svelte'
   /**
    * Phase 7 UI: sync packs (`gl-sync`) — named sets of targets (directory
    * links, merged files, plain-copy files, mod-id lists) kept consistent
@@ -15,6 +16,7 @@
   import PanelHeader from './components/PanelHeader.svelte'
   import Modal from './components/Modal.svelte'
   import type { JavaInstance } from './settings'
+  import ListSkeleton from './components/ListSkeleton.svelte'
 
   let {
     onBack,
@@ -134,6 +136,23 @@
     }
   }
 
+  /** Mirrors `SyncTarget::label()` (Rust, `gl_sync::model`) so a report
+   * entry's `target_label` string can be matched back to the target
+   * definition it came from (to know e.g. whether `Merge` is a valid
+   * resolution for it). */
+  function syncTargetLabel(t: SyncTarget): string {
+    switch (t.kind) {
+      case 'DirLink': return `dir-link:${t.relative_path}`
+      case 'FileMerge': return `file-merge:${t.relative_path}`
+      case 'FileCopy': return `file-copy:${t.relative_path}`
+      case 'Mods': return 'mods'
+    }
+  }
+
+  function conflictTargetKind(targetLabel: string): SyncTarget['kind'] | null {
+    return activePack?.targets.find((t) => syncTargetLabel(t) === targetLabel)?.kind ?? null
+  }
+
   function actionClass(a: ReportAction): string {
     if (a === 'Failed' || a === 'ConflictNeedsResolution') return 'sync-report-bad'
     if (a === 'NoOp') return 'sync-report-neutral'
@@ -199,7 +218,7 @@
     const id = newPackId.trim()
     const name = newPackName.trim()
     if (!id || !name || draftTargets.length === 0) {
-      onToast?.('Pack id, name, and at least one target are required.', 'error')
+      onToast?.(t('toast.packIdNameAtLeastOne'), 'error')
       return
     }
     busy = true
@@ -207,7 +226,7 @@
       await invoke('create_sync_pack', { id, name, targets: draftTargets })
       showCreateModal = false
       await reload()
-      onToast?.(`Created sync pack "${name}".`, 'success')
+      onToast?.(t('toast.createdSyncPack', { name }), 'success')
     } catch (e) {
       onToast?.(String(e), 'error')
     } finally {
@@ -220,7 +239,7 @@
     try {
       await invoke('delete_sync_pack', { packId: pack.id })
       await reload()
-      onToast?.(`Deleted "${pack.name}".`, 'info')
+      onToast?.(t('toast.deletedQuotedName', { name: pack.name }), 'info')
     } catch (e) {
       onToast?.(String(e), 'error')
     } finally {
@@ -286,14 +305,42 @@
       })
       await reload()
       if (report.entries.some((e) => e.action === 'Failed')) {
-        onToast?.('Applied with some failures — see the report.', 'error')
+        onToast?.(t('toast.appliedWithSomeFailuresSeeReport'), 'error')
       } else {
-        onToast?.(`Applied "${activePack.name}".`, 'success')
+        onToast?.(t('toast.appliedQuotedName', { name: activePack.name }), 'success')
       }
     } catch (e) {
       onToast?.(String(e), 'error')
     } finally {
       applying = false
+    }
+  }
+
+  /** `${instance_id}::${target_label}` of the conflict entry currently being
+   * resolved, so only that entry's buttons show a busy state. */
+  let resolvingKey = $state<string | null>(null)
+
+  async function resolveConflict(instanceId: string, targetLabel: string, strategy: AdoptStrategy) {
+    if (!activePack) return
+    const key = `${instanceId}::${targetLabel}`
+    resolvingKey = key
+    try {
+      report = await invoke<SyncReport>('resolve_sync_conflict', {
+        packId: activePack.id,
+        instanceId,
+        targetLabel,
+        adoptStrategy: strategy,
+      })
+      await reload()
+      if (report.entries.some((e) => e.action === 'Failed')) {
+        onToast?.(t('toast.resolvedButApplyingItHitFailure'), 'error')
+      } else {
+        onToast?.(t('toast.conflictResolved'), 'success')
+      }
+    } catch (e) {
+      onToast?.(String(e), 'error')
+    } finally {
+      resolvingKey = null
     }
   }
 
@@ -307,7 +354,7 @@
         mode,
       })
       await reload()
-      onToast?.(`Detached "${instanceName(instanceId)}" from "${activePack.name}".`, 'info')
+      onToast?.(t('toast.detachedFromPack', { instance: instanceName(instanceId), pack: activePack.name }), 'info')
     } catch (e) {
       onToast?.(String(e), 'error')
     } finally {
@@ -316,7 +363,7 @@
   }
 </script>
 
-<PanelHeader title="Sync Packs" {onBack}>
+<PanelHeader title={t('panel.syncPacks')} {onBack}>
   {#snippet extraActions()}
     <button
       type="button"
@@ -324,8 +371,8 @@
       disabled={isLoading}
       onclick={reload}
       onmousedown={(e) => e.stopPropagation()}
-      data-tooltip="Refresh"
-      aria-label="Refresh"
+      data-tooltip={t('tt.refresh')}
+      aria-label={t('tt.refresh')}
     >
       <i class="fa-solid fa-rotate"></i>
     </button>
@@ -334,8 +381,8 @@
       class="panel-icon-btn"
       onclick={openCreateModal}
       onmousedown={(e) => e.stopPropagation()}
-      data-tooltip="New sync pack"
-      aria-label="New sync pack"
+      data-tooltip={t('tt.newSyncPack')}
+      aria-label={t('tt.newSyncPack')}
     >
       <i class="fa-solid fa-plus"></i>
     </button>
@@ -349,11 +396,11 @@
   </p>
 
   {#if isLoading}
-    <div class="versions-loading"><span class="spinner"></span><span>Loading sync packs…</span></div>
+    <ListSkeleton rows={4} />
   {:else if packs.length === 0}
     <div class="empty-state">
       <i class="fa-solid fa-arrows-turn-to-dots"></i>
-      <span>No sync packs yet. Create one to share resourcepacks, options, or mod lists across instances.</span>
+      <span>{t('empty.noSyncPacksYetCreateOne')}</span>
     </div>
   {:else}
     {#each packs as pack (pack.id)}
@@ -365,8 +412,8 @@
           <span class="instance-hint">{trackingCount} instance{trackingCount === 1 ? '' : 's'}</span>
         </div>
         <div class="instance-hint" style="margin-bottom:8px;">
-          {#each pack.targets as t, i (i)}
-            <div>{targetLabel(t)}</div>
+          {#each pack.targets as target, i (i)}
+            <div>{targetLabel(target)}</div>
           {/each}
         </div>
         <div class="profile-actions">
@@ -374,7 +421,7 @@
             <i class="fa-solid fa-arrows-rotate"></i> Apply to instances
           </button>
           <button class="btn-sm skin-btn-ghost" onclick={() => deletePack(pack)} disabled={busy}>
-            <i class="fa-solid fa-trash"></i> Delete
+            <i class="fa-solid fa-trash"></i> {t('common.delete')}
           </button>
         </div>
       </div>
@@ -385,21 +432,21 @@
 <!-- Create pack -->
 <Modal open={showCreateModal} title="New Sync Pack" icon="fa-solid fa-plus" onClose={() => (showCreateModal = false)}>
   <div class="setting-row">
-    <label for="sync-pack-id">Pack id</label>
+    <label for="sync-pack-id">{t('label.packId')}</label>
     <input id="sync-pack-id" class="setting-input" placeholder="shared-resourcepacks" bind:value={newPackId} />
   </div>
   <div class="setting-row">
-    <label for="sync-pack-name">Name</label>
-    <input id="sync-pack-name" class="setting-input" placeholder="Shared resourcepacks" bind:value={newPackName} />
+    <label for="sync-pack-name">{t('label.name')}</label>
+    <input id="sync-pack-name" class="setting-input" placeholder={t('ph.sharedResourcepacks')} bind:value={newPackName} />
   </div>
 
-  <span class="panel-section-label">Targets</span>
+  <span class="panel-section-label">{t('label.targets')}</span>
   <div class="setting-row">
-    <select class="setting-select" bind:value={newTargetKind} aria-label="Target kind">
+    <select class="setting-select" bind:value={newTargetKind} aria-label={t('tt.targetKind')}>
       <option value="DirLink">Directory link (e.g. resourcepacks)</option>
       <option value="FileMerge">Merged file (options.txt)</option>
       <option value="FileCopy">Copied file (e.g. icon.png)</option>
-      <option value="Mods">Mod id list</option>
+      <option value="Mods">{t('x.modIdList')}</option>
     </select>
   </div>
   {#if newTargetKind === 'Mods'}
@@ -410,7 +457,7 @@
         bind:value={newTargetModIds}
         onkeydown={(e) => { if (e.key === 'Enter') addDraftTarget() }}
       />
-      <button class="vcs-btn" onclick={addDraftTarget} aria-label="Add target"><i class="fa-solid fa-plus"></i></button>
+      <button class="vcs-btn" onclick={addDraftTarget} aria-label={t('tt.addTarget')}><i class="fa-solid fa-plus"></i></button>
     </div>
   {:else}
     <div class="setting-row">
@@ -420,17 +467,17 @@
         bind:value={newTargetPath}
         onkeydown={(e) => { if (e.key === 'Enter') addDraftTarget() }}
       />
-      <button class="vcs-btn" onclick={addDraftTarget} aria-label="Add target"><i class="fa-solid fa-plus"></i></button>
+      <button class="vcs-btn" onclick={addDraftTarget} aria-label={t('tt.addTarget')}><i class="fa-solid fa-plus"></i></button>
     </div>
   {/if}
 
   {#if draftTargets.length > 0}
     <div class="instance-hint">
-      {#each draftTargets as t, i (i)}
+      {#each draftTargets as target, i (i)}
         <div class="instance-row">
-          <span>{targetLabel(t)}</span>
+          <span>{targetLabel(target)}</span>
           <div style="flex:1"></div>
-          <button class="instance-icon-btn" onclick={() => removeDraftTarget(i)} aria-label="Remove target">
+          <button class="instance-icon-btn" onclick={() => removeDraftTarget(i)} aria-label={t('tt.removeTarget')}>
             <i class="fa-solid fa-xmark"></i>
           </button>
         </div>
@@ -442,7 +489,7 @@
     <button class="btn-sm" onclick={createPack} disabled={busy}>
       <i class="fa-solid fa-check"></i> Create pack
     </button>
-    <button class="btn-sm skin-btn-ghost" onclick={() => (showCreateModal = false)}>Cancel</button>
+    <button class="btn-sm skin-btn-ghost" onclick={() => (showCreateModal = false)}>{t('common.cancel')}</button>
   </div>
 </Modal>
 
@@ -455,7 +502,7 @@
   class="sync-apply-modal"
 >
   {#if activePack}
-    <span class="panel-section-label">Instances</span>
+    <span class="panel-section-label">{t('nav.instances')}</span>
     <div class="instance-hint">
       {#each instances as inst (inst.id)}
         <label class="instance-row" style="cursor:pointer;">
@@ -470,8 +517,8 @@
             <span class="instance-hint">tracking</span>
             <button
               class="instance-icon-btn"
-              data-tooltip="Detach: keep current content"
-              aria-label="Detach and keep content"
+              data-tooltip={t('tt.detachKeepCurrentContent')}
+              aria-label={t('tt.detachKeepContent')}
               onclick={() => runDetach(inst.id, 'Materialize')}
             >
               <i class="fa-solid fa-link-slash"></i>
@@ -500,7 +547,7 @@
         {report.dry_run ? 'Preview' : 'Result'} ({report.entries.length} {report.entries.length === 1 ? 'entry' : 'entries'})
       </span>
       {#if report.entries.length === 0}
-        <div class="empty-state"><span>Nothing to do — already in sync.</span></div>
+        <div class="empty-state"><span>{t('empty.nothingDoAlreadySync')}</span></div>
       {:else}
         <div class="instance-hint">
           {#each report.entries as e, i (i)}
@@ -510,6 +557,38 @@
               <span>{actionLabel(e.action)}</span>
             </div>
             <div class="instance-hint" style="padding-left:8px;">{e.detail}</div>
+            {#if e.action === 'ConflictNeedsResolution'}
+              {@const key = `${e.instance_id}::${e.target_label}`}
+              {@const busyHere = resolvingKey === key}
+              <div class="profile-actions" style="padding-left:8px; margin-bottom:6px;">
+                <button
+                  class="btn-sm"
+                  disabled={busyHere}
+                  onclick={() => resolveConflict(e.instance_id, e.target_label, 'KeepExisting')}
+                  data-tooltip={t('tt.thisInstanceSCurrentContentBecomes')}
+                >
+                  <i class="fa-solid fa-hard-drive"></i> Keep this instance's version
+                </button>
+                <button
+                  class="btn-sm"
+                  disabled={busyHere}
+                  onclick={() => resolveConflict(e.instance_id, e.target_label, 'TakePackVersion')}
+                  data-tooltip={t('tt.discardThisInstanceSCurrentContent')}
+                >
+                  <i class="fa-solid fa-arrows-turn-to-dots"></i> Take pack version
+                </button>
+                {#if conflictTargetKind(e.target_label) === 'FileMerge'}
+                  <button
+                    class="btn-sm"
+                    disabled={busyHere}
+                    onclick={() => resolveConflict(e.instance_id, e.target_label, 'Merge')}
+                    data-tooltip={t('tt.combineBothPackManagedKeysWin')}
+                  >
+                    <i class="fa-solid fa-code-merge"></i> Merge
+                  </button>
+                {/if}
+              </div>
+            {/if}
           {/each}
         </div>
       {/if}
@@ -518,7 +597,7 @@
 </Modal>
 
 <style>
-  .sync-report-bad { color: var(--danger, #e05a5a); }
-  .sync-report-good { color: var(--success, #4caf7d); }
+  .sync-report-bad { color: var(--red); }
+  .sync-report-good { color: var(--green); }
   .sync-report-neutral { opacity: 0.75; }
 </style>

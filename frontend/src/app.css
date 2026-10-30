@@ -26,21 +26,25 @@
     --accent: #7289da;
     --accent-hover: #8ea0e0;
     --accent-press: #5b6eb8;
-    --accent-glow: rgba(114, 137, 218, 0.42);
+    --accent-glow: rgba(114, 137, 218, 0.22);
     --accent-bg: rgba(114, 137, 218, 0.10);
-    --bg: #23272a;
-    --bg-panel: #2c2f33;
-    --bg-inset: #1f2227;
-    --bg-item: rgba(255, 255, 255, 0.04);
-    --bg-item-hover: rgba(255, 255, 255, 0.075);
-    --text: #ffffff;
-    --text-dim: #99aab5;
+    --on-accent: #ffffff;
+    --bg: #0a0b14;
+    --bg-panel: #121526;
+    --bg-inset: #0c0d18;
+    --bg-item: rgba(255, 255, 255, 0.03);
+    --bg-item-hover: rgba(255, 255, 255, 0.06);
+    --text: #eaecf6;
+    --text-dim: #9aa1b8;
 
     --red: #f04747;
     --green: #43b581;
     --orange: #faa61a;
     --yellow: #fee75c;
     --pink: #eb459e;
+    --green-bg: rgba(67, 181, 129, 0.15);
+    --red-bg: rgba(240, 71, 71, 0.15);
+    --orange-bg: rgba(250, 166, 26, 0.15);
 
     --loader-fabric: #dbb989;
     --loader-fabric-bg: rgba(219, 185, 137, 0.15);
@@ -54,6 +58,7 @@
 
     --font-body: 'Plus Jakarta Sans', 'Segoe UI', system-ui, sans-serif;
     --font-display: 'Roboto', 'Segoe UI', system-ui, sans-serif;
+    --font-mono: ui-monospace, 'Cascadia Mono', Consolas, monospace;
 
     --panel-gutter: 16px;
     --panel-band: 8px;
@@ -76,10 +81,10 @@
     --t: calc(0.15s * var(--anim-mult)) var(--ease-out);
     --blur: 14px;
     --scale: 1;
-    --overlay-top: rgba(35, 39, 42, 0.55);
-    --overlay-mid: rgba(35, 39, 42, 0.20);
-    --overlay-bot: rgba(35, 39, 42, 0.85);
-    --sidebar-w: var(--sidebar-w-user, min(460px, 92vw));
+    --overlay-top: rgba(10, 11, 20, 0.55);
+    --overlay-mid: rgba(10, 11, 20, 0.20);
+    --overlay-bot: rgba(10, 11, 20, 0.85);
+    --sidebar-w: var(--sidebar-w-user, min(52%, 92vw));
 
     /* Depth scale, ported verbatim from Pepe's Portfolio (styles.css) for
        consistent elevation across both surfaces. Applied as a static
@@ -87,7 +92,7 @@
        target-hardware-n5100 memory: box-shadow recompute is one of the
        pricier GPU costs on the N5100 dev/target machine, so these only
        ever change on discrete state changes, not continuously. */
-    --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.3);
+    --shadow-sm: inset 0 1px 0 rgb(255 255 255 / .04), 0 1px 2px rgb(5 6 20 / .25), 0 2px 8px -2px rgb(5 6 20 / .30);
     --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.4);
     --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.5);
     --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.6);
@@ -108,46 +113,47 @@
     text-underline-offset: 2px;
 }
 
+/* The launcher's original grey palette, from before v2 matched the website. */
+[data-theme="legacy"] {
+    --accent-glow: rgba(114, 137, 218, 0.42);
+    --bg: #23272a;
+    --bg-panel: #2c2f33;
+    --bg-inset: #1f2227;
+    --bg-item: rgba(255, 255, 255, 0.04);
+    --bg-item-hover: rgba(255, 255, 255, 0.075);
+    --text: #ffffff;
+    --text-dim: #99aab5;
+    --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.3);
+}
+
 [data-theme="darker"] {
     --bg: #1e2124;
     --bg-panel: #26292c;
-    --overlay-top: rgba(30, 33, 36, 0.65);
-    --overlay-bot: rgba(30, 33, 36, 0.90);
 }
 
 [data-theme="midnight"] {
     --bg: #141520;
     --bg-panel: #1c1e30;
-    --overlay-top: rgba(20, 21, 32, 0.65);
-    --overlay-bot: rgba(20, 21, 32, 0.92);
 }
 
 [data-theme="slate"] {
     --bg: #2a2d35;
     --bg-panel: #33373f;
-    --overlay-top: rgba(42, 45, 53, 0.55);
-    --overlay-bot: rgba(42, 45, 53, 0.88);
 }
 
 [data-theme="ocean"] {
     --bg: #0e1f2a;
     --bg-panel: #13293a;
-    --overlay-top: rgba(14, 31, 42, 0.60);
-    --overlay-bot: rgba(14, 31, 42, 0.92);
 }
 
 [data-theme="forest"] {
     --bg: #16241a;
     --bg-panel: #1d2f22;
-    --overlay-top: rgba(22, 36, 26, 0.60);
-    --overlay-bot: rgba(22, 36, 26, 0.90);
 }
 
 [data-theme="sunset"] {
     --bg: #2a1a26;
     --bg-panel: #33212f;
-    --overlay-top: rgba(42, 26, 38, 0.60);
-    --overlay-bot: rgba(42, 26, 38, 0.92);
 }
 
 [data-theme="light"] {
@@ -157,9 +163,29 @@
     --bg-item-hover: rgba(0, 0, 0, 0.07);
     --text: #0e1116;
     --text-dim: #5b6470;
-    --overlay-top: rgba(245, 246, 248, 0.55);
-    --overlay-mid: rgba(245, 246, 248, 0.20);
-    --overlay-bot: rgba(245, 246, 248, 0.85);
+}
+
+/* Light theme: the wallpaper keeps the default dark overlay, so anything
+   sitting straight on it keeps light text; surfaces opt back into dark text. */
+[data-theme="light"] .top-bar,
+[data-theme="light"] .footer {
+    --text: #eaecf6;
+    --text-dim: #9aa1b8;
+    --bg-item: rgba(255, 255, 255, 0.04);
+    --bg-item-hover: rgba(255, 255, 255, 0.075);
+}
+
+[data-theme="light"] .panel-overlay,
+[data-theme="light"] .tw-dropdown-menu,
+[data-theme="light"] .notif-panel,
+[data-theme="light"] .modal-box,
+[data-theme="light"] .search-modal,
+[data-theme="light"] .xbox-hover-card,
+[data-theme="light"] .footer-running-dropdown {
+    --text: #0e1116;
+    --text-dim: #5b6470;
+    --bg-item: rgba(0, 0, 0, 0.04);
+    --bg-item-hover: rgba(0, 0, 0, 0.07);
 }
 
 [data-theme="light"] .panel-overlay {
@@ -280,8 +306,8 @@
 }
 
 [data-theme="light"] .panel-tab.active {
-    background: var(--accent);
-    color: #fff;
+    background: var(--accent-bg);
+    color: var(--accent-press);
 }
 
 .no-animations *:not(.news-track),
@@ -311,7 +337,7 @@
 }
 
 .no-animations .panel-overlay {
-    background: #1e2124 !important;
+    background: color-mix(in srgb, var(--bg) 88%, #000) !important;
 }
 .no-animations .modal-overlay {
     background: rgba(0, 0, 0, 0.7) !important;
@@ -460,7 +486,6 @@ body {
     background-color: var(--bg);
     z-index: 0;
     filter: blur(0) brightness(1);
-    transition: filter calc(0.28s * var(--anim-mult, 1)) var(--ease-out);
 }
 
 /* Mirrors the mockup's dimmed/blurred backdrop behind a floating panel
@@ -490,7 +515,10 @@ body {
 
 .top-bar {
     position: relative;
-    z-index: 10;
+    /* Above open panels (.panel-overlay 20, .directory-panel-overlay 90) so the
+       bell and client dropdowns it hosts aren't drawn underneath them; still
+       below drop zones (100), toasts and modals. */
+    z-index: 95;
     display: flex;
     align-items: center;
     gap: 8px;
@@ -528,7 +556,7 @@ body {
 .branding-title {
     font-size: 13px;
     font-weight: 700;
-    color: #fff;
+    color: var(--text);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -546,6 +574,7 @@ body {
 .top-bar-spacer {
     flex: 1;
     min-width: 8px;
+    padding: 20px;
 }
 
 .edition-switcher {
@@ -574,10 +603,10 @@ body {
     color: var(--text-dim);
     background: transparent;
     border: 0;
-    border-radius: 14px;
+    border-radius: max(4px, calc(16px - 3px));
     cursor: pointer;
     font-family: inherit;
-    transition: background var(--t), color var(--t), box-shadow var(--t);
+    transition: background var(--t), color var(--t);
     white-space: nowrap;
 }
 
@@ -592,7 +621,7 @@ body {
 }
 
 .edition-tab.active {
-    color: #fff;
+    color: var(--on-accent);
     background: var(--accent);
     box-shadow: 0 0 8px var(--accent-glow);
 }
@@ -619,7 +648,7 @@ body {
 
     flex-shrink: 1;
     min-width: 0;
-    transition: background var(--t), border-color var(--t), color var(--t), box-shadow var(--t);
+    transition: background var(--t), border-color var(--t), color var(--t);
     white-space: nowrap;
 }
 
@@ -667,75 +696,12 @@ body {
     color: var(--text);
 }
 
-.topbar-chip-wrap {
-    position: relative;
-    pointer-events: all;
-    flex-shrink: 1;
-    min-width: 0;
-}
-
 /* A click-anywhere-else-to-close scrim, same pattern as .notif-backdrop. */
 .topbar-backdrop {
     position: fixed;
     inset: 0;
     z-index: 199;
     background: transparent;
-}
-
-.topbar-chip-dropdown {
-    position: absolute;
-    top: calc(100% + 8px);
-    left: 0;
-    width: 220px;
-    z-index: 200;
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    padding: 6px;
-    background: rgba(35, 39, 42, 0.45);
-    backdrop-filter: blur(var(--blur, 14px));
-    -webkit-backdrop-filter: blur(var(--blur, 14px));
-    border: 1px solid rgba(255, 255, 255, 0.10);
-    border-radius: var(--r-md);
-    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.14);
-    animation: search-slide-down calc(0.18s * var(--anim-mult, 1)) var(--ease-out);
-}
-
-.tcd-item {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 8px 10px;
-    border-radius: var(--r-sm);
-    border: none;
-    background: transparent;
-    color: var(--text-dim);
-    font-family: inherit;
-    font-size: 12.5px;
-    font-weight: 500;
-    cursor: pointer;
-    text-align: left;
-    transition: background var(--t), color var(--t);
-}
-
-.tcd-item i:first-child {
-    width: 16px;
-    font-size: 13px;
-    flex-shrink: 0;
-    text-align: center;
-}
-
-.tcd-item span {
-    flex: 1;
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.tcd-item:hover {
-    background: var(--bg-item-hover);
-    color: var(--text);
 }
 
 .tcd-item.active {
@@ -746,19 +712,6 @@ body {
 
 .tcd-item.active i:first-child {
     color: var(--accent);
-}
-
-.tcd-check {
-    font-size: 11px;
-    color: var(--accent);
-    flex-shrink: 0;
-}
-
-.tcd-empty {
-    padding: 14px 10px;
-    text-align: center;
-    color: var(--text-dim);
-    font-size: 12px;
 }
 
 .chip-dot {
@@ -798,7 +751,7 @@ body {
     cursor: pointer;
     pointer-events: all;
     flex-shrink: 0;
-    transition: background var(--t), border-color var(--t), color var(--t), box-shadow var(--t);
+    transition: background var(--t), border-color var(--t), color var(--t);
     white-space: nowrap;
 }
 
@@ -848,7 +801,7 @@ body {
 }
 
 .close-btn {
-    background: rgba(240, 71, 71, 0.15);
+    background: var(--red-bg);
     border-color: rgba(240, 71, 71, 0.25);
 }
 
@@ -858,7 +811,7 @@ body {
 }
 
 .wnd-btn i {
-    font-size: 10px;
+    font-size: 12px;
     line-height: 1;
     pointer-events: none;
 }
@@ -874,7 +827,6 @@ body {
     justify-content: center;
     gap: 10px;
     filter: blur(0);
-    transition: filter calc(0.28s * var(--anim-mult, 1)) var(--ease-out);
 }
 
 .main-content.panel-open {
@@ -891,7 +843,8 @@ body {
 }
 
 .main-content .status-msg,
-.main-content .recently-launched {
+.main-content .recently-launched,
+.main-content .onboarding-checklist-card {
     pointer-events: auto;
 }
 
@@ -901,7 +854,8 @@ body {
 
 .main-content.panel-open .btn-row,
 .main-content.panel-open .status-msg,
-.main-content.panel-open .recently-launched {
+.main-content.panel-open .recently-launched,
+.main-content.panel-open .onboarding-checklist-card {
     pointer-events: none;
 }
 
@@ -909,19 +863,19 @@ body {
     height: 48px;
     border: none;
     border-radius: var(--r-sm);
-    background: rgba(44, 47, 51, 0.90);
+    background: color-mix(in srgb, var(--bg-panel) 90%, transparent);
     color: var(--text);
     font-family: inherit;
-    font-size: 14px;
+    font-size: 13px;
     font-weight: 600;
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 8px;
+    gap: 6px;
     overflow: hidden;
     white-space: nowrap;
-    transition: width 0.22s var(--ease-out), background 0.15s ease, box-shadow 0.18s ease, border-color 0.15s ease;
+    transition: width 0.22s var(--ease-out), background 0.15s ease, border-color 0.15s ease;
     outline: none;
     position: relative;
 }
@@ -942,7 +896,7 @@ body {
 }
 
 .btn-sq:not(:disabled):hover {
-    background: rgba(44, 47, 51, 0.99);
+    background: color-mix(in srgb, var(--bg-panel) 99%, transparent);
     box-shadow: 0 0 14px var(--accent-glow);
 }
 
@@ -994,7 +948,7 @@ body {
 }
 
 .action-btn i {
-    font-size: 15px;
+    font-size: 14px;
     line-height: 1;
     pointer-events: none;
 }
@@ -1092,35 +1046,13 @@ body {
     color: var(--red);
 }
 
-.launch-dl-bar {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    justify-content: center;
-    padding: 0 20px;
-    animation: fadeIn 0.15s ease;
-}
-
-.launch-dl-stage {
-    font-size: 11px;
-    color: var(--text-dim);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    max-width: 220px;
-}
-
-.launch-dl-progress {
-    width: 120px;
-}
-
 .recently-launched {
     display: flex;
     align-items: center;
     gap: 6px;
     flex-wrap: wrap;
     justify-content: center;
-    background: rgba(35, 39, 42, 0.45);
+    background: color-mix(in srgb, var(--bg) 45%, transparent);
     backdrop-filter: blur(var(--blur));
     border: 1px solid rgba(255, 255, 255, 0.10);
     border-radius: var(--r-pill);
@@ -1160,7 +1092,7 @@ body {
 
 .recent-item i {
     font-size: 10px;
-    color: var(--accent);
+    color: var(--text-dim);
 }
 
 @keyframes spin {
@@ -1173,28 +1105,23 @@ body {
 }
 
 @keyframes spin-pulse {
-    0% {
-        transform: rotate(0deg);
-        border-top-color: rgba(255, 255, 255, 1);
-    }
-    50% {
-        border-top-color: rgba(255, 255, 255, 0.65);
-    }
-    100% {
-        transform: rotate(360deg);
-        border-top-color: rgba(255, 255, 255, 1);
-    }
+    to { transform: rotate(360deg); }
 }
 
+/* Transform-only rotation (compositor-friendly on the N5100). */
 .spinner {
     display: inline-block;
     width: 16px;
     height: 16px;
     border: 2px solid rgba(255, 255, 255, 0.12);
-    border-top-color: #fff;
+    border-top-color: var(--accent-hover);
     border-radius: 50%;
-    animation: spin-pulse 0.85s cubic-bezier(0.4, 0.15, 0.6, 0.85) infinite;
+    animation: spin-pulse calc(0.85s * var(--anim-mult, 1)) cubic-bezier(0.4, 0.15, 0.6, 0.85) infinite;
     flex-shrink: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .spinner { animation-duration: calc(2.4s * var(--anim-mult, 1)); }
 }
 
 .footer {
@@ -1205,7 +1132,6 @@ body {
     gap: 10px;
     padding: 0 16px 16px;
     filter: blur(0);
-    transition: filter calc(0.28s * var(--anim-mult, 1)) var(--ease-out);
 }
 
 /* Mirrors the mockup's dimmed mainContent, which wraps the button row, the
@@ -1284,281 +1210,14 @@ body {
     margin-right: 0;
 }
 
-.discord-connect-btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 6px;
-    background: rgba(88, 101, 242, 0.18);
-    border: 1px solid rgba(88, 101, 242, 0.35);
-    border-radius: 8px;
-    padding: 5px 10px;
-    font-size: 11px;
-    font-weight: 600;
-    color: #7289da;
-    cursor: pointer;
-    font-family: inherit;
-    transition: background var(--t), border-color var(--t), box-shadow var(--t);
-}
-
-.discord-connect-btn:hover {
-    background: rgba(88, 101, 242, 0.30);
-    border-color: rgba(88, 101, 242, 0.60);
-    box-shadow: 0 0 12px rgba(88, 101, 242, 0.35);
-}
-
-.discord-connect-btn i {
-    font-size: 12px;
-}
-
-.discord-connected-pill {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 5px;
-    font-size: 11px;
-    color: var(--text-dim);
-    background: rgba(67, 181, 129, 0.12);
-    border: 1px solid rgba(67, 181, 129, 0.25);
-    border-radius: 8px;
-    padding: 4px 9px;
-}
-
-.discord-connected-pill i {
-    color: var(--green);
-    font-size: 11px;
-}
-
-.xbox-connect-btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 6px;
-    background: rgba(16, 124, 16, 0.18);
-    border: 1px solid rgba(16, 124, 16, 0.35);
-    border-radius: 8px;
-    padding: 5px 10px;
-    font-size: 11px;
-    font-weight: 600;
-    color: #107c10;
-    cursor: pointer;
-    font-family: inherit;
-    transition: background var(--t), border-color var(--t), box-shadow var(--t);
-}
-
-.xbox-connect-btn:hover {
-    background: rgba(16, 124, 16, 0.30);
-    border-color: rgba(16, 124, 16, 0.60);
-    box-shadow: 0 0 12px rgba(16, 124, 16, 0.35);
-}
-
-.xbox-connect-btn i {
-    font-size: 12px;
-}
-
-.xbox-connected-pill {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 5px;
-    font-size: 11px;
-    color: var(--text-dim);
-    background: rgba(16, 124, 16, 0.12);
-    border: 1px solid rgba(16, 124, 16, 0.25);
-    border-radius: 8px;
-    padding: 4px 9px;
-    cursor: pointer;
-    transition: background var(--t), border-color var(--t);
-}
-
-.xbox-connected-pill:hover {
-    background: rgba(16, 124, 16, 0.25);
-    border-color: rgba(16, 124, 16, 0.45);
-}
-
-.xbox-connected-pill i {
-    color: #107c10;
-    font-size: 11px;
-}
-
 .avatar.xbox-connected {
     border: 2px solid #107c10;
     box-shadow: 0 0 8px rgba(16, 124, 16, 0.4);
 }
 
-.xbox-signin-btn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    width: 100%;
-    padding: 10px 16px;
-    background: #107c10;
-    border: none;
-    border-radius: 8px;
-    color: #fff;
-    font-size: 13px;
-    font-weight: 600;
-    cursor: pointer;
-    font-family: inherit;
-    transition: background var(--t), box-shadow var(--t);
-}
-
-.xbox-signin-btn:hover {
-    background: #0e6b0e;
-    box-shadow: 0 0 16px rgba(16, 124, 16, 0.4);
-}
-
 .xbox-signin-btn.disabled {
     opacity: 0.6;
     pointer-events: none;
-}
-
-.xbox-profile-card {
-    display: flex;
-    align-items: center;
-    gap: 14px;
-    padding: 14px;
-    background: rgba(16, 124, 16, 0.08);
-    border: 1px solid rgba(16, 124, 16, 0.2);
-    border-radius: 10px;
-    margin-bottom: 16px;
-    box-shadow: var(--shadow-sm);
-}
-
-.xbox-avatar {
-    width: 52px;
-    height: 52px;
-    border-radius: 50%;
-    object-fit: cover;
-    border: 2px solid rgba(16, 124, 16, 0.4);
-}
-
-.xbox-avatar-placeholder {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: rgba(16, 124, 16, 0.15);
-    color: #107c10;
-    font-size: 22px;
-}
-
-.xbox-profile-info {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-}
-
-.xbox-gamertag {
-    font-size: 15px;
-    font-weight: 700;
-    color: var(--text);
-}
-
-.xbox-gamerscore {
-    font-size: 12px;
-    color: var(--text-dim);
-}
-
-.xbox-tier {
-    font-size: 11px;
-    color: var(--text-dim);
-    opacity: 0.7;
-}
-
-.xbox-tier-badge {
-    display: inline-block;
-    font-size: 10px;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    color: #107c10;
-    background: rgba(16, 124, 16, 0.15);
-    border: 1px solid rgba(16, 124, 16, 0.3);
-    border-radius: 4px;
-    padding: 2px 7px;
-    margin-top: 2px;
-    width: fit-content;
-}
-
-.xbox-bio-section {
-    margin-bottom: 14px;
-    padding: 10px 12px;
-    background: rgba(255, 255, 255, 0.03);
-    border: 1px solid rgba(255, 255, 255, 0.06);
-    border-radius: 8px;
-    box-shadow: var(--shadow-sm);
-}
-
-.xbox-bio-label {
-    font-size: 10px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    color: var(--text-dim);
-    display: block;
-    margin-bottom: 4px;
-}
-
-.xbox-bio-text {
-    font-size: 12px;
-    color: var(--text);
-    line-height: 1.5;
-    margin: 0;
-    opacity: 0.85;
-}
-
-.xbox-stats-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 10px;
-    margin-bottom: 16px;
-}
-
-.xbox-stat-card {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 10px 12px;
-    background: rgba(255, 255, 255, 0.03);
-    border: 1px solid rgba(255, 255, 255, 0.06);
-    border-radius: 8px;
-    box-shadow: var(--shadow-sm);
-}
-
-.xbox-stat-card i {
-    font-size: 18px;
-    opacity: 0.9;
-}
-
-.xbox-stat-detail {
-    display: flex;
-    flex-direction: column;
-    gap: 1px;
-    min-width: 0;
-}
-
-.xbox-stat-value {
-    font-size: 14px;
-    font-weight: 700;
-    color: var(--text);
-}
-
-.xbox-xuid-val {
-    font-size: 11px;
-    font-family: monospace;
-    letter-spacing: 0.03em;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.xbox-stat-label {
-    font-size: 10px;
-    color: var(--text-dim);
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    font-weight: 600;
 }
 
 .footer-profile-area {
@@ -1572,7 +1231,7 @@ body {
     border-radius: var(--r-sm);
     padding: 6px 12px 6px 6px;
     box-shadow: var(--shadow-sm);
-    transition: box-shadow var(--t), background var(--t);
+    transition: background var(--t);
 }
 
 .footer-profile-area:hover {
@@ -1584,8 +1243,8 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 24px;
-    height: 24px;
+    width: 32px;
+    height: 32px;
     border-radius: var(--r-sm);
     border: 1px solid rgba(255, 255, 255, 0.08);
     background: rgba(255, 255, 255, 0.05);
@@ -1600,7 +1259,7 @@ body {
 .profile-switch-btn:hover {
     background: var(--accent);
     border-color: var(--accent);
-    color: #fff;
+    color: var(--on-accent);
 }
 
 .profile-switch-btn.rpc-active {
@@ -1671,7 +1330,7 @@ body {
 .xbox-hover-gamertag {
     font-size: 14px;
     font-weight: 700;
-    color: #fff;
+    color: var(--text);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -1728,7 +1387,7 @@ body {
 .xbox-hover-stat-val {
     font-size: 12px;
     font-weight: 700;
-    color: #fff;
+    color: var(--text);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -1857,7 +1516,7 @@ body.drop-active .news-track {
 }
 
 .news-item i {
-    color: var(--accent);
+    color: var(--text-dim);
     font-size: 12px;
     flex-shrink: 0;
 }
@@ -1869,7 +1528,7 @@ body.drop-active .news-track {
 
 .panel-overlay {
     position: absolute;
-    top: var(--topbar-h, 64px);
+    top: var(--topbar-h, 60px);
     right: 0;
     bottom: 0;
     left: auto;
@@ -1878,17 +1537,51 @@ body.drop-active .news-track {
     z-index: 20;
     display: flex;
     flex-direction: column;
-    background: rgba(30, 33, 36, 0.97);
+    background: color-mix(in srgb, color-mix(in srgb, var(--bg) 88%, #000) 97%, transparent);
     border-left: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 0;
-
     backdrop-filter: blur(var(--blur, 14px));
     -webkit-backdrop-filter: blur(var(--blur, 14px));
-
     animation: slideUp calc(0.34s * var(--anim-mult)) var(--ease-drawer),
                panel-blur-hold calc(0.34s * var(--anim-mult)) linear;
     overflow: hidden;
     box-shadow: -8px 0 40px rgba(0, 0, 0, 0.55);
+}
+
+.compact .panel-overlay {
+    position: absolute;
+    top: var(--topbar-h, 46px);
+    right: 0;
+    bottom: 0;
+    left: auto;
+    width: var(--sidebar-w);
+    height: auto;
+    z-index: 20;
+    display: flex;
+    flex-direction: column;
+    background: color-mix(in srgb, color-mix(in srgb, var(--bg) 88%, #000) 97%, transparent);
+    border-left: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 0;
+    backdrop-filter: blur(var(--blur, 14px));
+    -webkit-backdrop-filter: blur(var(--blur, 14px));
+    animation: slideUp calc(0.34s * var(--anim-mult)) var(--ease-drawer),
+               panel-blur-hold calc(0.34s * var(--anim-mult)) linear;
+    overflow: hidden;
+    box-shadow: -8px 0 40px rgba(0, 0, 0, 0.55);
+}
+
+/* Search / More ("every panel") used to be centered floating modals with
+   their own bespoke chrome — now they're docked side panels like everything
+   else in the app, just layered above whatever panel happens to already be
+   open (same DOM-order problem `.panel-overlay`'s shared z-index doesn't
+   otherwise guard against, since these two can open over any other view). */
+.directory-panel-overlay {
+    z-index: 90;
+}
+
+.directory-panel-overlay .panel-body {
+    flex: 1;
+    overflow-y: auto;
 }
 
 @keyframes slideUp {
@@ -1943,29 +1636,28 @@ html.vt-active .panel-overlay {
 }
 
 /* One-click expand/collapse — lives OUTSIDE .panel-overlay (no overflow clip),
-   straddling the panel's inner edge. Arrow always points the direction the
-   next click will move the edge. Pill-shaped and taller than wide so it
-   reads clearly as a grab handle even without the old drag-resize strip. */
+   fully clear of the panel's inner edge (not straddling it). Arrow always
+   points the direction the next click will move the edge. */
 .panel-expand-btn {
     position: absolute;
     top: 50%;
-    /* Right-anchored (default): button sits on the panel's left edge */
-    right: var(--sidebar-w);
-    transform: translate(50%, -50%);
-    width: 20px;
-    height: 64px;
-    border-radius: var(--r-pill);
+    /* Right-anchored (default): button sits to the left of the panel */
+    right: calc(var(--sidebar-w) + 5px);
+    transform: translateY(-50%);
+    width: 32px;
+    height: 96px;
+    border-radius: 25px;
     border: 1px solid rgba(255, 255, 255, 0.14);
-    background: rgba(30, 33, 36, 0.94);
+    background: color-mix(in srgb, color-mix(in srgb, var(--bg) 88%, #000) 94%, transparent);
     color: var(--text-dim);
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 11px;
+    font-size: 13px;
     cursor: pointer;
     z-index: 25;
     box-shadow: var(--shadow-md);
-    transition: background var(--t), color var(--t), box-shadow var(--t), border-color var(--t);
+    transition: background var(--t), color var(--t), border-color var(--t);
     line-height: 1;
     padding: 0;
 }
@@ -1973,15 +1665,22 @@ html.vt-active .panel-overlay {
 .panel-expand-btn:hover {
     background: var(--accent);
     border-color: var(--accent);
-    color: #fff;
+    color: var(--on-accent);
     box-shadow: var(--shadow-lg);
 }
 
-/* Left-anchored panel: button sits on the panel's right edge */
+/* Compact size for tighter layouts (e.g. narrow window, small panels) */
+.panel-expand-btn.compact {
+    width: 32px;
+    height: 32px;
+    font-size: 11px;
+}
+
+/* Left-anchored panel: button sits to the right of the panel */
 :root[data-panel-side="left"] .panel-expand-btn {
     right: auto;
-    left: var(--sidebar-w);
-    transform: translate(-50%, -50%);
+    left: calc(var(--sidebar-w) + 16px);
+    transform: translateY(-50%);
 }
 
 .panel-header {
@@ -1990,6 +1689,7 @@ html.vt-active .panel-overlay {
     justify-content: space-between;
     padding: 15px var(--panel-gutter) 0;
     flex-shrink: 0;
+    position: relative;
 }
 
 /* PanelHeader.svelte leads with the back button (mirrors the mockup's
@@ -2026,6 +1726,7 @@ html.vt-active .panel-overlay {
     display: flex;
     flex-direction: column;
     gap: 0;
+    position: relative;
 }
 
 .panel-title {
@@ -2052,6 +1753,21 @@ html.vt-active .panel-overlay {
     color: var(--text);
 }
 
+.panel-breadcrumb-seg-btn {
+    background: none;
+    border: none;
+    padding: 0;
+    font: inherit;
+    font-weight: inherit;
+    color: var(--text-dim);
+    cursor: pointer;
+}
+
+.panel-breadcrumb-seg-btn:hover {
+    color: var(--accent-hover);
+    text-decoration: underline;
+}
+
 .panel-breadcrumb-sep {
     font-size: 8px;
     color: var(--text-dim);
@@ -2059,11 +1775,11 @@ html.vt-active .panel-overlay {
 }
 
 .panel-title-underline {
-    height: 2px;
-    width: 100%;
-    margin-top: 4px;
-    background: linear-gradient(to right, var(--accent), transparent);
-    border-radius: 1px;
+    height: 3px;
+    width: 28px;
+    margin-top: 6px;
+    background: var(--text-dim);
+    border-radius: var(--r-pill);
 }
 
 .panel-header-actions {
@@ -2104,7 +1820,7 @@ html.vt-active .panel-overlay {
 
 .panel-back-btn i,
 .panel-icon-btn i {
-    font-size: 12px;
+    font-size: 16px;
     line-height: 1;
     pointer-events: none;
 }
@@ -2115,6 +1831,17 @@ html.vt-active .panel-overlay {
     flex-shrink: 0;
 }
 
+.panel-search-count {
+    position: absolute;
+    right: 32px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 10.5px;
+    color: var(--text-dim);
+    white-space: nowrap;
+    pointer-events: none;
+}
+
 .panel-search-clear {
     position: absolute;
     right: 6px;
@@ -2123,8 +1850,8 @@ html.vt-active .panel-overlay {
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 22px;
-    height: 22px;
+    width: 32px;
+    height: 32px;
     border-radius: 6px;
     background: rgba(255, 255, 255, 0.06);
     color: var(--text-dim);
@@ -2136,9 +1863,8 @@ html.vt-active .panel-overlay {
 
 .panel-search-clear:hover {
     background: var(--accent);
-    color: #fff;
+    color: var(--on-accent);
 }
-
 
 .panel-search-wrap > i {
     position: absolute;
@@ -2161,7 +1887,7 @@ html.vt-active .panel-overlay {
     padding: 8px 34px 8px 30px;
     outline: none;
     box-shadow: var(--shadow-sm);
-    transition: border-color var(--t), background var(--t), box-shadow var(--t);
+    transition: border-color var(--t), background var(--t);
 }
 
 .panel-search-input:focus {
@@ -2193,56 +1919,14 @@ html.vt-active .panel-overlay {
     contain: layout paint style;
 }
 
-.tweak-cat-header {
-    display: flex;
-    align-items: center;
-    gap: 8px;
+/* .client-card rendered as a <button> (so the whole tile toggles the pack,
+   not just the switch) needs the usual button-reset properties .client-card
+   itself doesn't set. */
+.tweak-pack-card {
     width: 100%;
-    margin-top: 6px;
-    padding: 8px 10px;
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    background: var(--bg-item, rgba(255, 255, 255, 0.04));
-    color: var(--text);
-    font-size: 13px;
-    font-weight: 600;
-    cursor: pointer;
     text-align: left;
-}
-
-.tweak-cat-header:hover { border-color: var(--accent); }
-
-.tweak-cat-chevron {
-    font-size: 11px;
-    color: var(--text-dim);
-    transition: transform 0.15s ease;
-}
-
-.no-animations .tweak-cat-chevron { transition: none; }
-.tweak-cat-header.expanded .tweak-cat-chevron { transform: rotate(90deg); }
-
-.tweak-cat-name { flex: 1; min-width: 0; }
-
-.tweak-cat-count {
-    font-size: 11px;
-    color: var(--text-dim);
-    background: var(--bg-panel, rgba(0, 0, 0, 0.2));
-    border-radius: 10px;
-    padding: 1px 8px;
-}
-
-.tweak-cat-badge {
-    font-size: 11px;
-    font-weight: 700;
-    color: #fff;
-    background: var(--accent);
-    border-radius: 10px;
-    padding: 1px 8px;
-}
-
-.tweak-row {
-    align-items: center;
-    gap: 10px;
+    font-family: inherit;
+    cursor: pointer;
 }
 
 .tweak-icon {
@@ -2262,7 +1946,7 @@ html.vt-active .panel-overlay {
     display: flex;
     align-items: center;
     justify-content: center;
-    color: var(--accent);
+    color: var(--text-dim);
     font-size: 15px;
 }
 
@@ -2291,7 +1975,7 @@ html.vt-active .panel-overlay {
 }
 
 .footer-mc-version:hover { border-color: var(--accent); }
-.footer-mc-version i { color: var(--accent); }
+.footer-mc-version i { color: var(--text-dim); }
 
 .footer-mc-version-missing { color: var(--text-dim); }
 .footer-mc-version-missing i { color: var(--text-dim); }
@@ -2407,7 +2091,7 @@ html.vt-active .panel-overlay {
 
 .tw-dropdown-btn:hover:not(:disabled) { border-color: var(--accent); }
 .tw-dropdown-btn:disabled { opacity: 0.5; cursor: default; }
-.tw-dropdown-btn > i:first-child { color: var(--accent); }
+.tw-dropdown-btn > i:first-child { color: var(--text-dim); }
 
 .tw-dropdown-caret {
     font-size: 10px;
@@ -2418,6 +2102,7 @@ html.vt-active .panel-overlay {
 .no-animations .tw-dropdown-caret { transition: none; }
 .tw-dropdown.open .tw-dropdown-caret { transform: rotate(180deg); }
 
+
 .tw-dropdown-menu {
     position: absolute;
     top: calc(100% + 4px);
@@ -2426,12 +2111,22 @@ html.vt-active .panel-overlay {
     min-width: 120px;
     padding: 4px;
     border-radius: 8px;
-    border: 1px solid var(--border);
-    background: var(--bg-elevated, var(--bg-panel, #1b1d24));
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.10);
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
     display: flex;
     flex-direction: column;
     gap: 2px;
+}
+
+/* The Bedrock top-bar client chip closes on outside-click via a full-viewport
+   .notif-backdrop at z-index 190 (App.svelte:1362) — without this override
+   that backdrop sat above the reused .tw-dropdown-menu (z-index 50) and
+   swallowed every click meant for a menu item, so picking a client just
+   closed the menu instead of selecting it. Mirrors .topbar-chip-dropdown's
+   200-over-199 pairing just above. */
+.topbar-client-chip .tw-dropdown-menu {
+    z-index: 200;
 }
 
 .tw-dropdown-item {
@@ -2440,7 +2135,7 @@ html.vt-active .panel-overlay {
     justify-content: space-between;
     gap: 10px;
     padding: 6px 10px;
-    border-radius: 6px;
+    border-radius: max(4px, calc(8px - 5px));
     background: transparent;
     border: none;
     color: var(--text);
@@ -2473,7 +2168,7 @@ html.vt-active .panel-overlay {
     flex-shrink: 0;
     padding: 6px var(--panel-gutter) 9px;
     border-top: 1px solid rgba(255, 255, 255, 0.06);
-    background: rgba(25, 28, 31, 0.60);
+    background: color-mix(in srgb, var(--bg-inset) 60%, transparent);
     overflow-x: auto;
     scroll-behavior: smooth;
     scroll-snap-type: x proximity;
@@ -2527,7 +2222,7 @@ html.vt-active .panel-overlay {
 
 .panel-tabs-arrow:hover {
     background: var(--accent);
-    color: #fff;
+    color: var(--on-accent);
 }
 
 .panel-tabs-arrow.prev { left: -2px; }
@@ -2539,8 +2234,8 @@ html.vt-active .panel-overlay {
 }
 
 .panel-tab.active {
-    background: var(--accent);
-    color: #fff;
+    background: var(--accent-bg);
+    color: var(--accent-hover);
 }
 
 .panel-tab i {
@@ -2548,9 +2243,9 @@ html.vt-active .panel-overlay {
 }
 
 .panel-section-label {
-    font-size: 10px;
-    font-weight: 700;
-    letter-spacing: 0.08em;
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.12em;
     text-transform: uppercase;
     color: var(--text-dim);
     padding: 2px 2px 0;
@@ -2568,8 +2263,42 @@ html.vt-active .panel-overlay {
     border-radius: 1px;
 }
 
+/* IA change, not just spacing: each category used to be one full-width
+   column of rows you scrolled top to bottom — every setting got equal
+   vertical real estate whether it was a single toggle or a slider with a
+   paragraph of hint text. Settings now opens already widened (see
+   WIDE_DASHBOARD_VIEWS in App.svelte), so a category reads as a scannable
+   grid of cards instead of a list: the label spans the full width as a
+   section header, and every .setting-row below it becomes its own card that
+   wraps into 2-3 columns depending on how much width is actually available.
+   No change to .setting-row's own internals (still label/hint left, control
+   right) — only the container decides how many fit per line. */
 .settings-section {
-    display: contents;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(260px, 100%), 1fr));
+    align-items: start;
+    gap: 8px;
+    padding: 12px 12px 14px;
+    border-radius: var(--r-lg, 14px);
+    background: rgba(255, 255, 255, 0.015);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.settings-section > .panel-section-label {
+    grid-column: 1 / -1;
+    padding: 0;
+    margin-top: 0;
+}
+
+/* Direct-child intro text (e.g. Custom Themes' lead paragraph) and an
+   embedded panel (ThemeStudioView's root .panel-body) must span the full
+   section too — otherwise the auto-fill grid above treats them as just
+   another card and drops them into their own column next to whatever
+   comes before them, which is what put the Theme Studio empty-state in a
+   column to the right of its own description instead of below it. */
+.settings-section > .setting-hint,
+.settings-section > .panel-body {
+    grid-column: 1 / -1;
 }
 
 .setting-row {
@@ -2582,14 +2311,11 @@ html.vt-active .panel-overlay {
     gap: 12px;
     border-left: 0px solid transparent;
     box-shadow: var(--shadow-sm);
-    transition: background var(--t), border-left-color 0.18s var(--ease-out), border-left-width 0.18s var(--ease-out), box-shadow var(--t);
+    transition: background var(--t), border-left-color 0.18s var(--ease-out), border-left-width 0.18s var(--ease-out);
 }
 
 .setting-row:hover {
     background: var(--bg-item-hover);
-    border-left-width: 3px;
-    box-shadow: var(--shadow-md);
-    border-left-color: var(--accent);
 }
 
 .setting-row.clickable {
@@ -2602,14 +2328,14 @@ html.vt-active .panel-overlay {
 
 .setting-label {
     font-size: 13px;
-    font-weight: 500;
-    color: rgba(255, 255, 255, 0.85);
+    font-weight: 600;
+    color: var(--text);
     flex: 1;
     min-width: 0;
 }
 
 .setting-hint {
-    font-size: 10px;
+    font-size: 11px;
     color: var(--text-dim);
     margin-top: 1px;
 }
@@ -2666,7 +2392,7 @@ html.vt-active .panel-overlay {
 }
 
 .setting-select option {
-    background: #2c2f33;
+    background: var(--bg-panel);
 }
 
 .toggle {
@@ -2694,7 +2420,7 @@ html.vt-active .panel-overlay {
     height: 17px;
     border-radius: 50%;
     background: #fff;
-    transition: transform 0.32s var(--ease-bounce), box-shadow 0.2s ease;
+    transition: transform 0.32s var(--ease-bounce);
     box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
 }
 
@@ -2703,17 +2429,18 @@ html.vt-active .panel-overlay {
 }
 
 .btn-sm {
-    height: 28px;
+    height: 32px;
     padding: 0 13px;
     border: none;
-    border-radius: 6px;
+    border-radius: var(--r-sm);
     background: rgba(255, 255, 255, 0.07);
     color: var(--text);
     font-family: inherit;
-    font-size: 12px;
+    font-size: 11px;
+    font-weight: 600;
     cursor: pointer;
     white-space: nowrap;
-    transition: background var(--t), box-shadow var(--t);
+    transition: background var(--t);
     flex-shrink: 0;
     display: inline-flex;
     align-items: center;
@@ -2721,12 +2448,16 @@ html.vt-active .panel-overlay {
 }
 
 .btn-sm:hover {
-    background: var(--accent);
-    box-shadow: 0 0 10px var(--accent-glow);
+    background: color-mix(in srgb, var(--text) 12%, transparent);
 }
 
 .btn-sm i {
-    font-size: 11px;
+    font-size: 12px;
+}
+
+/* Leading-icon text buttons: lighter padding on the icon side for optical balance. */
+.btn-sm:has(> i:first-child) {
+    padding: 0 14px 0 10px;
 }
 
 /* New addition (no WPF original counterpart): a grid/list toggle for
@@ -2744,8 +2475,8 @@ html.vt-active .panel-overlay {
 }
 
 .view-mode-btn {
-    width: 26px;
-    height: 26px;
+    width: 32px;
+    height: 32px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -2765,7 +2496,7 @@ html.vt-active .panel-overlay {
 
 .view-mode-btn.active {
     background: var(--accent);
-    color: #fff;
+    color: var(--on-accent);
     box-shadow: var(--shadow-sm);
 }
 
@@ -2775,7 +2506,7 @@ html.vt-active .panel-overlay {
 
 .version-list.grid-view {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(min(150px, 100%), 1fr));
     gap: 10px;
 }
 
@@ -2874,7 +2605,7 @@ html.vt-active .panel-overlay {
     gap: 12px;
     border-left: 0px solid transparent;
     box-shadow: var(--shadow-sm);
-    transition: background var(--t), border-left-color 0.18s var(--ease-out), border-left-width 0.18s var(--ease-out), box-shadow var(--t);
+    transition: background var(--t), border-left-color 0.18s var(--ease-out), border-left-width 0.18s var(--ease-out);
 }
 
 .version-row:hover {
@@ -2894,6 +2625,12 @@ html.vt-active .panel-overlay {
     border-left-width: 2px;
     border-left-color: var(--orange);
     background: rgba(250, 166, 26, 0.06);
+}
+
+/* Generic drag-to-reorder visual state, shared by pinned versions and the
+   saved server list. */
+.dragging {
+    opacity: 0.4;
 }
 
 .version-meta {
@@ -2925,14 +2662,27 @@ html.vt-active .panel-overlay {
     display: flex;
     align-items: center;
     gap: 12px;
+    box-sizing: border-box;
+    min-height: 52px;
     padding: var(--row-pad-y) var(--row-pad-x);
 }
 
 .skeleton-block {
-    background: linear-gradient(90deg, rgba(255, 255, 255, 0.05) 25%, rgba(255, 255, 255, 0.11) 37%, rgba(255, 255, 255, 0.05) 63%);
-    background-size: 400% 100%;
+    position: relative;
+    overflow: hidden;
+    isolation: isolate;
+    background: var(--bg-item);
     border-radius: var(--r-sm);
-    animation: skeleton-shimmer 1.4s ease infinite;
+}
+
+/* Shimmer is a translated gradient pseudo-element: transform only. */
+.skeleton-block::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.08), transparent);
+    transform: translateX(-100%);
+    animation: skeleton-shimmer calc(1.4s * var(--anim-mult, 1)) ease-in-out infinite;
 }
 
 .skeleton-icon {
@@ -2959,13 +2709,16 @@ html.vt-active .panel-overlay {
 }
 
 @keyframes skeleton-shimmer {
-    0% { background-position: 100% 50%; }
-    100% { background-position: 0 50%; }
+    to { transform: translateX(100%); }
 }
 
-.no-animations .skeleton-block {
+@media (prefers-reduced-motion: reduce) {
+    .skeleton-block::after { animation: none; display: none; }
+}
+
+.no-animations .skeleton-block::after {
     animation: none;
-    background: rgba(255, 255, 255, 0.07);
+    display: none;
 }
 
 .no-animations .action-btn.launching,
@@ -2986,56 +2739,6 @@ html.vt-active .panel-overlay {
 .version-sub {
     font-size: 11px;
     color: var(--text-dim);
-}
-
-.server-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    background: var(--bg-item);
-    border-radius: var(--r-md);
-    padding: 12px 14px;
-    gap: 12px;
-    border-left: 2px solid transparent;
-    box-shadow: var(--shadow-sm);
-    transition: background var(--t), border-color var(--t), box-shadow var(--t);
-    margin-bottom: 6px;
-}
-
-.server-row:hover {
-    background: var(--bg-item-hover);
-    border-left-color: var(--accent);
-    box-shadow: var(--shadow-md);
-}
-
-.server-icon {
-    flex-shrink: 0;
-    width: 36px;
-    height: 36px;
-    border-radius: var(--r-sm);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: #fff;
-    font-size: 15px;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.18);
-}
-
-.server-meta {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    min-width: 0;
-    flex: 1;
-}
-
-.server-name {
-    font-size: 13px;
-    font-weight: 600;
-    color: var(--text);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
 }
 
 .server-tags {
@@ -3071,25 +2774,53 @@ html.vt-active .panel-overlay {
     color: var(--orange);
 }
 
+.notice-bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: var(--row-pad-y) var(--row-pad-x);
+    border-radius: var(--r-sm);
+    font-size: 12px;
+    color: var(--text-dim);
+    background: var(--bg-item);
+}
+
+.notice-bar > i {
+    flex-shrink: 0;
+}
+
+.notice-bar.is-warning {
+    color: var(--orange);
+    background: var(--orange-bg);
+}
+
+.notice-bar.is-error {
+    color: var(--red);
+    background: var(--red-bg);
+}
+
+.notice-bar.is-info {
+    color: var(--accent-hover);
+    background: var(--accent-bg);
+}
+
 .icon-btn {
     width: 32px;
     height: 32px;
     border: none;
     border-radius: 8px;
     background: var(--accent);
-    color: #fff;
+    color: var(--on-accent);
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
-    transition: background var(--t), box-shadow var(--t), transform 0.12s ease;
+    transition: background var(--t), transform 0.12s ease;
 }
 
 .icon-btn:not(:disabled):hover {
     background: var(--accent-hover);
-    box-shadow: 0 0 14px var(--accent-glow);
-    transform: scale(1.06);
 }
 
 .icon-btn:disabled {
@@ -3104,18 +2835,32 @@ html.vt-active .panel-overlay {
 }
 
 .icon-btn i {
-    font-size: 12px;
+    font-size: 16px;
     line-height: 1;
     pointer-events: none;
 }
 
 .icon-btn-ghost {
-    background: rgba(255, 255, 255, 0.08);
+    background: var(--bg-item);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
 }
 
 .icon-btn-ghost:not(:disabled):hover {
     background: rgba(240, 71, 71, 0.40);
     box-shadow: 0 0 10px rgba(240, 71, 71, 0.30);
+}
+
+/* Pinned-instance toggle (JavaInstancesView) — stays accent-colored even
+   unhovered so a pinned card is recognizable at a glance, and keeps that
+   color (rather than the ghost button's red hover) when hovered too. */
+.instance-pin-active {
+    color: var(--accent);
+    background: var(--accent-bg);
+}
+
+.instance-pin-active:not(:disabled):hover {
+    background: var(--accent-bg);
+    box-shadow: 0 0 10px var(--accent-glow);
 }
 
 .pin-btn {
@@ -3222,7 +2967,7 @@ html.vt-active .panel-overlay {
     background: transparent;
     box-shadow: none;
     transform: none;
-    color: var(--red, #f04747);
+    color: var(--red, var(--red));
 }
 
 .icon-btn-cancel:not(:disabled):hover .spinner,
@@ -3252,6 +2997,28 @@ html.vt-active .panel-overlay {
     border-width: 2.5px;
 }
 
+/* A plain 2-up grid for homogeneous .client-card groups (mod loaders, the
+   Assets tab's pack/screenshot/schematics cards) that were previously
+   stacked full-width one per row — wasting most of the panel's width on
+   short cards and pushing everything else down an extra scroll. Unlike
+   .version-list.grid-view (built for small icon-first tiles, forces
+   everything centered), this keeps each card's own internal layout
+   (.client-card-header row + .client-card-desc paragraph) untouched. */
+.client-card-cols {
+    display: grid;
+    /* `minmax(220px, ...)` alone forces a 220px floor even when the
+       container itself is narrower than that (a rail eating width, a
+       collapsed panel, a nested grid) — the grid then overflows its own
+       box instead of shrinking, which is exactly what pushed cards outside
+       the panel in Settings/Theme Studio. `min(220px, 100%)` caps the floor
+       at the container's own width so a column can never demand more space
+       than actually exists. */
+    grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr));
+    gap: 10px;
+    align-items: start;
+    min-width: 0;
+}
+
 .client-card {
     background: var(--bg-item);
     border-radius: var(--r-md);
@@ -3268,6 +3035,15 @@ html.vt-active .panel-overlay {
     background: var(--bg-item-hover);
 }
 
+.client-card.disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+.client-card.disabled:hover {
+    background: var(--bg-item);
+}
+
 .client-card.client-active {
     border-color: color-mix(in srgb, var(--accent) 40%, transparent);
     background: color-mix(in srgb, var(--accent) 8%, transparent);
@@ -3282,7 +3058,7 @@ html.vt-active .panel-overlay {
 .client-card-icon {
     width: 38px;
     height: 38px;
-    border-radius: 10px;
+    border-radius: max(4px, calc(var(--r-md) - var(--card-pad-x)));
     display: flex;
     align-items: center;
     justify-content: center;
@@ -3294,9 +3070,9 @@ html.vt-active .panel-overlay {
     padding: 5px;
 }
 
-.flarial-icon {
-    background: rgba(255, 100, 60, 0.15);
-    color: #ff7043;
+.client-card-icon.is-accent {
+    background: var(--accent-bg);
+    color: var(--accent-hover);
 }
 
 .latite-icon {
@@ -3342,12 +3118,17 @@ html.vt-active .panel-overlay {
     font-size: 11px;
     color: var(--text-dim);
     line-height: 1.55;
-    padding: 11px 0 0;
-    border-top: 1px solid rgba(255, 255, 255, 0.05);
+    padding: 14px 0 0;
 }
 
 .client-card-note {
     opacity: 0.55;
+}
+
+.client-card-note.is-error {
+    color: var(--red);
+    font-size: 11px;
+    opacity: 1;
 }
 
 .client-card-path {
@@ -3415,7 +3196,7 @@ html.vt-active .panel-overlay {
     align-items: center;
     justify-content: center;
     gap: 12px;
-    background: rgba(35, 39, 42, 0.90);
+    background: color-mix(in srgb, var(--bg) 90%, transparent);
     backdrop-filter: blur(8px);
     border: 2px dashed var(--accent);
     border-radius: 12px;
@@ -3470,15 +3251,18 @@ body.drop-active .drop-zone-overlay {
 }
 
 .drop-hint-row i {
-    color: var(--accent);
+    color: var(--text-dim);
     font-size: 14px;
 }
 
 .color-swatches {
     display: flex;
     gap: 8px;
-    flex-shrink: 0;
+    flex: 0 1 auto;
+    min-width: 0;
+    max-width: 60%;
     flex-wrap: wrap;
+    justify-content: flex-end;
 }
 
 .color-swatch {
@@ -3499,16 +3283,123 @@ body.drop-active .drop-zone-overlay {
     transform: scale(1.15);
 }
 
+/* Redesign: plain track was a single flat color end to end, giving no
+   at-a-glance sense of where the value sits in its range. `--pct` (set
+   inline per slider, from its own value/min/max) drives a two-tone
+   gradient instead — filled up to the thumb, dim after it — same track
+   Chromium/WebView2 paints `background` onto directly with no track pseudo
+   override needed. Falls back to 0% (empty track) if a caller forgets to
+   set it, rather than erroring. */
 input[type=range] {
     appearance: none;
     -webkit-appearance: none;
     width: 100px;
     height: 4px;
     border-radius: 2px;
-    background: rgba(255, 255, 255, 0.15);
+    background: linear-gradient(
+        to right,
+        var(--accent) 0%,
+        var(--accent) var(--pct, 0%),
+        var(--range-off) var(--pct, 0%),
+        var(--range-off) 100%
+    );
     cursor: pointer;
     flex-shrink: 0;
     accent-color: var(--accent);
+    --range-off: rgba(255, 255, 255, 0.15);
+}
+
+input[type=range]:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* No checkbox anywhere in the app had any styling at all — every one
+   (Profile's slim-model checkbox, the loader/import multi-select lists)
+   rendered as the bare OS-native checkbox, which reads as unthemed against
+   the dark UI. One custom appearance for all of them. */
+input[type="checkbox"] {
+    appearance: none;
+    -webkit-appearance: none;
+    position: relative;
+    width: 15px;
+    height: 15px;
+    flex-shrink: 0;
+    margin: 0;
+    border-radius: 4px;
+    border: 1.5px solid rgba(255, 255, 255, 0.20);
+    background: rgba(255, 255, 255, 0.04);
+    cursor: pointer;
+    vertical-align: middle;
+    transition: background var(--t), border-color var(--t);
+}
+
+input[type="checkbox"]:hover {
+    border-color: rgba(255, 255, 255, 0.38);
+}
+
+input[type="checkbox"]:checked {
+    background: var(--accent);
+    border-color: var(--accent);
+}
+
+input[type="checkbox"]:checked::after {
+    content: '';
+    position: absolute;
+    left: 4px;
+    top: 1px;
+    width: 4px;
+    height: 8px;
+    border: solid #fff;
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+}
+
+input[type="checkbox"]:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
+input[type="checkbox"]:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* Inline segmented control for a setting-row's right-hand slot — a compact
+   sibling to `.versions-client-switcher` (which is sized for a whole panel
+   width) for the 2-4-option case: a dropdown makes you open it and read
+   every option one at a time to see what's available, when all of them fit
+   on screen at once as pills. */
+.seg-control {
+    display: inline-flex;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    padding: 2px;
+    gap: 2px;
+    flex-shrink: 0;
+}
+
+.seg-btn {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text-dim);
+    background: transparent;
+    border: none;
+    border-radius: max(4px, calc(8px - 3px));
+    padding: 4px 10px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background var(--t), color var(--t);
+}
+
+.seg-btn:hover {
+    color: var(--text);
+}
+
+.seg-btn.active {
+    background: var(--accent);
+    color: var(--on-accent);
 }
 
 input[type=range]::-webkit-slider-thumb {
@@ -3520,7 +3411,7 @@ input[type=range]::-webkit-slider-thumb {
     border: 2px solid var(--accent);
     box-shadow: 0 1px 6px rgba(0, 0, 0, 0.30), 0 0 0 0 var(--accent-glow);
     cursor: pointer;
-    transition: box-shadow 0.18s var(--ease-out), transform 0.18s var(--ease-out);
+    transition: transform 0.18s var(--ease-out);
 }
 
 input[type=range]::-webkit-slider-thumb:hover {
@@ -3563,7 +3454,7 @@ input[type=range]:active::-webkit-slider-thumb {
 }
 
 .search-modal {
-    width: 560px;
+    width: 620px;
     max-width: calc(100% - 32px);
     background: rgba(24, 27, 31, 0.99);
     border: 1px solid rgba(255, 255, 255, 0.10);
@@ -3585,27 +3476,6 @@ input[type=range]:active::-webkit-slider-thumb {
         transform: translateY(0);
         opacity: 1
     }
-}
-
-.search-modal-input-row {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 16px 18px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.07);
-    flex-shrink: 0;
-}
-
-.search-modal-input-icon {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-}
-
-.search-modal-input-icon i {
-    font-size: 13px;
-    color: var(--accent);
 }
 
 .search-modal-input {
@@ -3640,66 +3510,10 @@ input[type=range]:active::-webkit-slider-thumb {
     white-space: nowrap;
 }
 
-.search-modal-esc {
-    font-size: 10px;
-    background: rgba(255, 255, 255, 0.06);
-    border: 1px solid rgba(255, 255, 255, 0.10);
-    border-radius: 5px;
-    padding: 3px 7px;
-    color: var(--text-dim);
-    flex-shrink: 0;
-    letter-spacing: 0.03em;
-}
-
-.search-results {
-    max-height: 380px;
-    overflow-y: auto;
-    padding: 8px;
-    scrollbar-width: none;
-}
-
-.search-results::-webkit-scrollbar {
-    display: none;
-}
-
-.search-category {
-    font-size: 10px;
-    font-weight: 700;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--text-dim);
-    padding: 10px 10px 5px;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-
-.search-category::before {
-    content: '';
-    width: 5px;
-    height: 5px;
-    border-radius: 50%;
-    background: var(--accent);
-    opacity: 0.6;
-    flex-shrink: 0;
-}
-
-.search-category::after {
-    content: '';
-    flex: 1;
-    height: 1px;
-    background: rgba(255, 255, 255, 0.06);
-}
-
-.search-result-item {
-    position: relative;
-    display: flex;
-    align-items: center;
-    gap: 11px;
-    padding: 9px 10px;
-    border-radius: 10px;
-    cursor: pointer;
-    transition: background var(--t);
+.search-pill.active {
+    background: var(--accent-bg);
+    border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+    color: var(--accent);
 }
 
 .search-result-item.disabled {
@@ -3709,10 +3523,6 @@ input[type=range]:active::-webkit-slider-thumb {
 
 .search-result-item.disabled:hover {
     background: none;
-}
-
-.search-result-item:hover {
-    background: var(--bg-item-hover);
 }
 
 .search-result-item.sel {
@@ -3730,65 +3540,39 @@ input[type=range]:active::-webkit-slider-thumb {
     background: var(--accent);
 }
 
-.search-result-icon {
-    width: 32px;
-    height: 32px;
-    border-radius: 9px;
-    background: var(--bg-item);
-    border: 1px solid rgba(255, 255, 255, 0.05);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-    font-size: 12px;
-    color: var(--accent);
-    transition: background var(--t);
-}
-
 .search-result-item.sel .search-result-icon {
     background: rgba(114, 137, 218, 0.15);
-}
-
-.search-result-text {
-    display: flex;
-    flex-direction: column;
-    gap: 1px;
-    flex: 1;
-    min-width: 0;
-}
-
-.search-result-label {
-    font-size: 13px;
-    font-weight: 500;
-    color: var(--text);
-}
-
-.search-result-sub {
-    font-size: 11px;
-    color: var(--text-dim);
-}
-
-.search-result-enter {
-    font-size: 10px;
-    color: var(--text-dim);
-    background: rgba(255, 255, 255, 0.07);
-    border: 1px solid rgba(255, 255, 255, 0.10);
-    border-radius: 4px;
-    padding: 2px 5px;
-    flex-shrink: 0;
-    opacity: 0;
-    transition: opacity var(--t);
 }
 
 .search-result-item.sel .search-result-enter {
     opacity: 1;
 }
 
-.search-no-results {
-    padding: 28px;
-    text-align: center;
-    color: var(--text-dim);
-    font-size: 13px;
+/* Quick Actions (the empty-query view) as a tile grid instead of a flat
+   list — these are one-click shortcuts, not search results to scan
+   top-to-bottom, so a grid reads faster and fits more on screen. Reuses
+   .search-result-item/-icon/-text/.sel untouched (same markup, same
+   searchSelIdx-driven keyboard nav) — only the container and the item's
+   internal axis change. */
+.search-quick-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(92px, 100%), 1fr));
+    gap: 6px;
+    padding: 2px 2px 10px;
+}
+
+.search-quick-grid .search-result-enter,
+.search-quick-grid .kbs {
+    display: none;
+}
+
+.search-quick-grid .search-result-item.sel::before {
+    left: 6px;
+    right: 6px;
+    top: 0;
+    bottom: auto;
+    width: auto;
+    height: 2px;
 }
 
 .search-footer {
@@ -3836,9 +3620,9 @@ input[type=range]:active::-webkit-slider-thumb {
 .modal-box {
     width: 360px;
     max-width: calc(100% - 32px);
-    background: rgba(28, 31, 35, 0.99);
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    border-radius: 16px;
+    background: var(--bg-panel);
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    border-radius: var(--r-md);
     box-shadow: 0 24px 80px rgba(0, 0, 0, 0.70);
     overflow: hidden;
     animation: search-slide-down 0.18s var(--ease-out);
@@ -3853,16 +3637,19 @@ input[type=range]:active::-webkit-slider-thumb {
 }
 
 .modal-title {
-    font-size: 16px;
+    font-size: 18px;
     font-weight: 700;
+    letter-spacing: -0.01em;
+    color: var(--text);
 }
 
 .modal-close-btn {
-    width: 28px;
-    height: 28px;
+    width: 32px;
+    height: 32px;
     border: none;
-    border-radius: 8px;
-    background: var(--bg-item);
+    border-radius: var(--r-sm);
+    background: transparent;
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
     color: var(--text-dim);
     cursor: pointer;
     display: flex;
@@ -3881,12 +3668,6 @@ input[type=range]:active::-webkit-slider-thumb {
     display: flex;
     flex-direction: column;
     gap: 12px;
-}
-
-.modal-desc {
-    font-size: 12px;
-    color: var(--text-dim);
-    line-height: 1.55;
 }
 
 /* Phase 4: crash-analysis modal (App.svelte, filled by analyze_crash) */
@@ -3908,7 +3689,7 @@ input[type=range]:active::-webkit-slider-thumb {
 }
 
 .crash-modal-fix i {
-    color: var(--accent);
+    color: var(--text-dim);
     margin-top: 2px;
     flex-shrink: 0;
 }
@@ -3918,49 +3699,6 @@ input[type=range]:active::-webkit-slider-thumb {
     gap: 8px;
     padding: 0 20px 18px;
     flex-wrap: wrap;
-}
-
-.discord-oauth-btn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 10px;
-    background: #5865f2;
-    border: none;
-    border-radius: var(--r-sm);
-    color: #fff;
-    font-family: inherit;
-    font-size: 14px;
-    font-weight: 600;
-    padding: 12px;
-    cursor: pointer;
-    width: 100%;
-    transition: background var(--t), box-shadow var(--t);
-}
-
-.discord-oauth-btn:hover {
-    background: #4752c4;
-    box-shadow: 0 0 20px rgba(88, 101, 242, 0.50);
-}
-
-.discord-oauth-btn i {
-    font-size: 16px;
-}
-
-.modal-divider {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    font-size: 11px;
-    color: var(--text-dim);
-}
-
-.modal-divider::before,
-.modal-divider::after {
-    content: '';
-    flex: 1;
-    height: 1px;
-    background: rgba(255, 255, 255, 0.07);
 }
 
 .modal-input-label {
@@ -4001,19 +3739,25 @@ input[type=range]:active::-webkit-slider-thumb {
 
 .modal-btn {
     flex: 1;
-    height: 36px;
+    height: 32px;
     border: none;
     border-radius: var(--r-sm);
     font-family: inherit;
-    font-size: 13px;
+    font-size: 11px;
     font-weight: 600;
     cursor: pointer;
-    transition: background var(--t), box-shadow var(--t);
+    transition: background var(--t), transform var(--t);
+}
+
+.modal-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
 }
 
 .modal-btn-cancel {
-    background: var(--bg-item);
+    background: transparent;
     color: var(--text-dim);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
 }
 
 .modal-btn-cancel:hover {
@@ -4023,21 +3767,11 @@ input[type=range]:active::-webkit-slider-thumb {
 
 .modal-btn-confirm {
     background: var(--accent);
-    color: #fff;
+    color: var(--on-accent);
 }
 
 .modal-btn-confirm:hover {
     background: var(--accent-hover);
-    box-shadow: 0 0 14px var(--accent-glow);
-}
-
-.modal-btn-disconnect {
-    background: rgba(240, 71, 71, 0.18);
-    color: var(--red);
-}
-
-.modal-btn-disconnect:hover {
-    background: rgba(240, 71, 71, 0.35);
 }
 
 .toast-container {
@@ -4075,6 +3809,30 @@ input[type=range]:active::-webkit-slider-thumb {
 
 .toast.success i {
     color: var(--green);
+}
+
+.toast.has-action {
+    pointer-events: auto;
+}
+
+.toast-action {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: 4px;
+    padding: 4px 12px;
+    border: none;
+    border-radius: 14px;
+    background: var(--accent);
+    color: var(--text-on-accent, #fff);
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.toast-action:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
 }
 
 .toast.error i {
@@ -4145,12 +3903,37 @@ input[type=range]:active::-webkit-slider-thumb {
     color: var(--accent);
 }
 
+/* Restyled from a row of individually-floating chips (each its own
+   background, gap between them) into one connected segmented control —
+   same container treatment as .mcv-channel-tabs — so this strip reads as
+   attached to the panel header above it and the content below it instead
+   of hovering as a separate disconnected row. */
 .versions-client-switcher {
     display: flex;
-    gap: 4px;
-    padding: var(--panel-band) var(--panel-gutter);
+    gap: 3px;
+    margin: 8px var(--panel-gutter) 0;
+    padding: 3px;
+    border-radius: var(--r-md);
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.06);
     flex-shrink: 0;
     overflow: hidden;
+}
+
+.versions-client-switcher .vcs-btn {
+    background: transparent;
+    box-shadow: none;
+}
+
+.versions-client-switcher .vcs-btn:hover {
+    background: rgba(255, 255, 255, 0.07);
+    color: var(--text);
+}
+
+.versions-client-switcher .vcs-btn.active {
+    background: var(--accent);
+    color: var(--on-accent);
+    box-shadow: 0 2px 8px rgba(114, 137, 218, 0.35);
 }
 
 /* Modifier for switchers with too many tabs (or unbounded/dynamic ones, e.g.
@@ -4163,7 +3946,8 @@ input[type=range]:active::-webkit-slider-thumb {
 }
 
 .versions-client-switcher.switcher-wrap .vcs-btn {
-    flex: 0 1 auto;
+    flex: 1 1 auto;
+    min-width: fit-content;
     white-space: nowrap;
 }
 
@@ -4201,6 +3985,13 @@ input[type=range]:active::-webkit-slider-thumb {
     font-size: 11px;
 }
 
+.vcs-btn-img {
+    width: 13px;
+    height: 13px;
+    object-fit: contain;
+    flex-shrink: 0;
+}
+
 .vcs-btn-ghost {
     background: transparent;
     box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
@@ -4208,11 +3999,6 @@ input[type=range]:active::-webkit-slider-thumb {
 
 .vcs-btn-ghost:hover {
     background: var(--bg-item);
-}
-
-.vcs-btn-icon {
-    flex: 0 0 auto;
-    padding: 0 11px;
 }
 
 .version-row.oderso-active-row {
@@ -4233,6 +4019,57 @@ input[type=range]:active::-webkit-slider-thumb {
     padding: 1px 7px;
 }
 
+.credits-hero {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    background: var(--accent-bg);
+    border-radius: var(--r-md);
+    padding: 16px;
+    border: 1px solid var(--accent-bg);
+    box-shadow: var(--shadow-sm);
+}
+
+.credits-hero-icon {
+    width: 46px;
+    height: 46px;
+    border-radius: var(--r-sm);
+    flex-shrink: 0;
+    padding: 7px;
+    background: var(--bg-item-hover);
+}
+
+.credits-hero-icon img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+}
+
+.credits-hero-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    flex: 1;
+    min-width: 0;
+}
+
+.credits-hero-name {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--text);
+}
+
+.credits-hero-sub {
+    font-size: 11.5px;
+    color: var(--text-dim);
+}
+
+.credits-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(230px, 100%), 1fr));
+    gap: 8px;
+}
+
 .credits-card {
     display: flex;
     align-items: center;
@@ -4242,11 +4079,7 @@ input[type=range]:active::-webkit-slider-thumb {
     padding: 13px 14px;
     border-left: 2px solid transparent;
     box-shadow: var(--shadow-sm);
-    transition: background var(--t), box-shadow var(--t);
-}
-
-.credits-card:hover {
-    box-shadow: var(--shadow-md);
+    transition: background var(--t);
 }
 
 .credits-card:hover {
@@ -4260,7 +4093,6 @@ input[type=range]:active::-webkit-slider-thumb {
 
 .credits-card-glacier:hover {
     background: var(--accent-bg);
-    filter: brightness(1.08);
 }
 
 .credits-card-icon {
@@ -4352,7 +4184,7 @@ input[type=range]:active::-webkit-slider-thumb {
     border-radius: 20px;
     cursor: pointer;
     background: var(--accent);
-    color: #fff;
+    color: var(--on-accent);
     font-family: inherit;
     font-size: 10px;
     font-weight: 700;
@@ -4364,7 +4196,6 @@ input[type=range]:active::-webkit-slider-thumb {
     position: relative;
     z-index: 11;
     pointer-events: auto;
-    transition: filter var(--t);
 }
 
 .update-pill::before {
@@ -4431,7 +4262,7 @@ input[type=range]:active::-webkit-slider-thumb {
     margin-left: 8px;
     border-radius: 20px;
     background: var(--accent);
-    color: #fff;
+    color: var(--on-accent);
     font-size: 10px;
     font-weight: 700;
     letter-spacing: 0.03em;
@@ -4439,116 +4270,12 @@ input[type=range]:active::-webkit-slider-thumb {
     box-shadow: 0 0 10px color-mix(in srgb, var(--accent) 60%, transparent);
 }
 
-.update-modal {
-    max-width: 420px;
-}
-
-.update-version-row {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 12px;
-    margin-bottom: 14px;
-}
-
-.update-version-chip {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 3px;
-    padding: 8px 18px;
-    border-radius: var(--r-md);
-    background: var(--bg-item);
-}
-
 .update-version-chip.next {
     background: var(--accent-bg);
 }
 
-.uvc-label {
-    font-size: 10px;
-    color: var(--text-dim);
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-}
-
-.uvc-tag {
-    font-size: 16px;
-    font-weight: 700;
-    color: var(--text);
-}
-
 .update-version-chip.next .uvc-tag {
     color: var(--accent);
-}
-
-.update-changelog {
-    background: var(--bg-item);
-    border-radius: var(--r-md);
-    padding: 10px 12px;
-    max-height: 140px;
-    overflow-y: auto;
-    scrollbar-width: none;
-}
-
-.update-changelog::-webkit-scrollbar {
-    display: none;
-}
-
-.update-changelog-label {
-    font-size: 10px;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    color: var(--text-dim);
-    display: block;
-    margin-bottom: 6px;
-}
-
-.update-changelog-body {
-    font-size: 12px;
-    color: var(--text-dim);
-    line-height: 1.6;
-}
-
-.update-changelog-body a {
-    color: var(--accent);
-    text-decoration: underline;
-    cursor: pointer;
-}
-
-.update-changelog-body a:hover {
-    color: var(--text);
-}
-
-.update-progress-wrap {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    margin-top: 12px;
-}
-
-.update-progress-bar {
-    flex: 1;
-    height: 6px;
-    border-radius: 3px;
-    background: var(--bg-item);
-    overflow: hidden;
-}
-
-.update-progress-fill {
-    height: 100%;
-    border-radius: 3px;
-    background: var(--accent);
-    transition: width 0.2s ease;
-}
-
-.update-progress-pct {
-    font-size: 11px;
-    color: var(--text-dim);
-    width: 34px;
-    text-align: right;
 }
 
 .mc-running-pill {
@@ -4620,59 +4347,117 @@ input[type=range]:active::-webkit-slider-thumb {
     white-space: nowrap;
 }
 
-.panel-body.settings-body {
-    gap: 12px;
+/*
+ * Settings' two-column layout: a persistent vertical category rail on the
+ * left (every category visible and reachable in one click, unlike the old
+ * horizontal .versions-client-switcher pill row that only ever showed the
+ * active category's label) and a scrolling content pane on the right that
+ * gets the panel's full remaining height to itself.
+ */
+.settings-layout {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    gap: 0;
+    overflow: hidden;
 }
 
-.sort-trigger {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    height: 30px;
-    padding: 0 10px 0 10px;
+.settings-nav-rail {
+    flex: 0 0 176px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: var(--panel-band) 8px var(--panel-gutter) var(--panel-gutter);
+    border-right: 1px solid rgba(255, 255, 255, 0.06);
+    overflow-y: auto;
+}
+
+/* Matched to .vcs-btn (the tab-button style used everywhere else — SubTabs,
+   the versions/client switchers): same resting chip background, height, and
+   type scale, so this rail reads as the same "tab button" affordance
+   instead of looking like plain sidebar links until hovered. Left-aligned
+   text and full-width layout are the only things that stay different,
+   since those are what make it work as a vertical rail instead of a
+   horizontal pill row. */
+.settings-nav-btn {
+    min-height: 32px;
+    padding: 7px 10px;
+    border: none;
+    border-radius: var(--r-sm);
     background: var(--bg-item);
-    border: 1px solid rgba(255, 255, 255, 0.06);
-    border-radius: 999px;
     color: var(--text-dim);
     font-family: inherit;
-    font-size: 12px;
-    font-weight: 500;
+    font-size: 11px;
+    font-weight: 600;
+    text-align: left;
     cursor: pointer;
-    transition: background var(--t), color var(--t), border-color var(--t), transform var(--t);
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    transition: background var(--t), color var(--t);
 }
 
-.sort-trigger:hover {
+/* Category names are data-driven (VanillaTweaks/BedrockTweaks fetch real
+   category lists at runtime) and can run long — wrap to a second line
+   instead of ellipsis-truncating into unreadable "Aes…"/"Terr…" labels. */
+.settings-nav-btn > span {
+    white-space: normal !important;
+    overflow: visible !important;
+    text-overflow: clip !important;
+    word-break: break-word;
+    line-height: 1.25;
+}
+
+.settings-nav-btn i {
+    width: 14px;
+    text-align: center;
+    font-size: 11px;
+    flex-shrink: 0;
+    margin-top: 1px;
+}
+
+.settings-nav-btn:hover {
     background: var(--bg-item-hover);
     color: var(--text);
-    border-color: rgba(255, 255, 255, 0.12);
 }
 
-.sort-trigger:active {
-    transform: scale(0.97);
+.settings-nav-btn.active {
+    background: var(--accent-bg);
+    color: var(--accent);
+}
+
+.settings-nav-btn-count {
+    margin-left: auto;
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--text-dim);
+    background: rgba(255, 255, 255, 0.06);
+    border-radius: 10px;
+    padding: 1px 6px;
+    flex-shrink: 0;
+}
+
+.settings-nav-btn.active .settings-nav-btn-count {
+    color: var(--accent);
+    background: rgba(255, 255, 255, 0.10);
+}
+
+.settings-content {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    overflow-x: hidden;
+}
+
+.panel-body.settings-body {
+    gap: 12px;
 }
 
 .sort-trigger.open {
     background: var(--accent-bg);
     color: var(--accent);
     border-color: var(--accent);
-}
-
-.sort-trigger>i:first-child {
-    font-size: 11px;
-}
-
-.sort-trigger-label {
-    line-height: 1;
-    max-width: 130px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.sort-trigger-chevron {
-    font-size: 9px;
-    opacity: 0.6;
-    transition: transform var(--t);
 }
 
 .sort-trigger.open .sort-trigger-chevron {
@@ -4689,29 +4474,6 @@ input[type=range]:active::-webkit-slider-thumb {
     border-color: rgba(0, 0, 0, 0.12);
 }
 
-.sort-menu-backdrop {
-    position: fixed;
-    inset: 0;
-    z-index: 29;
-    background: transparent;
-}
-
-.sort-menu {
-    position: absolute;
-    top: calc(100% + 8px);
-    right: 0;
-    z-index: 30;
-    width: 240px;
-    box-sizing: border-box;
-    background: #1c1f23;
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: var(--r-md);
-    padding: 6px;
-    box-shadow: 0 16px 48px rgba(0, 0, 0, 0.55), 0 2px 8px rgba(0, 0, 0, 0.30);
-    animation: sort-pop 0.16s var(--ease-bounce);
-    transform-origin: top right;
-}
-
 @keyframes sort-pop {
     from {
         opacity: 0;
@@ -4724,56 +4486,6 @@ input[type=range]:active::-webkit-slider-thumb {
     }
 }
 
-.sort-menu-header {
-    padding: 6px 10px 4px;
-    font-size: 10px;
-    font-weight: 700;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--text-dim);
-    opacity: 0.65;
-}
-
-.sort-menu-divider {
-    height: 1px;
-    margin: 6px 4px;
-    background: rgba(255, 255, 255, 0.06);
-}
-
-.sort-menu-item,
-.sort-menu-toggle {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    width: 100%;
-    box-sizing: border-box;
-    margin: 0;
-    padding: 8px 10px;
-    background: transparent;
-    border: 0;
-    color: var(--text-dim);
-    font-family: inherit;
-    font-size: 12px;
-    font-weight: 500;
-    line-height: 1.3;
-    border-radius: var(--r-sm);
-    cursor: pointer;
-    text-align: left;
-    transition: background var(--t), color var(--t);
-}
-
-.sort-menu-item+.sort-menu-item,
-.sort-menu-item+.sort-menu-toggle,
-.sort-menu-toggle+.sort-menu-toggle {
-    margin-top: 2px;
-}
-
-.sort-menu-item:hover,
-.sort-menu-toggle:hover {
-    background: var(--bg-item-hover);
-    color: var(--text);
-}
-
 .sort-menu-item.active {
     background: var(--accent-bg);
     color: var(--accent);
@@ -4781,47 +4493,6 @@ input[type=range]:active::-webkit-slider-thumb {
 
 .sort-menu-item.active .sort-menu-item-icon {
     color: var(--accent);
-}
-
-.sort-menu-item-icon {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 18px;
-    height: 18px;
-    flex-shrink: 0;
-    color: var(--text-dim);
-    font-size: 11px;
-}
-
-.sort-menu-item-label {
-    flex: 1;
-}
-
-.sort-menu-item-check {
-    font-size: 10px;
-    color: var(--accent);
-}
-
-.sort-menu-switch {
-    flex-shrink: 0;
-    width: 28px;
-    height: 16px;
-    background: rgba(255, 255, 255, 0.10);
-    border-radius: 999px;
-    position: relative;
-    transition: background var(--t);
-}
-
-.sort-menu-switch-thumb {
-    position: absolute;
-    top: 2px;
-    left: 2px;
-    width: 12px;
-    height: 12px;
-    background: #fff;
-    border-radius: 50%;
-    transition: transform var(--t);
 }
 
 .sort-menu-toggle.on {
@@ -4857,7 +4528,7 @@ input[type=range]:active::-webkit-slider-thumb {
 .versions-error {
     flex-direction: column;
     gap: 8px;
-    color: var(--red, #f04747);
+    color: var(--red, var(--red));
     text-align: center;
     padding: 24px 16px;
 }
@@ -4900,7 +4571,7 @@ select:focus-visible,
 .footer-mc-version:focus-visible,
 .news-row:focus-visible,
 .color-swatch:focus-visible {
-    outline: 2px solid var(--accent);
+    outline: 2px solid var(--accent-hover);
     outline-offset: 2px;
 }
 
@@ -4931,11 +4602,6 @@ select:focus-visible,
     outline: 1px solid rgba(255, 255, 255, 0.25);
 }
 
-.panel-body {
-    scrollbar-width: thin;
-    scrollbar-color: rgba(255, 255, 255, 0.10) transparent;
-}
-
 .panel-body::-webkit-scrollbar {
     width: 6px;
     height: 6px;
@@ -4953,11 +4619,11 @@ select:focus-visible,
 }
 
 .panel-body:hover::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.10);
+    background: color-mix(in srgb, var(--accent) 55%, transparent);
 }
 
 .panel-body::-webkit-scrollbar-thumb:hover {
-    background: rgba(255, 255, 255, 0.22);
+    background: var(--accent);
 }
 
 [data-theme="light"] .panel-body::-webkit-scrollbar-thumb {
@@ -4965,11 +4631,11 @@ select:focus-visible,
 }
 
 [data-theme="light"] .panel-body:hover::-webkit-scrollbar-thumb {
-    background: rgba(0, 0, 0, 0.14);
+    background: color-mix(in srgb, var(--accent) 60%, transparent);
 }
 
 [data-theme="light"] .panel-body::-webkit-scrollbar-thumb:hover {
-    background: rgba(0, 0, 0, 0.24);
+    background: var(--accent);
 }
 
 .client-card:hover,
@@ -5036,7 +4702,7 @@ select:focus-visible,
 .empty-state i {
     font-size: 28px;
     opacity: 0.4;
-    color: var(--accent);
+    color: var(--text-dim);
 }
 
 .empty-state span {
@@ -5164,7 +4830,10 @@ input[type=range]:disabled {
     opacity: 1;
     visibility: visible;
     transform: translateX(-50%) translateY(0);
-    transition-delay: 0.35s;
+    /* QOL: user-adjustable via Settings -> Appearance ("Tooltip delay") -
+       some people want them instant, some want them to never pop up
+       uninvited while just moving the mouse across the UI. */
+    transition-delay: var(--tooltip-delay, 0.35s);
 }
 
 [data-tooltip=""]:hover::after,
@@ -5200,7 +4869,7 @@ input[type=range]:disabled {
 }
 
 .mcv-info-bar i {
-    color: var(--accent);
+    color: var(--text-dim);
     font-size: 12px;
     flex-shrink: 0;
 }
@@ -5215,7 +4884,7 @@ input[type=range]:disabled {
     padding: 10px;
     border-radius: var(--r-md);
     border: 1px solid rgba(255, 255, 255, 0.10);
-    background: rgba(35, 39, 42, 0.75);
+    background: color-mix(in srgb, var(--bg) 75%, transparent);
     backdrop-filter: blur(var(--blur, 14px));
     box-shadow: 0 20px 48px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.10);
     text-align: left;
@@ -5232,20 +4901,13 @@ input[type=range]:disabled {
 }
 
 .mcv-info-pop p + p {
-    margin-top: 8px;
-    padding-top: 8px;
-    border-top: 1px solid rgba(255, 255, 255, 0.07);
+    margin-top: 12px;
+    padding-top: 0;
 }
 .mcv-info-pop i { color: var(--accent); margin-top: 2px; flex-shrink: 0; }
 .mcv-info-pop p > span { min-width: 0; }
 .mcv-info-pop b { color: var(--text); }
 .mcv-info-pop-warn i { color: #f0ad4e; }
-
-.mcv-active-row {
-    border-left-width: 2px;
-    border-left-color: var(--accent);
-    background: rgba(114, 137, 218, 0.06);
-}
 
 .mcv-store-row {
     display: flex;
@@ -5258,19 +4920,6 @@ input[type=range]:disabled {
     border: 1px solid rgba(0, 164, 239, 0.18);
     box-shadow: var(--shadow-sm);
     flex-shrink: 0;
-}
-
-.mcv-store-icon {
-    width: 36px;
-    height: 36px;
-    flex-shrink: 0;
-    border-radius: var(--r-sm);
-    background: rgba(0, 164, 239, 0.14);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: #00a4ef;
-    font-size: 15px;
 }
 
 .mcv-store-meta {
@@ -5308,7 +4957,7 @@ input[type=range]:disabled {
     min-width: 76px;
     height: 34px;
     background: var(--accent);
-    color: #fff;
+    color: var(--on-accent);
     box-shadow: 0 0 16px var(--accent-glow);
 }
 
@@ -5324,7 +4973,7 @@ input[type=range]:disabled {
 
 .mcv-switch-btn {
     background: var(--accent) !important;
-    color: #fff !important;
+    color: var(--text) !important;
 }
 
 .mcv-switch-btn:hover {
@@ -5362,7 +5011,7 @@ input[type=range]:disabled {
 
 .mcv-channel-tab.active {
     background: var(--accent);
-    color: #fff;
+    color: var(--on-accent);
     box-shadow: 0 2px 8px rgba(114, 137, 218, 0.35);
 }
 
@@ -5395,7 +5044,7 @@ input[type=range]:disabled {
 .panel-icon-btn,
 .modal-close-btn,
 .icon-btn {
-    will-change: transform, background, box-shadow;
+    will-change: transform, background;
 }
 
 .panel-back-btn:hover,
@@ -5413,8 +5062,15 @@ input[type=range]:disabled {
     transform: translateY(0) scale(0.96);
 }
 
+.icon-btn:not(:disabled):active,
+.panel-icon-btn:not(:disabled):active,
+.panel-back-btn:active,
+.modal-close-btn:active {
+    transform: scale(0.92);
+}
+
 .icon-btn:not(:disabled):hover {
-    transform: translateY(-1px) scale(1.04);
+    transform: none;
 }
 
 .icon-btn:focus-visible,
@@ -5430,9 +5086,9 @@ input[type=range]:disabled {
 .footer-mc-version:focus-visible,
 .news-row:focus-visible,
 .color-swatch:focus-visible {
-    outline: 2px solid var(--accent);
+    outline: 2px solid var(--accent-hover);
     outline-offset: 2px;
-    box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 18%, transparent);
+    box-shadow: none;
 }
 
 .panel-tab {
@@ -5446,27 +5102,22 @@ input[type=range]:disabled {
     pointer-events: none;
 }
 
-.panel-tab:hover {
-    transform: translateY(-1px);
-}
-
 .panel-tab.active:hover {
-    background: var(--accent-hover);
-    color: #fff;
+    background: color-mix(in srgb, var(--accent) 18%, transparent);
+    color: var(--accent-hover);
 }
 
 .panel-tab.active {
-    box-shadow: 0 2px 10px var(--accent-glow);
+    box-shadow: none;
 }
 
 .setting-row {
     min-width: 0;
-    transition-property: background, border-color, transform, box-shadow;
+    transition-property: background, border-color, transform;
 }
 
 .setting-row.clickable:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 8px 18px rgba(0, 0, 0, 0.10);
+    background: var(--bg-item-hover);
 }
 
 .setting-row.clickable:active {
@@ -5505,8 +5156,28 @@ input[type=range]:disabled {
     -webkit-line-clamp: 3;
 }
 
+/* A changelog body is exactly the case `.client-card-desc`'s 3-line clamp
+   exists to avoid elsewhere — the user explicitly expanded this entry to
+   read the whole thing, so clamping it to 3 lines with an ellipsis (and no
+   way to see the rest) defeats the entire point of expanding. */
+/* News/changelog entries read top-to-bottom, not scanned tile by tile —
+   single column, not `.client-card-cols`'s multi-column grid. */
+.news-card-col {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.client-card-desc.news-changelog-body {
+    display: block;
+    -webkit-line-clamp: unset;
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
+}
+
 .client-card {
-    transition-property: background, border-color, transform, box-shadow;
+    transition-property: background, border-color, transform;
     will-change: transform;
 }
 
@@ -5532,12 +5203,12 @@ input[type=range]:disabled {
 
 .toggle {
     outline: none;
-    transition-property: background, box-shadow, transform;
+    transition-property: background, transform;
     will-change: transform;
 }
 
 .toggle:hover {
-    transform: translateY(-1px);
+    transform: none;
 }
 
 .toggle:active {
@@ -5568,12 +5239,12 @@ input[type=range] {
 }
 
 input[type=range] {
-    transition: opacity 0.18s var(--ease-out), filter 0.18s var(--ease-out);
+    transition: opacity 0.18s var(--ease-out);
 }
 
 input[type=range]:hover:not(:disabled),
 input[type=range]:focus-visible:not(:disabled) {
-    filter: brightness(1.12);
+    --range-off: rgba(255, 255, 255, 0.24);
 }
 
 .progress-bar-wrap {
@@ -5717,7 +5388,6 @@ input[type=range]:focus-visible:not(:disabled) {
     cursor: grab;
 }
 .skin-canvas:active { cursor: grabbing; }
-.skin-hidden { display: none; }
 
 .skin-body,
 .skin-fallback {
@@ -5761,7 +5431,7 @@ input[type=range]:focus-visible:not(:disabled) {
 }
 .skin-pill:hover { color: var(--text); background: rgba(255, 255, 255, 0.12); }
 .skin-pill.active {
-    color: #fff;
+    color: var(--on-accent);
     background: var(--accent);
     border-color: transparent;
     box-shadow: 0 0 10px var(--accent-glow);
@@ -5782,7 +5452,7 @@ input[type=range]:focus-visible:not(:disabled) {
     gap: 7px;
     font-size: 12px;
     font-weight: 700;
-    color: #fff;
+    color: var(--text);
     margin-bottom: 10px;
 }
 .capes-head i { color: var(--accent); }
@@ -5881,8 +5551,19 @@ input[type=range]:focus-visible:not(:disabled) {
     gap: 10px;
     font-size: 22px;
     font-weight: 800;
-    color: #fff;
+    color: var(--text);
     line-height: 1.1;
+    min-width: 0;
+}
+/* The name itself (first child) is the only part allowed to truncate — a
+   flex child has no default min-width/overflow handling, so a long
+   Microsoft/Java username ran straight past the card's right edge with no
+   ellipsis before this. The "In game" badge next to it must stay full size. */
+.profile-name > span:first-child {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 .profile-online {
     display: inline-flex;
@@ -5910,26 +5591,56 @@ input[type=range]:focus-visible:not(:disabled) {
     margin-top: -4px;
 }
 
-.pstat-list { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
-.pstat {
-    display: flex;
-    align-items: center;
-    gap: 9px;
-    padding: 6px 8px;
-    border-radius: 8px;
-    font-size: 12px;
-    background: rgba(255, 255, 255, 0.03);
-    border: 0;
-    width: 100%;
-    text-align: left;
-    font-family: inherit;
-    color: var(--text);
+/* Replaces the old .pstat-list (a column of label:value rows crammed into
+   the hero card's narrow info column). Pulled out into its own full-width
+   section (see ProfileView.svelte), so this is a real dashboard row of
+   equal-weight stat tiles, not a form-style list. */
+.profile-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(140px, 100%), 1fr));
+    gap: 8px;
+    margin: 2px 2px 12px;
+    min-width: 0;
 }
-.pstat > i { width: 14px; text-align: center; color: var(--accent); font-size: 12px; }
-.pstat-k { color: var(--text-dim); }
-.pstat-v { margin-left: auto; font-weight: 600; color: #fff; font-family: ui-monospace, "Cascadia Code", monospace; font-size: 11px; }
-.pstat-click { cursor: pointer; transition: background var(--t); }
-.pstat-click:hover { background: var(--accent-bg); }
+
+.profile-stat-card {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    padding: 12px 14px;
+    border-radius: var(--r-md);
+    background: var(--bg-item);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    box-shadow: var(--shadow-sm);
+    font-family: inherit;
+    text-align: left;
+    transition: background var(--t);
+}
+
+.profile-stat-card > i { color: var(--accent); font-size: 13px; }
+
+.profile-stat-v {
+    font-weight: 700;
+    font-size: 15px;
+    color: var(--text);
+    font-family: ui-monospace, "Cascadia Code", monospace;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.profile-stat-k {
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+}
+
+button.profile-stat-card { cursor: pointer; }
+button.profile-stat-card:hover { background: var(--bg-item-hover); border-color: var(--accent); }
 
 .profile-actions {
     display: flex;
@@ -5947,46 +5658,6 @@ input[type=range]:focus-visible:not(:disabled) {
     justify-content: center;
 }
 
-.skin-meta {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 6px;
-}
-
-.skin-name {
-    font-size: 17px;
-    font-weight: 700;
-    color: #fff;
-}
-
-.skin-uuid {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 11px;
-    font-family: ui-monospace, "Cascadia Code", monospace;
-    color: var(--text-dim);
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 14px;
-    padding: 3px 10px;
-    cursor: pointer;
-    transition: background var(--t), color var(--t), border-color var(--t);
-}
-.skin-uuid:hover {
-    color: var(--text);
-    background: var(--accent-bg);
-    border-color: rgba(114, 137, 218, 0.4);
-}
-
-.skin-actions {
-    display: flex;
-    gap: 8px;
-    flex-wrap: wrap;
-    justify-content: center;
-}
-
 .skin-btn {
     display: inline-flex;
     align-items: center;
@@ -5994,13 +5665,13 @@ input[type=range]:focus-visible:not(:disabled) {
     font-size: 12px;
     font-weight: 600;
     font-family: inherit;
-    color: #fff;
+    color: var(--on-accent);
     background: var(--accent);
     border: 0;
     border-radius: 14px;
     padding: 7px 14px;
     cursor: pointer;
-    transition: filter var(--t), background var(--t), box-shadow var(--t);
+    transition: background var(--t);
 }
 .skin-btn:hover { filter: brightness(1.1); box-shadow: 0 0 12px var(--accent-glow); }
 
@@ -6026,7 +5697,7 @@ input[type=range]:focus-visible:not(:disabled) {
     gap: 7px;
     font-size: 12px;
     font-weight: 700;
-    color: #fff;
+    color: var(--text);
     margin-bottom: 8px;
 }
 .instance-card-head i { color: var(--accent); }
@@ -6036,20 +5707,13 @@ input[type=range]:focus-visible:not(:disabled) {
     background: rgba(0, 0, 0, 0.25);
     border: 1px solid rgba(255, 255, 255, 0.12);
     border-radius: 8px;
-    color: #fff;
+    color: var(--text);
     padding: 5px 8px;
     font-family: inherit;
     font-size: 12px;
 }
-.instance-ram-unit { font-size: 11px; color: var(--text-dim); }
+.instance-ram-unit { font-size: 11px; color: var(--text-dim); font-variant-numeric: tabular-nums; }
 .instance-hint { display: block; margin-top: 6px; font-size: 10px; color: var(--text-dim); opacity: 0.8; }
-
-.skin-change {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 8px;
-}
 .skin-slim-toggle {
     display: inline-flex;
     align-items: center;
@@ -6058,7 +5722,6 @@ input[type=range]:focus-visible:not(:disabled) {
     color: var(--text-dim);
     cursor: pointer;
 }
-.skin-change-btns { display: flex; gap: 8px; }
 
 .mod-warnings {
     background: rgba(240, 71, 71, 0.10);
@@ -6106,18 +5769,9 @@ input[type=range]:focus-visible:not(:disabled) {
     font-size: 15px;
 }
 .news-meta { display: flex; flex-direction: column; flex: 1; min-width: 0; }
-.news-title { font-size: 13px; font-weight: 600; color: #fff; }
+.news-title { font-size: 13px; font-weight: 600; color: var(--text); }
 .news-sub { font-size: 11px; color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .news-ext { color: var(--text-dim); font-size: 11px; opacity: 0.6; }
-
-.changelog-entry {
-    border-left: 2px solid var(--accent);
-    padding: 4px 0 10px 12px;
-    margin: 4px 2px 4px 6px;
-}
-.changelog-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 4px; }
-.changelog-tag { font-size: 13px; font-weight: 700; color: #fff; }
-.changelog-date { font-size: 10px; color: var(--text-dim); }
 .changelog-body {
     font-size: 11.5px;
     line-height: 1.5;
@@ -6128,7 +5782,7 @@ input[type=range]:focus-visible:not(:disabled) {
 
 .screenshot-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(min(150px, 100%), 1fr));
     gap: 8px;
     padding: 6px 2px;
 }
@@ -6142,7 +5796,7 @@ input[type=range]:focus-visible:not(:disabled) {
     overflow: hidden;
     background: rgba(255, 255, 255, 0.03);
     cursor: pointer;
-    transition: transform var(--t), border-color var(--t), box-shadow var(--t);
+    transition: transform var(--t), border-color var(--t);
 }
 .screenshot-tile:hover {
     transform: translateY(-2px);
@@ -6154,6 +5808,161 @@ input[type=range]:focus-visible:not(:disabled) {
     height: 100%;
     object-fit: cover;
     display: block;
+}
+.screenshot-tile-actions {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    display: flex;
+    gap: 4px;
+    opacity: 0;
+    transition: opacity var(--t);
+}
+.screenshot-tile:hover .screenshot-tile-actions,
+.screenshot-tile:focus-within .screenshot-tile-actions {
+    opacity: 1;
+}
+.screenshot-tile-actions .panel-icon-btn {
+    background: rgba(20, 22, 26, 0.72);
+    width: 26px;
+    height: 26px;
+    font-size: 11px;
+}
+.screenshot-tile-actions .panel-icon-btn.active {
+    color: var(--yellow);
+}
+.screenshot-tile-selected {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px var(--accent-glow);
+}
+.screenshot-tile-select-check {
+    position: absolute;
+    top: 6px;
+    left: 6px;
+    z-index: 1;
+    font-size: 18px;
+    color: var(--accent);
+    text-shadow: 0 1px 4px rgba(0, 0, 0, 0.8);
+}
+
+/* QOL screenshot lightbox — arrow-key/click next-prev viewer. */
+.lightbox-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 500;
+    background: rgba(0, 0, 0, 0.88);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    animation: search-fade-in 0.15s ease;
+}
+.lightbox-body {
+    max-width: min(1100px, 88vw);
+    max-height: 86vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0;
+}
+.lightbox-body img {
+    max-width: 100%;
+    max-height: 74vh;
+    object-fit: contain;
+    border-radius: 10px 10px 0 0;
+    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6);
+}
+.lightbox-caption {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    background: rgba(20, 22, 26, 0.95);
+    border-radius: 0 0 10px 10px;
+    padding: 10px 14px;
+}
+.lightbox-caption-name {
+    display: block;
+    color: #fff;
+    font-size: 12.5px;
+    font-weight: 600;
+}
+.lightbox-caption-meta {
+    display: block;
+    color: var(--text-dim);
+    font-size: 11px;
+    margin-top: 2px;
+}
+.lightbox-nav {
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    color: #fff;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    font-size: 16px;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: background 0.15s ease;
+}
+.lightbox-nav:hover {
+    background: var(--accent);
+}
+
+/* QOL: Home-screen pinned-panels quick-access row. */
+.pinned-panels-row {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 8px;
+    margin-bottom: 14px;
+}
+
+/* Shared by UpdateAvailableModal and App.svelte's What's New modal. */
+.update-modal-changelog {
+    max-height: 320px;
+    overflow-y: auto;
+    font-size: 12.5px;
+    line-height: 1.6;
+    color: var(--text-dim);
+    padding-right: 4px;
+}
+
+.modal-footer-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+}
+/* Never had rules before — the caption rendered as unstyled plain text
+   sitting under the image instead of overlaid on it. */
+.screenshot-tile-overlay {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 16px 8px 6px;
+    background: linear-gradient(to top, rgba(0, 0, 0, 0.75), rgba(0, 0, 0, 0));
+    pointer-events: none;
+}
+.screenshot-tile-name {
+    font-size: 11px;
+    font-weight: 600;
+    color: #fff;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1;
+    min-width: 0;
+}
+.screenshot-tile-meta {
+    font-size: 10px;
+    color: rgba(255, 255, 255, 0.7);
+    white-space: nowrap;
+    flex-shrink: 0;
 }
 
 .server-ping {
@@ -6173,7 +5982,7 @@ input[type=range]:focus-visible:not(:disabled) {
     flex-shrink: 0;
 }
 .server-ping.online  { color: var(--green); }
-.server-ping.offline { color: #f04747; }
+.server-ping.offline { color: var(--red); }
 .server-ping.checking {
     color: var(--text-dim);
     opacity: 0.7;
@@ -6201,8 +6010,6 @@ input[type=range]:focus-visible:not(:disabled) {
     box-shadow: var(--shadow-sm);
 }
 .profile-stat > i { font-size: 14px; color: var(--accent); margin-bottom: 2px; }
-.profile-stat-value { font-size: 15px; font-weight: 700; color: #fff; }
-.profile-stat-label { font-size: 10px; color: var(--text-dim); letter-spacing: 0.03em; }
 
 ::view-transition-old(root),
 ::view-transition-new(root) {
@@ -6289,13 +6096,122 @@ html.vt-active .panel-overlay {
    same var(--accent)/var(--r-md)/var(--blur) custom properties `preview()`
    already sets on :root while a theme is selected, so this card updates in
    lockstep with every slider drag for free without any separate state. */
+/* Split view: a rail (picker + tabs + one editor section) alongside a
+   live-preview column. This panel is often embedded in a narrow Settings
+   sub-column, so a fixed-track grid (or a viewport @media breakpoint,
+   which reacts to the window's width, not this panel's) either stayed
+   two-column when there wasn't room — the rail's chips/tabs don't shrink
+   below their content width, so they spilled out of their squeezed track
+   and rendered on top of the preview card — or, combined with sticky
+   positioning, left the preview floating over the rail while scrolled.
+   Flexbox with wrapping sidesteps all of it: no breakpoint to get out of
+   sync, no sticky to overlap — each row just centers whatever fits. */
+.ts-shell {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: flex-start;
+    gap: 16px;
+    width: 100%;
+    min-width: 0;
+}
+
+.ts-rail {
+    flex: 1 1 380px;
+    min-width: 300px;
+    max-width: 640px;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    background: var(--bg-panel-2, rgba(255, 255, 255, 0.02));
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: var(--r-lg, 16px);
+    padding: 14px;
+}
+
+.ts-preview-pane {
+    flex: 1 1 240px;
+    min-width: 220px;
+    max-width: 280px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin: 0 auto;
+}
+
+.ts-picker-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+
+.ts-picker-chips {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    flex: 1;
+    min-width: 0;
+}
+
+.ts-picker-actions {
+    display: flex;
+    gap: 6px;
+    flex-shrink: 0;
+}
+
+.ts-tabbar {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+    padding: 4px;
+    background: var(--bg-item);
+    border-radius: var(--r-md);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.ts-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 28px;
+    padding: 0 10px;
+    font-size: 11.5px;
+    font-weight: 600;
+    color: var(--text-dim);
+    background: transparent;
+    border: none;
+    border-radius: calc(var(--r-md) - 3px);
+    cursor: pointer;
+    transition: background var(--t), color var(--t);
+}
+
+.ts-tab:hover {
+    color: var(--text);
+    background: var(--bg-item-hover);
+}
+
+.ts-tab.selected {
+    color: var(--on-accent);
+    background: var(--accent);
+    box-shadow: 0 0 14px var(--accent-glow);
+}
+
+.ts-tab-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 4px 2px 2px;
+    animation: refined-dialog-in calc(0.18s * var(--anim-mult, 1)) var(--ease-out);
+}
+
 .ts-preview-card {
     border-radius: var(--r-lg, 16px);
     overflow: hidden;
     border: 1px solid rgba(255, 255, 255, 0.10);
     background: linear-gradient(180deg, rgba(20, 22, 26, 0.58), rgba(16, 18, 22, 0.92));
     box-shadow: var(--shadow-lg);
-    margin: 4px 0 12px;
 }
 
 .ts-preview-topbar {
@@ -6343,7 +6259,7 @@ html.vt-active .panel-overlay {
     border-radius: var(--r-sm);
     background: var(--accent);
     border: none;
-    color: #fff;
+    color: var(--on-accent);
     font-family: inherit;
     font-weight: 700;
     font-size: 12.5px;
@@ -6370,13 +6286,6 @@ html.vt-active .panel-overlay {
     justify-content: center;
     color: var(--text-dim);
     font-size: 12px;
-}
-
-.ts-chips {
-    display: flex;
-    gap: 6px;
-    flex-wrap: wrap;
-    padding: 4px 0 10px;
 }
 
 .ts-chip {
@@ -6425,7 +6334,7 @@ html.vt-active .panel-overlay {
 
 .ts-actions .btn-accent {
     background: var(--accent);
-    color: #fff;
+    color: var(--on-accent);
     box-shadow: 0 0 14px var(--accent-glow);
 }
 
@@ -6436,13 +6345,13 @@ html.vt-active .panel-overlay {
 }
 
 .ts-danger:hover {
-    background: rgba(240, 71, 71, 0.15);
+    background: var(--red-bg);
     color: var(--red);
 }
 
 .ts-color-grid {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(auto-fill, minmax(min(84px, 100%), 1fr));
     gap: 8px;
     padding: 4px 0 8px;
 }
@@ -6678,8 +6587,16 @@ html.vt-active .panel-overlay {
     box-shadow: var(--shadow-sm);
 }
 .stats-card > i { font-size: 15px; color: var(--accent); margin-bottom: 3px; }
-.stats-val { font-size: 16px; font-weight: 700; color: #fff; text-align: center; }
-.stats-label { font-size: 10px; color: var(--text-dim); text-align: center; }
+.stats-card:hover { background: var(--bg-item-hover); }
+.stats-val {
+    font-family: var(--font-display);
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--text);
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+}
+.stats-label { font-size: 11px; color: var(--text-dim); text-align: center; }
 
 .stats-chart {
     display: flex;
@@ -6712,6 +6629,49 @@ html.vt-active .panel-overlay {
 }
 .stats-bar-day { font-size: 9px; color: var(--text-dim); }
 
+/* Horizontal bar-meter breakdown (Stats panel's "By instance/version"
+   section) — a per-label session-count comparison, same visual language as
+   `.stats-bar-*`'s vertical daily chart but laid out as rows since labels
+   are free-text and can be longer than a day-of-month tick. */
+.stats-category-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 4px 0 10px;
+}
+.stats-category-row {
+    display: grid;
+    grid-template-columns: minmax(80px, 1fr) 2fr auto;
+    align-items: center;
+    gap: 10px;
+}
+.stats-category-name {
+    font-size: 12px;
+    color: var(--text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.stats-category-bar-track {
+    height: 8px;
+    background: var(--bg-item);
+    border-radius: var(--r-pill);
+    overflow: hidden;
+}
+.stats-category-bar-fill {
+    height: 100%;
+    background: linear-gradient(to right, var(--accent), var(--accent-hover));
+    border-radius: var(--r-pill);
+    transition: width 0.4s var(--ease-out);
+}
+.stats-category-count {
+    font-size: 11px;
+    color: var(--text-dim);
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+}
+
 .logs-file-list {
     display: flex;
     flex-direction: column;
@@ -6737,7 +6697,7 @@ html.vt-active .panel-overlay {
 .logs-file.crash > i { color: var(--red); }
 .logs-file > i:first-child { color: var(--text-dim); }
 .logs-file-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.logs-file-size { font-size: 10px; color: var(--text-dim); }
+.logs-file-size { font-size: 10px; color: var(--text-dim); font-variant-numeric: tabular-nums; text-align: right; }
 
 .logs-toolbar {
     display: flex;
@@ -6774,26 +6734,8 @@ html.vt-active .panel-overlay {
     white-space: pre-wrap;
     word-break: break-word;
 }
-
-.modpack-source-tabs { display: flex; gap: 6px; padding-bottom: 8px; }
 .modpack-search { display: flex; gap: 6px; padding-bottom: 10px; }
 .modpack-search .panel-search-input { flex: 1; }
-
-.modpack-row {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 10px;
-    background: var(--bg-item);
-    border: 1px solid rgba(255, 255, 255, 0.05);
-    border-radius: var(--r-md);
-    box-shadow: var(--shadow-sm);
-    margin-bottom: 6px;
-}
-
-.modpack-row:hover {
-    box-shadow: var(--shadow-md);
-}
 .modpack-icon {
     width: 44px;
     height: 44px;
@@ -6809,26 +6751,7 @@ html.vt-active .panel-overlay {
     color: var(--text-dim);
     font-size: 18px;
 }
-.modpack-meta { flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.modpack-summary {
-    font-size: 11px;
-    color: var(--text-dim);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-.modpack-install {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    padding: 24px 16px;
-    align-items: center;
-    text-align: center;
-}
-.modpack-install-title { font-size: 14px; font-weight: 600; color: #fff; display: flex; align-items: center; gap: 8px; }
 .modpack-install .progress-bar-wrap { width: 100%; }
-.modpack-manual-list { text-align: left; margin: 8px 0 0; padding-left: 18px; }
-.modpack-manual-list li { margin: 2px 0; }
 
 .skinlib-add { display: flex; gap: 6px; padding-bottom: 10px; }
 .skinlib-add .panel-search-input { flex: 1; }
@@ -6862,6 +6785,10 @@ html.vt-active .panel-overlay {
 .skinlib-actions { display: flex; gap: 4px; flex-wrap: wrap; justify-content: center; }
 
 .instance-card-head { display: flex; align-items: center; gap: 8px; }
+/* The toolbar packs a template select + several buttons onto one row —
+   wrap instead of overflowing the panel when it's narrower than that. */
+.instance-toolbar { flex-wrap: wrap; row-gap: 6px; }
+.instance-toolbar select { min-width: 0; }
 .instance-row {
     display: flex;
     align-items: center;
@@ -6877,13 +6804,6 @@ html.vt-active .panel-overlay {
    `--instance-accent` custom-property override on `.instance-row` (a single
    variable overridden per element, not a hardcoded new color). */
 .instance-row.active[style*="--instance-accent"] { border-left-color: var(--instance-accent); }
-.instance-accent-dot {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    flex: 0 0 auto;
-    margin-right: 2px;
-}
 .instance-accent-input {
     width: 26px;
     height: 26px;
@@ -6910,8 +6830,8 @@ html.vt-active .panel-overlay {
 }
 .instance-name-btn > i { color: var(--accent); font-size: 12px; }
 .instance-icon-btn {
-    width: 26px;
-    height: 26px;
+    width: 32px;
+    height: 32px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -6933,6 +6853,58 @@ html.vt-active .panel-overlay {
     font-size: 11px;
     padding: 2px 6px;
 }
+
+/* Redesign: each instance card used two full-width `.setting-row`s (label +
+   hint on the left, one small control on the right) just to host a version
+   select and a color swatch — a lot of vertical weight for two compact
+   controls. One footer row holds both, tooltip-only for the explanation
+   text the setting-rows used to spell out. */
+.instance-card-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding-top: 14px;
+    margin-top: 4px;
+}
+.instance-card-footer .instance-version-select { max-width: none; flex: 1; }
+
+/* `<details>`/`<summary>` grouping for Java's instance groups had no styling
+   at all — a bare browser-default disclosure triangle sitting directly in
+   the panel body. Give it the same card-section treatment as the rest of
+   the redesign, with a real chevron instead of the native marker. */
+.instance-group {
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: var(--r-md);
+    background: rgba(255, 255, 255, 0.015);
+    margin-top: 10px;
+    overflow: hidden;
+}
+.instance-group-summary {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text);
+    list-style: none;
+    user-select: none;
+    transition: background var(--t);
+}
+.instance-group-summary:hover { background: rgba(255, 255, 255, 0.03); }
+.instance-group-summary::-webkit-details-marker { display: none; }
+.instance-group-summary::before {
+    content: "\f078";
+    font-family: "Font Awesome 6 Free";
+    font-weight: 900;
+    font-size: 9px;
+    color: var(--text-dim);
+    transition: transform var(--t);
+}
+.instance-group:not([open]) .instance-group-summary::before { transform: rotate(-90deg); }
+.instance-group > .client-card-cols { padding: 2px 12px 12px; }
 
 .ts-chip,
 .logs-file,
@@ -7016,7 +6988,7 @@ html.vt-active .panel-overlay {
     height: 15px;
     padding: 0 3px;
     border-radius: 8px;
-    background: var(--accent, #f04747);
+    background: var(--accent, var(--red));
     color: #fff;
     font-size: 9px;
     font-weight: 700;
@@ -7032,9 +7004,8 @@ html.vt-active .panel-overlay {
     max-height: 420px;
     display: flex;
     flex-direction: column;
-    background: rgba(35, 39, 42, 0.45);
-    backdrop-filter: blur(var(--blur, 14px));
-    -webkit-backdrop-filter: blur(var(--blur, 14px));
+    /* Solid, not glass: over an open panel a translucent fill made the list unreadable. */
+    background: var(--bg-panel);
     border: 1px solid rgba(255, 255, 255, 0.10);
     border-radius: var(--r-md);
     box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.14);
@@ -7108,12 +7079,9 @@ html.vt-active .panel-overlay {
     display: flex;
     align-items: flex-start;
     gap: 8px;
-    padding: 10px 12px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+    padding: 12px 12px;
     font-size: 11px;
 }
-
-.notif-item:last-child { border-bottom: none; }
 
 .notif-item.unread { background: rgba(255, 255, 255, 0.03); position: relative; }
 .notif-item.unread::before {
@@ -7140,9 +7108,9 @@ html.vt-active .panel-overlay {
     color: var(--text-dim);
 }
 
-.notif-item.success i:first-child { background: rgba(67, 181, 129, 0.15); color: var(--green); }
-.notif-item.warning i:first-child { background: rgba(250, 166, 26, 0.15); color: var(--orange); }
-.notif-item.error i:first-child   { background: rgba(240, 71, 71, 0.15); color: var(--red); }
+.notif-item.success i:first-child { background: var(--green-bg); color: var(--green); }
+.notif-item.warning i:first-child { background: var(--orange-bg); color: var(--orange); }
+.notif-item.error i:first-child   { background: var(--red-bg); color: var(--red); }
 .notif-item.info i:first-child    { background: var(--accent-bg); color: var(--accent); }
 
 .notif-item-body { flex: 1; min-width: 0; }
@@ -7203,7 +7171,7 @@ html.vt-active .panel-overlay {
 }
 
 .announcement-banner.maintenance > i {
-    color: var(--red, #f04747);
+    color: var(--red, var(--red));
 }
 
 .announcement-banner-text {
@@ -7335,10 +7303,10 @@ html.vt-active .panel-overlay {
 .btn-sm.btn-primary {
     background: var(--accent);
     border-color: var(--accent);
-    color: #fff;
+    color: var(--on-accent);
 }
 
-.btn-sm.btn-primary:hover:not(:disabled) { filter: brightness(1.1); }
+.btn-sm.btn-primary:hover:not(:disabled) { background: var(--accent-hover); }
 
 .util-gauge-row {
     display: flex;
@@ -7417,14 +7385,6 @@ html.vt-active .panel-overlay {
     background: var(--accent);
     border-color: var(--accent);
     box-shadow: none;
-}
-
-.ts-chip-row {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    flex-wrap: wrap;
-    flex-shrink: 0;
 }
 
 .cl-pack {
@@ -7539,7 +7499,7 @@ html.vt-active .panel-overlay {
 
 .cl-dl-row > i {
     font-size: 12px;
-    color: var(--accent);
+    color: var(--text-dim);
     flex-shrink: 0;
     width: 14px;
     text-align: center;
@@ -7694,7 +7654,7 @@ html.vt-active .panel-overlay {
 
 .wizard-loader-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(min(90px, 100%), 1fr));
     gap: 8px;
 }
 
@@ -7747,8 +7707,7 @@ html.vt-active .panel-overlay {
 .wizard-review > div {
     display: flex;
     justify-content: space-between;
-    padding: 6px 0;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    padding: 8px 0;
 }
 
 .wizard-footer {
@@ -7965,4 +7924,156 @@ html.vt-active .panel-overlay {
 
 .modrinth-v2-detail {
     width: min(520px, 92vw);
+}
+/* Perf: skip layout/paint for off-screen notification rows (Horizon-style culling). */
+.notif-item {
+    content-visibility: auto;
+    contain-intrinsic-size: auto 64px;
+}
+
+/* Glass outline: every translucent button and container gets the same thin
+   light edge as the top bar's search and window buttons, so surfaces read
+   as frosted glass rather than flat fills. */
+:root { --glass-border: rgba(255, 255, 255, 0.10); --border: var(--glass-border); }
+[data-theme="light"] { --glass-border: rgba(0, 0, 0, 0.10); }
+[data-theme="light"] .top-bar,
+[data-theme="light"] .footer { --glass-border: rgba(255, 255, 255, 0.10); }
+
+.action-btn,
+.settings-nav-btn,
+.setting-row,
+.version-row,
+.notice-bar,
+.icon-btn-ghost,
+.credits-card,
+.util-save-bar,
+.cl-pack,
+.cl-dl-row,
+.instance-row,
+.instance-detail-rail,
+.cape-none,
+.mcv-store-row .vcs-btn-ghost {
+    border: 1px solid var(--glass-border);
+}
+
+/* Button states: one shared set of hover / active / focus-visible / disabled
+   rules for every button family. Only transform, opacity, background and
+   border-color transition; no box-shadow or filter transitions (low-end GPU). */
+.action-btn,
+.btn-sm,
+.btn-sq,
+.btn-wide,
+.icon-btn,
+.icon-btn-ghost,
+.wnd-btn,
+.edition-tab,
+.setting-select,
+.panel-icon-btn,
+.modal-btn,
+.vcs-btn {
+    -webkit-tap-highlight-color: transparent;
+}
+
+.action-btn:not(:disabled):hover,
+.btn-sm:not(:disabled):hover,
+.icon-btn:not(:disabled):hover,
+.icon-btn-ghost:not(:disabled):hover,
+.wnd-btn:not(:disabled):hover,
+.edition-tab:not(:disabled):hover,
+.setting-select:not(:disabled):hover,
+.panel-icon-btn:not(:disabled):hover,
+.modal-btn:not(:disabled):hover,
+.vcs-btn:not(:disabled):hover {
+    background-image: linear-gradient(rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.06));
+    border-color: rgba(255, 255, 255, 0.22);
+}
+
+.action-btn:not(:disabled):active,
+.btn-sm:not(:disabled):active,
+.btn-sq:not(:disabled):active,
+.btn-wide:not(:disabled):active,
+.icon-btn:not(:disabled):active,
+.icon-btn-ghost:not(:disabled):active,
+.wnd-btn:not(:disabled):active,
+.edition-tab:not(:disabled):active,
+.panel-icon-btn:not(:disabled):active,
+.modal-btn:not(:disabled):active,
+.vcs-btn:not(:disabled):active {
+    transform: scale(0.96);
+}
+
+.action-btn:focus-visible,
+.btn-sm:focus-visible,
+.btn-sq:focus-visible,
+.btn-wide:focus-visible,
+.icon-btn:focus-visible,
+.icon-btn-ghost:focus-visible,
+.wnd-btn:focus-visible,
+.edition-tab:focus-visible,
+.setting-select:focus-visible,
+.panel-icon-btn:focus-visible,
+.modal-btn:focus-visible,
+.vcs-btn:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
+.action-btn:disabled,
+.btn-sm:disabled,
+.btn-sq:disabled,
+.btn-wide:disabled,
+.icon-btn:disabled,
+.icon-btn-ghost:disabled,
+.wnd-btn:disabled,
+.edition-tab:disabled,
+.setting-select:disabled,
+.panel-icon-btn:disabled,
+.modal-btn:disabled,
+.vcs-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+    background-image: none;
+}
+
+.btn-sm,
+.icon-btn-ghost,
+.panel-icon-btn,
+.modal-btn,
+.vcs-btn {
+    transition-property: background-color, border-color, transform, opacity;
+}
+
+/* Global scrollbar: every scroll area (settings lists, mod grids, logs,
+   dropdowns) gets the same slim glass thumb instead of the Windows default.
+   Uses only ::-webkit-scrollbar, since setting the standard scrollbar-width
+   on an element makes WebView2 ignore these rules. */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
+    background: transparent;
+}
+::-webkit-scrollbar-thumb {
+    background: color-mix(in srgb, var(--accent) 55%, transparent);
+    border: 2px solid transparent;
+    background-clip: padding-box;
+    border-radius: 999px;
+}
+::-webkit-scrollbar-thumb:hover {
+    background: var(--accent);
+    background-clip: padding-box;
+}
+::-webkit-scrollbar-button {
+    display: none;
+}
+[data-theme="light"] ::-webkit-scrollbar-thumb {
+    background: color-mix(in srgb, var(--accent) 60%, transparent);
+    background-clip: padding-box;
+}
+[data-theme="light"] ::-webkit-scrollbar-thumb:hover {
+    background: var(--accent);
+    background-clip: padding-box;
 }

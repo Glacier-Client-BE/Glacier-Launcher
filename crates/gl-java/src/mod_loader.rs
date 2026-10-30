@@ -41,7 +41,9 @@ pub async fn run_loader_installer(
         }
     };
 
-    std::fs::create_dir_all(instance_dir).map_err(io_err(instance_dir))?;
+    tokio::fs::create_dir_all(instance_dir)
+        .await
+        .map_err(io_err(instance_dir))?;
 
     let mut cmd = tokio::process::Command::new(&java);
     cmd.arg("-jar")

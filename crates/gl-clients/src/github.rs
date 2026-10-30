@@ -2,9 +2,53 @@
 //! LeviLamina's self-update (LeviLaminaService.cs) and its mod registry
 //! (LeviLaminaModsService.cs).
 
+use std::collections::HashMap;
+use std::sync::{Mutex, OnceLock};
+use std::time::{Duration, Instant};
+
 use serde::Deserialize;
 
 use crate::error::{ClientsError, Result};
+
+/// How long a successful GitHub API response is reused before re-fetching.
+/// Release metadata changes rarely, and the unauthenticated API rate limit
+/// is tight, so repeated UI lookups should not each hit the network.
+const RESPONSE_TTL: Duration = Duration::from_secs(5 * 60);
+
+fn response_cache() -> &'static Mutex<HashMap<String, (Instant, String)>> {
+    static CACHE: OnceLock<Mutex<HashMap<String, (Instant, String)>>> = OnceLock::new();
+    CACHE.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+/// GETs a GitHub API URL and returns the response body, reusing a successful
+/// response for up to `RESPONSE_TTL`. Non-2xx bodies (for example rate-limit
+/// or "Not Found" payloads) are returned to the caller but never cached, so a
+/// transient failure does not stick around for the whole TTL.
+pub async fn get_text_cached(http: &reqwest::Client, url: &str) -> Result<String> {
+    if let Ok(cache) = response_cache().lock() {
+        if let Some((at, body)) = cache.get(url) {
+            if at.elapsed() < RESPONSE_TTL {
+                return Ok(body.clone());
+            }
+        }
+    }
+
+    let resp = http
+        .get(url)
+        .header("User-Agent", "GlacierLauncher")
+        .send()
+        .await?;
+    let ok = resp.status().is_success();
+    let body = resp.text().await?;
+
+    if ok {
+        if let Ok(mut cache) = response_cache().lock() {
+            cache.retain(|_, (at, _)| at.elapsed() < RESPONSE_TTL);
+            cache.insert(url.to_string(), (Instant::now(), body.clone()));
+        }
+    }
+    Ok(body)
+}
 
 /// A single release asset, as returned by GitHub's Releases API.
 #[derive(Debug, Clone, Deserialize)]

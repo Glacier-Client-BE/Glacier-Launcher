@@ -3,6 +3,7 @@
 //! to `gl-download` (see the crate-level TODO note); this module covers
 //! fetching + parsing the manifest and the installed-size/path helpers.
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use reqwest::Client;
@@ -15,8 +16,39 @@ pub const MANIFEST_URL: &str = "https://cdn.glacierclient.xyz/versions.json";
 /// Fetches and parses the Glacier Client version manifest. Mirrors
 /// `GlacierClientService.GetManifestAsync` (caching is left to the caller).
 pub async fn fetch_manifest(http: &Client) -> Result<GlacierManifest> {
-    let body = http.get(MANIFEST_URL).send().await?.text().await?;
+    let body = http
+        .get(MANIFEST_URL)
+        .send()
+        .await?
+        .error_for_status()?
+        .text()
+        .await?;
     parse_manifest(&body)
+}
+
+/// The same Cloudflare Worker `glacierclient.xyz`'s own website
+/// (`Glacier-Website/cloudflare-worker.js` + `js/modules/config.js`) already
+/// calls for its live per-version download counter — a first-party,
+/// product-wide count, not something scoped to this launcher. Read-only
+/// here: only `GET /counts` is used (never `POST /increment/:key`), since
+/// incrementing on every launcher-side download would double-count against
+/// the website's own increments and there's no way to tell the two apart
+/// server-side.
+pub const DOWNLOAD_COUNTER_API: &str = "https://glacier-downloads.pepeoncloudeflare.workers.dev";
+
+/// Fetches `{ "v1.2.0": 37, ... }` — keyed by the same `tag` string
+/// (`GlacierClientVersion::tag`, e.g. `"v1.2.0"`) the manifest already uses,
+/// so callers can look up `counts.get(&version.tag)` directly.
+pub async fn fetch_download_counts(http: &Client) -> Result<HashMap<String, u64>> {
+    let body = http
+        .get(format!("{DOWNLOAD_COUNTER_API}/counts"))
+        .send()
+        .await?
+        .error_for_status()
+        .map_err(ClientsError::from)?
+        .text()
+        .await?;
+    serde_json::from_str(&body).map_err(ClientsError::from)
 }
 
 /// Parses a manifest JSON body without a network round trip.

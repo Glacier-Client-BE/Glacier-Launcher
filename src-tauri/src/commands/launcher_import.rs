@@ -11,13 +11,13 @@ use crate::state::AppState;
 /// Scan `%APPDATA%` for install roots of every supported external launcher.
 /// Never errors — an unresolvable `%APPDATA%` or nothing found just yields
 /// an empty list, since "no other launchers installed" is a normal outcome.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn detect_external_launchers() -> Vec<DetectedLauncher> {
     detect::detect_all()
 }
 
 /// List every instance found under one detected launcher's root.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn scan_launcher_instances(
     launcher: SourceLauncher,
     root_path: String,
@@ -36,7 +36,7 @@ pub fn scan_launcher_instances(
 /// Richer preview for one already-scanned candidate: the actual list of mod
 /// jar filenames found in its `mods/` folder (the list view's `mod_count`
 /// badge is cheap; this is for the confirm-before-import step).
-#[tauri::command]
+#[tauri::command(async)]
 pub fn preview_import(candidate: ImportCandidate) -> Result<Vec<String>, String> {
     Ok(preview::mod_filenames(&candidate))
 }
@@ -54,7 +54,7 @@ pub struct ImportOutcome {
 /// Import a batch of candidates. Per-candidate outcome, not all-or-nothing —
 /// one failing import (name collision, disk full, unreadable source dir)
 /// must not block the rest of the batch.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn import_instances(
     state: State<'_, AppState>,
     candidates: Vec<ImportCandidate>,

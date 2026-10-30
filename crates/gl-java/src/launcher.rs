@@ -20,6 +20,19 @@ use tokio::process::{Child, Command};
 #[cfg(windows)]
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
+/// The JVM's `-cp` list separator: `;` on Windows, `:` everywhere else.
+/// Classpath joining previously hardcoded `;` unconditionally, which is only
+/// correct on Windows — building for any other target would silently pass
+/// the JVM a malformed classpath (each entry parsed as filenames containing
+/// literal `;`, which don't exist) and no jar/class on it would resolve.
+fn classpath_separator() -> &'static str {
+    if cfg!(windows) {
+        ";"
+    } else {
+        ":"
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct LibraryEntry {
     pub path: PathBuf,
@@ -48,7 +61,12 @@ pub fn read_version_profile(id: &str, mc_dir: &Path) -> Result<VersionProfile> {
 
     let mut main_class: Option<String> = None;
     let mut assets_idx: Option<String> = None;
-    let mut jar_ver_id: Option<String> = None;
+    // The client jar lives in the version that has no `inheritsFrom` (the
+    // vanilla root) unless some node in the chain names one explicitly with
+    // a `jar` key. Loader profiles (Fabric/Quilt/Forge) ship no jar of their
+    // own, so the first visited node must not claim it.
+    let mut explicit_jar: Option<String> = None;
+    let mut root_id: Option<String> = None;
     let mut min_java = String::new();
 
     let mut visited: std::collections::HashSet<String> = std::collections::HashSet::new();
@@ -82,13 +100,15 @@ pub fn read_version_profile(id: &str, mc_dir: &Path) -> Result<VersionProfile> {
                 .and_then(|v| v.as_str())
                 .map(str::to_string);
         }
-        if jar_ver_id.is_none() {
-            jar_ver_id = Some(
-                root.get("jar")
-                    .and_then(|v| v.as_str())
-                    .map(str::to_string)
-                    .unwrap_or_else(|| cur_id.clone()),
-            );
+        if explicit_jar.is_none() {
+            explicit_jar = root.get("jar").and_then(|v| v.as_str()).map(str::to_string);
+        }
+        let inherits = root
+            .get("inheritsFrom")
+            .and_then(|v| v.as_str())
+            .filter(|s| !s.is_empty());
+        if inherits.is_none() && root_id.is_none() {
+            root_id = Some(cur_id.clone());
         }
 
         if min_java.is_empty() {
@@ -170,14 +190,12 @@ pub fn read_version_profile(id: &str, mc_dir: &Path) -> Result<VersionProfile> {
             );
         }
 
-        if let Some(parent) = root.get("inheritsFrom").and_then(|v| v.as_str()) {
-            if !parent.is_empty() {
-                stack.push(parent.to_string());
-            }
+        if let Some(parent) = inherits {
+            stack.push(parent.to_string());
         }
     }
 
-    let jar_id = jar_ver_id.unwrap_or_else(|| id.to_string());
+    let jar_id = explicit_jar.or(root_id).unwrap_or_else(|| id.to_string());
     let primary = mc_dir
         .join("versions")
         .join(&jar_id)
@@ -257,13 +275,10 @@ fn os_matches(rule: &Value) -> bool {
 }
 
 fn features_match(rule: &Value) -> bool {
-    let Some(features) = rule.get("features") else {
+    let Some(obj) = rule.get("features").and_then(Value::as_object) else {
         return true;
     };
-    let Some(obj) = features.as_object() else {
-        return true;
-    };
-    obj.is_empty()
+    obj.values().all(|v| v.as_bool() == Some(false))
 }
 
 fn maven_coord_to_path(mc_dir: &Path, coord: &str) -> Option<PathBuf> {
@@ -387,12 +402,51 @@ pub fn build_jvm_args(
         // The C# code appends the raw custom-args string verbatim (whitespace
         // separated) into the shell command line; here we split it into
         // discrete tokens since we're building an argv, not a command line.
-        out.extend(opts.custom_jvm_args.split_whitespace().map(str::to_string));
+        out.extend(split_jvm_args(&opts.custom_jvm_args));
     }
 
     out.extend(opts.extra_jvm_args.iter().cloned());
 
     Ok(out)
+}
+
+/// Splits a user-typed custom-JVM-args string into argv tokens, honoring
+/// double quotes so a value containing spaces (e.g.
+/// `-Dfoo="some value" -Dbar=baz`) survives as one token instead of being
+/// torn apart by a plain `split_whitespace`. Unquoted input splits exactly
+/// as `split_whitespace` would, so this is a strict superset of the old
+/// behavior — nothing that worked before changes. An unterminated trailing
+/// quote is treated as running to the end of the string rather than erroring
+/// (this only affects a locally-typed settings field, not untrusted input,
+/// so best-effort recovery beats rejecting the whole launch).
+fn split_jvm_args(raw: &str) -> Vec<String> {
+    let mut tokens = Vec::new();
+    let mut current = String::new();
+    let mut in_quotes = false;
+    let mut has_token = false;
+
+    for ch in raw.chars() {
+        match ch {
+            '"' => {
+                in_quotes = !in_quotes;
+                has_token = true;
+            }
+            c if c.is_whitespace() && !in_quotes => {
+                if has_token {
+                    tokens.push(std::mem::take(&mut current));
+                    has_token = false;
+                }
+            }
+            c => {
+                current.push(c);
+                has_token = true;
+            }
+        }
+    }
+    if has_token {
+        tokens.push(current);
+    }
+    tokens
 }
 
 /// Build the game-side argument tokens (`${...}` substitutions,
@@ -595,7 +649,7 @@ pub fn render_command_line(
         .iter()
         .map(|p| p.to_string_lossy().into_owned())
         .collect::<Vec<_>>()
-        .join(";");
+        .join(classpath_separator());
     parts.push(quote_arg(&cp));
     parts.push(main_class.to_string());
     parts.extend(game_args.iter().map(|a| quote_arg(a)));
@@ -735,7 +789,16 @@ fn find_first_javaw_under(dir: &Path) -> Option<PathBuf> {
     // Depth-unbounded but directory-count-bounded in practice (a runtime
     // component dir), unlike the recursive `EnumerateFiles` in the C#
     // original which relies on the OS to short-circuit — fine for our sizes.
+    // `visited` guards against a symlink loop under the runtime directory
+    // turning this into an infinite scan; canonicalizing before the check
+    // means a symlinked subdir that cycles back to an ancestor is only
+    // ever walked once.
+    let mut visited: std::collections::HashSet<PathBuf> = std::collections::HashSet::new();
     while let Some(d) = stack.pop() {
+        let canonical = std::fs::canonicalize(&d).unwrap_or_else(|_| d.clone());
+        if !visited.insert(canonical) {
+            continue;
+        }
         let Ok(entries) = std::fs::read_dir(&d) else {
             continue;
         };
@@ -770,7 +833,7 @@ pub fn spawn(
         .iter()
         .map(|p| p.to_string_lossy().into_owned())
         .collect::<Vec<_>>()
-        .join(";");
+        .join(classpath_separator());
 
     let mut cmd = Command::new(javaw);
     cmd.args(jvm_args)

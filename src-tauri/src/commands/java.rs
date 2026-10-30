@@ -63,7 +63,7 @@ pub async fn list_java_versions(state: State<'_, AppState>) -> Result<Vec<JavaVe
 }
 
 #[tauri::command]
-pub fn list_java_instances(state: State<'_, AppState>) -> Result<Vec<JavaInstance>, String> {
+pub async fn list_java_instances(state: State<'_, AppState>) -> Result<Vec<JavaInstance>, String> {
     let svc = state
         .java_instances
         .lock()
@@ -72,7 +72,7 @@ pub fn list_java_instances(state: State<'_, AppState>) -> Result<Vec<JavaInstanc
 }
 
 #[tauri::command]
-pub fn create_java_instance(
+pub async fn create_java_instance(
     state: State<'_, AppState>,
     name: String,
     version_id: String,
@@ -85,7 +85,7 @@ pub fn create_java_instance(
 }
 
 #[tauri::command]
-pub fn rename_java_instance(
+pub async fn rename_java_instance(
     state: State<'_, AppState>,
     id: String,
     new_name: String,
@@ -98,7 +98,7 @@ pub fn rename_java_instance(
 }
 
 #[tauri::command]
-pub fn set_java_instance_accent_color(
+pub async fn set_java_instance_accent_color(
     state: State<'_, AppState>,
     id: String,
     color: Option<String>,
@@ -111,7 +111,7 @@ pub fn set_java_instance_accent_color(
 }
 
 #[tauri::command]
-pub fn delete_java_instance(state: State<'_, AppState>, id: String) -> Result<bool, String> {
+pub async fn delete_java_instance(state: State<'_, AppState>, id: String) -> Result<bool, String> {
     let svc = state
         .java_instances
         .lock()
@@ -124,7 +124,7 @@ pub fn delete_java_instance(state: State<'_, AppState>, id: String) -> Result<bo
 /// The `InstanceService::duplicate` logic already existed; it just had no
 /// `#[tauri::command]` wrapper reaching it from the frontend.
 #[tauri::command]
-pub fn duplicate_java_instance(
+pub async fn duplicate_java_instance(
     state: State<'_, AppState>,
     id: String,
 ) -> Result<JavaInstance, String> {
@@ -144,7 +144,7 @@ pub fn duplicate_java_instance(
 /// `import_modpack`/`detect_multimc_root` already existed in
 /// `gl_java::modpack_transfer` with no command wrapper reaching them.
 #[tauri::command]
-pub fn import_java_instance_zip(
+pub async fn import_java_instance_zip(
     state: State<'_, AppState>,
     zip_path: String,
 ) -> Result<JavaInstance, String> {
@@ -174,7 +174,7 @@ pub fn import_java_instance_zip(
 /// `import_official_minecraft` already existed in `gl_java::modpack_transfer`
 /// with no command wrapper reaching it.
 #[tauri::command]
-pub fn import_official_minecraft(state: State<'_, AppState>) -> Result<JavaInstance, String> {
+pub async fn import_official_minecraft(state: State<'_, AppState>) -> Result<JavaInstance, String> {
     let svc = state
         .java_instances
         .lock()
@@ -193,7 +193,7 @@ pub fn import_official_minecraft(state: State<'_, AppState>) -> Result<JavaInsta
 }
 
 #[tauri::command]
-pub fn set_java_instance_ram(
+pub async fn set_java_instance_ram(
     state: State<'_, AppState>,
     id: String,
     min_mb: i32,
@@ -210,7 +210,7 @@ pub fn set_java_instance_ram(
 /// "Performance", "Low-End") offered when creating an instance or changing
 /// its JVM-args preset later. JVM flags only — no mod/API downloads.
 #[tauri::command]
-pub fn list_jvm_presets() -> Vec<gl_java::JvmPreset> {
+pub async fn list_jvm_presets() -> Vec<gl_java::JvmPreset> {
     gl_java::JVM_PRESETS
         .iter()
         .map(|p| gl_java::JvmPreset {
@@ -226,7 +226,7 @@ pub fn list_jvm_presets() -> Vec<gl_java::JvmPreset> {
 /// template by id (see [`list_jvm_presets`]). Passing `None`/an unknown id
 /// behaves exactly like `create_java_instance`.
 #[tauri::command]
-pub fn create_java_instance_from_template(
+pub async fn create_java_instance_from_template(
     state: State<'_, AppState>,
     name: String,
     version_id: String,
@@ -245,7 +245,7 @@ pub fn create_java_instance_from_template(
 /// from (or `None` for "custom"). Used by the JVM-args-preset dropdown in
 /// instance settings.
 #[tauri::command]
-pub fn set_instance_jvm_args(
+pub async fn set_instance_jvm_args(
     state: State<'_, AppState>,
     id: String,
     extra_jvm_args: Vec<String>,
@@ -263,7 +263,7 @@ pub fn set_instance_jvm_args(
 /// the exact `set_instance_jvm_args` path. A convenience wrapper so the
 /// frontend dropdown doesn't need to know the preset's arg list itself.
 #[tauri::command]
-pub fn set_instance_jvm_preset(
+pub async fn set_instance_jvm_preset(
     state: State<'_, AppState>,
     id: String,
     preset: String,
@@ -279,7 +279,7 @@ pub fn set_instance_jvm_preset(
 
 /// Sets (or clears, with `None`) an instance's group/folder label.
 #[tauri::command]
-pub fn set_instance_group(
+pub async fn set_instance_group(
     state: State<'_, AppState>,
     id: String,
     group: Option<String>,
@@ -291,13 +291,28 @@ pub fn set_instance_group(
     svc.set_instance_group(&id, group).map_err(|e| e.to_string())
 }
 
+/// Pins (or unpins) an instance — pinned instances sort to the top of the
+/// instances list ahead of everything else.
+#[tauri::command]
+pub async fn set_instance_pinned(
+    state: State<'_, AppState>,
+    id: String,
+    pinned: bool,
+) -> Result<(), String> {
+    let svc = state
+        .java_instances
+        .lock()
+        .map_err(|_| "java instance service lock poisoned".to_string())?;
+    svc.set_instance_pinned(&id, pinned).map_err(|e| e.to_string())
+}
+
 /// Exports an instance's entire directory tree as a zip at `dest_path`
 /// (chosen by the frontend via the same `@tauri-apps/plugin-dialog` `save`
 /// flow used elsewhere). `zip` is already a workspace dependency (see
 /// `crates/gl-java/Cargo.toml`), so this is a real zip export, not a folder
 /// copy.
 #[tauri::command]
-pub fn export_java_instance(
+pub async fn export_java_instance(
     state: State<'_, AppState>,
     id: String,
     dest_path: String,
@@ -319,7 +334,7 @@ pub fn export_java_instance(
 /// Returns an instance's per-instance settings overrides (not the resolved
 /// effective config — see [`get_effective_launch_config`] for that).
 #[tauri::command]
-pub fn get_instance_settings(
+pub async fn get_instance_settings(
     state: State<'_, AppState>,
     id: String,
 ) -> Result<InstanceSettings, String> {
@@ -339,7 +354,7 @@ pub fn get_instance_settings(
 /// field is independently `Option`, so leaving the rest unset means
 /// "inherit from global defaults".
 #[tauri::command]
-pub fn set_instance_settings(
+pub async fn set_instance_settings(
     state: State<'_, AppState>,
     id: String,
     settings: InstanceSettings,
@@ -357,7 +372,7 @@ pub fn set_instance_settings(
 /// `"custom_jvm_args"`, `"extra_game_args"`, `"quick_play"`). Unknown names
 /// are a no-op.
 #[tauri::command]
-pub fn reset_instance_setting(
+pub async fn reset_instance_setting(
     state: State<'_, AppState>,
     id: String,
     field: String,
@@ -391,7 +406,7 @@ pub fn reset_instance_setting(
 /// loader. Does not install anything itself — Phase 2's loader installer
 /// commands call this once install succeeds.
 #[tauri::command]
-pub fn set_instance_loader(
+pub async fn set_instance_loader(
     state: State<'_, AppState>,
     id: String,
     loader: Option<ModLoaderKind>,
@@ -411,7 +426,7 @@ pub fn set_instance_loader(
 /// current account list — an id that no longer resolves is treated the
 /// same as "use the active global account" at launch time.
 #[tauri::command]
-pub fn set_instance_account(
+pub async fn set_instance_account(
     state: State<'_, AppState>,
     id: String,
     account_id: Option<String>,
@@ -429,7 +444,7 @@ pub fn set_instance_account(
 /// overrides — so the settings UI can show e.g. "4096 MB — from default"
 /// instead of guessing.
 #[tauri::command]
-pub fn get_effective_launch_config(
+pub async fn get_effective_launch_config(
     state: State<'_, AppState>,
     id: String,
 ) -> Result<EffectiveLaunchConfig, String> {

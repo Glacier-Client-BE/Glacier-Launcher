@@ -200,7 +200,7 @@
       </button>
       {#if confirmingStop}
         <span class="stop-confirm-label">Stop the running game?</span>
-        <button class="pill danger" onclick={stopGame}>Confirm</button>
+        <button class="pill danger" onclick={stopGame}>Stop game</button>
         <button class="pill" onclick={cancelStopGame}>Cancel</button>
       {:else}
         <button class="pill danger" onclick={requestStopGame}>Stop</button>

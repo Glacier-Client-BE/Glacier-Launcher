@@ -1,8 +1,9 @@
 <script lang="ts">
+  import { t } from './i18nStore.svelte'
   import { invoke } from '@tauri-apps/api/core'
   import { convertFileSrc } from '@tauri-apps/api/core'
   import PanelHeader from './components/PanelHeader.svelte'
-  import Spinner from './components/Spinner.svelte'
+  import ListSkeleton from './components/ListSkeleton.svelte'
   import IconBtn from './components/IconBtn.svelte'
   import type { JavaInstance } from './settings'
 
@@ -51,6 +52,7 @@
   async function loadShots() {
     if (!activeInstanceId) {
       shots = []
+      loading = false
       return
     }
     loading = true
@@ -81,7 +83,7 @@
     }
   }
 
-  loadInstances().then(loadShots)
+  loadInstances()
 
   $effect(() => {
     activeInstanceId
@@ -90,15 +92,15 @@
 </script>
 
 {#if !embedded}
-  <PanelHeader title="Java Screenshots" {onBack}>
+  <PanelHeader title={t('panel.javaScreenshots')} {onBack}>
     {#snippet extraActions()}
       <button
         type="button"
         class="panel-icon-btn"
         onclick={openFolder}
         onmousedown={(e) => e.stopPropagation()}
-        data-tooltip="Open screenshots folder"
-        aria-label="Open screenshots folder"
+        data-tooltip={t('tt.openScreenshotsFolder')}
+        aria-label={t('tt.openScreenshotsFolder')}
       >
         <i class="fa-solid fa-folder-open"></i>
       </button>
@@ -110,7 +112,7 @@
   {#if error}<p class="error-text">{error}</p>{/if}
 
   {#if instances.length > 1}
-    <select class="setting-select" bind:value={activeInstanceId} style="width:100%; margin-bottom:8px;">
+    <select class="setting-select shots-instance-select" bind:value={activeInstanceId} aria-label="Instance">
       {#each instances as inst (inst.id)}
         <option value={inst.id}>{inst.name}</option>
       {/each}
@@ -118,24 +120,19 @@
   {/if}
 
   {#if loading}
-    <Spinner />
+    <ListSkeleton rows={3} />
   {:else if shots.length === 0}
     <div class="empty-state">
       <i class="fa-solid fa-image"></i>
-      <span>No screenshots</span>
-      <small>Press F2 in-game to take one — they'll show up here.</small>
+      <span>{t('empty.noScreenshots')}</span>
+      <small>{t('empty.pressF2GameTakeOneThey')}</small>
     </div>
   {:else}
     {#each shots as shot (shot.path)}
       <div class="version-row">
-        <img
-          src={convertFileSrc(shot.path)}
-          alt={shot.name}
-          loading="lazy"
-          style="width:64px; height:36px; object-fit:cover; border-radius:4px; margin-right:8px;"
-        />
+        <img class="shot-thumb" src={convertFileSrc(shot.path)} alt={shot.name} loading="lazy" />
         <div class="version-meta">
-          <span class="version-name">{shot.name}</span>
+          <span class="version-name" title={shot.name}>{shot.name}</span>
           <span class="version-sub">{(shot.size_bytes / 1024).toFixed(0)} KB</span>
         </div>
         <IconBtn ghost icon="fa-solid fa-trash" title="Delete" onClick={() => remove(shot)} />
@@ -143,6 +140,39 @@
     {/each}
   {/if}
 </div>
+
+<style>
+  /* Screenshots rhythm: band gaps between rows, row padding per row, thumb
+     spaced by the row gutter, hover on row buttons, dimmed disabled state. */
+  .panel-body {
+    gap: var(--panel-band);
+  }
+  .shots-instance-select {
+    width: 100%;
+    margin-bottom: 0;
+  }
+  .panel-body :global(.version-list) {
+    gap: var(--panel-band);
+  }
+  .version-row {
+    gap: var(--row-pad-x);
+  }
+  .shot-thumb {
+    width: 64px;
+    height: 36px;
+    object-fit: cover;
+    border-radius: var(--r-sm);
+    margin-right: 0;
+    flex-shrink: 0;
+  }
+  .version-row :global(button:not(.btn-primary):hover:not(:disabled)) {
+    background: var(--bg-item-hover);
+  }
+  .version-row :global(button:disabled) {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+</style>
 
 <!-- Home.razor:5400-5403: this panel ends with `JavaTabs("photos")`. It had no
      bottom strip at all, which made it a dead end. -->

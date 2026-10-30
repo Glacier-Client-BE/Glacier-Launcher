@@ -199,7 +199,7 @@ fn backup_path(instance_dir: &str) -> PathBuf {
 }
 
 /// Mirrors `BedrockOptionsService.Load`.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_bedrock_options(instance_dir: String) -> Vec<OptionEntry> {
     let path = options_path(&instance_dir);
     let Ok(text) = std::fs::read_to_string(&path) else {
@@ -244,12 +244,12 @@ pub fn get_bedrock_options(instance_dir: String) -> Vec<OptionEntry> {
     out
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn bedrock_options_exist(instance_dir: String) -> bool {
     options_path(&instance_dir).is_file()
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn bedrock_options_has_backup(instance_dir: String) -> bool {
     backup_path(&instance_dir).is_file()
 }
@@ -257,7 +257,7 @@ pub fn bedrock_options_has_backup(instance_dir: String) -> bool {
 /// Port of `BedrockOptionsService.Save`, including its two refusal cases
 /// (game running, settings folder absent) and its case-insensitive key
 /// matching.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn save_bedrock_options(
     instance_dir: String,
     changes: std::collections::HashMap<String, String>,
@@ -339,7 +339,7 @@ pub fn save_bedrock_options(
     Ok(())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn restore_bedrock_options_backup(instance_dir: String) -> Result<bool, String> {
     let bak = backup_path(&instance_dir);
     if !bak.is_file() {
@@ -640,8 +640,23 @@ mod win {
     }
 }
 
-#[tauri::command]
+/// The registry and GPU enumeration never change while the launcher runs, so
+/// they are read once. Only RAM and disk usage are refreshed per call.
+#[tauri::command(async)]
 pub fn get_system_snapshot() -> SystemSnapshot {
+    static STATIC_SNAPSHOT: std::sync::OnceLock<SystemSnapshot> = std::sync::OnceLock::new();
+    let mut snap = STATIC_SNAPSHOT.get_or_init(read_system_snapshot).clone();
+    #[cfg(windows)]
+    {
+        let (total, used) = win::memory().unwrap_or((0, 0));
+        snap.total_ram_bytes = total;
+        snap.used_ram_bytes = used;
+        snap.disks = win::disks();
+    }
+    snap
+}
+
+fn read_system_snapshot() -> SystemSnapshot {
     let cpu_cores = std::thread::available_parallelism()
         .map(|n| n.get())
         .unwrap_or(1);
@@ -707,7 +722,7 @@ pub struct LiveSampleBaseline {
     pub have_baseline: bool,
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_live_sample(state: State<'_, AppState>) -> LiveSample {
     #[cfg(windows)]
     let cpu_percent = {
@@ -794,7 +809,7 @@ fn save_entries(entries: &[CustomClientEntry]) -> Result<(), String> {
     std::fs::write(cc::index_path(&dir), json).map_err(|e| e.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn list_custom_clients() -> Result<Vec<CustomClientEntry>, String> {
     load_entries()
 }
@@ -870,7 +885,7 @@ fn uuid_v4_lite() -> String {
     format!("{nanos:032x}")
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn add_custom_client_from_file(path: String) -> Result<CustomClientEntry, String> {
     let src = PathBuf::from(&path);
     if !src.is_file() {
@@ -919,7 +934,7 @@ pub async fn add_custom_client_from_url(
     result
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn rename_custom_client(id: String, new_name: String) -> Result<(), String> {
     let mut entries = load_entries()?;
     let entry = entries
@@ -933,7 +948,7 @@ pub fn rename_custom_client(id: String, new_name: String) -> Result<(), String> 
     save_entries(&entries)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn toggle_custom_client_auto_update(id: String) -> Result<(), String> {
     let mut entries = load_entries()?;
     let entry = entries
@@ -944,7 +959,7 @@ pub fn toggle_custom_client_auto_update(id: String) -> Result<(), String> {
     save_entries(&entries)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn delete_custom_client(id: String) -> Result<(), String> {
     let dir = library_dir();
     let mut entries = load_entries()?;
@@ -958,7 +973,7 @@ pub fn delete_custom_client(id: String) -> Result<(), String> {
     save_entries(&entries)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn open_custom_client_library_folder() -> Result<(), String> {
     let dir = library_dir();
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;

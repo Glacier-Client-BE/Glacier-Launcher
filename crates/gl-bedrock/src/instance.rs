@@ -292,10 +292,9 @@ impl BedrockInstanceService {
         if !index_path.exists() {
             return Ok(IndexFile::default());
         }
-        let json = match std::fs::read_to_string(index_path) {
-            Ok(json) => json,
-            Err(_) => return Ok(IndexFile::default()),
-        };
+        // A read failure must not fall back to an empty index: the caller would
+        // then save that empty index over the real one.
+        let json = std::fs::read_to_string(index_path).ctx(index_path)?;
         match serde_json::from_str(&json) {
             Ok(index) => Ok(index),
             Err(_) => {

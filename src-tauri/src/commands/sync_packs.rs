@@ -12,7 +12,7 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-use gl_sync::{DetachMode, SyncPack, SyncReport, SyncTarget};
+use gl_sync::{AdoptStrategy, DetachMode, SyncPack, SyncReport, SyncTarget};
 use tauri::State;
 
 use crate::state::AppState;
@@ -47,12 +47,12 @@ fn instance_dirs(state: &AppState, ids: &[String]) -> Result<HashMap<String, Pat
     Ok(map)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn list_sync_packs(state: State<'_, AppState>) -> Result<Vec<SyncPack>, String> {
     Ok(state.sync_engine.registry().list())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn create_sync_pack(
     state: State<'_, AppState>,
     id: String,
@@ -76,7 +76,7 @@ pub fn create_sync_pack(
     Ok(pack)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn update_sync_pack(state: State<'_, AppState>, pack: SyncPack) -> Result<(), String> {
     let mut pack = pack;
     pack.updated_at = now_iso();
@@ -87,7 +87,7 @@ pub fn update_sync_pack(state: State<'_, AppState>, pack: SyncPack) -> Result<()
         .map_err(|e| e.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn delete_sync_pack(state: State<'_, AppState>, pack_id: String) -> Result<bool, String> {
     state
         .sync_engine
@@ -98,7 +98,7 @@ pub fn delete_sync_pack(state: State<'_, AppState>, pack_id: String) -> Result<b
 
 /// Always callable, never mutates. The frontend must show this report to
 /// the user before offering `apply_sync_pack`.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn preview_sync(
     state: State<'_, AppState>,
     pack_id: String,
@@ -111,7 +111,7 @@ pub fn preview_sync(
         .map_err(|e| e.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn apply_sync_pack(
     state: State<'_, AppState>,
     pack_id: String,
@@ -142,7 +142,71 @@ pub fn apply_sync_pack(
     Ok(report)
 }
 
-#[tauri::command]
+/// Resolves a `ReportAction::ConflictNeedsResolution` entry the frontend got
+/// back from `preview_sync`/`apply_sync_pack`: persists the user's choice
+/// (`adopt_strategy`) as a `VersionOverride` for this exact
+/// (instance, target) pair, then immediately re-applies the pack to just
+/// this instance so the resolution takes effect right away rather than
+/// waiting for the next full apply. On success, also marks the instance as
+/// tracking this pack (mirroring `apply_sync_pack`'s own bookkeeping) — this
+/// is the natural "first real attach" moment for a target that had
+/// conflicting content.
+#[tauri::command(async)]
+pub fn resolve_sync_conflict(
+    state: State<'_, AppState>,
+    pack_id: String,
+    instance_id: String,
+    target_label: String,
+    adopt_strategy: AdoptStrategy,
+) -> Result<SyncReport, String> {
+    state
+        .sync_engine
+        .registry()
+        .set_override(&pack_id, &instance_id, &target_label, adopt_strategy)
+        .map_err(|e| e.to_string())?;
+
+    let dirs = instance_dirs(&state, std::slice::from_ref(&instance_id))?;
+    let report = state
+        .sync_engine
+        .apply(&pack_id, &dirs)
+        .map_err(|e| e.to_string())?;
+
+    if !report.has_failures() {
+        let svc = state
+            .java_instances
+            .lock()
+            .map_err(|_| "java instance service lock poisoned".to_string())?;
+        if let Some(inst) = svc.get(&instance_id) {
+            let mut ids = inst.sync_pack_ids;
+            if !ids.iter().any(|x| x == &pack_id) {
+                ids.push(pack_id.clone());
+                let _ = svc.set_instance_sync_packs(&instance_id, ids);
+            }
+        }
+    }
+
+    Ok(report)
+}
+
+/// Clears a previously-set per-instance override for one target, reverting
+/// it to the pack's default handling. Does not re-apply anything — the
+/// frontend should re-run `preview_sync`/`apply_sync_pack` afterward if it
+/// wants the effect to take place immediately.
+#[tauri::command(async)]
+pub fn clear_sync_conflict_override(
+    state: State<'_, AppState>,
+    pack_id: String,
+    instance_id: String,
+    target_label: String,
+) -> Result<SyncPack, String> {
+    state
+        .sync_engine
+        .registry()
+        .clear_override(&pack_id, &instance_id, &target_label)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command(async)]
 pub fn detach_sync_pack(
     state: State<'_, AppState>,
     pack_id: String,
@@ -176,7 +240,7 @@ pub fn detach_sync_pack(
 /// Re-runs `preview` for the pack against every instance currently
 /// tracking it (via `JavaInstance.sync_pack_ids`), so the UI can show a
 /// pack's current status without the caller re-collecting instance ids.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_sync_report(
     state: State<'_, AppState>,
     pack_id: String,

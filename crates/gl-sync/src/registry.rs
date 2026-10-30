@@ -6,7 +6,7 @@
 //! `gl_java::InstanceService::new(root_dir)`.
 
 use crate::error::{io_err, Result, SyncError};
-use crate::model::SyncPack;
+use crate::model::{AdoptStrategy, SyncPack, VersionOverride};
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
@@ -28,7 +28,11 @@ impl SyncRegistry {
         let packs = match gl_persistence::load::<Vec<SyncPack>>(&index_path) {
             Ok(Some(envelope)) => envelope.data,
             Ok(None) => Vec::new(),
-            Err(_) => Vec::new(), // already quarantined by load()
+            // A corrupt file was already quarantined by load(); an I/O error
+            // must not become an empty list, since the next save would
+            // overwrite every pack.
+            Err(gl_persistence::PersistError::Json(_)) => Vec::new(),
+            Err(e) => return Err(e.into()),
         };
         Ok(Self {
             root_dir,
@@ -70,21 +74,85 @@ impl SyncRegistry {
 
     pub fn upsert(&self, pack: SyncPack) -> Result<()> {
         let mut list = self.packs.lock().expect("sync pack list poisoned");
-        if let Some(existing) = list.iter_mut().find(|p| p.id == pack.id) {
+        let mut next = list.clone();
+        if let Some(existing) = next.iter_mut().find(|p| p.id == pack.id) {
             *existing = pack;
         } else {
-            list.push(pack);
+            next.push(pack);
         }
-        self.save(&list)
+        self.save(&next)?;
+        *list = next;
+        Ok(())
+    }
+
+    /// Records the user's answer to a `ReportAction::ConflictNeedsResolution`
+    /// for one (instance, target) pair — replacing any existing override for
+    /// that same pair — and persists it. This is the only way `resolve()`
+    /// (see `resolution.rs`) ever returns `Some`, so a target stays on the
+    /// unresolved "please choose" path (`adopt.is_none()` in the handlers)
+    /// until this has been called at least once for it.
+    pub fn set_override(
+        &self,
+        pack_id: &str,
+        instance_id: &str,
+        target_label: &str,
+        adopt_strategy: AdoptStrategy,
+    ) -> Result<SyncPack> {
+        let mut list = self.packs.lock().expect("sync pack list poisoned");
+        let mut next = list.clone();
+        let pack = next
+            .iter_mut()
+            .find(|p| p.id == pack_id)
+            .ok_or_else(|| SyncError::PackNotFound(pack_id.to_string()))?;
+        match pack
+            .overrides
+            .iter_mut()
+            .find(|o| o.instance_id == instance_id && o.target_label == target_label)
+        {
+            Some(existing) => existing.adopt_strategy = adopt_strategy,
+            None => pack.overrides.push(VersionOverride {
+                instance_id: instance_id.to_string(),
+                target_label: target_label.to_string(),
+                adopt_strategy,
+            }),
+        }
+        let updated = pack.clone();
+        self.save(&next)?;
+        *list = next;
+        Ok(updated)
+    }
+
+    /// Removes a previously-set override, if any, so the target goes back to
+    /// the pack's default handling (or back to needing a fresh resolution,
+    /// for a target kind that still has real conflicting content).
+    pub fn clear_override(
+        &self,
+        pack_id: &str,
+        instance_id: &str,
+        target_label: &str,
+    ) -> Result<SyncPack> {
+        let mut list = self.packs.lock().expect("sync pack list poisoned");
+        let mut next = list.clone();
+        let pack = next
+            .iter_mut()
+            .find(|p| p.id == pack_id)
+            .ok_or_else(|| SyncError::PackNotFound(pack_id.to_string()))?;
+        pack.overrides
+            .retain(|o| !(o.instance_id == instance_id && o.target_label == target_label));
+        let updated = pack.clone();
+        self.save(&next)?;
+        *list = next;
+        Ok(updated)
     }
 
     pub fn delete(&self, id: &str) -> Result<bool> {
         let mut list = self.packs.lock().expect("sync pack list poisoned");
-        let before = list.len();
-        list.retain(|p| p.id != id);
-        let changed = list.len() != before;
+        let mut next = list.clone();
+        next.retain(|p| p.id != id);
+        let changed = next.len() != list.len();
         if changed {
-            self.save(&list)?;
+            self.save(&next)?;
+            *list = next;
             let _ = std::fs::remove_dir_all(Self::store_root_of(&self.root_dir).join(id));
         }
         Ok(changed)

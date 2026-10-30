@@ -1,10 +1,24 @@
 //! Atomic JSON persistence with corrupt-file quarantine and schema versioning
 //! (JsonStore.cs equivalent).
 
+use std::io::Write;
 use std::path::Path;
+use std::sync::Mutex;
 
 use serde::{de::DeserializeOwned, Serialize};
 use thiserror::Error;
+
+/// Serializes every `write_atomic` call process-wide. Without this, two
+/// concurrent saves to the *same* path (e.g. two Tauri commands saving
+/// settings near-simultaneously) each write their own temp file safely, but
+/// the final `rename`s can land in either order — a last-writer-wins race
+/// that silently drops one save. A single process-wide lock is simpler than
+/// a per-path lock table (and correct: this crate's callers are infrequent,
+/// small JSON writes, not a hot path where serializing all of them together
+/// would be a real bottleneck) and also prevents a write and a concurrent
+/// `load`/`quarantine_corrupt` on the same path from ever observing a
+/// half-renamed state.
+static WRITE_LOCK: Mutex<()> = Mutex::new(());
 
 #[derive(Debug, Error)]
 pub enum PersistError {
@@ -24,9 +38,21 @@ pub struct Envelope<T> {
     pub data: T,
 }
 
-/// Write `contents` to `path` atomically: write to a sibling temp file, then
-/// rename over the destination. Mirrors JsonStore.WriteAtomic.
+/// Write `contents` to `path` atomically: write to a sibling temp file,
+/// `fsync` it so the bytes are actually on disk (not just in the OS page
+/// cache), then rename over the destination. Mirrors JsonStore.WriteAtomic —
+/// extended with the `fsync` step, since `write`+`rename` alone is atomic
+/// against torn writes but not durable against a crash/power loss between
+/// the write and the rename: without flushing, a crash can still leave the
+/// destination truncated, missing, or pointing at stale/zero-length data
+/// once the OS actually writes the page cache back.
+///
+/// Serialized process-wide via `WRITE_LOCK` so two concurrent calls for the
+/// same path can't have their renames land in a nondeterministic order and
+/// silently drop one save.
 pub fn write_atomic(path: &Path, contents: &str) -> Result<()> {
+    let _guard = WRITE_LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+
     if let Some(dir) = path.parent() {
         if !dir.as_os_str().is_empty() {
             std::fs::create_dir_all(dir)?;
@@ -35,11 +61,38 @@ pub fn write_atomic(path: &Path, contents: &str) -> Result<()> {
 
     let tmp = append_extension(path, &format!("{}.tmp", uuid_like_suffix()));
 
-    let write_result = std::fs::write(&tmp, contents);
+    let write_result = (|| -> std::io::Result<()> {
+        let mut file = std::fs::File::create(&tmp)?;
+        file.write_all(contents.as_bytes())?;
+        // Flush the temp file's actual content to disk before the rename —
+        // otherwise the rename can be durable while the data behind it
+        // isn't, on a filesystem/OS that doesn't itself guarantee write
+        // ordering across a rename.
+        file.sync_all()?;
+        Ok(())
+    })();
+
     let result = match write_result {
         Ok(()) => std::fs::rename(&tmp, path).map_err(PersistError::from),
         Err(e) => Err(PersistError::from(e)),
     };
+
+    // Best-effort: fsync the parent directory too, so the rename's directory
+    // entry update itself is durable, not just the file content. Unix
+    // filesystems need this explicitly; Windows has no portable std
+    // equivalent (opening a directory as a `File` isn't supported there),
+    // but NTFS journals metadata operations like rename on its own, so this
+    // is skipped rather than faked on that platform.
+    #[cfg(unix)]
+    if result.is_ok() {
+        if let Some(dir) = path.parent() {
+            if !dir.as_os_str().is_empty() {
+                if let Ok(dir_file) = std::fs::File::open(dir) {
+                    let _ = dir_file.sync_all();
+                }
+            }
+        }
+    }
 
     // Best-effort cleanup of the temp file if the rename didn't consume it.
     if tmp.exists() {
@@ -71,10 +124,13 @@ pub fn save<T: Serialize>(path: &Path, schema_version: u32, data: &T) -> Result<
 /// Load a versioned JSON envelope. On parse failure, quarantines the corrupt
 /// file and returns the error so the caller can fall back to defaults.
 pub fn load<T: DeserializeOwned>(path: &Path) -> Result<Option<Envelope<T>>> {
-    if !path.exists() {
-        return Ok(None);
-    }
-    let contents = std::fs::read_to_string(path)?;
+    // Single read instead of exists() + read: avoids an extra metadata
+    // syscall on every load, and a missing file is still reported as None.
+    let contents = match std::fs::read_to_string(path) {
+        Ok(c) => c,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(e) => return Err(e.into()),
+    };
     match serde_json::from_str::<Envelope<T>>(&contents) {
         Ok(envelope) => Ok(Some(envelope)),
         Err(e) => {

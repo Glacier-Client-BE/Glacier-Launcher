@@ -1,5 +1,6 @@
 //! Small filesystem helpers shared by the Bedrock services.
 
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -148,9 +149,16 @@ pub fn write_atomic(path: &Path, contents: &[u8]) -> Result<()> {
         s.push(format!(".{}.tmp", std::process::id()));
         PathBuf::from(s)
     };
-    std::fs::write(&tmp, contents).ctx(&tmp)?;
-    let result = std::fs::rename(&tmp, path).ctx(path);
-    if tmp.exists() {
+    let result = std::fs::File::create(&tmp)
+        .and_then(|mut file| {
+            file.write_all(contents)?;
+            // Flush to disk before the rename, otherwise a crash right after can leave
+            // the destination pointing at an empty or truncated file.
+            file.sync_all()
+        })
+        .and_then(|()| std::fs::rename(&tmp, path))
+        .ctx(path);
+    if result.is_err() {
         let _ = std::fs::remove_file(&tmp);
     }
     result

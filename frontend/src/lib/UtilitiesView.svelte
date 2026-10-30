@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from './i18nStore.svelte'
   /**
    * 1:1 port of the "utilities" panel — Home.razor lines 3267-3714 plus
    * Home.Utilities.cs (428 lines).
@@ -24,9 +25,11 @@
   import { untrack } from 'svelte'
   import { open } from '@tauri-apps/plugin-dialog'
   import PanelHeader from './components/PanelHeader.svelte'
-  import SubTabs from './components/SubTabs.svelte'
   import Spinner from './components/Spinner.svelte'
   import Toggle from './components/Toggle.svelte'
+  import ListSkeleton from './components/ListSkeleton.svelte'
+  import { UTILITIES } from './components/SubTabs.svelte'
+  import { loadFilterPref, saveFilterPref } from './filterMemory'
   import type { LauncherSettings } from './settings'
 
   let {
@@ -39,15 +42,30 @@
     instanceDir: string
     initialTab?: string
     onBack?: () => void
-    onNavigate?: (view: string) => void
+    onNavigate?: (view: string, strip?: string) => void
     onToast?: (message: string, kind?: 'info' | 'success' | 'error' | 'warning') => void
   } = $props()
 
   type Tab = 'options' | 'shaders' | 'clients' | 'system'
   const INTERNAL: Tab[] = ['options', 'shaders', 'clients', 'system']
 
+  // `UTILITIES` (imported from SubTabs.svelte) is this same 6-item list —
+  // the vertical `.settings-nav-rail` here and the Bedrock Backups/Screenshots
+  // panels' rails all render it, so it only needs to exist in one place.
+
+  // QOL: remembers the last internal sub-tab across restarts. `initialTab`
+  // is `'options'` both as its literal default *and* whenever App.svelte's
+  // own default fires (i.e. "just open Utilities", not a deep-link from the
+  // Backups/Photos rail) - in that ambiguous case, prefer whatever tab was
+  // last open instead of always resetting to Options. An explicit non-
+  // default `initialTab` (a real deep-link) always wins.
+  const requestedTab = untrack(() => initialTab)
+  const effectiveInitialTab =
+    requestedTab !== 'options' && (INTERNAL as string[]).includes(requestedTab)
+      ? requestedTab
+      : loadFilterPref('utilities.tab', 'options')
   let utilTab = $state<Tab>(
-    (INTERNAL as string[]).includes(untrack(() => initialTab)) ? (untrack(() => initialTab) as Tab) : 'options',
+    (INTERNAL as string[]).includes(effectiveInitialTab) ? (effectiveInitialTab as Tab) : 'options',
   )
 
   /// Labels for the breadcrumb's trailing segment — the sub-tab is internal
@@ -251,8 +269,13 @@
   let stockMaterialCount = $state(0)
 
   async function loadShaderState() {
-    shaderBlockReason = await invoke<string | null>('shaders_unavailable_reason')
-    appliedShaders = await invoke<AppliedShader[]>('list_applied_shaders')
+    try {
+      shaderBlockReason = await invoke<string | null>('shaders_unavailable_reason')
+      appliedShaders = await invoke<AppliedShader[]>('list_applied_shaders')
+    } catch (e) {
+      toast(String(e), 'error')
+      return
+    }
     if (shaderBlockReason) {
       stockMaterialCount = 0
       return
@@ -335,11 +358,25 @@
   let clientConfirmDeleteId = $state<string | null>(null)
   let defaultClientId = $state('')
 
+  /** "More" menu per card — check-updates/auto-update are secondary to
+   *  default/rename/delete, same overflow-avoidance pattern used on the
+   *  Instances cards. */
+  let openClientMenuId = $state<string | null>(null)
+  function toggleClientMenu(id: string) {
+    openClientMenuId = openClientMenuId === id ? null : id
+  }
+  function closeClientMenu() {
+    openClientMenuId = null
+  }
+
+  let clientError = $state('')
   async function loadClientLibrary() {
     try {
       clientLib = await invoke<CustomClientEntry[]>('list_custom_clients')
       defaultClientId = (await invoke<LauncherSettings>('get_settings')).DefaultCustomClientId ?? ''
+      clientError = ''
     } catch (e) {
+      clientError = String(e)
       toast(String(e), 'error')
     }
   }
@@ -475,7 +512,13 @@
   }
 
   async function copySystemReport() {
-    const s = sysInfo ?? (await invoke<SystemSnapshot>('get_system_snapshot'))
+    let s: SystemSnapshot
+    try {
+      s = sysInfo ?? (await invoke<SystemSnapshot>('get_system_snapshot'))
+    } catch (e) {
+      toast(String(e), 'error')
+      return
+    }
     const lines = [
       `CPU:        ${s.cpu_name} (${s.cpu_cores} logical cores)`,
       `Memory:     ${formatBytes(s.total_ram_bytes)}`,
@@ -494,35 +537,48 @@
   // =====================================================================
   // tab switching  (Home.Utilities.cs:22-45)
   // =====================================================================
+  // Drives the ListSkeleton for whichever sub-tab is loading.
+  let tabLoading = $state(false)
   async function loadUtilTab() {
-    if (utilTab === 'options') await loadGameOptions()
-    else if (utilTab === 'shaders') await loadShaderState()
-    else if (utilTab === 'clients') await loadClientLibrary()
-    else if (utilTab === 'system') await loadSystemInfo()
+    tabLoading = true
+    try {
+      if (utilTab === 'options') await loadGameOptions()
+      else if (utilTab === 'shaders') await loadShaderState()
+      else if (utilTab === 'clients') await loadClientLibrary()
+      else if (utilTab === 'system') await loadSystemInfo()
+    } finally {
+      tabLoading = false
+    }
   }
 
   function handleSubTab(key: string) {
     if (key === 'backups' || key === 'photos') {
-      // Navigating away to the separate panels — the parent routes.
-      onNavigate?.(key === 'backups' ? 'bedrockbackups' : 'bedrockscreenshots')
+      // Navigating away to the separate panels — the parent (App.svelte's
+      // navigateFromPanel) resolves `backups`/`photos` + the `utilities`
+      // strip to the Bedrock backups/screenshots panels via
+      // EDITION_VIEW_MAP. Passing the already-resolved view name here
+      // instead of the original key meant navigateFromPanel's lookup always
+      // missed and silently did nothing — these buttons never worked.
+      onNavigate?.(key, 'utilities')
       return
     }
     if (!(INTERNAL as string[]).includes(key)) return
     if (utilTab === key) return
     utilTab = key as Tab
+    saveFilterPref('utilities.tab', utilTab)
     loadUtilTab()
   }
 
   loadUtilTab()
 </script>
 
-<PanelHeader title="Utilities" {onBack} breadcrumb={['Home', 'Utilities', UTIL_TAB_LABELS[utilTab]]}>
+<PanelHeader title={t('panel.utilities')} {onBack} breadcrumb={['Home', 'Utilities', UTIL_TAB_LABELS[utilTab]]}>
   {#snippet extraActions()}
     <button
       type="button"
       class="panel-icon-btn"
-      data-tooltip="Refresh"
-      aria-label="Refresh"
+      data-tooltip={t('tt.refresh')}
+      aria-label={t('tt.refresh')}
       onclick={loadUtilTab}
       onmousedown={(e) => e.stopPropagation()}
     >
@@ -531,15 +587,35 @@
   {/snippet}
 </PanelHeader>
 
-<SubTabs strip="utilities" active={utilTab} onNavigate={handleSubTab} />
+<!--
+  IA change: was a horizontal 6-tab strip (Options/Shaders/Library/System/
+  Backups/Photos) — the exact "more than ~3 sections" case the rest of this
+  overhaul moved to a vertical rail for. Backups/Photos still just navigate
+  away to their own panels (handleSubTab is unchanged), so they never show
+  as active here — only the four internal tabs can be.
+-->
+<div class="settings-layout">
+  <nav class="settings-nav-rail" aria-label={t('tt.utilitiesSections')}>
+    {#each UTILITIES as nav (nav.key)}
+      <button
+        type="button"
+        class="settings-nav-btn {utilTab === nav.key ? 'active' : ''}"
+        onclick={() => handleSubTab(nav.key)}
+        onmousedown={(e) => e.stopPropagation()}
+      >
+        <i class={nav.icon}></i> {nav.label}
+      </button>
+    {/each}
+  </nav>
 
+  <div class="settings-content">
 <div class="panel-body">
   {#if utilTab === 'options'}
     <div class="util-quick-row">
       <div class="util-quick-card">
         <div class="util-quick-head">
           <i class="fa-solid fa-display"></i>
-          <span>V-Sync</span>
+          <span>{t('x.vSync')}</span>
         </div>
         <span class="setting-hint">
           {vsyncKeyPresent
@@ -565,7 +641,7 @@
         {#if hasBackup}
           <button
             class="btn-sm"
-            data-tooltip="Restore the options.txt Glacier saved before its first edit"
+            data-tooltip={t('tt.restoreOptionsTxtGlacierSavedBefore')}
             onclick={restoreOptionsBackup}
             onmousedown={(e) => e.stopPropagation()}
           >
@@ -575,23 +651,29 @@
       </div>
     </div>
 
-    {#if optionsError}
+    {#if tabLoading && options.length === 0 && !optionsError}
+      <ListSkeleton rows={5} />
+    {:else if optionsError}
       <div class="empty-state">
         <i class="fa-solid fa-triangle-exclamation"></i>
-        <span>options.txt isn't available</span>
+        <span>{t('empty.optionsTxtIsnTAvailable')}</span>
         <small>{optionsError}</small>
+        <button type="button" class="btn-sm gap-top" onclick={loadGameOptions} onmousedown={(e) => e.stopPropagation()}>
+          <i class="fa-solid fa-rotate"></i> {t('common.retry')}
+        </button>
       </div>
     {:else}
       <div class="util-filter-row">
         <input
           class="panel-search-input"
-          placeholder="Filter settings…"
+          aria-label={t('ph.filterSettingsEllipsis')}
+          placeholder={t('ph.filterSettingsEllipsis')}
           bind:value={optionsFilter}
           onmousedown={(e) => e.stopPropagation()}
         />
         <button
           class="ts-chip {optionsShowAll ? 'selected' : ''}"
-          data-tooltip="Show every key in options.txt"
+          data-tooltip={t('tt.showEveryKeyOptionsTxt')}
           onclick={() => (optionsShowAll = !optionsShowAll)}
           onmousedown={(e) => e.stopPropagation()}
         >
@@ -626,13 +708,13 @@
       {#if visibleOptionGroups.length === 0}
         <div class="empty-state">
           <i class="fa-solid fa-magnifying-glass"></i>
-          <span>Nothing matches</span>
-          <small>Try "All keys" to see everything Minecraft wrote.</small>
+          <span>{t('empty.nothingMatches')}</span>
+          <small>{t('empty.tryAllKeysSeeEverythingMinecraft')}</small>
         </div>
       {/if}
     {/if}
   {:else if utilTab === 'shaders'}
-    <p class="setting-hint" style="margin:0 0 10px;">
+    <p class="setting-hint intro">
       RenderDragon shaders replace compiled <code>.material.bin</code> files inside Minecraft. Glacier backs up every
       stock file it overwrites, so "Restore stock" always puts the game back exactly as it was.
     </p>
@@ -640,23 +722,22 @@
     {#if shaderBlockReason}
       <div class="empty-state">
         <i class="fa-solid fa-lock"></i>
-        <span>Shaders unavailable</span>
+        <span>{t('empty.shadersUnavailable')}</span>
         <small>{shaderBlockReason}</small>
         <!-- The original offers "Enable Developer Mode" here; there is no
              `enable_developer_mode` command, so the button stays disabled
              rather than pretending to work. -->
         <button
-          class="btn-sm"
-          style="margin-top:10px;"
+          class="btn-sm gap-top"
           disabled
-          data-tooltip="Not wired yet — this needs an `enable_developer_mode` backend command. Turn Developer Mode on in Windows Settings for now."
+          data-tooltip={t('tt.notWiredYetThisNeedsEnable')}
           onmousedown={(e) => e.stopPropagation()}
         >
-          <i class="fa-solid fa-shield-halved"></i><span>Enable Developer Mode</span>
+          <i class="fa-solid fa-shield-halved"></i><span>{t('empty.enableDeveloperMode')}</span>
         </button>
       </div>
     {:else}
-      <div class="util-quick-actions" style="margin-bottom:10px;">
+      <div class="util-quick-actions toolbar-mb">
         <button class="btn-sm" disabled={shaderBusy} onclick={applyShaders} onmousedown={(e) => e.stopPropagation()}>
           <i class="fa-solid fa-file-import"></i> Apply shader…
         </button>
@@ -671,41 +752,48 @@
         <button class="btn-sm" onclick={openMaterialsFolder} onmousedown={(e) => e.stopPropagation()}>
           <i class="fa-solid fa-folder-open"></i> Materials folder
         </button>
-        <span class="setting-hint" style="align-self:center;">{stockMaterialCount} materials in this build</span>
+        <span class="setting-hint self-center">{stockMaterialCount} materials in this build</span>
       </div>
 
       <!-- The original shows a progress bar here; `apply_shaders` reports no
            progress events, so there is nothing to drive it. -->
 
-      {#if appliedShaders.length === 0}
+      {#if tabLoading && appliedShaders.length === 0}
+        <ListSkeleton rows={3} />
+      {:else if appliedShaders.length === 0}
         <div class="empty-state">
           <i class="fa-solid fa-droplet"></i>
-          <span>No shaders applied</span>
-          <small>Pick the shader's .material.bin files, or the .zip / .mcpack they shipped in.</small>
+          <span>{t('empty.noShadersApplied')}</span>
+          <small>{t('empty.pickShaderSMaterialBinFiles')}</small>
         </div>
       {:else}
+        <div class="client-card-cols">
         {#each appliedShaders as sh (sh.file_name)}
-          <div class="version-row">
-            <div class="version-icon version-icon-placeholder"><i class="fa-solid fa-droplet"></i></div>
-            <div class="version-meta">
-              <span class="version-name">{sh.file_name}</span>
-              <span class="version-sub">
+          <div class="client-card">
+            <div class="client-card-header">
+              <div class="client-card-icon client-icon-accent">
+                <i class="fa-solid fa-droplet"></i>
+              </div>
+              <div class="client-card-meta">
+                <span class="client-card-name truncate" title={sh.file_name}>{sh.file_name}</span>
                 <!-- The original appends " · added (no stock file)" from
                      AppliedShader.HadStock, which the Rust view doesn't carry. -->
-                from {sh.source_name} · {formatSize(sh.size_bytes)} · {formatRelativeTime(sh.applied_iso)}
-              </span>
+                <span class="client-card-sub">from {sh.source_name} · {formatSize(sh.size_bytes)}</span>
+              </div>
             </div>
+            <p class="client-card-desc">Applied {formatRelativeTime(sh.applied_iso)}</p>
           </div>
         {/each}
+        </div>
       {/if}
     {/if}
   {:else if utilTab === 'clients'}
-    <p class="setting-hint" style="margin:0 0 10px;">
-      Your own DLL and EXE clients. Set one as default and pick <b>Custom DLL</b> as the active client to launch it.
+    <p class="setting-hint intro">
+      Your own DLL and EXE clients. Set one as default and pick <b>{t('x.customDll')}</b> as the active client to launch it.
       Entries added from a URL re-check their hash before every launch and refresh themselves when the build changes.
     </p>
 
-    <div class="util-quick-actions" style="margin-bottom:8px;">
+    <div class="util-quick-actions toolbar-mb-8">
       <button class="btn-sm" disabled={clientBusy} onclick={addClientFromFile} onmousedown={(e) => e.stopPropagation()}>
         <i class="fa-solid fa-folder-open"></i> Add from file
       </button>
@@ -714,7 +802,7 @@
       </button>
     </div>
 
-    <div class="util-filter-row" style="margin-bottom:10px;">
+    <div class="util-filter-row toolbar-mb">
       <input
         class="panel-search-input"
         placeholder="https://…/client.dll"
@@ -728,38 +816,51 @@
         onmousedown={(e) => e.stopPropagation()}
       >
         {#if clientBusy}<Spinner />{:else}<i class="fa-solid fa-cloud-arrow-down"></i>{/if}
-        <span>Add from URL</span>
+        <span>{t('x.addFromUrl')}</span>
       </button>
     </div>
 
-    {#if clientLib.length === 0}
+    {#if clientError && clientLib.length === 0}
+      <div class="empty-state">
+        <i class="fa-solid fa-triangle-exclamation"></i>
+        <span>Could not load your library</span>
+        <small>{clientError}</small>
+        <button type="button" class="btn-sm gap-top" onclick={loadClientLibrary} onmousedown={(e) => e.stopPropagation()}>
+          <i class="fa-solid fa-rotate"></i> {t('common.retry')}
+        </button>
+      </div>
+    {:else if tabLoading && clientLib.length === 0}
+      <ListSkeleton rows={3} />
+    {:else if clientLib.length === 0}
       <div class="empty-state">
         <i class="fa-solid fa-file-code"></i>
-        <span>Your library is empty</span>
-        <small>Add a client from disk, or paste a direct link to a .dll / .exe.</small>
+        <span>{t('empty.yourLibraryIsEmpty')}</span>
+        <small>{t('empty.addClientFromDiskOrPaste')}</small>
       </div>
     {:else}
+      <div class="client-card-cols">
       {#each clientLib as c (c.id)}
-        <div class="version-row {isDefaultClient(c) ? 'version-row-active' : ''}">
-          <div class="version-icon version-icon-placeholder">
+        <div class="client-card {isDefaultClient(c) ? 'client-active' : ''}">
+          <div class="client-card-header">
+          <div class="client-card-icon client-icon-accent">
             <i class="fa-solid {c.kind === 'exe' ? 'fa-square-arrow-up-right' : 'fa-file-code'}"></i>
           </div>
-          <div class="version-meta">
+          <div class="client-card-meta">
             {#if clientRenamingId === c.id}
               <input
-                class="util-option-input"
-                style="width:100%;"
+                class="util-option-input util-option-full"
+                aria-label={t('tt.rename')}
                 bind:value={clientRenameValue}
                 onkeydown={(e) => onClientRenameKey(c, e)}
                 onmousedown={(e) => e.stopPropagation()}
               />
             {:else}
-              <span class="version-name">
+              <span class="client-card-name truncate" title={c.name}>
                 {c.name}
-                {#if isDefaultClient(c)}<span class="tweaks-version-pill" style="margin-left:6px;">Default</span>{/if}
+                {#if isDefaultClient(c)}<span class="tweaks-version-pill default-pill">{t('label.default')}</span>{/if}
               </span>
             {/if}
-            <span class="version-sub">
+            <span class="client-card-sub">
               {c.kind.toUpperCase()} · {formatSize(c.size_bytes)}
               {#if c.source_url}
                 · web{#if c.auto_update} · auto-update on{/if}
@@ -771,12 +872,12 @@
               {/if}
             </span>
           </div>
-          <div class="version-actions">
+          <div class="client-card-actions">
             {#if clientRenamingId === c.id}
               <button
                 class="icon-btn icon-btn-ghost"
-                data-tooltip="Save name"
-                aria-label="Save name"
+                data-tooltip={t('tt.saveName')}
+                aria-label={t('tt.saveName')}
                 onclick={() => commitRenameClient(c)}
                 onmousedown={(e) => e.stopPropagation()}
               >
@@ -784,8 +885,8 @@
               </button>
               <button
                 class="icon-btn icon-btn-ghost"
-                data-tooltip="Cancel"
-                aria-label="Cancel"
+                data-tooltip={t('tt.cancel')}
+                aria-label={t('tt.cancel')}
                 onclick={cancelRenameClient}
                 onmousedown={(e) => e.stopPropagation()}
               >
@@ -794,8 +895,8 @@
             {:else if clientConfirmDeleteId === c.id}
               <button
                 class="icon-btn icon-btn-ghost"
-                data-tooltip="Confirm delete"
-                aria-label="Confirm delete"
+                data-tooltip={t('tt.confirmDelete')}
+                aria-label={t('tt.confirmDelete')}
                 onclick={() => deleteClient(c)}
                 onmousedown={(e) => e.stopPropagation()}
               >
@@ -803,8 +904,8 @@
               </button>
               <button
                 class="icon-btn icon-btn-ghost"
-                data-tooltip="Cancel"
-                aria-label="Cancel"
+                data-tooltip={t('tt.cancel')}
+                aria-label={t('tt.cancel')}
                 onclick={cancelDeleteClient}
                 onmousedown={(e) => e.stopPropagation()}
               >
@@ -820,32 +921,10 @@
               >
                 <i class={isDefaultClient(c) ? 'fa-solid fa-star' : 'fa-regular fa-star'}></i>
               </button>
-              {#if c.source_url}
-                <!-- "Check for updates now" needs an `update_custom_client`
-                     command (C# ClientLib.UpdateIfChangedAsync); disabled. -->
-                <button
-                  class="icon-btn icon-btn-ghost"
-                  data-tooltip="Check for updates now — not wired yet, needs an `update_custom_client` backend command"
-                  aria-label="Check for updates now"
-                  disabled
-                  onmousedown={(e) => e.stopPropagation()}
-                >
-                  <i class="fa-solid fa-cloud-arrow-down"></i>
-                </button>
-                <button
-                  class="icon-btn icon-btn-ghost"
-                  data-tooltip={c.auto_update ? 'Auto-update on' : 'Auto-update off'}
-                  aria-label={c.auto_update ? 'Auto-update on' : 'Auto-update off'}
-                  onclick={() => toggleClientAutoUpdate(c)}
-                  onmousedown={(e) => e.stopPropagation()}
-                >
-                  <i class="fa-solid {c.auto_update ? 'fa-rotate' : 'fa-rotate-left'}"></i>
-                </button>
-              {/if}
               <button
                 class="icon-btn icon-btn-ghost"
-                data-tooltip="Rename"
-                aria-label="Rename"
+                data-tooltip={t('tt.rename')}
+                aria-label={t('tt.rename')}
                 onclick={() => startRenameClient(c)}
                 onmousedown={(e) => e.stopPropagation()}
               >
@@ -853,23 +932,63 @@
               </button>
               <button
                 class="icon-btn icon-btn-ghost"
-                data-tooltip="Remove"
-                aria-label="Remove"
+                data-tooltip={t('tt.remove')}
+                aria-label={t('tt.remove')}
                 onclick={() => confirmDeleteClient(c.id)}
                 onmousedown={(e) => e.stopPropagation()}
               >
                 <i class="fa-solid fa-trash"></i>
               </button>
+              {#if c.source_url}
+                <div class="menu-anchor" onmousedown={(e) => e.stopPropagation()}>
+                  <button
+                    class="icon-btn icon-btn-ghost"
+                    data-tooltip={t('tt.more')}
+                    aria-label={t('tt.more')}
+                    onclick={() => toggleClientMenu(c.id)}
+                  >
+                    <i class="fa-solid fa-ellipsis-vertical"></i>
+                  </button>
+                  {#if openClientMenuId === c.id}
+                    <div class="tw-dropdown-menu">
+                      <!-- "Check for updates now" needs an `update_custom_client`
+                           command (C# ClientLib.UpdateIfChangedAsync); disabled. -->
+                      <button
+                        type="button"
+                        class="tw-dropdown-item"
+                        disabled
+                        data-tooltip={t('tt.notWiredYetNeedsUpdateCustom')}
+                        onclick={closeClientMenu}
+                      >
+                        <span><i class="fa-solid fa-cloud-arrow-down"></i> Check for updates now</span>
+                      </button>
+                      <button
+                        type="button"
+                        class="tw-dropdown-item"
+                        onclick={() => { closeClientMenu(); toggleClientAutoUpdate(c) }}
+                      >
+                        <span
+                          ><i class="fa-solid {c.auto_update ? 'fa-rotate' : 'fa-rotate-left'}"></i> Auto-update {c.auto_update
+                            ? 'on'
+                            : 'off'}</span
+                        >
+                      </button>
+                    </div>
+                  {/if}
+                </div>
+              {/if}
             {/if}
+          </div>
           </div>
         </div>
       {/each}
+      </div>
     {/if}
   {:else if utilTab === 'system'}
     {#if !sysInfo}
-      <div class="versions-loading"><Spinner /><span>Reading hardware…</span></div>
+      <ListSkeleton rows={4} />
     {:else}
-      <div class="util-quick-actions" style="margin-bottom:10px;">
+      <div class="util-quick-actions toolbar-mb">
         <button class="btn-sm" onclick={copySystemReport} onmousedown={(e) => e.stopPropagation()}>
           <i class="fa-solid fa-clipboard"></i> Copy report
         </button>
@@ -882,7 +1001,7 @@
       <div class="util-gauge-row">
         <div class="util-gauge">
           <div class="util-gauge-head">
-            <span>Memory</span>
+            <span>{t('label.memory')}</span>
             <span>{formatBytes(sysInfo.used_ram_bytes)} / {formatBytes(sysInfo.total_ram_bytes)}</span>
           </div>
           <div class="progress-bar-wrap">
@@ -891,7 +1010,7 @@
         </div>
       </div>
 
-      <span class="panel-section-label">Processor</span>
+      <span class="panel-section-label">{t('x.processor')}</span>
       <div class="setting-row">
         <div class="setting-meta">
           <span class="setting-label">{sysInfo.cpu_name}</span>
@@ -899,17 +1018,17 @@
         </div>
       </div>
 
-      <span class="panel-section-label">Graphics</span>
+      <span class="panel-section-label">{t('x.graphics')}</span>
       <div class="setting-row">
         <div class="setting-meta">
-          <span class="setting-label">GPU details unavailable</span>
+          <span class="setting-label">{t('x.gpuDetailsUnavailable')}</span>
           <span class="setting-hint">
             Name, VRAM and driver came from WMI in the original launcher; no backend command exposes them here.
           </span>
         </div>
       </div>
 
-      <span class="panel-section-label">System</span>
+      <span class="panel-section-label">{t('x.system')}</span>
       <div class="setting-row">
         <div class="setting-meta">
           <span class="setting-label">{sysInfo.os}</span>
@@ -918,7 +1037,7 @@
       </div>
       <!-- Motherboard / BIOS / local IP rows need the same missing WMI data. -->
 
-      <span class="panel-section-label">Storage</span>
+      <span class="panel-section-label">{t('x.storage')}</span>
       {#each sysInfo.disks as disk (disk.name)}
         {@const usedPercent = disk.total_bytes ? ((disk.total_bytes - disk.free_bytes) / disk.total_bytes) * 100 : 0}
         <div class="setting-row">
@@ -934,18 +1053,20 @@
         </div>
       {/each}
 
-      <p class="setting-hint" style="margin-top:12px;">
+      <p class="setting-hint intro-top">
         Temperatures and fan speeds need a kernel-level driver and administrator rights, which Glacier deliberately
         doesn't ship — everything above is read without either.
       </p>
     {/if}
   {/if}
 </div>
+  </div>
+</div>
 
 {#if utilTab === 'options' && optionsPendingCount > 0}
   <div class="util-save-bar">
     <span>{optionsPendingCount} unsaved change{optionsPendingCount === 1 ? '' : 's'}</span>
-    <button class="btn-sm" onclick={discardOptionEdits} onmousedown={(e) => e.stopPropagation()}>Discard</button>
+    <button class="btn-sm" onclick={discardOptionEdits} onmousedown={(e) => e.stopPropagation()}>{t('x.discard')}</button>
     <button
       class="btn-sm btn-primary"
       disabled={optionsSaving}
@@ -953,8 +1074,58 @@
       onmousedown={(e) => e.stopPropagation()}
     >
       {#if optionsSaving}<Spinner /><span>Saving…</span>{:else}<i class="fa-solid fa-floppy-disk"></i><span
-          >Save to options.txt</span
+          >{t('x.saveToOptionsTxt')}</span
         >{/if}
     </button>
   </div>
 {/if}
+
+<style>
+  /* Utility cards and rows reuse the shared client-card / setting-row surfaces
+     from app.css. This block only sets the spacing and small text roles the
+     markup needs; colours come from tokens. */
+  .setting-row {
+    min-height: 48px;
+    box-sizing: border-box;
+  }
+  .setting-row + .setting-row {
+    border-top: 1px solid color-mix(in srgb, var(--text) 7%, transparent);
+  }
+  .intro {
+    margin: 0 0 10px;
+  }
+  .intro-top {
+    margin-top: 12px;
+  }
+  .self-center {
+    align-self: center;
+  }
+  .gap-top {
+    margin-top: 10px;
+  }
+  .toolbar-mb {
+    margin-bottom: 10px;
+  }
+  .toolbar-mb-8 {
+    margin-bottom: 8px;
+  }
+  .client-icon-accent {
+    background: var(--accent-bg);
+    color: var(--accent);
+  }
+  .default-pill {
+    margin-left: 6px;
+  }
+  .menu-anchor {
+    position: relative;
+  }
+  .util-option-full {
+    width: 100%;
+  }
+  .truncate {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+  }
+</style>

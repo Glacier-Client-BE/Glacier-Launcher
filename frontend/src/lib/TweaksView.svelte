@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from './i18nStore.svelte'
   /**
    * Port of the "tweaks" panel - Home.razor:3102-3266 with its code-behind in
    * Home.Tweaks.cs, backed by `Services/TweaksService.cs`: the VanillaTweaks
@@ -6,9 +7,8 @@
    * assembly for Bedrock.
    */
   import { invoke } from '@tauri-apps/api/core'
-  import { untrack } from 'svelte'
   import { listen, type UnlistenFn } from '@tauri-apps/api/event'
-  import { onDestroy, onMount } from 'svelte'
+  import { onDestroy, onMount, untrack } from 'svelte'
   import PanelHeader from './components/PanelHeader.svelte'
   import SubTabs from './components/SubTabs.svelte'
   import ListSkeleton from './components/ListSkeleton.svelte'
@@ -38,6 +38,13 @@
     icon_url: string
   }
   type Category = { id: string; name: string; packs: Pack[] }
+  /** BedrockTweaks' `packs.json` splits what's conceptually one category into
+   *  a parent plus several "Parent / Sub-thing" children (e.g. "Aesthetic"
+   *  and "Aesthetic / More Zombies", or "GUI" with five+ children) — each of
+   *  those rendered as its own top-level rail entry, so the rail had 27
+   *  buttons where ~13 real topics exist. Java's flat VanillaTweaks
+   *  categories have no "/" and end up one group per category, unaffected. */
+  type CategoryGroup = { id: string; name: string; categories: Category[] }
 
   /** Fetched rather than hardcoded - `TweaksService.JavaVersions` is the source. */
   let javaVersions = $state<string[]>([])
@@ -47,7 +54,12 @@
   let categories = $state<Category[]>([])
   let engineVersion = $state<[number, number, number]>([1, 20, 0])
   let versionLabel = $state('')
-  let expanded = $state<Set<string>>(new Set())
+  /** IA change: was an accordion of categories you expanded one at a time,
+   *  each pushing the next one further down. Now that the panel opens wide
+   *  (WIDE_DASHBOARD_VIEWS), this is master-detail instead — a category rail
+   *  on the left, the selected category's packs as a card grid on the
+   *  right, same pattern as Settings/Java Mods. */
+  let selectedCategoryId = $state('')
   let selected = $state<Map<string, Pack>>(new Map())
   let loading = $state(true)
   let error = $state('')
@@ -73,7 +85,7 @@
     loading = true
     error = ''
     selected = new Map()
-    expanded = new Set()
+    selectedCategoryId = ''
     loadedEditionIsJava = isJava
     try {
       if (isJava) {
@@ -106,22 +118,63 @@
     try {
       const dataUrl = await invoke<string>('fetch_image_bytes', { url })
       iconCache = new Map(iconCache).set(url, dataUrl)
-    } catch {
+    } catch (e) {
       // Leave unresolved — the CSS fallback icon behind it stays visible.
+      // Logged (not just swallowed): a silent catch here is exactly why a
+      // real backend fetch failure looked identical to "icons just don't
+      // exist" instead of a diagnosable error.
+      console.warn(`Tweak pack icon failed to load: ${url}`, e)
     }
   }
 
-  /** Port of `ToggleCategory` - keyed on `c.Name`, as the original is. */
-  function toggleCategory(c: Category) {
-    const next = new Set(expanded)
-    if (next.has(c.name)) {
-      next.delete(c.name)
-    } else {
-      next.add(c.name)
-      for (const p of c.packs) resolveIcon(p.icon_url)
+  /** Groups categories that share a "/"-namespaced parent id into one rail
+   *  entry, preserving each sub-category's own name/packs for section
+   *  headers in the detail pane. Order follows first-seen order in
+   *  `categories` (already the source's own ordering). */
+  const categoryGroups = $derived.by(() => {
+    const groups = new Map<string, Category[]>()
+    for (const c of categories) {
+      const topId = c.id.split('/')[0]
+      if (!groups.has(topId)) groups.set(topId, [])
+      groups.get(topId)!.push(c)
     }
-    expanded = next
+    const result: CategoryGroup[] = []
+    for (const [topId, cats] of groups) {
+      const parent = cats.find((c) => c.id === topId)
+      const name = parent ? parent.name : (cats[0].name.split(' / ')[0] ?? cats[0].name)
+      result.push({ id: topId, name, categories: cats })
+    }
+    return result
+  })
+
+  /** A sub-category's own display label within its group's detail pane —
+   *  drops the "Parent / " prefix `packs.json` puts on every child's name,
+   *  since the parent is already the rail's active label. */
+  function subCategoryLabel(g: CategoryGroup, c: Category): string {
+    if (c.id === g.id) return ''
+    const idx = c.name.indexOf(' / ')
+    return idx === -1 ? c.name : c.name.slice(idx + 3)
   }
+
+  /** Was `ToggleCategory` (accordion expand/collapse, keyed on `c.Name`).
+   *  Master-detail replaces expand/collapse with selection — picking a
+   *  category shows its packs in the detail pane instead of pushing every
+   *  other category down the page. */
+  function selectCategory(g: CategoryGroup) {
+    selectedCategoryId = g.id
+    for (const c of g.categories) for (const p of c.packs) resolveIcon(p.icon_url)
+  }
+
+  const selectedCategory = $derived(
+    categoryGroups.find((g) => g.id === selectedCategoryId) ?? categoryGroups[0] ?? null,
+  )
+
+  $effect(() => {
+    if (categoryGroups.length === 0) return
+    if (!categoryGroups.some((g) => g.id === selectedCategoryId)) {
+      selectCategory(categoryGroups[0])
+    }
+  })
 
   function isTweakSelected(p: Pack) {
     return selected.has(packKey(p))
@@ -135,8 +188,15 @@
     selected = next
   }
 
-  function categorySelectedCount(c: Category) {
-    return c.packs.filter((p) => isTweakSelected(p)).length
+  function categorySelectedCount(g: CategoryGroup) {
+    return g.categories.reduce(
+      (sum, c) => sum + c.packs.filter((p) => isTweakSelected(p)).length,
+      0,
+    )
+  }
+
+  function groupPackCount(g: CategoryGroup) {
+    return g.categories.reduce((sum, c) => sum + c.packs.length, 0)
   }
 
   /** Port of `InstallTweaksAsync` - same toast texts, selection cleared on success. */
@@ -158,14 +218,14 @@
           version: javaVersion,
           selection,
         })
-        onToast?.(`Installed to resourcepacks — ${baseName(path)}`, 'success')
+        onToast?.(t('toast.installedToResourcepacksDash', { file: baseName(path) }), 'success')
       } else {
         const path = await invoke<string>('build_bedrock_tweaks_pack', {
           destDir: `${minecraftDir}\\resource_packs`,
           engineVersion,
           selection: Array.from(selected.values()),
         })
-        onToast?.(`Installed ${baseName(path)} to your resource packs.`, 'success')
+        onToast?.(t('toast.installedFileToPacks', { file: baseName(path) }), 'success')
       }
       selected = new Map()
     } catch (e) {
@@ -206,6 +266,7 @@
   type QueueEntry = { id: string; label: string; status: string; progress: number }
   let queue = $state<QueueEntry[]>([])
   let unlisten: UnlistenFn | undefined
+  let tweaksDisposed = false
 
   const tweaksProgress = $derived.by(() => {
     const label = loadedEditionIsJava ? 'VanillaTweaks pack' : 'BedrockTweaks file'
@@ -237,10 +298,12 @@
     listen<QueueEntry[]>('downloads-changed', (e) => {
       queue = e.payload
     }).then((fn) => {
-      unlisten = fn
+      if (tweaksDisposed) fn()
+      else unlisten = fn
     })
   })
   onDestroy(() => {
+    tweaksDisposed = true
     unlisten?.()
   })
 
@@ -281,7 +344,7 @@
         {/if}
       </div>
     {:else if tweaksVersionLabel}
-      <span class="tweaks-version-pill" data-tooltip="BedrockTweaks ships one current pack set">
+      <span class="tweaks-version-pill" data-tooltip={t('tt.bedrocktweaksShipsOneCurrentPackSet')}>
         <i class="fa-solid fa-cube"></i> {tweaksVersionLabel}
       </span>
     {/if}
@@ -291,8 +354,8 @@
       disabled={loading}
       onclick={load}
       onmousedown={(e) => e.stopPropagation()}
-      data-tooltip="Refresh"
-      aria-label="Refresh"
+      data-tooltip={t('tt.refresh')}
+      aria-label={t('tt.refresh')}
     >
       <i class="fa-solid fa-rotate"></i>
     </button>
@@ -302,99 +365,120 @@
 <!-- Home.razor:3156-3159: the Bedrock edition gets the shared
      Packs/Addons cross-nav strip here; Java does not. -->
 {#if !isJava}
-  <SubTabs strip="packs-addons" active="tweaks" onNavigate={(k, s) => onNavigate?.(k, s)} />
+  <SubTabs strip="packs-addons" active="tweaks" edition="bedrock" onNavigate={(k, s) => onNavigate?.(k, s)} />
 {/if}
 
-<div class="panel-body">
-  {#if loading}
-    <ListSkeleton rows={5} />
-  {:else if error && categories.length === 0}
+{#if loading}
+  <div class="panel-body"><ListSkeleton rows={5} /></div>
+{:else if error && categories.length === 0}
+  <div class="panel-body">
     <div class="empty-state">
       <i class="fa-solid fa-triangle-exclamation"></i>
-      <span>Couldn't load tweaks</span>
+      <span>{t('empty.couldnTLoadTweaks')}</span>
       <small>{error}</small>
       <button
         type="button"
-        class="btn-sm"
-        style="margin-top:10px;"
+        class="btn-sm retry-btn"
         onclick={load}
         onmousedown={(e) => e.stopPropagation()}
       >
-        <i class="fa-solid fa-rotate"></i> Retry
+        <i class="fa-solid fa-rotate"></i> {t('common.retry')}
       </button>
     </div>
-  {:else if categories.length === 0}
+  </div>
+{:else if categories.length === 0}
+  <div class="panel-body">
     <div class="empty-state">
       <i class="fa-solid fa-wand-magic-sparkles"></i>
-      <span>No tweaks available</span>
-      <small>Try a different Minecraft version.</small>
+      <span>{t('empty.noTweaksAvailable')}</span>
+      <small>{t('empty.tryDifferentMinecraftVersion')}</small>
     </div>
-  {:else}
-    <p class="setting-hint" style="margin:0 0 8px;">
-      {isJava
-        ? 'Pick tweaks, then build & install them straight into your resourcepacks folder.'
-        : 'Pick tweaks — Glacier assembles a single .mcpack and imports it into your resource packs.'}
-    </p>
-    {#each categories as c (c.id)}
-      {@const isExpanded = expanded.has(c.name)}
-      {@const selCount = categorySelectedCount(c)}
-      <button
-        type="button"
-        class="tweak-cat-header {isExpanded ? 'expanded' : ''}"
-        onclick={() => toggleCategory(c)}
-        onmousedown={(e) => e.stopPropagation()}
-      >
-        <i class="fa-solid fa-chevron-right tweak-cat-chevron"></i>
-        <span class="tweak-cat-name">{c.name}</span>
-        {#if selCount > 0}
-          <span class="tweak-cat-badge">{selCount}</span>
-        {/if}
-        <span class="tweak-cat-count">{c.packs.length}</span>
-      </button>
-      {#if isExpanded}
-        {#each c.packs as p (packKey(p))}
-          {@const sel = isTweakSelected(p)}
-          <div class="setting-row clickable tweak-row" role="button" tabindex="0" onclick={() => toggleTweak(p)} onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && toggleTweak(p)}>
-            <span class="tweak-icon">
-              <i class="fa-solid fa-wand-magic-sparkles tweak-icon-fallback"></i>
-              {#if iconCache.has(p.icon_url)}
-                <img class="tweak-icon-img" src={iconCache.get(p.icon_url)} alt="" />
-              {/if}
-            </span>
-            <div class="setting-meta" style="min-width:0;">
-              <span class="setting-label">{p.name}</span>
-              {#if p.description}
-                <span class="setting-hint">{p.description}</span>
-              {/if}
-            </div>
-            <div
-              class="toggle {sel ? 'on' : ''}"
-              role="switch"
-              aria-checked={sel}
-              tabindex="0"
-              onclick={(e) => {
-                e.stopPropagation()
-                toggleTweak(p)
-              }}
-              onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && toggleTweak(p)}
-            ></div>
-          </div>
-        {/each}
-      {/if}
-    {/each}
-  {/if}
+  </div>
+{:else}
+  <div class="settings-layout">
+    <nav class="settings-nav-rail" aria-label={t('tt.tweakCategories')}>
+      {#each categoryGroups as g (g.id)}
+        {@const selCount = categorySelectedCount(g)}
+        <button
+          type="button"
+          class="settings-nav-btn {selectedCategory?.id === g.id ? 'active' : ''}"
+          onclick={() => selectCategory(g)}
+          onmousedown={(e) => e.stopPropagation()}
+        >
+          <i class="fa-solid fa-wand-magic-sparkles"></i>
+          <span class="nav-label truncate" title={g.name}>{g.name}</span>
+          <span class="settings-nav-btn-count {selCount > 0 ? 'count-active' : ''}"
+            >{selCount > 0 ? selCount : groupPackCount(g)}</span
+          >
+        </button>
+      {/each}
+    </nav>
 
-</div>
+    <div class="settings-content">
+      <div class="panel-body">
+        <p class="setting-hint intro">
+          {isJava
+            ? 'Pick tweaks, then build & install them straight into your resourcepacks folder.'
+            : 'Pick tweaks — Glacier assembles a single .mcpack and imports it into your resource packs.'}
+        </p>
+        {#if selectedCategory}
+          {#each selectedCategory.categories as c (c.id)}
+            {@const subLabel = subCategoryLabel(selectedCategory, c)}
+            {#if subLabel}
+              <span class="panel-section-label">{subLabel}</span>
+            {/if}
+            <div class="client-card-cols {subLabel ? 'has-sub' : ''}">
+              {#each c.packs as p (packKey(p))}
+                {@const sel = isTweakSelected(p)}
+                <button
+                  type="button"
+                  class="client-card tweak-pack-card {sel ? 'client-active' : ''}"
+                  onclick={() => toggleTweak(p)}
+                >
+                  <div class="client-card-header">
+                    <span class="tweak-icon client-card-icon tweak-icon-box">
+                      <i class="fa-solid fa-wand-magic-sparkles tweak-icon-fallback"></i>
+                      {#if iconCache.has(p.icon_url)}
+                        <img class="tweak-icon-img" src={iconCache.get(p.icon_url)} alt="" loading="lazy" decoding="async" />
+                      {/if}
+                    </span>
+                    <div class="client-card-meta">
+                      <span class="client-card-name truncate" title={p.name}>{p.name}</span>
+                    </div>
+                    <div
+                      class="toggle {sel ? 'on' : ''}"
+                      role="switch"
+                      aria-checked={sel}
+                      tabindex="0"
+                      onclick={(e) => {
+                        e.stopPropagation()
+                        toggleTweak(p)
+                      }}
+                      onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && toggleTweak(p)}
+                    ></div>
+                  </div>
+                  {#if p.description}
+                    <p class="client-card-desc" title={p.description}>{p.description}</p>
+                  {/if}
+                </button>
+              {/each}
+            </div>
+          {/each}
+        {/if}
+      </div>
+    </div>
+  </div>
+{/if}
 
 {#if categories.length > 0}
   <div class="panel-footer-bar">
     {#if building}
-      <div class="progress-bar-wrap" style="flex:1;">
+      <div class="progress-bar-wrap progress-grow">
         <div class="progress-bar-fill" style="width:{Math.round(tweaksProgress * 100)}%"></div>
       </div>
       <span class="dl-pct">{Math.floor(tweaksProgress * 100)}%</span>
     {:else}
-      <span style="font-size:12px;color:var(--text-dim);">{selected.size} selected</span>
+      <span class="footer-count">{selected.size} selected</span>
       <button
         type="button"
         class="action-btn"
@@ -407,4 +491,48 @@
     {/if}
   </div>
 {/if}
+
+<style>
+  /* Pack cards sit on the shared client-card surface; this file only adds the
+     spacing and small text roles its markup needs. Colours come from tokens. */
+  .retry-btn {
+    margin-top: 10px;
+  }
+  .nav-label {
+    flex: 1;
+    min-width: 0;
+  }
+  .count-active {
+    color: var(--accent-hover);
+    background: var(--accent-bg);
+  }
+  .intro {
+    margin: 0 0 8px;
+  }
+  .has-sub {
+    margin-bottom: 14px;
+  }
+  .tweak-icon-box {
+    padding: 6px;
+  }
+  .progress-grow {
+    flex: 1;
+    min-width: 0;
+  }
+  .footer-count {
+    font-size: 12px;
+    color: var(--text-dim);
+  }
+  .truncate {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .client-card-desc {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+</style>
 

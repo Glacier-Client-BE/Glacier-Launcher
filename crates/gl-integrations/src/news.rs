@@ -8,6 +8,9 @@
 //! `src-tauri/src/commands/update.rs`, rendered as NewsView's dedicated
 //! "Changelog" section) — kept apart here so the two don't duplicate.
 
+use std::sync::Mutex;
+use std::time::{Duration, Instant};
+
 use serde_json::Value;
 
 use crate::models::NewsPost;
@@ -17,12 +20,38 @@ const DOWNLOADS_JSON_URL: &str = "https://glacierclient.xyz/assets/data/download
 /// Fetches the Glacier Client website's changelog feed and HTML-decodes
 /// each post's title/subtitle (mirroring the original `Decode` helper).
 pub async fn get_news(client: &reqwest::Client) -> Option<Vec<NewsPost>> {
+    if let Some(cached) = cached_news() {
+        return Some(cached);
+    }
     let mut posts = fetch_client_changelog(client).await?;
     if posts.is_empty() {
         return None;
     }
     posts.sort_by(|a, b| b.date.cmp(&a.date));
-    Some(decode(posts))
+    let decoded = decode(posts);
+    store_news(&decoded);
+    Some(decoded)
+}
+
+/// How long a successfully fetched changelog is reused before re-fetching.
+/// The feed changes rarely, and the panel can be opened many times per
+/// session, so this avoids a network round trip on every open. Failures are
+/// never cached, so a transient error retries on the next call.
+const NEWS_TTL: Duration = Duration::from_secs(10 * 60);
+
+static NEWS_CACHE: Mutex<Option<(Instant, Vec<NewsPost>)>> = Mutex::new(None);
+
+fn cached_news() -> Option<Vec<NewsPost>> {
+    let guard = NEWS_CACHE.lock().unwrap_or_else(|p| p.into_inner());
+    match guard.as_ref() {
+        Some((at, posts)) if at.elapsed() < NEWS_TTL => Some(posts.clone()),
+        _ => None,
+    }
+}
+
+fn store_news(posts: &[NewsPost]) {
+    let mut guard = NEWS_CACHE.lock().unwrap_or_else(|p| p.into_inner());
+    *guard = Some((Instant::now(), posts.to_vec()));
 }
 
 async fn fetch_client_changelog(client: &reqwest::Client) -> Option<Vec<NewsPost>> {
@@ -177,5 +206,26 @@ mod tests {
         assert_eq!(html_decode("Tom &amp; Jerry"), "Tom & Jerry");
         assert_eq!(html_decode("caf&#233;"), "caf\u{e9}");
         assert_eq!(html_decode("no entities here"), "no entities here");
+    }
+
+    #[test]
+    fn html_decode_is_single_pass() {
+        // A double-encoded entity must only lose one layer of escaping.
+        assert_eq!(html_decode("&amp;lt;"), "&lt;");
+        assert_eq!(html_decode("&amp;amp;"), "&amp;");
+    }
+
+    #[test]
+    fn decode_posts_decodes_exactly_once() {
+        let post = NewsPost {
+            icon: String::new(),
+            title: "&amp;lt;b&amp;gt;".to_string(),
+            subtitle: "&amp;lt;".to_string(),
+            url: String::new(),
+            date: String::new(),
+        };
+        let decoded = decode(vec![post]);
+        assert_eq!(decoded[0].title, "&lt;b&gt;");
+        assert_eq!(decoded[0].subtitle, "&lt;");
     }
 }

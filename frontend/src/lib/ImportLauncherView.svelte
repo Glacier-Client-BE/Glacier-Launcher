@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from './i18nStore.svelte'
   /**
    * Phase 5: import instances from an external launcher (MultiMC/Prism,
    * CurseForge app, ATLauncher, Modrinth App) into Glacier.
@@ -17,6 +18,7 @@
   import { open } from '@tauri-apps/plugin-dialog'
   import PanelHeader from './components/PanelHeader.svelte'
   import InlineProgress from './components/InlineProgress.svelte'
+  import ListSkeleton from './components/ListSkeleton.svelte'
   import type { JavaInstance } from './settings'
 
   let {
@@ -66,14 +68,13 @@
   type Step = 'detect' | 'list' | 'preview' | 'importing' | 'done'
 
   let step = $state<Step>('detect')
-  let loading = $state(false);
+  let loading = $state(false)
   let detected = $state<DetectedLauncher[]>([])
   let activeLauncher = $state<DetectedLauncher | null>(null)
   let candidates = $state<ImportCandidate[]>([])
   let selected = $state<Set<number>>(new Set())
   let previewMods = $state<Record<number, string[]>>({})
   let outcomes = $state<ImportOutcome[]>([])
-  let importingIndex = $state(-1)
 
   function formatSize(bytes: number): string {
     if (bytes <= 0) return '0 MB'
@@ -150,7 +151,6 @@
   async function runImport() {
     step = 'importing'
     outcomes = []
-    importingIndex = 0
     const chosen = candidates.filter((_, i) => selected.has(i))
     try {
       outcomes = await invoke<ImportOutcome[]>('import_instances', { candidates: chosen })
@@ -159,7 +159,6 @@
       step = 'preview'
       return
     }
-    importingIndex = -1
     step = 'done'
     const okCount = outcomes.filter((o) => o.instance).length
     if (okCount > 0) {
@@ -183,39 +182,48 @@
   }
 </script>
 
-<PanelHeader title="Import from another launcher" {onBack} />
+<PanelHeader title={t('panel.importFromAnotherLauncher')} {onBack} />
 
 <div class="panel-body">
   {#if step === 'detect'}
     {#if loading}
-      <p>Scanning %APPDATA% for other launchers...</p>
+      <ListSkeleton rows={4} />
     {:else}
-      <p>Choose a launcher to import instances from.</p>
+      <p class="wizard-hint">{t('x.chooseALauncherToImportInstancesFrom')}</p>
       {#each (['multi_mc_or_prism', 'curse_forge_app', 'a_t_launcher', 'modrinth_app'] as SourceLauncher[]) as kind (kind)}
         {@const found = detected.find((d) => d.launcher === kind)}
         <div class="instance-row">
-          <span style="flex:1">{LAUNCHER_LABELS[kind]}{#if found}<br /><small>{found.root_path}</small>{/if}</span>
+          <span class="row-grow">
+            {LAUNCHER_LABELS[kind]}
+            {#if found}<br /><small>{found.root_path}</small>{:else}<br /><small>Not found</small>{/if}
+          </span>
           {#if found}
-            <button class="btn-sm" onclick={() => openLauncher(found)}>Scan</button>
+            <button class="btn-sm btn-primary" onclick={() => openLauncher(found)}>{t('x.scan')}</button>
           {/if}
-          <button class="btn-sm" onclick={() => pickCustomRoot(kind)}>Choose folder…</button>
+          <button class="btn-sm" onclick={() => pickCustomRoot(kind)}>
+            <i class="fa-solid fa-folder-open"></i> Choose folder
+          </button>
         </div>
       {/each}
     {/if}
   {:else if step === 'list'}
-    <p>
+    <div class="instance-row">
       <button class="btn-sm" onclick={startOver}><i class="fa-solid fa-arrow-left"></i> Launchers</button>
-      {activeLauncher ? LAUNCHER_LABELS[activeLauncher.launcher] : ''}
-    </p>
+      <span class="row-grow">{activeLauncher ? LAUNCHER_LABELS[activeLauncher.launcher] : ''}</span>
+    </div>
     {#if loading}
-      <p>Scanning instances...</p>
+      <ListSkeleton rows={3} />
     {:else if candidates.length === 0}
-      <p>No instances found.</p>
+      <div class="empty-state">
+        <i class="fa-solid fa-folder-open"></i>
+        <span>{t('x.noInstancesFound')}</span>
+        <button class="btn-sm" onclick={startOver}>Choose another launcher</button>
+      </div>
     {:else}
       {#each candidates as c, i (c.instance_path)}
         <label class="instance-row">
           <input type="checkbox" checked={selected.has(i)} onchange={() => toggle(i)} />
-          <span style="flex:1">
+          <span class="row-grow">
             {c.name}
             <br />
             <small>
@@ -226,29 +234,36 @@
           </span>
         </label>
       {/each}
-      <button class="vcs-btn" disabled={selected.size === 0} onclick={goToPreview}>
-        Preview {selected.size} instance(s)
-      </button>
+      <div class="instance-row">
+        <button class="btn-sm" onclick={backToList}><i class="fa-solid fa-arrow-left"></i> Back</button>
+        <span class="row-grow"></span>
+        <button class="btn-sm btn-primary" disabled={selected.size === 0} onclick={goToPreview}>
+          Preview {selected.size} instance(s)
+        </button>
+      </div>
     {/if}
   {:else if step === 'preview'}
-    <p><button class="btn-sm" onclick={backToList}><i class="fa-solid fa-arrow-left"></i> Back</button></p>
+    <div class="instance-row">
+      <button class="btn-sm" onclick={backToList}><i class="fa-solid fa-arrow-left"></i> Back</button>
+      <span class="row-grow"></span>
+      <button class="btn-sm btn-primary" onclick={runImport}>Import {selected.size} instance(s)</button>
+    </div>
     {#each candidates as c, i (c.instance_path)}
       {#if selected.has(i)}
-        <div class="instance-row" style="flex-direction:column; align-items:flex-start">
+        <div class="instance-row row-stack">
           <strong>{c.name}</strong>
           <small>{(previewMods[i] ?? []).length} mod file(s){#if (previewMods[i] ?? []).length > 0}: {(previewMods[i] ?? []).slice(0, 8).join(', ')}{(previewMods[i] ?? []).length > 8 ? '…' : ''}{/if}</small>
         </div>
       {/if}
     {/each}
-    <button class="vcs-btn" onclick={runImport}>Import {selected.size} instance(s)</button>
   {:else if step === 'importing'}
-    <p>Importing…</p>
+    <p class="wizard-hint">Importing…</p>
     <InlineProgress progress={0.5} showSpinner={true} />
   {:else if step === 'done'}
-    <p>Import finished.</p>
-    {#each outcomes as o (o.name)}
+    <p class="wizard-hint">{t('x.importFinished')}</p>
+    {#each outcomes as o, oi (oi)}
       <div class="instance-row">
-        <span style="flex:1">{o.name}</span>
+        <span class="row-grow">{o.name}</span>
         {#if o.instance}
           <span class="badge-ok"><i class="fa-solid fa-check"></i> Imported</span>
         {:else}
@@ -256,6 +271,71 @@
         {/if}
       </div>
     {/each}
-    <button class="vcs-btn" onclick={startOver}>Import more</button>
+    <div class="instance-row">
+      <span class="row-grow"></span>
+      <button class="btn-sm btn-primary" onclick={startOver}>{t('x.importMore')}</button>
+    </div>
   {/if}
 </div>
+
+<style>
+  /* Outcome markers after an import ran: were unstyled plain text before. */
+  .badge-ok,
+  .badge-err {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 12px;
+  }
+  .badge-ok {
+    color: var(--green);
+    background: var(--green-bg);
+  }
+  .badge-err {
+    color: var(--red);
+    background: var(--red-bg);
+  }
+
+  /* Import rhythm: band gaps between stacked rows, row padding inside each
+     row, hover on clickable (label) rows and buttons, dimmed disabled. */
+  .panel-body {
+    gap: var(--panel-band);
+  }
+  .instance-row {
+    gap: var(--panel-band);
+    padding: var(--row-pad-y) var(--row-pad-x);
+    margin-top: 0;
+    transition: background-color var(--t);
+  }
+  .instance-row:hover {
+    background: var(--bg-item-hover);
+  }
+  .instance-row.row-stack {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .row-grow {
+    flex: 1;
+    min-width: 0;
+  }
+  label.instance-row {
+    cursor: pointer;
+  }
+  .instance-row button:not(.btn-primary):hover:not(:disabled) {
+    background: var(--bg-item-hover);
+  }
+  .instance-row button:disabled,
+  .instance-row input:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  .instance-row button,
+  .empty-state button {
+    transition: background-color var(--t), opacity var(--t);
+  }
+  .instance-row small {
+    overflow-wrap: anywhere;
+  }
+</style>

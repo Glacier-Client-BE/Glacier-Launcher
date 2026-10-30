@@ -8,7 +8,7 @@ export default defineConfig({
   plugins: [svelte()],
   clearScreen: false,
   build: {
-    target: 'esnext',
+    target: 'es2022',
     minify: 'esbuild',
     cssMinify: 'esbuild',
     sourcemap: false,

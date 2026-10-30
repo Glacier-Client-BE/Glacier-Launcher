@@ -2,21 +2,52 @@
 /target
 crates/*/target
 src-tauri/target
+**/*.rs.bk
+Cargo.lock.bak
 
 # Node / frontend
 frontend/node_modules
 frontend/dist
 frontend/.vite
+frontend/coverage
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
 
 # Tauri
 src-tauri/gen
+src-tauri/WixTools*
 
-# Editor / OS
+# Editor / IDE
 .vs/
+.vscode/*
+!.vscode/extensions.json
+.idea/
 *.user
 *.suo
-.claude/
+*.swp
+*.swo
+
+# OS cruft
 .DS_Store
+Thumbs.db
+desktop.ini
+
+# Local env / secrets — never commit real keys; see .github/dependabot.yml
+# and repo secrets for how these are supplied in CI instead.
+.env
+.env.*
+!.env.example
+
+# Claude Code / graphify local session state
+.claude/
+*.session.json
+
+# Logs and crash dumps produced by local runs
+*.log
+crash*.txt
+run_output.txt
 
 # Legacy WPF build artifacts (retained temporarily during migration)
 bin/
@@ -25,6 +56,3 @@ wwwroot.zip
 publish_test/
 publish_final/
 publish/
-crash.txt
-crash_domain.txt
-run_output.txt

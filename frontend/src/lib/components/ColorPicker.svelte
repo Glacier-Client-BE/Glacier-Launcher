@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../i18nStore.svelte'
   /**
    * HSV colour picker - 1:1 port of `Components/ColorPicker.razor` (198 lines).
    *
@@ -175,7 +176,7 @@
     min="0"
     max="360"
     step="1"
-    aria-label="Hue"
+    aria-label={t('tt.hue')}
     value={Math.round(h)}
     oninput={(e) => { h = Math.min(360, Math.max(0, +e.currentTarget.value)); emit() }}
   />
@@ -186,7 +187,7 @@
     min="0"
     max="100"
     step="1"
-    aria-label="Shade"
+    aria-label={t('tt.shade')}
     style="--cpick-grad: linear-gradient(to right, #000, {pureHueHex});"
     value={Math.round(shade * 100)}
     oninput={(e) => { shade = Math.min(1, Math.max(0, +e.currentTarget.value / 100)); emit() }}
@@ -198,7 +199,7 @@
     min="0"
     max="100"
     step="1"
-    aria-label="Opacity"
+    aria-label={t('tt.opacity')}
     style="--cpick-grad: linear-gradient(to right, transparent, {opaqueHex});"
     value={Math.round(a * 100)}
     oninput={(e) => { a = Math.min(1, Math.max(0, +e.currentTarget.value / 100)); emit() }}
@@ -215,9 +216,9 @@
         spellcheck="false"
         autocomplete="off"
         maxlength="8"
-        aria-label="Hex colour"
+        aria-label={t('tt.hexColour')}
       />
     </div>
-    <button type="button" class="btn-sm btn-accent" onclick={() => onClose?.()}>Done</button>
+    <button type="button" class="btn-sm btn-accent" onclick={() => onClose?.()}>{t('x.done')}</button>
   </div>
 </div>

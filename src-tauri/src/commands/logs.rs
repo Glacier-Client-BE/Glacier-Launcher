@@ -29,7 +29,7 @@ pub struct LogFile {
 
 /// Lists `.log`/`.txt`/`.gz` files under `<instance_dir>/logs` and
 /// `<instance_dir>/crash-reports`, newest first — mirrors `LogService.ListLogs`.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn list_logs(instance_dir: String) -> Result<Vec<LogFile>, String> {
     let mut result = Vec::new();
     scan_log_dir(&Path::new(&instance_dir).join("logs"), false, &mut result);
@@ -92,7 +92,7 @@ pub struct CrashReportInfo {
 /// `Home.Panels.cs::LatestJavaCrashFile` — this is the flat, version-scoped
 /// `.minecraft` layout (`JavaVersions.MinecraftDir`), distinct from
 /// `list_logs`'s per-instance `crash-reports` folder.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn latest_java_crash_report(minecraft_dir: String) -> Option<CrashReportInfo> {
     let dir = Path::new(&minecraft_dir).join("crash-reports");
     let entries = std::fs::read_dir(&dir).ok()?;
@@ -122,7 +122,7 @@ pub fn latest_java_crash_report(minecraft_dir: String) -> Option<CrashReportInfo
 
 /// Reads a log file (transparently gunzipping `.gz`), truncated to the last
 /// `max_lines` lines — mirrors `LogService.ReadLogAsync`.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn read_log(path: String, max_lines: Option<usize>) -> Result<String, String> {
     let p = Path::new(&path);
     let max_lines = max_lines.unwrap_or(2000);
@@ -138,7 +138,7 @@ pub fn read_log(path: String, max_lines: Option<usize>) -> Result<String, String
         let decompressed = gl_nbt::gzip_decompress(&bytes).map_err(|e| e.to_string())?;
         String::from_utf8_lossy(&decompressed).into_owned()
     } else {
-        std::fs::read_to_string(p).map_err(|e| e.to_string())?
+        read_plain_tail(p, max_lines)?
     };
 
     let lines: Vec<&str> = text.split('\n').collect();
@@ -148,6 +148,36 @@ pub fn read_log(path: String, max_lines: Option<usize>) -> Result<String, String
         text
     };
     Ok(text)
+}
+
+/// Reads only the bytes that hold the last `max_lines` lines of a plain file,
+/// walking backwards in chunks. Large `latest.log` files are not loaded whole.
+/// A file that fits entirely is read strictly as UTF-8, like `read_to_string`.
+fn read_plain_tail(p: &Path, max_lines: usize) -> Result<String, String> {
+    use std::io::{Read, Seek, SeekFrom};
+
+    const CHUNK: u64 = 64 * 1024;
+    let mut file = std::fs::File::open(p).map_err(|e| e.to_string())?;
+    let mut pos = file.metadata().map_err(|e| e.to_string())?.len();
+    let mut buf: Vec<u8> = Vec::new();
+    let mut newlines = 0usize;
+    while pos > 0 && newlines <= max_lines {
+        let step = CHUNK.min(pos);
+        pos -= step;
+        file.seek(SeekFrom::Start(pos)).map_err(|e| e.to_string())?;
+        let mut chunk = vec![0u8; step as usize];
+        file.read_exact(&mut chunk).map_err(|e| e.to_string())?;
+        newlines += chunk.iter().filter(|&&b| b == b'\n').count();
+        chunk.extend_from_slice(&buf);
+        buf = chunk;
+    }
+    if pos == 0 {
+        String::from_utf8(buf).map_err(|e| e.to_string())
+    } else {
+        // The partial first segment is dropped by the caller's line slicing
+        // because more than `max_lines` newlines were read.
+        Ok(String::from_utf8_lossy(&buf).into_owned())
+    }
 }
 
 /// Heuristic crash-report detection, mirrors `LogService.LooksLikeCrash`.
@@ -414,6 +444,75 @@ pub async fn share_log(state: State<'_, AppState>, content: String) -> Result<St
         .ok_or_else(|| "mclo.gs response had no url field".to_string())
 }
 
+/// QOL: "Export logs for support" - a single zip with the launcher version
+/// + OS info, redacted (never-truncated) settings JSON, and the newest
+/// `max_logs` redacted log files from `instance_dir`, so a user reporting a
+/// problem can attach one file instead of hunting for the settings export
+/// button, screenshotting version info, and finding the right log
+/// separately. Returns the zip's path.
+#[tauri::command(async)]
+pub fn export_support_bundle(instance_dir: String, max_logs: Option<usize>) -> Result<String, String> {
+    use std::io::Write;
+
+    let dir = gl_settings::launcher_root().join("exports");
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let stamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let zip_path = dir.join(format!("glacier-support-{stamp}.zip"));
+
+    let file = std::fs::File::create(&zip_path).map_err(|e| e.to_string())?;
+    let mut zip = zip::ZipWriter::new(file);
+    let options = zip::write::SimpleFileOptions::default()
+        .compression_method(zip::CompressionMethod::Deflated);
+
+    // launcher_info.txt - version + platform, the two things any support
+    // request needs first and that a user might otherwise misreport.
+    let info = format!(
+        "Glacier Launcher {}\nOS: {} ({})\n",
+        env!("CARGO_PKG_VERSION"),
+        std::env::consts::OS,
+        std::env::consts::ARCH,
+    );
+    zip.start_file("launcher_info.txt", options)
+        .map_err(|e| e.to_string())?;
+    zip.write_all(info.as_bytes()).map_err(|e| e.to_string())?;
+
+    // settings.json - same as the manual export, but with the two actual
+    // secrets (Discord/Xbox refresh tokens) stripped. Everything else in
+    // settings is preferences/paths, useful for reproducing a bug and not
+    // sensitive the way a live auth token is.
+    if let Ok(mut settings) = gl_settings::load() {
+        settings.discord_token = String::new();
+        settings.xbox_live_refresh_token = String::new();
+        if let Ok(json) = serde_json::to_string_pretty(&settings) {
+            zip.start_file("settings.json", options)
+                .map_err(|e| e.to_string())?;
+            zip.write_all(json.as_bytes()).map_err(|e| e.to_string())?;
+        }
+    }
+
+    // The newest `max_logs` log/crash files, redacted the same way
+    // `share_log` redacts before uploading anywhere.
+    let mut logs = Vec::new();
+    scan_log_dir(&Path::new(&instance_dir).join("logs"), false, &mut logs);
+    scan_log_dir(&Path::new(&instance_dir).join("crash-reports"), true, &mut logs);
+    logs.sort_by(|a, b| b.modified_at.cmp(&a.modified_at));
+    for log in logs.into_iter().take(max_logs.unwrap_or(5)) {
+        let Ok(content) = std::fs::read_to_string(&log.path) else {
+            continue;
+        };
+        let redacted = redact(&content);
+        if zip.start_file(format!("logs/{}", log.name), options).is_ok() {
+            let _ = zip.write_all(redacted.as_bytes());
+        }
+    }
+
+    zip.finish().map_err(|e| e.to_string())?;
+    Ok(zip_path.display().to_string())
+}
+
 // ---------------------------------------------------------------------------
 // Stats
 // ---------------------------------------------------------------------------
@@ -451,7 +550,7 @@ fn save_sessions(sessions: &[PlaySession]) -> Result<(), String> {
 
 /// Appends a completed play session, trimming to the most recent
 /// `MAX_SESSIONS` — mirrors `StatsService.RecordSession`.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn record_play_session(
     started_at: String,
     seconds: i64,
@@ -490,7 +589,7 @@ pub struct StatsSummary {
 /// Computes the full stats summary the frontend needs in one call, mirroring
 /// `StatsService`'s `TotalSeconds`/`SessionCount`/`LongestSessionSeconds`/
 /// `DailyTotals`/`RecentSessions`/`TopLabels`.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_stats_summary(days: Option<u32>, recent_count: Option<usize>) -> StatsSummary {
     let sessions = load_sessions();
     let days = days.unwrap_or(14) as i64;

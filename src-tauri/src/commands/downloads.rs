@@ -55,6 +55,7 @@ fn status_str(status: DownloadStatus) -> &'static str {
         DownloadStatus::Completed => "Completed",
         DownloadStatus::Failed => "Failed",
         DownloadStatus::Cancelled => "Cancelled",
+        DownloadStatus::Paused => "Paused",
     }
 }
 
@@ -85,16 +86,30 @@ pub fn list_downloads(state: State<'_, AppState>) -> Vec<DownloadEntryDto> {
         .collect()
 }
 
+/// QOL: pauses a `Downloading` entry, leaving its partial `.tmp` on disk so
+/// `resume_download` can continue it via a Range request. A no-op for
+/// anything not currently downloading.
+#[tauri::command]
+pub async fn pause_download(state: State<'_, AppState>, id: String) -> Result<(), String> {
+    state.downloads.pause_str(&id)
+}
+
+/// QOL: resumes a `Paused` download from where it left off.
+#[tauri::command]
+pub async fn resume_download(state: State<'_, AppState>, id: String) -> Result<bool, String> {
+    state.downloads.resume_str(&id)
+}
+
 /// Cancels an in-flight download by id. Mirrors `CancelDownload`.
 #[tauri::command]
-pub fn cancel_download(state: State<'_, AppState>, id: String) -> Result<(), String> {
+pub async fn cancel_download(state: State<'_, AppState>, id: String) -> Result<(), String> {
     state.downloads.cancel_str(&id)
 }
 
 /// Drops a single tracked download regardless of status. Mirrors
 /// `DownloadService.Remove`.
 #[tauri::command]
-pub fn remove_download(state: State<'_, AppState>, id: String) -> Result<(), String> {
+pub async fn remove_download(state: State<'_, AppState>, id: String) -> Result<(), String> {
     state.downloads.remove_str(&id)
 }
 
@@ -103,4 +118,35 @@ pub fn remove_download(state: State<'_, AppState>, id: String) -> Result<(), Str
 #[tauri::command]
 pub fn clear_finished_downloads(state: State<'_, AppState>) {
     state.downloads.clear_finished();
+}
+
+/// QOL: resubmits every currently-`Failed` download using its original
+/// request, instead of the user having to remove each one and re-trigger
+/// whatever originally queued it. Returns how many were retried.
+#[tauri::command]
+pub fn retry_failed_downloads(state: State<'_, AppState>) -> usize {
+    state.downloads.retry_failed()
+}
+
+/// QOL: retries one specific download by id, regardless of its status.
+#[tauri::command]
+pub async fn retry_download(state: State<'_, AppState>, id: String) -> Result<bool, String> {
+    state.downloads.retry_str(&id)
+}
+
+/// QOL: sweeps finished downloads older than
+/// `settings.auto_clear_downloads_after_days`. A no-op when that's `0`
+/// (disabled). Meant to be called periodically (and once at startup) by the
+/// frontend rather than driven by a backend timer, so it only ever runs
+/// while the launcher is actually open.
+#[tauri::command]
+pub fn sweep_old_downloads(state: State<'_, AppState>) {
+    let days = gl_settings::load()
+        .map(|s| s.auto_clear_downloads_after_days)
+        .unwrap_or(0);
+    if days <= 0 {
+        return;
+    }
+    let max_age_ms = (days as i64) * 24 * 60 * 60 * 1000;
+    state.downloads.clear_finished_older_than(max_age_ms);
 }

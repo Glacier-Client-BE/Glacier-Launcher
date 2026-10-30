@@ -20,6 +20,7 @@ pub mod flarial;
 pub mod github;
 pub mod glacier_client;
 pub mod hash;
+pub mod horizon;
 pub mod latite;
 pub mod levilamina;
 pub mod levilamina_mods;

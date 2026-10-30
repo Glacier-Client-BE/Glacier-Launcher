@@ -80,6 +80,17 @@ fn create_junction(link_path: &Path, target_dir: &Path) -> Result<()> {
     Ok(())
 }
 
+/// A sibling path next to `path`, with `suffix` appended to its file name
+/// (not replacing an existing extension the way `Path::with_extension`
+/// would — a store/instance directory named e.g. `mods.pack` would
+/// otherwise lose the `.pack` part of its name to a staging suffix).
+fn staging_sibling(path: &Path, suffix: &str) -> PathBuf {
+    let mut name = path.file_name().unwrap_or_default().to_os_string();
+    name.push(".");
+    name.push(suffix);
+    path.with_file_name(name)
+}
+
 fn copy_dir_recursive(from: &Path, to: &Path) -> Result<()> {
     std::fs::create_dir_all(to).map_err(io_err(to))?;
     for entry in std::fs::read_dir(from).map_err(io_err(from))? {
@@ -140,11 +151,37 @@ pub fn apply(
             AdoptStrategy::KeepExisting => {
                 if !store_dir.exists() {
                     if !dry_run {
-                        copy_dir_recursive(instance_dir, store_dir)?;
+                        // Copy to a staging sibling and rename it into place
+                        // as `store_dir` atomically, rather than copying
+                        // straight into `store_dir`: if the copy fails
+                        // partway (e.g. a file locked by a running instance)
+                        // this leaves no half-populated `store_dir` behind.
+                        // Only once the rename succeeds — meaning
+                        // `store_dir` is a complete, verified copy — do we
+                        // touch `instance_dir`. If `remove_dir_all` below
+                        // then fails, a retry sees `store_dir` already
+                        // exists and safely retries just the removal below,
+                        // instead of re-copying over (or silently trusting)
+                        // a store that was never actually confirmed intact.
+                        let staging = staging_sibling(store_dir, "gl-sync-adopt-tmp");
+                        if staging.exists() {
+                            std::fs::remove_dir_all(&staging).map_err(io_err(&staging))?;
+                        }
+                        copy_dir_recursive(instance_dir, &staging)?;
+                        std::fs::rename(&staging, store_dir).map_err(io_err(store_dir))?;
                         std::fs::remove_dir_all(instance_dir).map_err(io_err(instance_dir))?;
                     }
                 } else if !dry_run {
-                    std::fs::remove_dir_all(instance_dir).map_err(io_err(instance_dir))?;
+                    // The pack already has a shared copy. "Keep existing" means
+                    // this instance's files win, so copy them over the shared
+                    // copy, then park the original folder as a backup rather
+                    // than deleting it: nothing the player had is ever lost.
+                    copy_dir_recursive(instance_dir, store_dir)?;
+                    let backup = staging_sibling(instance_dir, "gl-sync-backup");
+                    if backup.exists() {
+                        std::fs::remove_dir_all(&backup).map_err(io_err(&backup))?;
+                    }
+                    std::fs::rename(instance_dir, &backup).map_err(io_err(instance_dir))?;
                 }
             }
             AdoptStrategy::TakePackVersion => {
@@ -237,10 +274,23 @@ pub fn detach(
                     .canonicalize()
                     .unwrap_or_else(|_| instance_dir.to_path_buf());
                 if !dry_run {
-                    let tmp = instance_dir.with_extension("gl-sync-materialize-tmp");
+                    let tmp = staging_sibling(instance_dir, "gl-sync-materialize-tmp");
+                    let junction_stub = staging_sibling(instance_dir, "gl-sync-materialize-junction");
+                    if tmp.exists() {
+                        std::fs::remove_dir_all(&tmp).map_err(io_err(&tmp))?;
+                    }
                     copy_dir_recursive(&real, &tmp)?;
-                    remove_junction(instance_dir)?;
+                    // Move the junction out of the way, then swap the real
+                    // copy into `instance_dir`'s place, *before* removing
+                    // the junction reparse point — so a crash at any point
+                    // in this sequence still leaves either the original
+                    // junction (still fully functional, just renamed) or
+                    // the materialized copy sitting at `instance_dir`.
+                    // Never a window where nothing is there at all, unlike
+                    // removing the junction first and renaming second.
+                    std::fs::rename(instance_dir, &junction_stub).map_err(io_err(instance_dir))?;
                     std::fs::rename(&tmp, instance_dir).map_err(io_err(instance_dir))?;
+                    remove_junction(&junction_stub)?;
                 }
             }
             report.push(
@@ -274,4 +324,33 @@ fn remove_junction(path: &Path) -> Result<()> {
     // reparse point, leaving the real target directory's contents intact —
     // exactly what an already-materialized detach needs.
     std::fs::remove_dir(path).map_err(io_err(path))
+}
+
+#[cfg(test)]
+mod keep_existing_tests {
+    use super::*;
+
+    /// "Keep existing" with a shared copy already present used to delete the
+    /// instance's own folder outright. Its files must survive.
+    #[test]
+    fn keep_existing_never_loses_instance_files() {
+        let tmp = tempfile::tempdir().unwrap();
+        let store = tmp.path().join("store").join("mods");
+        let inst = tmp.path().join("inst").join("mods");
+        std::fs::create_dir_all(&store).unwrap();
+        std::fs::create_dir_all(&inst).unwrap();
+        std::fs::write(store.join("shared.jar"), "pack").unwrap();
+        std::fs::write(store.join("both.jar"), "pack").unwrap();
+        std::fs::write(inst.join("mine.jar"), "player").unwrap();
+        std::fs::write(inst.join("both.jar"), "player").unwrap();
+
+        let mut report = SyncReport::new("p", false);
+        apply(&mut report, "i", "mods", &store, &inst, Some(AdoptStrategy::KeepExisting), false).unwrap();
+
+        assert_eq!(std::fs::read_to_string(store.join("mine.jar")).unwrap(), "player");
+        assert_eq!(std::fs::read_to_string(store.join("both.jar")).unwrap(), "player");
+        assert!(store.join("shared.jar").exists());
+        let backup = staging_sibling(&inst, "gl-sync-backup");
+        assert_eq!(std::fs::read_to_string(backup.join("mine.jar")).unwrap(), "player");
+    }
 }

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from './i18nStore.svelte'
   /**
    * Port of the "versions" panel — Home.razor:2189-2361, with its code-behind
    * in Home.Clients.cs (BackFromVersions:180, RefreshVersionsAsync:193,
@@ -32,6 +33,7 @@
     onLaunchDll,
     onToast,
     breadcrumb = [],
+    onBreadcrumbJump,
   }: {
     settings: LauncherSettings | null
     onBack?: () => void
@@ -41,6 +43,7 @@
     onLaunchDll?: (dllPath: string, label: string) => void
     onToast?: (message: string, kind?: string) => void
     breadcrumb?: string[]
+    onBreadcrumbJump?: (index: number) => void
   } = $props()
 
   type LatiteVersion = {
@@ -136,7 +139,7 @@
   /** Port of `CopyVersionTag` — same toast text, quotes included. */
   async function copyVersionTag(row: LatiteRow) {
     await window.copyToClipboard?.(row.tag)
-    onToast?.(`Copied "${row.tag}"`, 'info')
+    onToast?.(t('toast.copiedQuotedTag', { tag: row.tag }), 'info')
   }
 
   /** Port of `SortedVersions` (Home.Clients.cs:494). */
@@ -172,8 +175,34 @@
     return sortedVersions(q)
   })
 
-  const pinnedList = $derived(filteredVersions.filter((v) => isPinned(v.tag)))
+  // QOL: pinned rows now actually follow `PinnedVersions`' own order (drag-
+  // reorderable below) instead of always tracking `filteredVersions`' order,
+  // which made `togglePin`'s "unshift to front" have no visible effect.
+  const pinnedList = $derived(
+    pinnedVersions
+      .map((tag) => filteredVersions.find((v) => v.tag === tag))
+      .filter((v): v is LatiteRow => !!v),
+  )
   const unpinnedList = $derived(filteredVersions.filter((v) => !isPinned(v.tag)))
+
+  let dragTag = $state<string | null>(null)
+  function handlePinDragStart(tag: string) {
+    dragTag = tag
+  }
+  function handlePinDragOver(e: DragEvent) {
+    e.preventDefault()
+  }
+  function handlePinDrop(targetTag: string) {
+    if (!settings || !dragTag || dragTag === targetTag) return
+    const pins = [...pinnedVersions]
+    const from = pins.indexOf(dragTag)
+    const to = pins.indexOf(targetTag)
+    if (from < 0 || to < 0) return
+    pins.splice(from, 1)
+    pins.splice(to, 0, dragTag)
+    onSaveSettings?.({ ...settings, PinnedVersions: pins })
+    dragTag = null
+  }
 
   /** Port of `SizeLabel` on `OderSoDllState` — F1 in MB, F0 in KB, empty at 0. */
   function sizeLabel(bytes: number): string {
@@ -202,13 +231,16 @@
     latiteFetchError = ''
     try {
       const list = await invoke<LatiteVersion[]>('list_latite_versions')
-      const next: LatiteRow[] = []
-      for (const v of list) {
-        const downloaded = await invoke<boolean>('latite_version_installed', { tag: v.tag }).catch(
-          () => false,
-        )
-        next.push({ ...v, downloaded, downloading: false, error: '' })
-      }
+      // Per-version installed checks run concurrently; a sequential loop costs
+      // one IPC round trip per version before the list can render.
+      const next: LatiteRow[] = await Promise.all(
+        list.map(async (v) => {
+          const downloaded = await invoke<boolean>('latite_version_installed', { tag: v.tag }).catch(
+            () => false,
+          )
+          return { ...v, downloaded, downloading: false, error: '' }
+        }),
+      )
       versions = next
     } catch (e) {
       latiteFetchError = String(e)
@@ -224,13 +256,14 @@
     try {
       const entries = await invoke<OderSoEntry[]>('list_oderso_dlls')
       const active = await invoke<string | null>('active_oderso_dll').catch(() => null)
-      const next: OderSoRow[] = []
-      for (const e of entries) {
-        const downloaded = await invoke<boolean>('oderso_dll_installed', { name: e.name }).catch(
-          () => false,
-        )
-        next.push({ ...e, downloaded, downloading: false, active: active === e.name, error: '' })
-      }
+      const next: OderSoRow[] = await Promise.all(
+        entries.map(async (e) => {
+          const downloaded = await invoke<boolean>('oderso_dll_installed', { name: e.name }).catch(
+            () => false,
+          )
+          return { ...e, downloaded, downloading: false, active: active === e.name, error: '' }
+        }),
+      )
       oderSoVersions = next
     } catch (e) {
       oderSoFetchError = String(e)
@@ -264,7 +297,7 @@
     try {
       await invoke('download_latite_version', { tag: row.tag, downloadUrl: row.download_url })
       row.downloaded = true
-      onToast?.(`${row.display_name} downloaded!`, 'success')
+      onToast?.(t('toast.nameDownloaded', { name: row.display_name }), 'success')
     } catch (e) {
       row.error = String(e)
     } finally {
@@ -301,7 +334,7 @@
     try {
       await invoke('download_oderso_dll', { name: row.name })
       row.downloaded = true
-      onToast?.(`${displayName(row)} downloaded!`, 'success')
+      onToast?.(t('toast.nameDownloaded', { name: displayName(row) }), 'success')
     } catch (e) {
       row.error = String(e)
     } finally {
@@ -365,21 +398,25 @@
     if (entry) invoke('cancel_download', { id: entry.id }).catch(() => {})
   }
 
+  let versionsDisposed = false
   onMount(() => {
     listen<QueueEntry[]>('downloads-changed', (e) => {
       queue = e.payload
     }).then((fn) => {
-      unlisten = fn
+      // Unmounted before the listener registered: drop it immediately.
+      if (versionsDisposed) fn()
+      else unlisten = fn
     })
   })
   onDestroy(() => {
+    versionsDisposed = true
     unlisten?.()
   })
 
   loadVersions()
 </script>
 
-<PanelHeader title="Versions" {onBack} {breadcrumb}>
+<PanelHeader title={t('panel.versions')} {onBack} {breadcrumb} {onBreadcrumbJump}>
   {#snippet extraActions()}
     <button
       type="button"
@@ -407,8 +444,8 @@
       disabled={refreshing}
       onclick={refreshVersions}
       onmousedown={(e) => e.stopPropagation()}
-      data-tooltip="Refresh"
-      aria-label="Refresh"
+      data-tooltip={t('tt.refresh')}
+      aria-label={t('tt.refresh')}
     >
       <i class="fa-solid fa-rotate"></i>
     </button>
@@ -416,7 +453,10 @@
   {/snippet}
 </PanelHeader>
 
-<div class="versions-client-switcher">
+<!-- `switcher-wrap` opts this 2-item strip out of interop.js's tab-cycler
+     (`.versions-client-switcher:not(.switcher-wrap)`), same fix as the
+     shared SubTabs component — 2 tabs should never be paged behind arrows. -->
+<div class="versions-client-switcher switcher-wrap">
   <button
     class="vcs-btn {versionsClient === 'Latite' ? 'active' : ''}"
     onclick={() => switchVersionsClient('Latite')}
@@ -437,6 +477,7 @@
   <i class="fa-solid fa-magnifying-glass"></i>
   <input
     class="panel-search-input"
+    aria-label={versionsClient === 'Latite' ? 'Filter Latite versions...' : 'Filter OderSo versions...'}
     placeholder={versionsClient === 'Latite'
       ? 'Filter Latite versions...'
       : 'Filter OderSo versions...'}
@@ -456,23 +497,31 @@
       <div class="versions-loading versions-error">
         <i class="fa-solid fa-triangle-exclamation"></i>
         <span>{latiteFetchError}</span>
-        <button class="vcs-btn" style="margin-top:8px;" onclick={loadVersions}>
-          <i class="fa-solid fa-rotate"></i> Retry
+        <button class="vcs-btn retry-btn" onclick={loadVersions}>
+          <i class="fa-solid fa-rotate"></i> {t('common.retry')}
         </button>
       </div>
     {:else if versions.length === 0}
-      <div class="versions-loading"><span style="opacity:0.5;">No versions found.</span></div>
+      <div class="versions-loading empty-line"><i class="fa-solid fa-box-open"></i><span>{t('x.noVersionsFound')}</span></div>
     {:else}
       {#if pinnedList.length > 0}
-        <span class="panel-section-label">Pinned</span>
+        <span class="panel-section-label">{t('label.pinned')}</span>
         {#each pinnedList as v (v.tag)}
-          <div class="version-row {v.error ? 'error-row' : ''} pinned">
+          <div
+            class="version-row {v.error ? 'error-row' : ''} pinned {dragTag === v.tag ? 'dragging' : ''}"
+            draggable="true"
+            ondragstart={() => handlePinDragStart(v.tag)}
+            ondragover={handlePinDragOver}
+            ondrop={() => handlePinDrop(v.tag)}
+            ondragend={() => (dragTag = null)}
+          >
+            <i class="fa-solid fa-grip-vertical grip" data-tooltip={t('tt.dragReorder')}></i>
             <div class="version-meta">
-              <span class="version-name">{v.display_name}</span>
+              <span class="version-name truncate" title={v.display_name}>{v.display_name}</span>
               {#if v.error}
-                <span class="error-text">{v.error}</span>
+                <span class="error-text">{v.error}</span>{#if !v.downloaded}<button type="button" class="vcs-btn retry-btn-inline" aria-label="Retry download" onclick={() => handleVersionDownload(v)}><i class="fa-solid fa-rotate"></i> Retry</button>{/if}
               {:else if v.downloaded && !v.downloading}
-                <span class="version-sub">Ready</span>
+                <span class="version-sub">{t('label.ready')}</span>
               {/if}
             </div>
             {#if !v.error}
@@ -486,11 +535,12 @@
                   <button
                     class={isPinned(v.tag) ? 'pin-btn pinned' : 'pin-btn'}
                     title={isPinned(v.tag) ? 'Unpin' : 'Pin'}
+                    aria-label={isPinned(v.tag) ? 'Unpin' : 'Pin'}
                     onclick={() => togglePin(v)}
                   >
-                    <i class="fa-solid fa-thumbtack" style={isPinned(v.tag) ? '' : 'opacity:0.4;'}></i>
+                    <i class="fa-solid fa-thumbtack {isPinned(v.tag) ? '' : 'pin-faded'}"></i>
                   </button>
-                  <button class="copy-btn" title="Copy tag" onclick={() => copyVersionTag(v)}>
+                  <button class="copy-btn" title="Copy tag" aria-label="Copy tag" onclick={() => copyVersionTag(v)}>
                     <i class="fa-solid fa-copy"></i>
                   </button>
                   {#if v.downloaded}
@@ -504,22 +554,22 @@
             {/if}
           </div>
         {/each}
-        <span class="panel-section-label">All Versions</span>
+        <span class="panel-section-label">{t('x.allVersions')}</span>
       {/if}
 
       {#if unpinnedList.length === 0 && pinnedList.length === 0}
-        <div class="versions-loading"><span style="opacity:0.5;">No results for "{versionsFilter}"</span></div>
+        <div class="versions-loading empty-line"><i class="fa-solid fa-box-open"></i><span>{t('empty.noResultsFound')}</span></div>
       {/if}
 
       <div class="version-list {versionsViewMode === 'grid' ? 'grid-view' : ''}">
       {#each unpinnedList as v (v.tag)}
         <div class="version-row {v.error ? 'error-row' : ''}">
           <div class="version-meta">
-            <span class="version-name">{v.display_name}</span>
+            <span class="version-name truncate" title={v.display_name}>{v.display_name}</span>
             {#if v.error}
-              <span class="error-text">{v.error}</span>
+              <span class="error-text">{v.error}</span>{#if !v.downloaded}<button type="button" class="vcs-btn retry-btn-inline" aria-label="Retry download" onclick={() => handleVersionDownload(v)}><i class="fa-solid fa-rotate"></i> Retry</button>{/if}
             {:else if v.downloaded && !v.downloading}
-              <span class="version-sub">Ready</span>
+              <span class="version-sub">{t('label.ready')}</span>
             {/if}
           </div>
           {#if !v.error}
@@ -533,11 +583,12 @@
                 <button
                   class={isPinned(v.tag) ? 'pin-btn pinned' : 'pin-btn'}
                   title={isPinned(v.tag) ? 'Unpin' : 'Pin'}
+                  aria-label={isPinned(v.tag) ? 'Unpin' : 'Pin'}
                   onclick={() => togglePin(v)}
                 >
-                  <i class="fa-solid fa-thumbtack" style={isPinned(v.tag) ? '' : 'opacity:0.4;'}></i>
+                  <i class="fa-solid fa-thumbtack {isPinned(v.tag) ? '' : 'pin-faded'}"></i>
                 </button>
-                <button class="copy-btn" title="Copy tag" onclick={() => copyVersionTag(v)}>
+                <button class="copy-btn" title="Copy tag" aria-label="Copy tag" onclick={() => copyVersionTag(v)}>
                   <i class="fa-solid fa-copy"></i>
                 </button>
                 {#if v.downloaded}
@@ -565,27 +616,27 @@
       <div class="versions-loading versions-error">
         <i class="fa-solid fa-triangle-exclamation"></i>
         <span>{oderSoFetchError}</span>
-        <button class="vcs-btn" style="margin-top:8px;" onclick={loadOderSoVersions}>
-          <i class="fa-solid fa-rotate"></i> Retry
+        <button class="vcs-btn retry-btn" onclick={loadOderSoVersions}>
+          <i class="fa-solid fa-rotate"></i> {t('common.retry')}
         </button>
       </div>
     {:else if oderSoVersions.length === 0}
-      <div class="versions-loading"><span style="opacity:0.5;">No DLLs found in repo.</span></div>
+      <div class="versions-loading empty-line"><i class="fa-solid fa-box-open"></i><span>{t('x.noDllsFoundInRepo')}</span></div>
     {:else}
       {#if filteredOderSo.length === 0}
-        <div class="versions-loading"><span style="opacity:0.5;">No results for "{versionsFilter}"</span></div>
+        <div class="versions-loading empty-line"><i class="fa-solid fa-box-open"></i><span>{t('empty.noResultsFound')}</span></div>
       {/if}
 
       <div class="version-list {versionsViewMode === 'grid' ? 'grid-view' : ''}">
       {#each filteredOderSo as state (state.name)}
         <div class="version-row {state.active ? 'oderso-active-row' : ''}">
           <div class="version-meta">
-            <div style="display:flex; align-items:center; gap:6px;">
-              <span class="version-name">{displayName(state)}</span>
-              {#if state.active}<span class="tag-active">Active</span>{/if}
+            <div class="tag-row">
+              <span class="version-name truncate" title={displayName(state)}>{displayName(state)}</span>
+              {#if state.active}<span class="tag-active">{t('label.active')}</span>{/if}
             </div>
             {#if state.error}
-              <span class="error-text">{state.error}</span>
+              <span class="error-text">{state.error}</span>{#if !state.downloaded}<button type="button" class="vcs-btn retry-btn-inline" aria-label="Retry download" onclick={() => handleOderSoDownload(state)}><i class="fa-solid fa-rotate"></i> Retry</button>{/if}
             {:else if state.downloaded && !state.downloading}
               <span class="version-sub">Ready · {sizeLabel(state.size)}</span>
             {:else if !state.downloaded}
@@ -613,3 +664,46 @@
     {/if}
   {/if}
 </div>
+
+<style>
+  /* Version rows reuse the shared version-row / version-actions surfaces from
+     app.css. This block only adds the spacing, icon-state and empty-state
+     roles the markup needs; colours come from tokens. */
+  .retry-btn {
+    margin-top: 8px;
+  }
+  .retry-btn-inline {
+    margin-top: 4px;
+    align-self: flex-start;
+  }
+  .muted-text {
+    opacity: 0.5;
+  }
+  .empty-line {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    color: var(--text-dim);
+  }
+  .grip {
+    opacity: 0.35;
+    cursor: grab;
+    margin-right: 8px;
+  }
+  .pin-faded {
+    opacity: 0.4;
+  }
+  .tag-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+  }
+  .truncate {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+  }
+</style>

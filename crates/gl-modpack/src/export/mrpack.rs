@@ -13,7 +13,7 @@ use zip::ZipWriter;
 
 use crate::error::{ModpackError, Result};
 use crate::export::{read_mod_provenance, ExportOptions, OVERRIDE_DIRS};
-use crate::hash::{sha1_hex_file, sha512_hex_file};
+use crate::hash::{sha1_and_sha512_hex_file, sha512_hex_file};
 
 /// Writes an `.mrpack` for `instance_dir` to `dest_path`.
 ///
@@ -54,11 +54,10 @@ pub fn export_mrpack(instance_dir: &Path, dest_path: &Path, opts: &ExportOptions
 
             match url {
                 Some(download_url) => {
-                    let sha1 = matched
-                        .and_then(|p| p.sha1.clone())
-                        .map(Ok)
-                        .unwrap_or_else(|| sha1_hex_file(&path))?;
-                    let sha512 = sha512_hex_file(&path)?;
+                    let (sha1, sha512) = match matched.and_then(|p| p.sha1.clone()) {
+                        Some(known) => (known, sha512_hex_file(&path)?),
+                        None => sha1_and_sha512_hex_file(&path)?,
+                    };
                     let size = std::fs::metadata(&path)?.len();
                     files_json.push(json!({
                         "path": format!("mods/{filename}"),

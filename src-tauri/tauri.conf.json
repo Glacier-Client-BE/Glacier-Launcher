@@ -14,10 +14,10 @@
       {
         "label": "main",
         "title": "Glacier Launcher",
-        "width": 880,
-        "height": 600,
-        "minWidth": 740,
-        "minHeight": 500,
+        "width": 720,
+        "height": 480,
+        "minWidth": 720,
+        "minHeight": 480,
         "resizable": true,
         "fullscreen": false,
         "decorations": false,
@@ -32,6 +32,13 @@
       "assetProtocol": {
         "enable": true,
         "scope": ["**"]
+      }
+    }
+  },
+  "plugins": {
+    "deep-link": {
+      "desktop": {
+        "schemes": ["glacier"]
       }
     }
   },

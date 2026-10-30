@@ -30,7 +30,13 @@ pub fn extract_overrides(zip_path: &Path, instance_dir: &Path) -> Result<()> {
         if entry.is_dir() {
             continue;
         }
-        let full = entry.name().replace('\\', "/");
+        // `enclosed_name` rejects `..` and absolute-path entries, so a
+        // malicious or corrupt modpack zip cannot write outside
+        // `instance_dir` (zip-slip) regardless of the prefix-stripping below.
+        let Some(enclosed) = entry.enclosed_name() else {
+            continue;
+        };
+        let full = enclosed.to_string_lossy().replace('\\', "/");
 
         let rel = if let Some(r) = full.strip_prefix("overrides/") {
             r
@@ -132,12 +138,11 @@ fn add_dir_to_zip<W: std::io::Write + std::io::Seek>(
     for entry in walk_files(dir) {
         let rel = entry.strip_prefix(dir).expect("walked under dir");
         let entry_name = format!("{prefix}/{}", rel.to_string_lossy().replace('\\', "/"));
-        let Ok(bytes) = fs::read(&entry) else { continue };
+        let Ok(mut file) = fs::File::open(&entry) else { continue };
         if zip.start_file(&entry_name, options).is_err() {
             continue;
         }
-        use std::io::Write;
-        zip.write_all(&bytes).map_err(err)?;
+        std::io::copy(&mut file, zip).map_err(err)?;
     }
     Ok(())
 }
@@ -199,7 +204,16 @@ pub fn import_modpack(zip_path: &Path, instance_dir: &Path) -> Result<()> {
         if entry.is_dir() {
             continue;
         }
-        let full = entry.name().replace('\\', "/");
+        // `enclosed_name` rejects `..` and absolute-path entries, so a
+        // malicious or corrupt zip cannot escape `instance_dir` (zip-slip)
+        // no matter what prefix-stripping logic runs below — the detection
+        // pass above (has_overrides/has_cfg/mmc_root) still reads raw entry
+        // names since it only classifies the archive, but every actual
+        // destination path here is derived from the sanitized name.
+        let Some(enclosed) = entry.enclosed_name() else {
+            continue;
+        };
+        let full = enclosed.to_string_lossy().replace('\\', "/");
 
         let rel: Option<String> = if has_overrides {
             if let Some(r) = full.strip_prefix("overrides/") {

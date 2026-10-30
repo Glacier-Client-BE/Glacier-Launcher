@@ -212,6 +212,13 @@ impl NotificationService {
     }
 }
 
+/// Unit tests mutate detached services through the same methods, so saving is
+/// a no-op under `cfg(test)`: otherwise every test run wrote its fixtures
+/// (e.g. an unread "b" from 2026-01-02) into the player's real bell.
+#[cfg(test)]
+fn save(_items: &[AppNotification]) {}
+
+#[cfg(not(test))]
 fn save(items: &[AppNotification]) {
     let path = notifications_path();
     if let Some(parent) = path.parent() {

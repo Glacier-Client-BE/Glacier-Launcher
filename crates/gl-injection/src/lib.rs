@@ -39,9 +39,10 @@ use std::time::{Duration, Instant};
 
 use windows::core::{Result as WinResult, HSTRING, PCWSTR, PWSTR};
 use windows::Win32::Foundation::GENERIC_ALL;
-use windows::Win32::Foundation::{CloseHandle, HANDLE, HLOCAL, LUID};
+use windows::Win32::Foundation::{CloseHandle, FILETIME, HANDLE, HLOCAL, LUID};
 use windows::Win32::Security::Authorization::{
-    BuildTrusteeWithNameW, SetEntriesInAclW, SetNamedSecurityInfoW, EXPLICIT_ACCESS_W, SET_ACCESS,
+    BuildTrusteeWithNameW, GetNamedSecurityInfoW, SetEntriesInAclW, SetNamedSecurityInfoW,
+    EXPLICIT_ACCESS_W, SET_ACCESS,
     SE_FILE_OBJECT, TRUSTEE_IS_NAME, TRUSTEE_IS_WELL_KNOWN_GROUP, TRUSTEE_W,
 };
 use windows::Win32::Security::{
@@ -63,10 +64,10 @@ use windows::Win32::System::Power::{
     SetThreadExecutionState, ES_CONTINUOUS, ES_DISPLAY_REQUIRED, ES_SYSTEM_REQUIRED,
 };
 use windows::Win32::System::Threading::{
-    CreateRemoteThread, GetCurrentProcess, GetExitCodeThread, OpenProcess, OpenProcessToken,
-    WaitForSingleObject, PROCESS_ACCESS_RIGHTS, PROCESS_ALL_ACCESS, PROCESS_CREATE_THREAD,
-    PROCESS_QUERY_INFORMATION, PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_SYNCHRONIZE,
-    PROCESS_VM_OPERATION, PROCESS_VM_READ, PROCESS_VM_WRITE,
+    CreateRemoteThread, GetCurrentProcess, GetExitCodeThread, GetProcessTimes, OpenProcess,
+    OpenProcessToken, WaitForSingleObject, PROCESS_ACCESS_RIGHTS, PROCESS_ALL_ACCESS,
+    PROCESS_CREATE_THREAD, PROCESS_QUERY_INFORMATION, PROCESS_QUERY_LIMITED_INFORMATION,
+    PROCESS_SYNCHRONIZE, PROCESS_VM_OPERATION, PROCESS_VM_READ, PROCESS_VM_WRITE,
 };
 
 /// Errors that can occur while enabling privileges, injecting a DLL, or
@@ -197,11 +198,17 @@ fn open_target_process(process_id: u32) -> Result<OwnedHandle> {
                 return Ok(OwnedHandle(h));
             }
         }
+        // Capture the wider attempt's error before trying the narrower
+        // fallback — if both fail for *different* reasons (e.g. the process
+        // is a protected process, so the wide request is denied for that,
+        // while the narrower request fails for an unrelated reason), the
+        // wide attempt's code is almost always the more diagnostic one to
+        // surface, since it's the more common failure path for a real
+        // target and the one users' error messages should match.
+        let broad_access_error = windows::Win32::Foundation::GetLastError().0;
         match OpenProcess(PROCESS_INJECT_ACCESS, false, process_id) {
             Ok(h) if !h.is_invalid() => Ok(OwnedHandle(h)),
-            _ => Err(InjectionError::OpenProcessFailed(
-                windows::Win32::Foundation::GetLastError().0,
-            )),
+            _ => Err(InjectionError::OpenProcessFailed(broad_access_error)),
         }
     }
 }
@@ -378,11 +385,17 @@ fn probe_module(process_id: u32, dll_path: &Path) -> ModuleProbe {
         ..Default::default()
     };
 
+    let target_str = target.to_string_lossy();
     let mut found_any = false;
     let mut ok = unsafe { Module32FirstW(snapshot.0, &mut entry) }.is_ok();
     while ok {
         found_any = true;
         let name = pwstr_buf_to_string(&entry.szExePath);
+        // Cheap string match first: canonicalize() is a filesystem call per module, and this
+        // runs for every module on every poll.
+        if name.eq_ignore_ascii_case(&target_str) {
+            return ModuleProbe::Confirmed;
+        }
         if let Ok(module_path) = Path::new(&name).canonicalize() {
             if module_path == target {
                 return ModuleProbe::Confirmed;
@@ -552,32 +565,60 @@ fn try_grant_uwp_access(path: &Path) -> WinResult<()> {
             Trustee: trustee,
         };
 
-        let mut new_acl: *mut windows::Win32::Security::ACL = std::ptr::null_mut();
-        let status = SetEntriesInAclW(Some(&[access]), None, &mut new_acl);
-        if status.0 != 0 {
-            return Err(windows::core::Error::from_win32());
-        }
-
+        // Merge into the existing DACL. Building a fresh ACL and applying it would
+        // drop every other entry on the file/folder, including the owner's own access.
         let path_hstring = HSTRING::from(path.as_os_str());
-        let _ = SetNamedSecurityInfoW(
-            PWSTR(path_hstring.as_ptr() as *mut u16),
+        let mut old_acl: *mut windows::Win32::Security::ACL = std::ptr::null_mut();
+        let mut security_descriptor = windows::Win32::Security::PSECURITY_DESCRIPTOR::default();
+        let status = GetNamedSecurityInfoW(
+            PCWSTR(path_hstring.as_ptr()),
             SE_FILE_OBJECT,
             DACL_SECURITY_INFORMATION,
             None,
             None,
-            if new_acl.is_null() {
-                None
-            } else {
-                Some(new_acl as *const _)
-            },
+            Some(&mut old_acl as *mut _),
             None,
+            &mut security_descriptor as *mut _,
         );
+        if status.0 != 0 {
+            return Err(windows::core::Error::from_hresult(
+                windows::core::HRESULT::from_win32(status.0),
+            ));
+        }
+
+        let mut new_acl: *mut windows::Win32::Security::ACL = std::ptr::null_mut();
+        let status = SetEntriesInAclW(Some(&[access]), Some(old_acl), &mut new_acl);
+        let result = if status.0 != 0 {
+            Err(windows::core::Error::from_hresult(
+                windows::core::HRESULT::from_win32(status.0),
+            ))
+        } else {
+            let status = SetNamedSecurityInfoW(
+                PWSTR(path_hstring.as_ptr() as *mut u16),
+                SE_FILE_OBJECT,
+                DACL_SECURITY_INFORMATION,
+                None,
+                None,
+                Some(new_acl as *const _),
+                None,
+            );
+            if status.0 == 0 {
+                Ok(())
+            } else {
+                Err(windows::core::Error::from_hresult(
+                    windows::core::HRESULT::from_win32(status.0),
+                ))
+            }
+        };
 
         if !new_acl.is_null() {
             let _ = windows::Win32::Foundation::LocalFree(Some(HLOCAL(new_acl as *mut _)));
         }
+        if !security_descriptor.0.is_null() {
+            let _ = windows::Win32::Foundation::LocalFree(Some(HLOCAL(security_descriptor.0)));
+        }
 
-        Ok(())
+        result
     }
 }
 
@@ -695,6 +736,39 @@ pub fn process_is_alive(process_id: u32) -> bool {
         _ => return false,
     };
     unsafe { WaitForSingleObject(handle.0, 0) }.0 != 0
+}
+
+/// The process's creation time as Unix seconds, or `None` if it can't be
+/// opened/queried (already exited, or a permissions issue). Used to guard
+/// against PID recycling: a tracker that remembers "PID 1234 is my launched
+/// process" can otherwise end up killing a completely unrelated process if
+/// the original already exited and the OS handed that PID to something else
+/// before the kill runs — see [`ProcessRegistry::kill`] in `gl_launch`,
+/// which compares this against the PID's remembered start time before
+/// trusting it.
+pub fn process_start_time_unix(process_id: u32) -> Option<u64> {
+    let handle = match unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, process_id) }
+    {
+        Ok(h) if !h.is_invalid() => OwnedHandle(h),
+        _ => return None,
+    };
+
+    let mut creation = FILETIME::default();
+    let mut exit = FILETIME::default();
+    let mut kernel = FILETIME::default();
+    let mut user = FILETIME::default();
+    let ok = unsafe {
+        GetProcessTimes(handle.0, &mut creation, &mut exit, &mut kernel, &mut user)
+    };
+    if ok.is_err() {
+        return None;
+    }
+
+    // FILETIME is 100ns intervals since 1601-01-01; Unix epoch is
+    // 1970-01-01, which is 11644473600 seconds later.
+    let ticks_100ns = ((creation.dwHighDateTime as u64) << 32) | creation.dwLowDateTime as u64;
+    let unix_100ns = ticks_100ns.checked_sub(116_444_736_000_000_000)?;
+    Some(unix_100ns / 10_000_000)
 }
 
 /// Blocks the calling thread until the process `process_id` exits (or is

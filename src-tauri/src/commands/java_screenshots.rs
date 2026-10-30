@@ -48,7 +48,7 @@ fn entry(file: &Path) -> Option<ScreenshotFile> {
 }
 
 #[tauri::command]
-pub fn list_java_screenshots(
+pub async fn list_java_screenshots(
     state: State<'_, AppState>,
     instance_id: String,
 ) -> Result<Vec<ScreenshotFile>, String> {
@@ -80,16 +80,30 @@ pub fn list_java_screenshots(
 }
 
 #[tauri::command]
-pub fn delete_java_screenshot(path: String) -> Result<(), String> {
-    let p = PathBuf::from(&path);
-    if p.exists() {
-        std::fs::remove_file(&p).map_err(|e| e.to_string())?;
+pub async fn delete_java_screenshot(
+    state: State<'_, AppState>,
+    path: String,
+) -> Result<(), String> {
+    // Only screenshots inside some Java instance's `screenshots` folder may be
+    // removed; the frontend supplies `path`.
+    let target = {
+        let svc = state
+            .java_instances
+            .lock()
+            .map_err(|_| "java instance service lock poisoned".to_string())?;
+        svc.instances()
+            .iter()
+            .find_map(|inst| {
+                let dir = svc.path_for_instance(&inst.id, "screenshots");
+                super::ensure_direct_child(&dir, Path::new(&path)).ok()
+            })
     }
-    Ok(())
+    .ok_or_else(|| format!("Refusing to delete {path}: not a Java instance screenshot."))?;
+    std::fs::remove_file(&target).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-pub fn open_java_screenshots_folder(
+pub async fn open_java_screenshots_folder(
     state: State<'_, AppState>,
     instance_id: String,
 ) -> Result<(), String> {

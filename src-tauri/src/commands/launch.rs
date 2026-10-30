@@ -73,17 +73,16 @@ struct JavaProcessChangedPayload<'a> {
     exit_code: Option<i32>,
 }
 
-/// PID of the most recently launched Java process, if it may still be
-/// running. Not stored on `AppState` (kept local to this module): mirrors
-/// the original's `_launchCts`/force-close scope, which only ever needs to
-/// reach "the thing we just tried to launch," not general app state.
-static LAST_JAVA_PID: Mutex<Option<u32>> = Mutex::new(None);
-// TODO: multi-instance parallel launch needs per-instance process tracking;
-// `LAST_JAVA_PID` above (and the equivalent single-slot state backing
-// `is_java_game_running`/`cancel_launch`) is a single global slot, not keyed
-// by instance id — launching a second instance would silently overwrite the
-// first one's tracked PID. Not implemented here; would need a
-// `HashMap<instance_id, u32>` on `AppState` plus updates to every reader.
+/// Registry key of whichever Java process the console window is currently
+/// attached to — the console is a single shared window, so "stop" or
+/// force-close always targets the one currently shown there. Actual
+/// per-instance tracking (list/kill/query by id, for multiple instances
+/// running in parallel with no console attached) lives in
+/// `state.java_processes` (`gl_launch::ProcessRegistry`) — see
+/// `commands::java_process::kill_instance`/`list_running_instances`, which
+/// already key correctly by instance id. This slot only needs to remember
+/// "which one is on screen right now."
+static CONSOLE_JAVA_KEY: Mutex<Option<String>> = Mutex::new(None);
 
 /// The console window's current in-content title (`TitleLabel.Text` in the
 /// original). Read by the console page on mount via [`console_content_title`]
@@ -119,16 +118,15 @@ fn kill_process_tree(pid: u32) {
 #[cfg(target_os = "windows")]
 use std::os::windows::process::CommandExt;
 
-/// Force-aborts the in-flight launch: mirrors `ForceCloseLaunch` — kills the
-/// most recently spawned Java process (if any) and any running Bedrock game
-/// process. Safe to call even if nothing is currently launching (both kills
-/// are no-ops when there's no matching PID).
+/// Force-aborts the in-flight launch: mirrors `ForceCloseLaunch` — kills
+/// whichever Java process the console window is currently attached to (if
+/// any) and any running Bedrock game process. Safe to call even if nothing
+/// is currently launching (both kills are no-ops when there's nothing
+/// tracked/running).
 #[tauri::command]
-pub fn cancel_launch() {
-    if let Ok(mut guard) = LAST_JAVA_PID.lock() {
-        if let Some(pid) = guard.take() {
-            kill_process_tree(pid);
-        }
+pub fn cancel_launch(state: State<'_, AppState>) {
+    if let Some(key) = CONSOLE_JAVA_KEY.lock().ok().and_then(|mut g| g.take()) {
+        let _ = state.java_processes.kill(&key);
     }
     if let Some(pid) = bedrock_launch::find_game_process() {
         kill_process_tree(pid);
@@ -258,6 +256,11 @@ fn stream_child_output(
         let _ = app.emit(CONSOLE_EXIT_EVENT, ConsoleExitPayload { code });
         if let Some((reg, key)) = registry {
             reg.mark_exited(&key);
+            if let Ok(mut guard) = CONSOLE_JAVA_KEY.lock() {
+                if guard.as_deref() == Some(key.as_str()) {
+                    guard.take();
+                }
+            }
             let _ = app.emit(
                 JAVA_PROCESS_CHANGED_EVENT,
                 JavaProcessChangedPayload {
@@ -395,7 +398,7 @@ fn unix_to_rfc3339(secs: i64) -> String {
 /// Minimal RFC 3339 UTC (`YYYY-MM-DDTHH:MM:SSZ`) → Unix-seconds parser,
 /// sufficient for the `DateTimeOffset`-formatted timestamps this launcher
 /// writes to settings itself.
-fn time_from_rfc3339(s: &str) -> Result<u64, ()> {
+pub(crate) fn time_from_rfc3339(s: &str) -> Result<u64, ()> {
     let s = s.trim();
     if s.len() < 19 {
         return Err(());
@@ -514,7 +517,7 @@ pub async fn launch_java_instance(
 /// never an error that would block Launch — mirroring
 /// `gl_java::prelaunch::check`'s own contract. `id: None` checks whatever
 /// instance `launch_java_instance` would resolve to (active instance).
-#[tauri::command]
+#[tauri::command(async)]
 pub fn java_prelaunch_check(
     state: State<'_, AppState>,
     id: Option<String>,
@@ -762,8 +765,8 @@ async fn launch_java_with(
     emit_log(&app, "info", launched.command_line.clone());
 
     let pid = launched.pid;
-    if let Ok(mut guard) = LAST_JAVA_PID.lock() {
-        *guard = Some(pid);
+    if let Ok(mut guard) = CONSOLE_JAVA_KEY.lock() {
+        *guard = Some(registry_key.clone());
     }
     set_discord_playing(&app, &discord_version_tag, None);
     emit_status(&app, "running", Some(pid), None);
@@ -953,31 +956,27 @@ fn spawn_console_exit_on_pid(app: AppHandle, pid: u32) {
     });
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn is_bedrock_game_running() -> bool {
     bedrock_launch::find_game_process().is_some()
 }
 
 /// Java's `tokio::process::Child` isn't shared out to the frontend, so this
-/// checks `LAST_JAVA_PID` (the PID of the most recently launched Java
-/// process) against the actual process table, rather than name-matching
+/// checks `state.java_processes` (every instance the process registry
+/// currently tracks as running) rather than name-matching
 /// `java.exe`/`javaw.exe` — that would false-positive on any other running
-/// Java application. Bedrock's `is_bedrock_game_running` gets away with
-/// name-matching because it's UWP-scoped by package family.
-#[tauri::command]
-pub fn is_java_game_running() -> bool {
-    let Ok(guard) = LAST_JAVA_PID.lock() else {
-        return false;
-    };
-    match *guard {
-        Some(pid) => gl_injection::process_is_alive(pid),
-        None => false,
-    }
+/// Java application. Reflects *all* running Java instances, not just
+/// whichever one the console window last attached to. Bedrock's
+/// `is_bedrock_game_running` gets away with name-matching because it's
+/// UWP-scoped by package family.
+#[tauri::command(async)]
+pub fn is_java_game_running(state: State<'_, AppState>) -> bool {
+    !state.java_processes.list().is_empty()
 }
 
 /// Port of `GameConsoleWindow.SaveBtn_Click`: writes the console's full text
 /// to a path the user already chose via a save dialog.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn save_console_log(path: String, content: String) -> Result<(), String> {
     std::fs::write(path, content).map_err(|e| e.to_string())
 }
@@ -1011,9 +1010,9 @@ pub async fn upload_console_log_to_mclogs(content: String) -> Result<String, Str
 /// Port of `GameConsoleWindow.StopBtn_Click`: kills the process the console
 /// window is currently attached to. An alias of [`cancel_launch`] under the
 /// console's own name — same underlying kill, different caller.
-#[tauri::command]
-pub fn console_stop_game() {
-    cancel_launch();
+#[tauri::command(async)]
+pub fn console_stop_game(state: State<'_, AppState>) {
+    cancel_launch(state);
 }
 
 #[cfg(test)]

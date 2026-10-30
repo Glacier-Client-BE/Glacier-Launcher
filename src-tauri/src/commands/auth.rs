@@ -23,7 +23,17 @@ fn login_url() -> Url {
         .append_pair("response_type", "code")
         .append_pair("redirect_uri", gl_auth::REDIRECT_URI)
         .append_pair("scope", gl_auth::SCOPE)
-        .append_pair("display", "touch");
+        .append_pair("display", "touch")
+        // Without this, a cached login.live.com session cookie from an
+        // already-signed-in account makes the popup silently re-auth with
+        // that same account and redirect immediately - the window "opens
+        // and closes" before the user ever sees a form, exactly the
+        // symptom hit trying to add a *second* account (the first
+        // account's session cookie is still sitting in the webview).
+        // `select_account` forces the picker/login form every time,
+        // matching the doc comment's claim of `promptAccountPicker: true`
+        // that this URL never actually implemented.
+        .append_pair("prompt", "select_account");
     url
 }
 
@@ -123,6 +133,17 @@ mod tests {
             Some(&gl_auth::REDIRECT_URI.to_string())
         );
         assert_eq!(pairs.get("scope"), Some(&gl_auth::SCOPE.to_string()));
+    }
+
+    #[test]
+    fn login_url_forces_the_account_picker() {
+        // Regression test: without `prompt=select_account`, a cached
+        // login.live.com session silently re-authenticates the same
+        // account and the popup closes before the user can pick a
+        // different one.
+        let url = login_url();
+        let pairs: std::collections::HashMap<_, _> = url.query_pairs().into_owned().collect();
+        assert_eq!(pairs.get("prompt"), Some(&"select_account".to_string()));
     }
 
     #[test]

@@ -1,6 +1,7 @@
 <script lang="ts">
+  import { t } from './i18nStore.svelte'
   import { invoke } from '@tauri-apps/api/core'
-  import { open } from '@tauri-apps/plugin-dialog'
+  import { open, save } from '@tauri-apps/plugin-dialog'
   import PanelHeader from './components/PanelHeader.svelte'
   import SubTabs from './components/SubTabs.svelte'
   import InlineProgress from './components/InlineProgress.svelte'
@@ -10,6 +11,7 @@
   import Modal from './components/Modal.svelte'
   import { loadViewMode, saveViewMode, type ViewMode } from './viewMode'
   import type { LauncherSettings, JavaInstance } from './settings'
+  import ListSkeleton from './components/ListSkeleton.svelte'
 
   /**
    * 1:1 port of the Java (`IsJava`) half of the `addons` panel -
@@ -86,6 +88,12 @@
   let report = $state<ModReport>({ mods: [], warnings: [] })
   let error = $state('')
   let javaUtilityBusy = $state(false)
+  let installingLoader = $state<string | null>(null)
+  // UI-only loading flags for skeleton states (no data-flow change).
+  let modsLoading = $state(false)
+  let packsLoading = $state(false)
+  let datapacksLoading = $state(false)
+  let bulkBusy = $state(false)
 
   // Assets tab counts. Only screenshots have a backing command
   // (list_java_screenshots); the rest stay null and render as "-".
@@ -112,11 +120,20 @@
     try {
       javaWorldsList = await invoke<JavaWorld[]>('list_java_worlds')
     } catch (e) {
-      onToast?.(`Failed to list worlds: ${e}`, 'error')
+      onToast?.(t('toast.failedToListWorlds', { error: String(e) }), 'error')
     }
   }
 
   async function loadJavaDatapacks() {
+    datapacksLoading = true
+    try {
+      await loadJavaDatapacksInner()
+    } finally {
+      datapacksLoading = false
+    }
+  }
+
+  async function loadJavaDatapacksInner() {
     if (!datapacksWorldName) {
       javaDatapacks = []
       return
@@ -126,7 +143,7 @@
         worldName: datapacksWorldName,
       })
     } catch (e) {
-      onToast?.(`Failed to list datapacks: ${e}`, 'error')
+      onToast?.(t('toast.failedToListDatapacks', { error: String(e) }), 'error')
     }
   }
 
@@ -147,9 +164,9 @@
     try {
       await invoke('import_java_datapack', { worldName: datapacksWorldName, zipPath: path })
       await loadJavaDatapacks()
-      onToast?.('Datapack installed.', 'success')
+      onToast?.(t('toast.datapackInstalled'), 'success')
     } catch (e) {
-      onToast?.(`Failed to add datapack: ${e}`, 'error')
+      onToast?.(t('toast.failedToAddDatapack', { error: String(e) }), 'error')
     } finally {
       datapacksBusy = false
     }
@@ -161,7 +178,7 @@
       await invoke('delete_java_datapack', { path: pack.path })
       await loadJavaDatapacks()
     } catch (e) {
-      onToast?.(`Failed to delete datapack: ${e}`, 'error')
+      onToast?.(t('toast.failedToDeleteDatapack', { error: String(e) }), 'error')
     } finally {
       datapacksBusy = false
     }
@@ -172,7 +189,7 @@
     try {
       await invoke('open_java_datapacks_folder', { worldName: datapacksWorldName })
     } catch (e) {
-      onToast?.(`Failed to open folder: ${e}`, 'error')
+      onToast?.(t('toast.failedToOpenFolder', { error: String(e) }), 'error')
     }
   }
 
@@ -182,9 +199,9 @@
     duplicateBusy = true
     try {
       await invoke('duplicate_java_instance', { id: activeInstanceId })
-      onToast?.('Instance duplicated.', 'success')
+      onToast?.(t('toast.instanceDuplicated'), 'success')
     } catch (e) {
-      onToast?.(`Failed to duplicate instance: ${e}`, 'error')
+      onToast?.(t('toast.failedToDuplicateInstance', { error: String(e) }), 'error')
     } finally {
       duplicateBusy = false
     }
@@ -314,7 +331,7 @@
             ).versions
       const latest = versions[0]
       if (!latest) {
-        onToast?.(`'${mod.name}' has no downloadable file.`, 'error')
+        onToast?.(t('toast.noDownloadableFile', { name: mod.name }), 'error')
         return
       }
       await invoke('install_curseforge_mod', {
@@ -323,10 +340,10 @@
         modId: Number(mod.id),
         fileId: Number(latest.version_id),
       })
-      onToast?.(`Installed '${mod.name}'.`, 'success')
-      await loadMods()
+      onToast?.(t('toast.installedName', { name: mod.name }), 'success')
+await loadMods()
     } catch (e) {
-      onToast?.(`Failed to install '${mod.name}': ${String(e)}`, 'error')
+      onToast?.(t('toast.failedToInstallName', { name: mod.name, error: String(e) }), 'error')
     } finally {
       cfDownloadingId = null
     }
@@ -463,11 +480,11 @@
           'info',
         )
       } else {
-        onToast?.(`Installed '${project.title}'.`, 'success')
+        onToast?.(t('toast.installedName', { name: project.title }), 'success')
       }
       await loadMods()
     } catch (e) {
-      onToast?.(`Failed to install '${project.title}': ${String(e)}`, 'error')
+      onToast?.(t('toast.failedToInstallName', { name: project.title, error: String(e) }), 'error')
     } finally {
       mrDownloadingId = null
     }
@@ -498,6 +515,28 @@
     return match ? [match[0]] : []
   }
 
+  /** QOL: export the active instance's mod list as a shareable text file
+   *  (name, mod id, loader, enabled state per line) - handy for posting a
+   *  modlist for support/comparison without screenshotting the panel. */
+  async function exportModList() {
+    if (report.mods.length === 0) return
+    const lines = report.mods.map(
+      (m) => `${m.disabled ? '[disabled] ' : ''}${m.name} (${m.mod_id}) — ${m.loader} — ${m.file_name}`,
+    )
+    const text = `Mod list — ${report.mods.length} mod${report.mods.length === 1 ? '' : 's'}\n\n${lines.join('\n')}\n`
+    try {
+      const path = await save({
+        defaultPath: 'mod-list.txt',
+        filters: [{ name: 'Text', extensions: ['txt'] }],
+      })
+      if (!path) return
+      await invoke('write_text_file', { path, contents: text })
+      onToast?.(t('toast.modListExported'), 'success')
+    } catch (e) {
+      onToast?.(t('toast.exportFailed', { error: String(e) }), 'error')
+    }
+  }
+
   async function checkForModUpdates() {
     if (!activeInstanceId) return
     checkingUpdates = true
@@ -517,6 +556,7 @@
   }
 
   async function applyModUpdate(update: ModUpdateInfo) {
+    if (updatingFile || updatingAll) return
     updatingFile = update.file_name
     try {
       await invoke('update_java_mod', {
@@ -526,29 +566,29 @@
       })
       modUpdates = modUpdates.filter((u) => u.file_name !== update.file_name)
       if (changelogFor?.file_name === update.file_name) changelogFor = null
-      onToast?.(`Updated ${update.name}.`, 'success')
+      onToast?.(t('toast.updatedName', { name: update.name }), 'success')
       await loadMods()
     } catch (e) {
-      onToast?.(`Failed to update ${update.name}: ${String(e)}`, 'error')
+      onToast?.(t('toast.failedToUpdateName', { name: update.name, error: String(e) }), 'error')
     } finally {
       updatingFile = null
     }
   }
 
   async function applyAllModUpdates() {
-    if (modUpdates.length === 0) return
+    if (modUpdates.length === 0 || updatingAll || updatingFile) return
     updatingAll = true
     try {
       await invoke('update_all_java_mods', {
         instanceId: activeInstanceId,
         updates: modUpdates.map((u) => ({ oldFileName: u.file_name, version: u.available })),
       })
-      onToast?.(`Updated ${modUpdates.length} mod${modUpdates.length === 1 ? '' : 's'}.`, 'success')
+      onToast?.(t('toast.updatedCountMods', { count: modUpdates.length }), 'success')
       modUpdates = []
       changelogFor = null
       await loadMods()
     } catch (e) {
-      onToast?.(`Failed to update all: ${String(e)}`, 'error')
+      onToast?.(t('toast.failedToUpdateAll', { error: String(e) }), 'error')
     } finally {
       updatingAll = false
     }
@@ -567,7 +607,7 @@
         instanceId: activeInstanceId,
         enabled: enable,
       })
-      onToast?.(`${enable ? 'Enabled' : 'Disabled'} ${count} mod${count === 1 ? '' : 's'}.`, 'success')
+      onToast?.(enable ? t('toast.enabledCountMods', { count }) : t('toast.disabledCountMods', { count }), 'success')
       await loadMods()
     } catch (e) {
       onToast?.(String(e), 'error')
@@ -636,6 +676,15 @@
   }
 
   async function loadMods() {
+    modsLoading = true
+    try {
+      await loadModsInner()
+    } finally {
+      modsLoading = false
+    }
+  }
+
+  async function loadModsInner() {
     if (!activeInstanceId) {
       report = { mods: [], warnings: [] }
       return
@@ -676,6 +725,15 @@
   let shaderPacks = $state<JavaPackFile[]>([])
 
   async function loadPacks() {
+    packsLoading = true
+    try {
+      await loadPacksInner()
+    } finally {
+      packsLoading = false
+    }
+  }
+
+  async function loadPacksInner() {
     if (!activeInstanceId) {
       resourcePacks = []
       shaderPacks = []
@@ -707,9 +765,9 @@
         sourcePath: selected,
       })
       await loadPacks()
-      onToast?.('Pack imported.', 'success')
+      onToast?.(t('toast.packImported'), 'success')
     } catch (e) {
-      onToast?.(`Failed to import pack: ${e}`, 'error')
+      onToast?.(t('toast.failedToImportPack', { error: String(e) }), 'error')
     }
   }
 
@@ -720,7 +778,7 @@
       })
       await loadPacks()
     } catch (e) {
-      onToast?.(`Failed to delete pack: ${e}`, 'error')
+      onToast?.(t('toast.failedToDeletePack', { error: String(e) }), 'error')
     }
   }
 
@@ -732,7 +790,7 @@
         enabled: mod.disabled,
       })
       await loadMods()
-      onToast?.(`${mod.file_name} ${mod.disabled ? 'enabled' : 'disabled'}.`, 'success')
+      onToast?.(mod.disabled ? t('toast.fileEnabled', { file: mod.file_name }) : t('toast.fileDisabled', { file: mod.file_name }), 'success')
     } catch (e) {
       error = String(e)
       onToast?.(String(e), 'error')
@@ -743,11 +801,75 @@
     try {
       await invoke('delete_java_mod', { instanceId: activeInstanceId, fileName: mod.file_name })
       await loadMods()
-      onToast?.(`${mod.file_name} deleted.`, 'success')
+      onToast?.(t('toast.fileDeleted', { file: mod.file_name }), 'success')
     } catch (e) {
       error = String(e)
       onToast?.(String(e), 'error')
     }
+  }
+
+  // QOL: bulk-select mods for enable/disable/delete instead of one row at a
+  // time — useful for e.g. disabling a whole batch while bisecting a crash.
+  let modSelectMode = $state(false)
+  let selectedModFiles = $state<Set<string>>(new Set())
+
+  function toggleModSelectMode() {
+    modSelectMode = !modSelectMode
+    selectedModFiles = new Set()
+  }
+  function toggleModSelected(fileName: string) {
+    const next = new Set(selectedModFiles)
+    if (next.has(fileName)) next.delete(fileName)
+    else next.add(fileName)
+    selectedModFiles = next
+  }
+  const selectedMods = $derived(report.mods.filter((m) => selectedModFiles.has(m.file_name)))
+
+  async function bulkSetEnabled(enabled: boolean) {
+    if (bulkBusy) return
+    bulkBusy = true
+    try {
+      await bulkSetEnabledInner(enabled)
+    } finally {
+      bulkBusy = false
+    }
+  }
+
+  async function bulkSetEnabledInner(enabled: boolean) {
+    for (const mod of selectedMods) {
+      try {
+        await invoke('set_java_mod_enabled', { instanceId: activeInstanceId, fileName: mod.file_name, enabled })
+      } catch {
+        // Best-effort — keep going through the rest of the selection.
+      }
+    }
+    await loadMods()
+    onToast?.(enabled ? t('toast.enabledCountMods', { count: selectedMods.length }) : t('toast.disabledCountMods', { count: selectedMods.length }), 'success')
+  }
+
+  async function bulkDeleteMods() {
+    if (bulkBusy) return
+    bulkBusy = true
+    try {
+      await bulkDeleteModsInner()
+    } finally {
+      bulkBusy = false
+    }
+  }
+
+  async function bulkDeleteModsInner() {
+    const files = selectedMods.map((m) => m.file_name)
+    for (const fileName of files) {
+      try {
+        await invoke('delete_java_mod', { instanceId: activeInstanceId, fileName })
+      } catch {
+        // Best-effort — keep going through the rest of the selection.
+      }
+    }
+    selectedModFiles = new Set()
+    modSelectMode = false
+    await loadMods()
+    onToast?.(t('toast.deletedCountMods', { count: files.length }), 'success')
   }
 
   /**
@@ -786,8 +908,9 @@
   let loaderInstallStatus = $state('')
 
   async function installLoaderForActive(loader: 'fabric' | 'quilt' | 'forge' | 'neoforge') {
-    if (!activeVersion || !activeInstanceId) return
+    if (!activeVersion || !activeInstanceId || javaUtilityBusy) return
     javaUtilityBusy = true
+    installingLoader = loader
     loaderInstallStatus = loader === 'forge' || loader === 'neoforge' ? 'Starting install...' : ''
     error = ''
     try {
@@ -800,6 +923,7 @@
       error = String(e)
     } finally {
       javaUtilityBusy = false
+      installingLoader = null
       loaderInstallStatus = ''
     }
   }
@@ -819,9 +943,10 @@
 
   $effect(() => {
     let unlisten: (() => void) | undefined
+    let disposed = false
     ;(async () => {
       const { listen } = await import('@tauri-apps/api/event')
-      unlisten = await listen<{ instanceId: string; message: string }>(
+      const fn = await listen<{ instanceId: string; message: string }>(
         'loader-install-progress',
         (evt) => {
           if (evt.payload.instanceId === activeInstanceId) {
@@ -829,8 +954,15 @@
           }
         },
       )
+      // Effect torn down while the listener was still registering: drop it now
+      // instead of leaking a handler that outlives this run.
+      if (disposed) fn()
+      else unlisten = fn
     })()
-    return () => unlisten?.()
+    return () => {
+      disposed = true
+      unlisten?.()
+    }
   })
 
   /** Port of `OnOpenDatapacksTab` (Home.Datapacks.cs:17). */
@@ -855,7 +987,19 @@
   })
 </script>
 
-<PanelHeader title="Mods & Addons" {onBack}>
+{#snippet errorRow(message: string, retry?: () => void)}
+  <div class="jm-error-row" role="alert">
+    <i class="fa-solid fa-circle-exclamation"></i>
+    <span class="jm-error-msg">{message}</span>
+    {#if retry}
+      <button type="button" class="btn-sm" onclick={retry} onmousedown={(e) => e.stopPropagation()}>
+        <i class="fa-solid fa-rotate"></i> {t('common.retry')}
+      </button>
+    {/if}
+  </div>
+{/snippet}
+
+<PanelHeader title={t('panel.modsAndAddons')} {onBack}>
   {#snippet extraActions()}
     <button
       type="button"
@@ -869,69 +1013,89 @@
   {/snippet}
 </PanelHeader>
 
-<SubTabs strip="packs-addons" active="addons" onNavigate={(k, s) => onNavigate?.(k, s)} />
+<SubTabs strip="packs-addons" active="addons" edition="java" onNavigate={(k, s) => onNavigate?.(k, s)} />
 
-<div class="versions-client-switcher switcher-wrap">
-  <button
-    class="vcs-btn {javaModsTab === 'loaders' ? 'active' : ''}"
-    onclick={() => (javaModsTab = 'loaders')}
-    onmousedown={(e) => e.stopPropagation()}
-  >
-    <i class="fa-solid fa-screwdriver-wrench"></i> Loaders
-  </button>
-  <button
-    class="vcs-btn {javaModsTab === 'mods' ? 'active' : ''}"
-    onclick={() => (javaModsTab = 'mods')}
-    onmousedown={(e) => e.stopPropagation()}
-  >
-    <i class="fa-solid fa-puzzle-piece"></i> Mods ({report.mods.length})
-  </button>
-  <button
-    class="vcs-btn {javaModsTab === 'assets' ? 'active' : ''}"
-    onclick={() => (javaModsTab = 'assets')}
-    onmousedown={(e) => e.stopPropagation()}
-  >
-    <i class="fa-solid fa-image"></i> Assets
-  </button>
-  <button
-    class="vcs-btn {javaModsTab === 'datapacks' ? 'active' : ''}"
-    onclick={() => onOpenDatapacksTab()}
-    onmousedown={(e) => e.stopPropagation()}
-  >
-    <i class="fa-solid fa-cubes-stacked"></i> Datapacks
-  </button>
-  <button
-    class="vcs-btn {javaModsTab === 'tools' ? 'active' : ''}"
-    onclick={() => (javaModsTab = 'tools')}
-    onmousedown={(e) => e.stopPropagation()}
-  >
-    <i class="fa-solid fa-toolbox"></i> Tools
-  </button>
-  <button
-    class="vcs-btn {javaModsTab === 'curseforge' ? 'active' : ''}"
-    onclick={() => (javaModsTab = 'curseforge')}
-    onmousedown={(e) => e.stopPropagation()}
-  >
-    <i class="fa-solid fa-fire"></i> CurseForge
-  </button>
-  <button
-    class="vcs-btn {javaModsTab === 'modrinth' ? 'active' : ''}"
-    onclick={() => (javaModsTab = 'modrinth')}
-    onmousedown={(e) => e.stopPropagation()}
-  >
-    <i class="fa-solid fa-leaf"></i> Modrinth
-  </button>
-</div>
+<!--
+  IA change: "Mods & Addons" is the single biggest panel in the app (7
+  sub-sections), and a wrapping horizontal tab strip meant the active
+  section's content started at a different vertical position depending on
+  how many rows the tabs themselves wrapped to. Master-detail — a fixed-width
+  vertical rail (same pattern as SettingsView's category rail) + a content
+  pane that always starts at the same place — needs the panel's wide mode to
+  have room for a rail without squeezing the content (see
+  WIDE_DASHBOARD_VIEWS in App.svelte).
+-->
+<div class="settings-layout">
+  <nav class="settings-nav-rail" aria-label={t('tt.modsAddonsSections')}>
+    <button
+      type="button"
+      class="settings-nav-btn {javaModsTab === 'loaders' ? 'active' : ''}"
+      onclick={() => (javaModsTab = 'loaders')}
+      onmousedown={(e) => e.stopPropagation()}
+    >
+      <i class="fa-solid fa-screwdriver-wrench"></i> Loaders
+    </button>
+    <button
+      type="button"
+      class="settings-nav-btn {javaModsTab === 'mods' ? 'active' : ''}"
+      onclick={() => (javaModsTab = 'mods')}
+      onmousedown={(e) => e.stopPropagation()}
+    >
+      <i class="fa-solid fa-puzzle-piece"></i> Mods
+      <span class="settings-nav-btn-count">{report.mods.length}</span>
+    </button>
+    <button
+      type="button"
+      class="settings-nav-btn {javaModsTab === 'assets' ? 'active' : ''}"
+      onclick={() => (javaModsTab = 'assets')}
+      onmousedown={(e) => e.stopPropagation()}
+    >
+      <i class="fa-solid fa-image"></i> Assets
+    </button>
+    <button
+      type="button"
+      class="settings-nav-btn {javaModsTab === 'datapacks' ? 'active' : ''}"
+      onclick={() => onOpenDatapacksTab()}
+      onmousedown={(e) => e.stopPropagation()}
+    >
+      <i class="fa-solid fa-cubes-stacked"></i> Datapacks
+    </button>
+    <button
+      type="button"
+      class="settings-nav-btn {javaModsTab === 'tools' ? 'active' : ''}"
+      onclick={() => (javaModsTab = 'tools')}
+      onmousedown={(e) => e.stopPropagation()}
+    >
+      <i class="fa-solid fa-toolbox"></i> Tools
+    </button>
+    <button
+      type="button"
+      class="settings-nav-btn {javaModsTab === 'curseforge' ? 'active' : ''}"
+      onclick={() => (javaModsTab = 'curseforge')}
+      onmousedown={(e) => e.stopPropagation()}
+    >
+      <i class="fa-solid fa-fire"></i> CurseForge
+    </button>
+    <button
+      type="button"
+      class="settings-nav-btn {javaModsTab === 'modrinth' ? 'active' : ''}"
+      onclick={() => (javaModsTab = 'modrinth')}
+      onmousedown={(e) => e.stopPropagation()}
+    >
+      <i class="fa-solid fa-leaf"></i> Modrinth
+    </button>
+  </nav>
+
+  <div class="settings-content">
 
 {#if javaModsTab !== 'curseforge' && javaModsTab !== 'modrinth'}
-  <div class="panel-body" style="padding-top:6px;">
-    {#if error}<p class="error-text">{error}</p>{/if}
+  <div class="panel-body jm-pt6">
+    {#if error}{@render errorRow(error, () => void loadMods())}{/if}
 
     {#if instances.length > 1}
       <select
-        class="setting-select"
+        class="setting-select jm-select-full"
         bind:value={activeInstanceId}
-        style="width:100%; margin-bottom:8px;"
       >
         {#each instances as inst (inst.id)}
           <option value={inst.id}>{inst.name}</option>
@@ -943,7 +1107,7 @@
       {#if !activeVersion}
         <div class="empty-state">
           <i class="fa-solid fa-triangle-exclamation"></i>
-          <span>No version selected</span>
+          <span>{t('empty.noVersionSelected')}</span>
           <small
             >Pick a Minecraft version from the Versions panel first, then come back to install a mod
             loader.</small
@@ -951,14 +1115,13 @@
         </div>
       {:else}
         <div
-          class="version-row"
-          style="border-left-width:2px; border-left-color:var(--accent); margin-bottom:4px;"
+          class="version-row jm-active-row"
         >
           <div class="version-meta">
-            <span class="version-name" style="font-size:12px; color:var(--text-dim);"
-              >Installing for</span
+            <span class="jm-eyebrow"
+              >{t('x.installingFor')}</span
             >
-            <span class="version-sub" style="font-size:13px; font-weight:600; color:var(--text);"
+            <span class="jm-row-title"
               >{activeVersion}</span
             >
           </div>
@@ -976,17 +1139,17 @@
         </div>
 
         {#if loaderInstallStatus}
-          <div style="margin-bottom:8px;">
-            <small style="color:var(--text-dim);">{loaderInstallStatus}</small>
+          <div class="jm-mb8">
+            <small class="jm-dim">{loaderInstallStatus}</small>
             <InlineProgress progress={0} showSpinner={true} />
           </div>
         {/if}
 
+        <div class="client-card-cols">
         <div class="client-card {activeVersion.includes('fabric') ? 'client-active' : ''}">
           <div class="client-card-header">
             <div
-              class="client-card-icon"
-              style="background:var(--loader-fabric-bg); color:var(--loader-fabric); padding:8px;"
+              class="client-card-icon jm-tile jm-tile--loader-fabric"
             >
               <i class="fa-solid fa-feather"></i>
             </div>
@@ -996,13 +1159,13 @@
                 {#if activeVersion.includes('fabric')}
                   <span class="tag-uptodate"><i class="fa-solid fa-circle-check"></i> Active</span>
                 {:else}
-                  <span style="opacity:0.5;">Lightweight mod loader</span>
+                  <span class="jm-dim">{t('x.lightweightModLoader')}</span>
                 {/if}
               </span>
             </div>
             <div class="client-card-actions">
               <IconBtn
-                icon="fa-solid fa-download"
+                icon={installingLoader === 'fabric' ? 'fa-solid fa-spinner fa-spin' : 'fa-solid fa-download'}
                 title="Install Fabric"
                 disabled={javaUtilityBusy}
                 onClick={() => installLoaderForActive('fabric')}
@@ -1018,8 +1181,7 @@
         <div class="client-card {activeVersion.includes('quilt') ? 'client-active' : ''}">
           <div class="client-card-header">
             <div
-              class="client-card-icon"
-              style="background:var(--loader-quilt-bg); color:var(--loader-quilt); padding:8px;"
+              class="client-card-icon jm-tile jm-tile--loader-quilt"
             >
               <i class="fa-solid fa-layer-group"></i>
             </div>
@@ -1029,13 +1191,13 @@
                 {#if activeVersion.includes('quilt')}
                   <span class="tag-uptodate"><i class="fa-solid fa-circle-check"></i> Active</span>
                 {:else}
-                  <span style="opacity:0.5;">Fabric-compatible fork</span>
+                  <span class="jm-dim">Fabric-compatible fork</span>
                 {/if}
               </span>
             </div>
             <div class="client-card-actions">
               <IconBtn
-                icon="fa-solid fa-download"
+                icon={installingLoader === 'quilt' ? 'fa-solid fa-spinner fa-spin' : 'fa-solid fa-download'}
                 title="Install Quilt"
                 disabled={javaUtilityBusy}
                 onClick={() => installLoaderForActive('quilt')}
@@ -1051,18 +1213,17 @@
         <div class="client-card">
           <div class="client-card-header">
             <div
-              class="client-card-icon"
-              style="background:var(--loader-forge-bg); color:var(--loader-forge); padding:8px;"
+              class="client-card-icon jm-tile jm-tile--loader-forge"
             >
               <i class="fa-solid fa-hammer"></i>
             </div>
             <div class="client-card-meta">
               <span class="client-card-name">Forge</span>
-              <span class="client-card-sub"><span style="opacity:0.5;">The classic mod loader</span></span>
+              <span class="client-card-sub"><span class="jm-dim">{t('x.theClassicModLoader')}</span></span>
             </div>
             <div class="client-card-actions">
               <IconBtn
-                icon="fa-solid fa-download"
+                icon={installingLoader === 'forge' ? 'fa-solid fa-spinner fa-spin' : 'fa-solid fa-download'}
                 title="Download Forge installer"
                 disabled={javaUtilityBusy}
                 onClick={() => installLoaderForActive('forge')}
@@ -1078,20 +1239,19 @@
         <div class="client-card">
           <div class="client-card-header">
             <div
-              class="client-card-icon"
-              style="background:var(--loader-neoforge-bg); color:var(--loader-neoforge); padding:8px;"
+              class="client-card-icon jm-tile jm-tile--loader-neoforge"
             >
               <i class="fa-solid fa-fire-flame-curved"></i>
             </div>
             <div class="client-card-meta">
               <span class="client-card-name">NeoForge</span>
               <span class="client-card-sub"
-                ><span style="opacity:0.5;">Modern Forge fork (1.20.2+)</span></span
+                ><span class="jm-dim">Modern Forge fork (1.20.2+)</span></span
               >
             </div>
             <div class="client-card-actions">
               <IconBtn
-                icon="fa-solid fa-download"
+                icon={installingLoader === 'neoforge' ? 'fa-solid fa-spinner fa-spin' : 'fa-solid fa-download'}
                 title="Download NeoForge installer"
                 disabled={javaUtilityBusy}
                 onClick={() => installLoaderForActive('neoforge')}
@@ -1103,12 +1263,13 @@
             the installer.
           </p>
         </div>
+        </div>
       {/if}
     {:else if javaModsTab === 'mods'}
       {#if report.mods.length > 0}
-        <div class="version-row" style="margin-bottom:8px; gap:6px; flex-wrap:wrap;">
+        <div class="version-row jm-toolbar">
           <button
-            class="btn-sm"
+            class="btn-sm btn-primary"
             disabled={checkingUpdates || !activeInstanceId}
             onclick={checkForModUpdates}
             onmousedown={(e) => e.stopPropagation()}
@@ -1119,7 +1280,7 @@
           <button
             class="btn-sm"
             disabled={bisectBusy}
-            data-tooltip="Toggle every mod on/off at once, for crash-cause bisecting"
+            data-tooltip={t('tt.toggleEveryModOffAtOnce')}
             onclick={toggleAllMods}
             onmousedown={(e) => e.stopPropagation()}
           >
@@ -1137,22 +1298,52 @@
               <i class="fa-solid fa-code-compare"></i> Compare instance
             </button>
           {/if}
+          <button
+            class="btn-sm"
+            onclick={exportModList}
+            onmousedown={(e) => e.stopPropagation()}
+            data-tooltip={t('tt.saveThisInstanceSModList')}
+          >
+            <i class="fa-solid fa-file-export"></i> Export list
+          </button>
+          <button
+            class="btn-sm {modSelectMode ? 'active' : ''}"
+            onclick={toggleModSelectMode}
+            onmousedown={(e) => e.stopPropagation()}
+          >
+            <i class="fa-solid fa-check-double"></i> {modSelectMode ? 'Cancel' : 'Select'}
+          </button>
         </div>
 
+        {#if modSelectMode}
+          <div class="version-row jm-bulkbar">
+            <span class="version-sub">{selectedModFiles.size} selected</span>
+            <button class="btn-sm" onclick={() => bulkSetEnabled(false)} disabled={selectedModFiles.size === 0 || bulkBusy}>
+              <i class="fa-solid fa-toggle-off"></i> Disable selected
+            </button>
+            <button class="btn-sm" onclick={() => bulkSetEnabled(true)} disabled={selectedModFiles.size === 0 || bulkBusy}>
+              <i class="fa-solid fa-toggle-on"></i> Enable selected
+            </button>
+            <button class="btn-sm jm-danger" onclick={bulkDeleteMods} disabled={selectedModFiles.size === 0 || bulkBusy}>
+              <i class="fa-solid fa-trash"></i> Delete selected
+            </button>
+          </div>
+        {/if}
+
         {#if showDiff}
-          <div class="mod-warnings" style="margin-bottom:8px;">
-            <div class="mod-warnings-head" style="justify-content:space-between; display:flex;">
+          <div class="mod-warnings jm-mb8">
+            <div class="mod-warnings-head jm-split">
               <span><i class="fa-solid fa-code-compare"></i> Compare mods against another instance</span>
               <button
                 class="panel-icon-btn"
                 onclick={() => (showDiff = false)}
                 onmousedown={(e) => e.stopPropagation()}
-                aria-label="Close"><i class="fa-solid fa-xmark"></i></button
+                aria-label={t('tt.close')}><i class="fa-solid fa-xmark"></i></button
               >
             </div>
-            <div style="display:flex; gap:6px; padding:6px 0;">
-              <select class="setting-select" bind:value={diffOtherInstanceId} style="flex:1;">
-                <option value="">Choose an instance...</option>
+            <div class="jm-diff-row">
+              <select class="setting-select jm-grow" bind:value={diffOtherInstanceId}>
+                <option value="">{t('x.chooseAnInstance')}</option>
                 {#each instances.filter((i) => i.id !== activeInstanceId) as inst (inst.id)}
                   <option value={inst.id}>{inst.name}</option>
                 {/each}
@@ -1166,7 +1357,7 @@
                 {#if diffBusy}<span class="spinner"></span>{:else}Diff{/if}
               </button>
             </div>
-            {#if diffError}<p class="error-text">{diffError}</p>{/if}
+            {#if diffError}{@render errorRow(diffError, () => void runDiff())}{/if}
             {#if diffResult}
               <div class="mod-warning-item">
                 <strong>Only in {activeInstance?.name ?? 'this instance'}</strong>
@@ -1179,24 +1370,24 @@
                 {diffResult.only_b.map((m) => m.name).join(', ') || 'none'}
               </div>
               <div class="mod-warning-item">
-                <strong>Different version in both</strong> ({diffResult.different_version.length}):
+                <strong>{t('x.differentVersionInBoth')}</strong> ({diffResult.different_version.length}):
                 {diffResult.different_version.map((p) => p.a.name).join(', ') || 'none'}
               </div>
             {/if}
           </div>
         {/if}
 
-        {#if updateCheckError}<p class="error-text">{updateCheckError}</p>{/if}
+        {#if updateCheckError}{@render errorRow(updateCheckError, () => void checkForModUpdates())}{/if}
         {#if modUpdates.length > 0}
-          <div class="mod-warnings" style="margin-bottom:8px;">
-            <div class="mod-warnings-head" style="justify-content:space-between; display:flex;">
+          <div class="mod-warnings jm-mb8">
+            <div class="mod-warnings-head jm-split">
               <span
                 ><i class="fa-solid fa-cloud-arrow-down"></i>
                 {modUpdates.length} update{modUpdates.length === 1 ? '' : 's'} available</span
               >
               <button
-                class="btn-sm"
-                disabled={updatingAll}
+                class="btn-sm btn-primary"
+                disabled={updatingAll || updatingFile !== null}
                 onclick={applyAllModUpdates}
                 onmousedown={(e) => e.stopPropagation()}
               >
@@ -1204,15 +1395,15 @@
               </button>
             </div>
             {#each modUpdates as u (u.file_name)}
-              <div class="mod-warning-item" style="display:flex; align-items:center; gap:8px;">
-                <span style="flex:1;">{u.name} → {u.available.name}</span>
+              <div class="mod-warning-item jm-row-flex">
+                <span class="jm-grow">{u.name} → {u.available.name}</span>
                 {#if u.available.changelog}
                   <button
                     class="panel-icon-btn"
-                    aria-label="View changelog"
+                    aria-label={t('tt.viewChangelog')}
                     onclick={() => (changelogFor = changelogFor?.file_name === u.file_name ? null : u)}
                     onmousedown={(e) => e.stopPropagation()}
-                    data-tooltip="View changelog"
+                    data-tooltip={t('tt.viewChangelog')}
                   >
                     <i class="fa-solid fa-scroll"></i>
                   </button>
@@ -1227,7 +1418,7 @@
                 </button>
               </div>
               {#if changelogFor?.file_name === u.file_name}
-                <pre class="mod-warning-item" style="white-space:pre-wrap; max-height:180px; overflow:auto;">{u.available.changelog}</pre>
+                <pre class="mod-warning-item jm-changelog">{u.available.changelog}</pre>
               {/if}
             {/each}
           </div>
@@ -1235,8 +1426,8 @@
       {/if}
 
       {#if lastInstallWarnings}
-        <div class="mod-warnings" style="margin-bottom:8px;">
-          <div class="mod-warnings-head" style="justify-content:space-between; display:flex;">
+        <div class="mod-warnings jm-mb8">
+          <div class="mod-warnings-head jm-split">
             <span
               ><i class="fa-solid fa-triangle-exclamation"></i> '{lastInstallWarnings.projectTitle}' needs
               these mods too</span
@@ -1245,7 +1436,7 @@
               class="panel-icon-btn"
               onclick={() => (lastInstallWarnings = null)}
               onmousedown={(e) => e.stopPropagation()}
-              aria-label="Dismiss"><i class="fa-solid fa-xmark"></i></button
+              aria-label={t('tt.dismiss')}><i class="fa-solid fa-xmark"></i></button
             >
           </div>
           {#each lastInstallWarnings.deps as d}
@@ -1265,14 +1456,15 @@
           {/each}
         </div>
       {/if}
-      {#if report.mods.length === 0}
+      {#if modsLoading && report.mods.length === 0}
+        <ListSkeleton rows={4} />
+      {:else if report.mods.length === 0}
         <div class="empty-state">
           <i class="fa-solid fa-puzzle-piece"></i>
-          <span>No local mods</span>
-          <small>Drop jars into the active instance mods folder, or browse CurseForge below.</small>
+          <span>{t('empty.noLocalMods')}</span>
+          <small>{t('empty.dropJarsIntoActiveInstanceMods')}</small>
           <button
-            class="btn-sm"
-            style="margin-top:6px;"
+            class="btn-sm jm-mt6"
             onclick={() => openJavaFolder('mods')}
             onmousedown={(e) => e.stopPropagation()}
           >
@@ -1283,15 +1475,26 @@
         <div class="version-list {javaModsViewMode === 'grid' ? 'grid-view' : ''}">
         {#each report.mods as mod (mod.file_name)}
           <div class="version-row">
+            {#if modSelectMode}
+              <button
+                type="button"
+                class="btn-sm"
+                onclick={() => toggleModSelected(mod.file_name)}
+                onmousedown={(e) => e.stopPropagation()}
+                aria-label={selectedModFiles.has(mod.file_name) ? `Deselect ${mod.name}` : `Select ${mod.name}`}
+              >
+                <i class="fa-solid {selectedModFiles.has(mod.file_name) ? 'fa-square-check' : 'fa-square'}"></i>
+              </button>
+            {/if}
             <div class="version-meta">
-              <span class="version-name" style={mod.disabled ? 'opacity:.55;' : ''}>{mod.name}</span>
+              <span class="version-name" class:jm-disabled={mod.disabled}>{mod.name}</span>
               <span class="version-sub"
                 >{mod.disabled ? 'Disabled' : 'Enabled'}
                 {mod.required_deps.length === 0 ? '' : `· Requires ${mod.required_deps.join(', ')}`}</span
               >
             </div>
             <button
-              class="vcs-btn vcs-btn-ghost"
+              class="btn-sm"
               onclick={() => toggleJavaMod(mod)}
               onmousedown={(e) => e.stopPropagation()}
               aria-label={mod.disabled ? `Enable ${mod.name}` : `Disable ${mod.name}`}
@@ -1299,7 +1502,7 @@
               <i class="fa-solid {mod.disabled ? 'fa-toggle-off' : 'fa-toggle-on'}"></i>
             </button>
             <button
-              class="vcs-btn vcs-btn-ghost"
+              class="btn-sm"
               onclick={() => deleteJavaFile(mod)}
               onmousedown={(e) => e.stopPropagation()}
               aria-label={`Delete ${mod.name}`}
@@ -1309,7 +1512,7 @@
           </div>
         {/each}
         </div>
-        <div style="text-align:center; padding:4px;">
+        <div class="jm-center-pad-sm">
           <button
             class="btn-sm"
             onclick={() => openJavaFolder('mods')}
@@ -1320,17 +1523,17 @@
         </div>
       {/if}
     {:else if javaModsTab === 'assets'}
+      <div class="client-card-cols">
       <div class="client-card">
         <div class="client-card-header">
           <div
-            class="client-card-icon"
-            style="background:rgba(67,181,129,0.15); color:var(--green); padding:8px;"
+            class="client-card-icon jm-tile jm-tile--green"
           >
             <i class="fa-solid fa-image"></i>
           </div>
           <div class="client-card-meta">
-            <span class="client-card-name">Resource Packs</span>
-            <span class="client-card-sub" style="opacity:0.5;"
+            <span class="client-card-name">{t('x.resourcePacks')}</span>
+            <span class="client-card-sub jm-dim"
               >{resourcePacks.length} pack(s)</span
             >
           </div>
@@ -1349,14 +1552,22 @@
             />
           </div>
         </div>
+        {#if packsLoading && resourcePacks.length === 0}
+          <ListSkeleton rows={2} />
+        {:else if resourcePacks.length === 0}
+          <div class="empty-state">
+            <i class="fa-solid fa-image"></i>
+            <span>No resource packs yet</span>
+          </div>
+        {/if}
         {#each resourcePacks as pack (pack.path)}
-          <div class="version-row" style="padding-left:8px;">
+          <div class="version-row jm-indent">
             <div class="version-meta">
               <span class="version-name">{pack.name}</span>
               <span class="version-sub">{formatSize(pack.size_bytes)}</span>
             </div>
             <button
-              class="vcs-btn vcs-btn-ghost"
+              class="btn-sm"
               onclick={() => deletePack('resourcepack', pack)}
               aria-label={`Delete ${pack.name}`}
             >
@@ -1368,14 +1579,13 @@
       <div class="client-card">
         <div class="client-card-header">
           <div
-            class="client-card-icon"
-            style="background:rgba(255,200,50,0.15); color:#ffc832; padding:8px;"
+            class="client-card-icon jm-tile jm-tile--orange"
           >
             <i class="fa-solid fa-wand-magic-sparkles"></i>
           </div>
           <div class="client-card-meta">
-            <span class="client-card-name">Shader Packs</span>
-            <span class="client-card-sub" style="opacity:0.5;"
+            <span class="client-card-name">{t('x.shaderPacks')}</span>
+            <span class="client-card-sub jm-dim"
               >{shaderPacks.length} pack(s)</span
             >
           </div>
@@ -1394,14 +1604,22 @@
             />
           </div>
         </div>
+        {#if packsLoading && shaderPacks.length === 0}
+          <ListSkeleton rows={2} />
+        {:else if shaderPacks.length === 0}
+          <div class="empty-state">
+            <i class="fa-solid fa-wand-magic-sparkles"></i>
+            <span>No shader packs yet</span>
+          </div>
+        {/if}
         {#each shaderPacks as pack (pack.path)}
-          <div class="version-row" style="padding-left:8px;">
+          <div class="version-row jm-indent">
             <div class="version-meta">
               <span class="version-name">{pack.name}</span>
               <span class="version-sub">{formatSize(pack.size_bytes)}</span>
             </div>
             <button
-              class="vcs-btn vcs-btn-ghost"
+              class="btn-sm"
               onclick={() => deletePack('shaderpack', pack)}
               aria-label={`Delete ${pack.name}`}
             >
@@ -1413,14 +1631,13 @@
       <div class="client-card">
         <div class="client-card-header">
           <div
-            class="client-card-icon"
-            style="background:rgba(114,137,218,0.15); color:var(--accent); padding:8px;"
+            class="client-card-icon jm-tile jm-tile--accent"
           >
             <i class="fa-solid fa-map"></i>
           </div>
           <div class="client-card-meta">
-            <span class="client-card-name">Saves / Worlds</span>
-            <span class="client-card-sub" style="opacity:0.5;">Open your worlds folder</span>
+            <span class="client-card-name">{t('x.savesWorlds')}</span>
+            <span class="client-card-sub jm-dim">{t('x.openYourWorldsFolder')}</span>
           </div>
           <div class="client-card-actions">
             <IconBtn
@@ -1435,14 +1652,13 @@
       <div class="client-card">
         <div class="client-card-header">
           <div
-            class="client-card-icon"
-            style="background:rgba(240,71,71,0.15); color:var(--red); padding:8px;"
+            class="client-card-icon jm-tile jm-tile--red"
           >
             <i class="fa-solid fa-camera"></i>
           </div>
           <div class="client-card-meta">
-            <span class="client-card-name">Screenshots</span>
-            <span class="client-card-sub" style="opacity:0.5;"
+            <span class="client-card-name">{t('panel.screenshots')}</span>
+            <span class="client-card-sub jm-dim"
               >{javaScreenshotsCount ?? '—'} screenshot(s)</span
             >
           </div>
@@ -1459,16 +1675,14 @@
       <div class="client-card">
         <div class="client-card-header">
           <div
-            class="client-card-icon"
-            style="background:rgba(250,166,26,0.15); color:var(--orange); padding:8px;"
+            class="client-card-icon jm-tile jm-tile--orange"
           >
             <i class="fa-solid fa-drafting-compass"></i>
           </div>
           <div class="client-card-meta">
-            <span class="client-card-name">Schematics</span>
+            <span class="client-card-name">{t('x.schematics')}</span>
             <span
-              class="client-card-sub"
-              style="opacity:0.5;"
+              class="client-card-sub jm-dim"
               data-tooltip={MISSING_FILE_LIST_SCHEMATICS}>— file(s)</span
             >
           </div>
@@ -1482,14 +1696,14 @@
           </div>
         </div>
       </div>
+      </div>
     {:else if javaModsTab === 'datapacks'}
-      <label class="modal-input-label" for="datapacks-world">World</label>
+      <label class="modal-input-label" for="datapacks-world">{t('label.world')}</label>
       <select
         id="datapacks-world"
-        class="setting-select"
+        class="setting-select jm-select-full"
         bind:value={datapacksWorldName}
         onclick={(e) => e.stopPropagation()}
-        style="width:100%; margin-bottom:8px;"
       >
         <option value="">Select a world…</option>
         {#each javaWorldsList as w (w.name)}
@@ -1500,16 +1714,17 @@
       {#if !datapacksWorldName}
         <div class="empty-state">
           <i class="fa-solid fa-cubes-stacked"></i>
-          <span>Pick a world above</span>
-          <small>Datapacks are installed per-world, not shared across all your saves.</small>
+          <span>{t('empty.pickWorldAbove')}</span>
+          <small>{t('empty.datapacksAreInstalledPerWorldNot')}</small>
         </div>
+      {:else if datapacksLoading && javaDatapacks.length === 0}
+        <ListSkeleton rows={3} />
       {:else if javaDatapacks.length === 0}
         <div class="empty-state">
           <i class="fa-solid fa-cubes-stacked"></i>
           <span>No datapacks in "{datapacksWorldName}"</span>
           <button
-            class="btn-sm"
-            style="margin-top:6px;"
+            class="btn-sm jm-mt6"
             disabled={datapacksBusy}
             onclick={addJavaDatapack}
           >
@@ -1524,7 +1739,7 @@
               <span class="version-sub">{formatSize(pack.size_bytes)} · {pack.modified_at}</span>
             </div>
             <button
-              class="vcs-btn vcs-btn-ghost"
+              class="btn-sm"
               disabled={datapacksBusy}
               onclick={() => deleteJavaDatapack(pack)}
               aria-label={`Delete ${pack.name}`}
@@ -1533,7 +1748,7 @@
             </button>
           </div>
         {/each}
-        <div style="text-align:center; padding:8px;">
+        <div class="jm-center-pad">
           <button class="btn-sm" disabled={datapacksBusy} onclick={addJavaDatapack}>
             <i class="fa-solid fa-upload"></i> Add datapack (.zip)
           </button>
@@ -1546,15 +1761,14 @@
       <div class="client-card">
         <div class="client-card-header">
           <div
-            class="client-card-icon"
-            style="background:rgba(114,137,218,0.15); color:var(--accent); padding:8px;"
+            class="client-card-icon jm-tile jm-tile--accent"
           >
             <i class="fa-solid fa-box-archive"></i>
           </div>
           <div class="client-card-meta">
-            <span class="client-card-name">Backup Saves</span>
-            <span class="client-card-sub" style="opacity:0.5;"
-              >Zip your worlds before a risky update</span
+            <span class="client-card-name">{t('x.backupSaves')}</span>
+            <span class="client-card-sub jm-dim"
+              >{t('x.zipYourWorldsBeforeARiskyUpdate')}</span
             >
           </div>
           <div class="client-card-actions">
@@ -1565,14 +1779,13 @@
       <div class="client-card">
         <div class="client-card-header">
           <div
-            class="client-card-icon"
-            style="background:rgba(67,181,129,0.15); color:var(--green); padding:8px;"
+            class="client-card-icon jm-tile jm-tile--green"
           >
             <i class="fa-solid fa-file-zipper"></i>
           </div>
           <div class="client-card-meta">
-            <span class="client-card-name">Export Modpack</span>
-            <span class="client-card-sub" style="opacity:0.5;"
+            <span class="client-card-name">{t('x.exportModpack')}</span>
+            <span class="client-card-sub jm-dim"
               >Bundle mods + config into a shareable zip</span
             >
           </div>
@@ -1584,14 +1797,13 @@
       <div class="client-card">
         <div class="client-card-header">
           <div
-            class="client-card-icon"
-            style="background:rgba(250,166,26,0.15); color:var(--orange); padding:8px;"
+            class="client-card-icon jm-tile jm-tile--orange"
           >
             <i class="fa-solid fa-clone"></i>
           </div>
           <div class="client-card-meta">
-            <span class="client-card-name">Duplicate Instance</span>
-            <span class="client-card-sub" style="opacity:0.5;"
+            <span class="client-card-name">{t('x.duplicateInstance')}</span>
+            <span class="client-card-sub jm-dim"
               >Clone your active instance with all mods &amp; config</span
             >
           </div>
@@ -1627,7 +1839,7 @@
       <i class="fa-solid fa-magnifying-glass"></i>
       <input
         class="panel-search-input"
-        placeholder="Search CurseForge for Java mods..."
+        placeholder={t('ph.searchCurseforgeJava')}
         bind:value={cfSearchQuery}
         onkeydown={(e) => {
           e.stopPropagation()
@@ -1639,55 +1851,50 @@
     {#if cfCategory !== 'all' && cfCategory !== 'mods'}
       <div class="empty-state">
         <i class="fa-solid fa-cube"></i>
-        <span>Mods only, for now</span>
-        <small>CurseForge search is wired up for mods; other categories aren't resolved yet.</small>
+        <span>{t('empty.modsOnlyNow')}</span>
+        <small>{t('empty.curseforgeSearchIsWiredUpMods')}</small>
       </div>
     {:else if cfSearching}
-      <div class="versions-loading"><Spinner size={18} borderWidth={2} /><span>Searching CurseForge...</span></div>
+      <ListSkeleton rows={5} />
     {:else if cfError}
-      <div style="padding:20px; text-align:center;">
-        <span class="error-text">{cfError}</span>
-        <br />
-        <button class="btn-sm" style="margin-top:10px;" onclick={() => searchCurseForgeMods()}>
-          <i class="fa-solid fa-rotate"></i> Retry
-        </button>
-      </div>
+      {@render errorRow(cfError, () => void searchCurseForgeMods())}
     {:else if cfResults.length === 0 && cfHasSearched}
       <div class="empty-state">
         <i class="fa-solid fa-box-open"></i>
-        <span>No mods found</span>
-        <small>Try a different search term.</small>
+        <span>{t('empty.noModsFound')}</span>
+        <small>{t('empty.tryDifferentSearchTerm')}</small>
       </div>
     {:else if cfResults.length === 0}
       <div class="empty-state">
         <i class="fa-solid fa-magnifying-glass"></i>
-        <span>Browse CurseForge</span>
-        <small>Search for Java mods above (requires a CurseForge API key in Settings).</small>
+        <span>{t('empty.browseCurseforge')}</span>
+        <small>{t('empty.searchJavaModsAboveRequiresCurseforge')}</small>
       </div>
     {:else}
       <div class="version-list {javaModsViewMode === 'grid' ? 'grid-view' : ''}">
       {#each cfResults as a (a.id)}
-        <div class="client-card" style="margin-bottom:6px;">
+        <div class="client-card jm-card-gap">
           <div class="client-card-header">
-            <div class="client-card-icon" style="padding:3px; border-radius:6px; overflow:hidden;">
+            <div class="client-card-icon jm-cover">
               {#if a.icon_url}
                 <img
                   src={a.icon_url}
-                  style="width:100%;height:100%;object-fit:cover;border-radius:4px;"
+                  loading="lazy"
+                  decoding="async"
+                  class="jm-cover-img"
                   alt=""
                 />
               {:else}
-                <i class="fa-solid fa-cube" style="font-size:18px; color:var(--accent);"></i>
+                <i class="fa-solid fa-cube jm-cover-icon"></i>
               {/if}
             </div>
-            <div class="client-card-meta" style="min-width:0;">
+            <div class="client-card-meta jm-minw0">
               <span
-                class="client-card-name"
-                style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{a.name}</span
+                class="client-card-name jm-ellipsis">{a.name}</span
               >
-              <span class="client-card-sub" style="display:flex; gap:8px; align-items:center;">
-                <span style="opacity:0.6;">{a.author}</span>
-                <span style="opacity:0.4;">{formatDownloads(a.downloads)}</span>
+              <span class="client-card-sub jm-sub-row">
+                <span class="jm-author">{a.author}</span>
+                <span class="jm-dim">{formatDownloads(a.downloads)}</span>
               </span>
             </div>
             <div class="client-card-actions">
@@ -1705,8 +1912,7 @@
             </div>
           </div>
           <p
-            class="client-card-desc"
-            style="display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;"
+            class="client-card-desc jm-clamp2"
           >
             {a.summary}
           </p>
@@ -1714,7 +1920,7 @@
       {/each}
       </div>
 
-      <div style="text-align:center; padding:8px;">
+      <div class="jm-center-pad">
         <button class="btn-sm" onclick={() => searchCurseForgeMods(true)}>
           <i class="fa-solid fa-angles-down"></i> Load more
         </button>
@@ -1741,7 +1947,7 @@
       <i class="fa-solid fa-magnifying-glass"></i>
       <input
         class="panel-search-input"
-        placeholder="Search Modrinth for mods, modpacks, shaders..."
+        placeholder={t('ph.searchModrinth')}
         bind:value={mrSearchQuery}
         onkeydown={(e) => {
           e.stopPropagation()
@@ -1751,64 +1957,54 @@
     </div>
 
     {#if mrSearching}
-      <div class="versions-loading"><Spinner size={18} borderWidth={2} /><span>Searching Modrinth...</span></div>
+      <ListSkeleton rows={5} />
     {:else if mrError}
-      <div style="padding:20px; text-align:center;">
-        <span class="error-text">{mrError}</span>
-        <br />
-        <button
-          class="btn-sm"
-          style="margin-top:10px;"
-          onclick={searchModrinth}
-          onmousedown={(e) => e.stopPropagation()}
-        >
-          <i class="fa-solid fa-rotate"></i> Retry
-        </button>
-      </div>
+      {@render errorRow(mrError, () => void searchModrinth())}
     {:else if mrResults.length === 0 && mrHasSearched}
       <div class="empty-state">
         <i class="fa-solid fa-box-open"></i>
-        <span>No results found</span>
-        <small>Try a different search term or category.</small>
+        <span>{t('empty.noResultsFound')}</span>
+        <small>{t('empty.tryDifferentSearchTermOrCategory')}</small>
       </div>
     {:else if mrResults.length === 0}
       <div class="empty-state">
         <i class="fa-solid fa-leaf"></i>
-        <span>Browse Modrinth</span>
-        <small>Search for mods, modpacks, resource packs, or shaders above.</small>
+        <span>{t('empty.browseModrinth')}</span>
+        <small>{t('empty.searchModsModpacksResourcePacksOr')}</small>
       </div>
     {:else}
       <div class="version-list {javaModsViewMode === 'grid' ? 'grid-view' : ''}">
       {#each mrResults as p (p.id)}
-        <div class="client-card" style="margin-bottom:6px;">
+        <div class="client-card jm-card-gap">
           <div class="client-card-header">
-            <div class="client-card-icon" style="padding:3px; border-radius:6px; overflow:hidden;">
+            <div class="client-card-icon jm-cover">
               {#if p.icon_url}
                 <img
                   src={p.icon_url}
-                  style="width:100%;height:100%;object-fit:cover;border-radius:4px;"
+                  loading="lazy"
+                  decoding="async"
+                  class="jm-cover-img"
                   alt=""
                 />
               {:else}
-                <i class="fa-solid fa-leaf" style="font-size:18px; color:var(--loader-modrinth);"></i>
+                <i class="fa-solid fa-leaf jm-cover-icon jm-modrinth"></i>
               {/if}
             </div>
-            <div class="client-card-meta" style="min-width:0;">
+            <div class="client-card-meta jm-minw0">
               <span
-                class="client-card-name"
-                style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{p.title}</span
+                class="client-card-name jm-ellipsis">{p.title}</span
               >
-              <span class="client-card-sub" style="display:flex; gap:8px; align-items:center;">
-                <span style="opacity:0.6;">{p.author}</span>
-                <span style="opacity:0.4;">{formatDownloads(p.downloads)}</span>
+              <span class="client-card-sub jm-sub-row">
+                <span class="jm-author">{p.author}</span>
+                <span class="jm-dim">{formatDownloads(p.downloads)}</span>
                 {#if p.category_name}
-                  <span class="tag-uptodate" style="font-size:9px; padding:1px 5px;"
+                  <span class="tag-uptodate jm-tag-sm"
                     >{p.category_name}</span
                   >
                 {/if}
               </span>
             </div>
-            <div class="client-card-actions" style="display:flex; gap:4px;">
+            <div class="client-card-actions jm-actions-tight">
               <IconBtn
                 icon={isStarred(p.id) ? 'fa-solid fa-star' : 'fa-regular fa-star'}
                 title={isStarred(p.id) ? 'Unstar' : 'Star'}
@@ -1829,8 +2025,7 @@
             </div>
           </div>
           <p
-            class="client-card-desc"
-            style="display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;"
+            class="client-card-desc jm-clamp2"
           >
             {p.description}
           </p>
@@ -1839,7 +2034,7 @@
       </div>
 
       {#if mrResults.length < mrTotalCount}
-        <div style="text-align:center; padding:8px;">
+        <div class="jm-center-pad">
           <button class="btn-sm" onclick={() => searchModrinth(true)} onmousedown={(e) => e.stopPropagation()}>
             <i class="fa-solid fa-angles-down"></i> Load more ({mrResults.length} / {mrTotalCount})
           </button>
@@ -1848,6 +2043,9 @@
     {/if}
   </div>
 {/if}
+
+  </div>
+</div>
 
 <Modal
   open={depModalOpen}
@@ -1858,13 +2056,13 @@
   {#if depError}
     <p class="error-text">{depError}</p>
   {:else if !depPlan}
-    <div class="versions-loading"><Spinner size={18} borderWidth={2} /><span>Resolving dependencies...</span></div>
+    <ListSkeleton rows={3} />
   {:else}
     {#if depPlan.conflicts.length > 0}
-      <div class="empty-state" style="text-align:left; align-items:flex-start;">
+      <div class="empty-state jm-left">
         <span><i class="fa-solid fa-triangle-exclamation"></i> Conflicts</span>
         {#each depPlan.conflicts as c}
-          <small style="display:block;">{c}</small>
+          <small class="jm-block">{c}</small>
         {/each}
       </div>
     {/if}
@@ -1879,15 +2077,100 @@
         </div>
       </div>
     {/each}
-    <div style="text-align:right; padding-top:12px;">
-      <button class="btn-sm" disabled={depBusy} onclick={confirmDependencyInstall}>
+    <div class="jm-right-pad">
+      <button class="btn-sm btn-primary" disabled={depBusy} onclick={confirmDependencyInstall}>
         {#if depBusy}
           <Spinner size={14} borderWidth={2} />
         {:else}
-          <i class="fa-solid fa-check"></i> Install
+          <i class="fa-solid fa-check"></i> Install {depPlan.files.length} file{depPlan.files.length === 1 ? '' : 's'}
         {/if}
       </button>
     </div>
   {/if}
 </Modal>
 
+<style>
+  /* Spacing / layout helpers (replace former inline styles). */
+  .jm-pt6 { padding-top: 6px; }
+  .jm-mb8 { margin-bottom: 8px; }
+  .jm-mt6 { margin-top: 6px; }
+  .jm-mt10 { margin-top: 10px; }
+  .jm-select-full { width: 100%; margin-bottom: 8px; }
+  .jm-grow { flex: 1; min-width: 0; }
+  .jm-split { display: flex; justify-content: space-between; align-items: center; }
+  .jm-row-flex { display: flex; align-items: center; gap: 8px; }
+  .jm-toolbar { margin-bottom: 8px; gap: 6px; flex-wrap: wrap; }
+  .jm-bulkbar { gap: 8px; padding: 4px 0 8px; flex-wrap: wrap; }
+  .jm-diff-row { display: flex; gap: 6px; padding: 6px 0; }
+  .jm-changelog { white-space: pre-wrap; max-height: 180px; overflow: auto; }
+  .jm-danger { color: var(--red); }
+  .jm-disabled { opacity: 0.55; }
+  .jm-center-pad { text-align: center; padding: 8px; }
+  .jm-center-pad-sm { text-align: center; padding: 4px; }
+  .jm-right-pad { text-align: right; padding-top: 12px; }
+  .jm-left { text-align: left; align-items: flex-start; }
+  .jm-block { display: block; }
+  .jm-indent { padding-left: 8px; }
+  .jm-active-row { border-left: 2px solid var(--accent); margin-bottom: 4px; }
+  .jm-card-gap { margin-bottom: 6px; }
+  .jm-minw0 { min-width: 0; }
+  .jm-ellipsis { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .jm-sub-row { display: flex; gap: 8px; align-items: center; }
+  .jm-clamp2 {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .jm-actions-tight { display: flex; gap: 4px; }
+  .jm-tag-sm { font-size: 9px; padding: 1px 5px; }
+
+  /* Typography: eyebrow / row title / caption. */
+  .jm-eyebrow {
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--text-dim);
+  }
+  .jm-row-title { font-size: 13px; font-weight: 600; color: var(--text); }
+  .jm-dim { font-size: 11px; color: var(--text-dim); }
+  .jm-author { font-size: 11px; color: var(--text-dim); }
+
+  /* Icon tiles (loader cards + asset cards). */
+  .jm-tile { padding: 8px; }
+  .jm-tile--loader-fabric { background: var(--loader-fabric-bg); color: var(--loader-fabric); }
+  .jm-tile--loader-quilt { background: var(--loader-quilt-bg); color: var(--loader-quilt); }
+  .jm-tile--loader-forge { background: var(--loader-forge-bg); color: var(--loader-forge); }
+  .jm-tile--loader-neoforge { background: var(--loader-neoforge-bg); color: var(--loader-neoforge); }
+  .jm-tile--green { background: var(--green-bg); color: var(--green); }
+  .jm-tile--orange { background: var(--orange-bg); color: var(--orange); }
+  .jm-tile--accent { background: var(--accent-bg); color: var(--accent); }
+  .jm-tile--red { background: var(--red-bg); color: var(--red); }
+
+  /* Search-result cover art. */
+  .jm-cover { padding: 3px; border-radius: 6px; overflow: hidden; }
+  .jm-cover-img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 4px;
+  }
+  .jm-cover-icon { font-size: 18px; color: var(--accent); }
+  .jm-cover-icon.jm-modrinth { color: var(--loader-modrinth); }
+
+  /* Error row: one consistent treatment, with Retry where a retry exists. */
+  .jm-error-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    margin-bottom: 8px;
+    border-radius: var(--r-sm);
+    background: var(--red-bg);
+    color: var(--red);
+    font-size: 12px;
+  }
+  .jm-error-row .jm-error-msg { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+  .jm-error-row .btn-sm { color: var(--text); }
+</style>

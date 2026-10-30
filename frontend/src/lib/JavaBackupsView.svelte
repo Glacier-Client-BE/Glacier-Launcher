@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from './i18nStore.svelte'
   /**
    * Port of `Components/BackupsPanel.razor` (140 lines) — the "World Backups"
    * panel, reached from `currentView == "backups"` (Home.razor:1008).
@@ -11,9 +12,9 @@
    */
   import { invoke } from '@tauri-apps/api/core'
   import PanelHeader from './components/PanelHeader.svelte'
-  import Spinner from './components/Spinner.svelte'
   import ViewModeToggle from './components/ViewModeToggle.svelte'
   import { loadViewMode, saveViewMode, type ViewMode } from './viewMode'
+  import ListSkeleton from './components/ListSkeleton.svelte'
 
   let {
     instanceName,
@@ -78,7 +79,7 @@
     try {
       await invoke('backup_java_world', { worldDir })
       await reload()
-      onToast?.('World backed up.', 'success')
+      onToast?.(t('toast.worldBackedUp'), 'success')
     } catch (e) {
       onToast?.(String(e), 'error')
     } finally {
@@ -94,7 +95,7 @@
     try {
       await invoke('restore_java_backup', { zipPath })
       await reload()
-      onToast?.('Backup restored.', 'success')
+      onToast?.(t('toast.backupRestored'), 'success')
     } catch (e) {
       onToast?.(String(e), 'error')
     } finally {
@@ -102,18 +103,22 @@
     }
   }
 
-  /** Port of `Delete` — the C# never surfaces a failure here. */
+  /** Port of `Delete`; failures are surfaced as a toast. */
   async function deleteBackup(zipPath: string) {
-    await invoke('delete_java_backup', { zipPath })
-    await reload()
-    onToast?.('Backup deleted.', 'info')
+    try {
+      await invoke('delete_java_backup', { zipPath })
+      await reload()
+      onToast?.(t('toast.backupDeleted'), 'info')
+    } catch (e) {
+      onToast?.(String(e), 'error')
+    }
   }
 
   reload()
 </script>
 
 {#if !embedded}
-  <PanelHeader title="World Backups" {onBack}>
+  <PanelHeader title={t('panel.worldBackups')} {onBack}>
     {#snippet extraActions()}
       <button
         type="button"
@@ -121,8 +126,8 @@
         disabled={isLoading}
         onclick={reload}
         onmousedown={(e) => e.stopPropagation()}
-        data-tooltip="Refresh"
-        aria-label="Refresh"
+        data-tooltip={t('tt.refresh')}
+        aria-label={t('tt.refresh')}
       >
         <i class="fa-solid fa-rotate"></i>
       </button>
@@ -136,8 +141,8 @@
       class="panel-icon-btn {isLoading ? 'spinning' : ''}"
       disabled={isLoading}
       onclick={reload}
-      data-tooltip="Refresh"
-      aria-label="Refresh"
+      data-tooltip={t('tt.refresh')}
+      aria-label={t('tt.refresh')}
     >
       <i class="fa-solid fa-rotate"></i>
     </button>
@@ -147,77 +152,77 @@
 
 <div class="panel-body">
   {#if isLoading}
-    <div class="versions-loading"><Spinner size={18} /><span>Loading worlds and backups...</span></div>
+    <ListSkeleton rows={4} />
   {:else}
   <span class="panel-section-label">Worlds ({instanceName})</span>
   {#if worlds.length === 0}
     <div class="empty-state">
       <i class="fa-solid fa-globe"></i>
-      <span>No worlds in this instance's saves folder yet.</span>
+      <span>{t('empty.noWorldsThisInstanceSSaves')}</span>
     </div>
   {:else}
     <div class="version-list {backupsViewMode === 'grid' ? 'grid-view' : ''}">
     {#each worlds as w (w.path)}
       <div class="version-row">
         <div class="version-meta">
-          <span class="version-name">{w.name}</span>
+          <span class="version-name" title={w.name}>{w.name}</span>
           <span class="version-sub">{formatSize(w.size)}</span>
         </div>
         <button
-          class="vcs-btn"
+          class="btn-sm btn-primary"
           onclick={() => backupWorld(w.path)}
           disabled={busy}
           onmousedown={(e) => e.stopPropagation()}
         >
-          <i class="fa-solid fa-box-archive"></i>&nbsp;Back up
+          <i class={busy ? 'fa-solid fa-spinner fa-spin' : 'fa-solid fa-box-archive'}></i>&nbsp;{busy ? 'Backing up…' : 'Back up'}
         </button>
       </div>
     {/each}
     </div>
   {/if}
 
-  <span class="panel-section-label">Backups</span>
+  <span class="panel-section-label">{t('label.backups')}</span>
   {#if backups.length === 0}
     <div class="empty-state">
       <i class="fa-solid fa-clock-rotate-left"></i>
-      <span>No backups yet. Backing up a world zips it into the instance's backups folder.</span>
+      <span>{t('empty.noBackupsYetBackingUpWorld')}</span>
     </div>
   {:else}
     <div class="version-list {backupsViewMode === 'grid' ? 'grid-view' : ''}">
     {#each backups as b (b.path)}
       <div class="version-row">
         <div class="version-meta">
-          <span class="version-name">{b.name}</span>
+          <span class="version-name" title={b.name}>{b.name}</span>
           <span class="version-sub">{formatSize(b.size_bytes)}</span>
         </div>
         {#if confirmRestore === b.path}
           <button
-            class="vcs-btn"
+            class="btn-sm btn-primary"
             onclick={() => restoreBackup(b.path)}
             disabled={busy}
             onmousedown={(e) => e.stopPropagation()}
           >
-            <i class="fa-solid fa-check"></i>&nbsp;Confirm restore
+            <i class={busy ? 'fa-solid fa-spinner fa-spin' : 'fa-solid fa-check'}></i>&nbsp;{busy ? 'Restoring…' : 'Restore backup'}
           </button>
           <button
-            class="vcs-btn vcs-btn-ghost"
+            class="btn-sm"
             onclick={() => (confirmRestore = null)}
-            onmousedown={(e) => e.stopPropagation()}>Cancel</button
+            onmousedown={(e) => e.stopPropagation()}>{t('common.cancel')}</button
           >
         {:else}
           <button
-            class="vcs-btn vcs-btn-ghost"
+            class="btn-sm"
             onclick={() => (confirmRestore = b.path)}
             onmousedown={(e) => e.stopPropagation()}
-            data-tooltip="Replaces the current world with this backup"
+            data-tooltip={t('tt.replacesCurrentWorldWithThisBackup')}
           >
             <i class="fa-solid fa-clock-rotate-left"></i>&nbsp;Restore
           </button>
           <button
-            class="vcs-btn vcs-btn-ghost"
+            class="btn-sm"
             onclick={() => deleteBackup(b.path)}
             onmousedown={(e) => e.stopPropagation()}
-            aria-label="Delete backup"
+            aria-label={t('tt.deleteBackup')}
           >
             <i class="fa-solid fa-trash"></i>
           </button>
@@ -228,3 +233,27 @@
   {/if}
   {/if}
 </div>
+
+<style>
+  /* Backups rhythm: section gutter and band gaps between stacked rows,
+     row gap inside each row, hover on row buttons, dimmed disabled state. */
+  .panel-body {
+    gap: var(--panel-gutter);
+  }
+  .panel-body > .panel-section-label {
+    margin-top: 0;
+  }
+  .panel-body :global(.version-list) {
+    gap: var(--panel-band);
+  }
+  .version-row {
+    gap: var(--row-pad-x);
+  }
+  .version-row :global(button:not(.btn-primary):hover:not(:disabled)) {
+    background: var(--bg-item-hover);
+  }
+  .version-row :global(button:disabled) {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+</style>

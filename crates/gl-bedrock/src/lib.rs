@@ -40,7 +40,7 @@ mod util;
 pub mod world;
 pub mod wu;
 
-pub use backup::{BedrockBackupService, BedrockRoot, MANAGED_FOLDERS};
+pub use backup::{BackupDiff, BedrockBackupService, BedrockRoot, MANAGED_FOLDERS};
 pub use error::{BedrockError, Result};
 pub use import::{import_content, ImportOutcome};
 pub use instance::BedrockInstanceService;

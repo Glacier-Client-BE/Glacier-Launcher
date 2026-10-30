@@ -74,7 +74,7 @@ pub struct VersionService {
 impl VersionService {
     pub fn new(cache_file: PathBuf) -> Self {
         Self {
-            client: reqwest::Client::new(),
+            client: crate::util::http_client(),
             cache_file,
             last_error: None,
             latest_release: None,
@@ -99,14 +99,22 @@ impl VersionService {
     ) -> Result<Vec<JavaVersion>> {
         self.last_error = None;
 
+        // All disk I/O (cache read/write, per-version stat calls) runs on the
+        // blocking pool so it never stalls the async runtime.
         let mut versions = match self.fetch_manifest().await {
             Ok(v) => {
-                self.save_cache(&v);
+                if let Ok(json) = serde_json::to_string(&cache_entries(&v)) {
+                    let path = self.cache_file.clone();
+                    let _ = tokio::task::spawn_blocking(move || persist_cache(&path, &json)).await;
+                }
                 v
             }
             Err(e) => {
                 self.last_error = Some(format!("Failed to fetch Mojang manifest: {e}"));
-                let cached = self.load_cache();
+                let path = self.cache_file.clone();
+                let cached = tokio::task::spawn_blocking(move || load_cache_file(&path))
+                    .await
+                    .unwrap_or_default();
                 if !cached.is_empty() {
                     if let Some(err) = &mut self.last_error {
                         err.push_str(" (showing cached data)");
@@ -116,12 +124,14 @@ impl VersionService {
             }
         };
 
-        for v in &mut versions {
-            let dir = versions_dir.join(&v.id);
-            v.is_installed = dir.join(format!("{}.json", v.id)).is_file();
-            v.has_jar = dir.join(format!("{}.jar", v.id)).is_file();
-            v.is_active = Some(v.id.as_str()) == active_version_id;
-        }
+        let versions_dir = versions_dir.to_path_buf();
+        let active = active_version_id.map(str::to_string);
+        versions = tokio::task::spawn_blocking(move || {
+            annotate_installed(&mut versions, &versions_dir, active.as_deref());
+            versions
+        })
+        .await
+        .map_err(|e| crate::error::JavaError::Other(format!("version annotate task failed: {e}")))?;
 
         Ok(versions)
     }
@@ -197,47 +207,60 @@ impl VersionService {
             .collect())
     }
 
-    fn save_cache(&self, versions: &[JavaVersion]) {
-        let data: Vec<CachedVersion> = versions
-            .iter()
-            .map(|v| CachedVersion {
-                id: v.id.clone(),
-                kind: v.kind.clone(),
-                url: v.url.clone(),
-                sha1: v.sha1.clone(),
-                release_time: v.release_time.clone(),
-                time: v.time.clone(),
-                compliance_level: v.compliance_level,
-            })
-            .collect();
-        if let Ok(json) = serde_json::to_string(&data) {
-            if let Some(parent) = self.cache_file.parent() {
-                let _ = std::fs::create_dir_all(parent);
-            }
-            let _ = std::fs::write(&self.cache_file, json);
-        }
-    }
+}
 
-    fn load_cache(&self) -> Vec<JavaVersion> {
-        let Ok(text) = std::fs::read_to_string(&self.cache_file) else {
-            return Vec::new();
-        };
-        let Ok(cached) = serde_json::from_str::<Vec<CachedVersion>>(&text) else {
-            return Vec::new();
-        };
-        cached
-            .into_iter()
-            .map(|c| JavaVersion {
-                id: c.id,
-                kind: c.kind,
-                url: c.url,
-                sha1: c.sha1,
-                release_time: c.release_time,
-                time: c.time,
-                compliance_level: c.compliance_level,
-                ..Default::default()
-            })
-            .collect()
+fn cache_entries(versions: &[JavaVersion]) -> Vec<CachedVersion> {
+    versions
+        .iter()
+        .map(|v| CachedVersion {
+            id: v.id.clone(),
+            kind: v.kind.clone(),
+            url: v.url.clone(),
+            sha1: v.sha1.clone(),
+            release_time: v.release_time.clone(),
+            time: v.time.clone(),
+            compliance_level: v.compliance_level,
+        })
+        .collect()
+}
+
+fn persist_cache(cache_file: &Path, json: &str) {
+    if let Some(parent) = cache_file.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    // Atomic so a crash mid-write can't leave a truncated cache that
+    // then fails to parse on every subsequent launch.
+    let _ = crate::util::write_atomic(cache_file, json);
+}
+
+fn load_cache_file(cache_file: &Path) -> Vec<JavaVersion> {
+    let Ok(text) = std::fs::read_to_string(cache_file) else {
+        return Vec::new();
+    };
+    let Ok(cached) = serde_json::from_str::<Vec<CachedVersion>>(&text) else {
+        return Vec::new();
+    };
+    cached
+        .into_iter()
+        .map(|c| JavaVersion {
+            id: c.id,
+            kind: c.kind,
+            url: c.url,
+            sha1: c.sha1,
+            release_time: c.release_time,
+            time: c.time,
+            compliance_level: c.compliance_level,
+            ..Default::default()
+        })
+        .collect()
+}
+
+fn annotate_installed(versions: &mut [JavaVersion], versions_dir: &Path, active: Option<&str>) {
+    for v in versions.iter_mut() {
+        let dir = versions_dir.join(&v.id);
+        v.is_installed = dir.join(format!("{}.json", v.id)).is_file();
+        v.has_jar = dir.join(format!("{}.jar", v.id)).is_file();
+        v.is_active = Some(v.id.as_str()) == active;
     }
 }
 

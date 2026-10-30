@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from './i18nStore.svelte'
   /**
    * Literal port of the `clientlibrary` panel — Home.razor:4022-4185, with
    * behaviour from Pages/Home.ClientLibrary.cs (108 lines) and
@@ -18,9 +19,10 @@
    * the real per-account com.mojang path itself, so it is NOT a disabled state.
    */
   import { invoke } from '@tauri-apps/api/core'
-  import { onMount } from 'svelte'
+  import { onDestroy, onMount } from 'svelte'
   import SubTabs from './components/SubTabs.svelte'
   import InlineProgress from './components/InlineProgress.svelte'
+  import ListSkeleton from './components/ListSkeleton.svelte'
 
   let {
     instanceDir = '',
@@ -56,6 +58,16 @@
   let _clLoading = $state(false)
   let _clError = $state('')
   let _clFilter = $state('')
+  // The search box updates `_clFilter` ~150ms after typing so the derived
+  // list is not rebuilt on every keystroke.
+  let _clFilterInput = $state('')
+  let _clFilterTimer: ReturnType<typeof setTimeout> | undefined
+  function onClFilterInput(e: Event) {
+    _clFilterInput = (e.currentTarget as HTMLInputElement).value
+    clearTimeout(_clFilterTimer)
+    _clFilterTimer = setTimeout(() => (_clFilter = _clFilterInput), 150)
+  }
+  onDestroy(() => clearTimeout(_clFilterTimer))
   let _clVersion = $state('all')
   let _clExpanded = $state<Set<string>>(new Set())
   /** Port of `ClientLibVersions()` (Home.ClientLibrary.cs:46). */
@@ -106,21 +118,18 @@
 
   /** Port of `IsClientDownloadInstalled` (Home.ClientLibrary.cs:75), pre-resolved. */
   async function refreshInstalled() {
-    const next = new Set<string>()
-    for (const p of _clPacks) {
-      for (const d of p.downloads) {
-        try {
-          const yes = await invoke<boolean>('is_client_library_download_installed', {
-            instanceDir,
-            download: d,
-          })
-          if (yes) next.add(d.repo_path)
-        } catch {
-          /* a probe failure just means "not installed" */
-        }
-      }
-    }
-    _clInstalled = next
+    // Probes run concurrently; sequential awaits made N*M IPC round-trips
+    // block the panel on the N5100 for no benefit.
+    const downloads = _clPacks.flatMap((p) => p.downloads)
+    const results = await Promise.all(
+      downloads.map((d) =>
+        invoke<boolean>('is_client_library_download_installed', { instanceDir, download: d })
+          .then((yes) => (yes ? d.repo_path : null))
+          // a probe failure just means "not installed"
+          .catch(() => null),
+      ),
+    )
+    _clInstalled = new Set(results.filter((r): r is string => r !== null))
   }
 
 
@@ -163,9 +172,9 @@
     try {
       await invoke('install_client_library_download', { instanceDir, download: d })
       _clInstalled = new Set([..._clInstalled, d.repo_path])
-      onToast?.(`Installed ${d.label} to your resource packs.`, 'success')
+      onToast?.(t('toast.installedLabelToPacks', { label: d.label }), 'success')
     } catch (e) {
-      onToast?.('Install failed: ' + String(e), 'error')
+      onToast?.(t('toast.installFailed', { error: String(e) }), 'error')
     } finally {
       _clBusyPath = null
       _clProgress = 0
@@ -179,9 +188,9 @@
       const next = new Set(_clInstalled)
       next.delete(d.repo_path)
       _clInstalled = next
-      onToast?.(`Removed ${d.label}.`, 'info')
+      onToast?.(t('toast.removedLabel', { label: d.label }), 'info')
     } catch (e) {
-      onToast?.("Couldn't remove it: " + String(e), 'error')
+      onToast?.(t('toast.couldnTRemoveIt') + String(e), 'error')
     }
   }
 
@@ -199,19 +208,24 @@
   onMount(() => loadClientLibrary(false))
 </script>
 
+<style>
+  .cl-retry { margin-top: 10px; }
+  .cl-progress { margin-top: 4px; }
+</style>
+
 <div class="panel-header has-back">
   <button
     type="button"
     class="panel-back-btn"
     onclick={onBack}
     onmousedown={(e) => e.stopPropagation()}
-    data-tooltip="Back"
-    aria-label="Back"
+    data-tooltip={t('tt.back')}
+    aria-label={t('tt.back')}
   >
     <i class="fa-solid fa-arrow-left"></i>
   </button>
   <div class="panel-title-wrap">
-    <span class="panel-title">Client Library</span>
+    <span class="panel-title">{t('x.clientLibrary')}</span>
     <div class="panel-title-underline"></div>
   </div>
   <div class="panel-header-spacer"></div>
@@ -220,8 +234,8 @@
       class="panel-icon-btn"
       onclick={openSiteUrl}
       onmousedown={(e) => e.stopPropagation()}
-      data-tooltip="Indigo-Tools/ClientLibrary on GitHub"
-      aria-label="Open on GitHub"
+      data-tooltip={t('tt.indigoToolsClientlibraryGithub')}
+      aria-label={t('tt.openGithub')}
     >
       <i class="fa-brands fa-github"></i>
     </button>
@@ -230,150 +244,174 @@
       disabled={_clLoading}
       onclick={() => loadClientLibrary(true)}
       onmousedown={(e) => e.stopPropagation()}
-      data-tooltip="Refresh"
-      aria-label="Refresh"
+      data-tooltip={t('tt.refresh')}
+      aria-label={t('tt.refresh')}
     >
       <i class="fa-solid fa-rotate"></i>
     </button>
   </div>
 </div>
 
-<SubTabs strip="packs-addons" active="clientlib" onNavigate={(k) => onNavigate?.(k)} />
+<SubTabs strip="packs-addons" active="clientlib" edition="bedrock" onNavigate={(k) => onNavigate?.(k)} />
 
-<div class="mcv-filter-bar">
-  <div class="panel-search-wrap">
-    <i class="fa-solid fa-magnifying-glass"></i>
-    <input
-      class="panel-search-input"
-      placeholder="Search clients..."
-      bind:value={_clFilter}
-      onkeydown={(e) => e.stopPropagation()}
-    />
-  </div>
-  <div class="mcv-channel-tabs">
+<!--
+  IA change: the version filter was a `.mcv-channel-tabs` row that has to
+  wrap onto more and more lines as the community catalog grows Minecraft
+  versions — unlike the fixed 2-4 item strips elsewhere, this list is
+  unbounded. Same master-detail rail as Settings/Java Mods/Tweaks fixes
+  that; the accordion pack list becomes a `.client-card-cols` grid so
+  browsing many packs isn't one long column of full-width rows either.
+-->
+<div class="settings-layout">
+  <nav class="settings-nav-rail" aria-label={t('tt.minecraftVersion')}>
     <button
-      class="mcv-channel-tab {_clVersion === 'all' ? 'active' : ''}"
+      type="button"
+      class="settings-nav-btn {_clVersion === 'all' ? 'active' : ''}"
       onclick={() => setClientLibVersion('all')}
       onmousedown={(e) => e.stopPropagation()}
-    >All</button>
+    >
+      <i class="fa-solid fa-layer-group"></i> <span>{t('x.all')}</span>
+      <span class="settings-nav-btn-count">{_clPacks.length}</span>
+    </button>
     {#each _clVersions as v (v)}
       <button
-        class="mcv-channel-tab {_clVersion === v ? 'active' : ''}"
+        type="button"
+        class="settings-nav-btn {_clVersion === v ? 'active' : ''}"
         onclick={() => setClientLibVersion(v)}
         onmousedown={(e) => e.stopPropagation()}
-      >{v}</button>
-    {/each}
-  </div>
-</div>
-
-<div class="panel-body">
-  {#if _clLoading && _clPacks.length === 0}
-    <div class="versions-loading"><span class="spinner"></span><span>Loading the client library...</span></div>
-  {:else if _clError && _clPacks.length === 0}
-    <div class="empty-state">
-      <i class="fa-solid fa-triangle-exclamation"></i>
-      <span>Couldn't load the library</span>
-      <small>{_clError}</small>
-      <button
-        class="btn-sm"
-        style="margin-top:10px;"
-        onclick={() => loadClientLibrary(true)}
-        onmousedown={(e) => e.stopPropagation()}
       >
-        <i class="fa-solid fa-rotate"></i> Retry
+        <i class="fa-solid fa-cube"></i> <span>MC {v}</span>
+        <span class="settings-nav-btn-count">{_clPacks.filter((p) => p.version === v).length}</span>
       </button>
+    {/each}
+  </nav>
+
+  <div class="settings-content">
+    <div class="panel-search-wrap settings-search-wrap">
+      <i class="fa-solid fa-magnifying-glass"></i>
+      <input
+        class="panel-search-input"
+        aria-label={t('ph.searchClients')}
+        placeholder={t('ph.searchClients')}
+        value={_clFilterInput}
+        oninput={onClFilterInput}
+        onkeydown={(e) => e.stopPropagation()}
+      />
     </div>
-  {:else}
-    {#if _clError}
-      <div class="cache-notice"><i class="fa-solid fa-circle-info"></i><span>{_clError}</span></div>
-    {/if}
 
-    {#if clFiltered.length === 0}
-      <div class="empty-state">
-        <i class="fa-solid fa-magnifying-glass"></i>
-        <span>No clients match</span>
-        <small>Try another Minecraft version or clear the search.</small>
-      </div>
-    {/if}
-
-    {#each clFiltered as pack (packKey(pack))}
-      {@const open = isClientPackExpanded(pack)}
-      <div
-        class="cl-pack {open ? 'open' : ''} {pack.banner_url ? 'textured' : ''}"
-        style={pack.banner_url ? `--cl-banner:url('${pack.banner_url}')` : ''}
-      >
-        <div
-          class="cl-pack-head"
-          role="button"
-          tabindex="0"
-          onclick={() => toggleClientPack(pack)}
-          onkeydown={(e) => {
-            if (e.key === 'Enter' || e.key === ' ') toggleClientPack(pack)
-          }}
-          onmousedown={(e) => e.stopPropagation()}
-        >
-          {#if pack.icon_url}
-            <img class="cl-pack-icon" src={pack.icon_url} alt="" loading="lazy" />
-          {:else}
-            <div class="cl-pack-icon cl-pack-icon-ph"><i class="fa-solid fa-wand-sparkles"></i></div>
-          {/if}
-          <div class="version-meta">
-            <span class="version-name">{pack.name}</span>
-            <span class="version-sub">
-              MC {pack.version} · {mainDownloads(pack).length} download{mainDownloads(pack).length === 1 ? '' : 's'}
-              {#if extensions(pack).length > 0} · {extensions(pack).length} extension{extensions(pack).length === 1 ? '' : 's'}{/if}
-            </span>
-          </div>
-          <i class="fa-solid fa-chevron-down cl-pack-caret"></i>
+    <div class="panel-body">
+      {#if _clLoading && _clPacks.length === 0}
+        <ListSkeleton rows={5} />
+      {:else if _clError && _clPacks.length === 0}
+        <div class="empty-state">
+          <i class="fa-solid fa-triangle-exclamation"></i>
+          <span>{t('empty.couldnTLoadLibrary')}</span>
+          <small>{_clError}</small>
+          <button
+            class="btn-sm cl-retry"
+            onclick={() => loadClientLibrary(true)}
+            onmousedown={(e) => e.stopPropagation()}
+          >
+            <i class="fa-solid fa-rotate"></i> {t('common.retry')}
+          </button>
         </div>
+      {:else}
+        {#if _clError}
+          <div class="cache-notice"><i class="fa-solid fa-circle-info"></i><span>{_clError}</span></div>
+        {/if}
 
-        {#if open}
-          <div class="cl-pack-body">
-            {#if pack.description}<p class="cl-pack-desc">{pack.description}</p>{/if}
-            {#each [...mainDownloads(pack), ...extensions(pack)] as dl (dl.repo_path)}
-              {@const isInstalled = _clInstalled.has(dl.repo_path)}
-              {@const busy = _clBusyPath === dl.repo_path}
-              <div class="cl-dl-row">
-                <i class={dl.is_extension ? 'fa-solid fa-puzzle-piece' : 'fa-solid fa-box'}></i>
-                <div class="version-meta">
-                  <span class="version-name">{dl.label}</span>
-                  <span class="version-sub">
-                    {dl.is_extension ? 'Extension' : 'Client pack'}
-                    {#if isInstalled} · installed{/if}
-                  </span>
-                  {#if busy}
-                    <div style="margin-top:4px;">
-                      <InlineProgress progress={_clProgress} showSpinner={false} />
-                    </div>
-                  {/if}
-                </div>
-                <div class="version-actions">
-                  {#if isInstalled}
-                    <button
-                      class="icon-btn icon-btn-ghost"
-                      data-tooltip="Remove from resource packs"
-                      aria-label="Remove from resource packs"
-                      onclick={() => uninstallClientPack(dl)}
-                      onmousedown={(e) => e.stopPropagation()}
-                    >
-                      <i class="fa-solid fa-trash"></i>
-                    </button>
-                  {/if}
-                  <button
-                    class="icon-btn icon-btn-ghost"
-                    data-tooltip={isInstalled ? 'Reinstall' : 'Install to resource packs'}
-                    disabled={_clBusyPath !== null}
-                    onclick={() => installClientPack(dl)}
-                    onmousedown={(e) => e.stopPropagation()}
-                  >
-                    {#if busy}<span class="spinner"></span>{:else}<i class="fa-solid fa-download"></i>{/if}
-                  </button>
-                </div>
-              </div>
-            {/each}
+        {#if clFiltered.length === 0}
+          <div class="empty-state">
+            <i class="fa-solid fa-magnifying-glass"></i>
+            <span>{t('empty.noClientsMatch')}</span>
+            <small>{t('empty.tryAnotherMinecraftVersionOrClear')}</small>
           </div>
         {/if}
-      </div>
-    {/each}
-  {/if}
+
+        <div class="client-card-cols">
+        {#each clFiltered as pack (packKey(pack))}
+          {@const open = isClientPackExpanded(pack)}
+          <div
+            class="cl-pack {open ? 'open' : ''} {pack.banner_url ? 'textured' : ''}"
+            style={pack.banner_url ? `--cl-banner:url('${pack.banner_url}')` : ''}
+          >
+            <div
+              class="cl-pack-head"
+              role="button"
+              tabindex="0"
+              aria-expanded={open}
+              onclick={() => toggleClientPack(pack)}
+              onkeydown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') toggleClientPack(pack)
+              }}
+              onmousedown={(e) => e.stopPropagation()}
+            >
+              {#if pack.icon_url}
+                <img class="cl-pack-icon" src={pack.icon_url} alt="" loading="lazy" decoding="async" />
+              {:else}
+                <div class="cl-pack-icon cl-pack-icon-ph"><i class="fa-solid fa-wand-sparkles"></i></div>
+              {/if}
+              <div class="version-meta">
+                <span class="version-name">{pack.name}</span>
+                <span class="version-sub">
+                  MC {pack.version} · {mainDownloads(pack).length} download{mainDownloads(pack).length === 1 ? '' : 's'}
+                  {#if extensions(pack).length > 0} · {extensions(pack).length} extension{extensions(pack).length === 1 ? '' : 's'}{/if}
+                </span>
+              </div>
+              <i class="fa-solid fa-chevron-down cl-pack-caret"></i>
+            </div>
+
+            {#if open}
+              <div class="cl-pack-body">
+                {#if pack.description}<p class="cl-pack-desc">{pack.description}</p>{/if}
+                {#each [...mainDownloads(pack), ...extensions(pack)] as dl (dl.repo_path)}
+                  {@const isInstalled = _clInstalled.has(dl.repo_path)}
+                  {@const busy = _clBusyPath === dl.repo_path}
+                  <div class="cl-dl-row">
+                    <i class={dl.is_extension ? 'fa-solid fa-puzzle-piece' : 'fa-solid fa-box'}></i>
+                    <div class="version-meta">
+                      <span class="version-name">{dl.label}</span>
+                      <span class="version-sub">
+                        {dl.is_extension ? 'Extension' : 'Client pack'}
+                        {#if isInstalled} · installed{/if}
+                      </span>
+                      {#if busy}
+                        <div class="cl-progress">
+                          <InlineProgress progress={_clProgress} showSpinner={false} />
+                        </div>
+                      {/if}
+                    </div>
+                    <div class="version-actions">
+                      {#if isInstalled}
+                        <button
+                          class="icon-btn icon-btn-ghost"
+                          data-tooltip={t('tt.removeFromResourcePacks')}
+                          aria-label={t('tt.removeFromResourcePacks')}
+                          onclick={() => uninstallClientPack(dl)}
+                          onmousedown={(e) => e.stopPropagation()}
+                        >
+                          <i class="fa-solid fa-trash"></i>
+                        </button>
+                      {/if}
+                      <button
+                        class="icon-btn icon-btn-ghost"
+                        data-tooltip={isInstalled ? 'Reinstall' : 'Install to resource packs'}
+                        aria-label={isInstalled ? 'Reinstall' : 'Install to resource packs'}
+                        disabled={_clBusyPath !== null}
+                        onclick={() => installClientPack(dl)}
+                        onmousedown={(e) => e.stopPropagation()}
+                      >
+                        {#if busy}<span class="spinner"></span>{:else}<i class="fa-solid fa-download"></i>{/if}
+                      </button>
+                    </div>
+                  </div>
+                {/each}
+              </div>
+            {/if}
+          </div>
+        {/each}
+        </div>
+      {/if}
+    </div>
+  </div>
 </div>

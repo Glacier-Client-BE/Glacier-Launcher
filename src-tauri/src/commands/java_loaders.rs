@@ -193,7 +193,7 @@ pub async fn install_loader(
 /// delete downloaded loader libraries/versions from the shared tree, since
 /// other instances may share them.
 #[tauri::command]
-pub fn uninstall_loader(state: State<'_, AppState>, instance_id: String) -> Result<(), String> {
+pub async fn uninstall_loader(state: State<'_, AppState>, instance_id: String) -> Result<(), String> {
     let svc = state
         .java_instances
         .lock()
@@ -210,7 +210,7 @@ pub struct InstanceLoaderDto {
 }
 
 #[tauri::command]
-pub fn get_instance_loader(
+pub async fn get_instance_loader(
     state: State<'_, AppState>,
     instance_id: String,
 ) -> Result<InstanceLoaderDto, String> {

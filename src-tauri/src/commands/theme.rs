@@ -15,19 +15,19 @@ use tauri::State;
 
 use crate::state::AppState;
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn list_themes(state: State<'_, AppState>) -> Vec<ThemeDefinition> {
     state.themes.themes()
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_theme(state: State<'_, AppState>, id: String) -> Option<ThemeDefinition> {
     state.themes.get(&id)
 }
 
 /// Creates a theme seeded from a base preset. Port of `ThemeService.SeedFrom`
 /// followed by `Add`.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn create_theme(
     state: State<'_, AppState>,
     preset: String,
@@ -38,23 +38,23 @@ pub fn create_theme(
 }
 
 /// Persists edits to an existing theme. Returns false when the id is unknown.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn update_theme(state: State<'_, AppState>, theme: ThemeDefinition) -> bool {
     state.themes.update(theme)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn duplicate_theme(state: State<'_, AppState>, id: String) -> Option<ThemeDefinition> {
     state.themes.duplicate(&id)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn delete_theme(state: State<'_, AppState>, id: String) {
     state.themes.delete(&id);
 }
 
 /// Writes `<slug>.glaciertheme.json` and returns its path.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn export_theme(state: State<'_, AppState>, id: String) -> Result<String, String> {
     let theme = state
         .themes
@@ -69,14 +69,14 @@ pub fn export_theme(state: State<'_, AppState>, id: String) -> Result<String, St
 
 /// Imports a `.glaciertheme.json`. Returns `None` when the file is missing,
 /// unparseable, or has no name - matching the original's `catch { return null; }`.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn import_theme(state: State<'_, AppState>, file_path: String) -> Option<ThemeDefinition> {
     state.themes.import(&PathBuf::from(file_path))
 }
 
 /// Copies a chosen background image next to the launcher's data so the theme
 /// survives the source file moving. Rejects files over 20 MB.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn stash_theme_background(
     state: State<'_, AppState>,
     source_path: String,

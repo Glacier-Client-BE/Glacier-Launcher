@@ -11,13 +11,16 @@ use std::time::Duration;
 use futures_util::StreamExt;
 use sha2::{Digest, Sha256};
 use tokio::fs;
-use tokio::io::AsyncWriteExt;
+use tokio::io::{AsyncReadExt, AsyncWriteExt, BufWriter};
 use tokio_util::sync::CancellationToken;
-use uuid::Uuid;
 
 use crate::client::DownloadClient;
 use crate::error::{DownloadError, Result};
 use crate::progress::ProgressValue;
+
+/// Buffer size for both disk reads (re-hashing a partial) and buffered writes
+/// of the streamed body.
+const WRITE_BUFFER_BYTES: usize = 256 * 1024;
 
 /// A "no real hash supplied" sentinel some callers pass (mirrors `HasRealHash` in
 /// the C# source, which treated a leading run of zeros as "not a real checksum").
@@ -136,18 +139,29 @@ pub async fn download_file(
 
     match &result {
         Ok(_) => commit(&tmp_path, &req.destination).await?,
+        // A paused download's `.tmp` is deliberately left in place (a real
+        // cancel calls `try_delete` itself before this - see
+        // `queue.rs::pause` vs `queue.rs::cancel`) so `resume` can pick up
+        // where it left off via a Range request instead of restarting.
+        Err(DownloadError::Cancelled) => {}
         Err(_) => try_delete(&tmp_path).await,
     }
 
     result
 }
 
-fn tmp_sibling(destination: &Path) -> PathBuf {
+/// Deterministic (not per-attempt-random) so a paused-then-resumed download
+/// finds the same partial file to continue from. Downloading two different
+/// files to the same `destination` concurrently was never supported anyway
+/// (they'd collide on the final `commit` rename regardless of tmp naming).
+/// Public so `queue.rs` can find (and delete) the same path when a *real*
+/// cancel - as opposed to a pause - needs to clean it up.
+pub fn tmp_sibling(destination: &Path) -> PathBuf {
     let mut name = destination
         .file_name()
         .map(|n| n.to_os_string())
         .unwrap_or_default();
-    name.push(format!(".{}.tmp", Uuid::new_v4().simple()));
+    name.push(".partial.tmp");
     destination.with_file_name(name)
 }
 
@@ -167,6 +181,16 @@ async fn download_with_retry(
 
         match download_once(client, req, tmp_path, on_progress, on_total, cancel).await {
             Ok(outcome) => return Ok(outcome),
+            // A cancellation (pause or real cancel) mid-attempt must
+            // propagate as a bare `Cancelled`, not get wrapped in
+            // `RetriesExhausted` - `Cancelled::is_transient()` is `false`,
+            // so without this early return it fell into the same "give up
+            // and wrap" branch a real failure does, and the queue's
+            // `matches!(err, DownloadError::Cancelled)` status check
+            // (paused vs failed, cancelled vs failed) would never see a
+            // plain `Cancelled` for anything cancelled mid-stream - only
+            // for the (much rarer) case of cancelling between attempts.
+            Err(DownloadError::Cancelled) => return Err(DownloadError::Cancelled),
             Err(err) => {
                 let transient = err.is_transient();
                 if attempt >= req.max_attempts || !transient {
@@ -201,14 +225,27 @@ async fn download_once(
     on_total: &mut impl FnMut(u64),
     cancel: &CancellationToken,
 ) -> Result<DownloadOutcome> {
-    let response = client
-        .inner()
-        .get(&req.url)
-        .send()
-        .await
-        .map_err(DownloadError::Http)?;
+    // QOL pause/resume: a `.tmp` left behind by a paused download (see
+    // `download_file`'s doc comment) is resumed with a `Range` request
+    // instead of restarting from zero. `existing_len` is only trusted once
+    // the response actually confirms it with `206 Partial Content` -
+    // servers are allowed to ignore `Range` and answer `200` with the full
+    // body, in which case this falls back to a normal full download.
+    let existing_len = fs::metadata(tmp_path).await.map(|m| m.len()).unwrap_or(0);
+
+    let mut request_builder = client.inner().get(&req.url);
+    if existing_len > 0 {
+        request_builder = request_builder.header(reqwest::header::RANGE, format!("bytes={existing_len}-"));
+    }
+    let response = request_builder.send().await.map_err(DownloadError::Http)?;
 
     let status = response.status();
+    if status == reqwest::StatusCode::RANGE_NOT_SATISFIABLE && existing_len > 0 {
+        // The leftover partial is no longer a valid prefix (typically it was already
+        // complete when the previous attempt died). Drop it so the transient-error
+        // retry restarts from zero instead of re-sending the same bad Range.
+        let _ = fs::remove_file(tmp_path).await;
+    }
     if !status.is_success() {
         return Err(DownloadError::Status {
             status: status.as_u16(),
@@ -216,22 +253,68 @@ async fn download_once(
         });
     }
 
-    let total = response
-        .content_length()
-        .or(req.known_total_bytes)
-        .unwrap_or(0);
+    let resuming = existing_len > 0 && status == reqwest::StatusCode::PARTIAL_CONTENT;
+
+    let total = if resuming {
+        // "bytes <start>-<end>/<total>" - the part after '/' is the full
+        // size regardless of how much of the range is actually being sent.
+        content_range_total(&response)
+            .or(req.known_total_bytes)
+            .unwrap_or(0)
+    } else {
+        response
+            .content_length()
+            .or(req.known_total_bytes)
+            .unwrap_or(0)
+    };
     on_total(total);
 
-    let mut file = fs::File::create(tmp_path)
-        .await
-        .map_err(|e| DownloadError::io(tmp_path, e))?;
-
     let mut hasher = Sha256::new();
-    let mut downloaded: u64 = 0;
+    let mut downloaded: u64;
+
+    // Chunks from the network are small (often 8-16 KiB); without buffering,
+    // every `write_all` on a `tokio::fs::File` is a separate blocking-pool
+    // hop. A 256 KiB buffer turns that into a handful of large writes.
+    let mut file = if resuming {
+        // Re-hash what's already on disk so the final SHA256 covers the
+        // whole file, not just the newly-appended tail - the alternative
+        // (skip verification on a resumed download) would make
+        // `expected_sha256` silently stop being checked for anything that
+        // was ever paused.
+        let mut existing = fs::File::open(tmp_path)
+            .await
+            .map_err(|e| DownloadError::io(tmp_path, e))?;
+        let mut buf = vec![0u8; WRITE_BUFFER_BYTES];
+        loop {
+            let n = existing
+                .read(&mut buf)
+                .await
+                .map_err(|e| DownloadError::io(tmp_path, e))?;
+            if n == 0 {
+                break;
+            }
+            hasher.update(&buf[..n]);
+        }
+        downloaded = existing_len;
+        let appending = fs::OpenOptions::new()
+            .append(true)
+            .open(tmp_path)
+            .await
+            .map_err(|e| DownloadError::io(tmp_path, e))?;
+        BufWriter::with_capacity(WRITE_BUFFER_BYTES, appending)
+    } else {
+        downloaded = 0;
+        let created = fs::File::create(tmp_path)
+            .await
+            .map_err(|e| DownloadError::io(tmp_path, e))?;
+        BufWriter::with_capacity(WRITE_BUFFER_BYTES, created)
+    };
+
     let mut stream = response.bytes_stream();
 
     while let Some(chunk) = stream.next().await {
         if cancel.is_cancelled() {
+            file.flush().await.map_err(|e| DownloadError::io(tmp_path, e))?;
             return Err(DownloadError::Cancelled);
         }
         let chunk = chunk.map_err(DownloadError::Http)?;
@@ -270,6 +353,15 @@ async fn download_once(
         sha256: actual,
         bytes: downloaded,
     })
+}
+
+/// Parses the total size out of a `Content-Range: bytes 1000-1999/2000`
+/// response header. `None` for a missing/malformed header or a server that
+/// doesn't know the total (`.../*`).
+fn content_range_total(response: &reqwest::Response) -> Option<u64> {
+    let value = response.headers().get(reqwest::header::CONTENT_RANGE)?.to_str().ok()?;
+    let total_part = value.rsplit('/').next()?;
+    total_part.parse::<u64>().ok()
 }
 
 async fn commit(tmp_path: &Path, destination: &Path) -> Result<()> {
@@ -323,6 +415,15 @@ mod tests {
         let name = tmp.file_name().unwrap().to_string_lossy().into_owned();
         assert!(name.starts_with("client.jar."));
         assert!(name.ends_with(".tmp"));
+    }
+
+    #[test]
+    fn tmp_sibling_is_deterministic_for_resume() {
+        // Two calls for the same destination must agree on the path - a
+        // random-per-call name (the old behavior) would make a paused
+        // download's resume attempt look for a file that was never written.
+        let dest = PathBuf::from("/downloads/client.jar");
+        assert_eq!(tmp_sibling(&dest), tmp_sibling(&dest));
     }
 
     #[test]

@@ -62,7 +62,7 @@ fn runtimes_root(_state: &State<'_, AppState>) -> Result<PathBuf, String> {
 }
 
 #[tauri::command]
-pub fn list_java_mods(
+pub async fn list_java_mods(
     state: State<'_, AppState>,
     instance_id: String,
 ) -> Result<ModReport, String> {
@@ -71,7 +71,7 @@ pub fn list_java_mods(
 }
 
 #[tauri::command]
-pub fn set_java_mod_enabled(
+pub async fn set_java_mod_enabled(
     state: State<'_, AppState>,
     instance_id: String,
     file_name: String,
@@ -82,7 +82,7 @@ pub fn set_java_mod_enabled(
 }
 
 #[tauri::command]
-pub fn delete_java_mod(
+pub async fn delete_java_mod(
     state: State<'_, AppState>,
     instance_id: String,
     file_name: String,
@@ -94,7 +94,7 @@ pub fn delete_java_mod(
 }
 
 #[tauri::command]
-pub fn open_java_mods_folder(
+pub async fn open_java_mods_folder(
     state: State<'_, AppState>,
     instance_id: String,
 ) -> Result<(), String> {
@@ -250,7 +250,7 @@ pub async fn install_modrinth_mod(
 
     let mods_dir = instance_mods_dir(&state, &instance_id)?;
     std::fs::create_dir_all(&mods_dir).map_err(|e| e.to_string())?;
-    let dest = mods_dir.join(&version.file_name);
+    let dest = mods_dir.join(super::safe_file_name(&version.file_name)?);
     let req = DownloadRequest::new(version.url.clone(), dest).with_label(version.file_name.clone());
     state
         .downloads
@@ -302,6 +302,125 @@ pub async fn install_modrinth_mod(
         file_name: version.file_name,
         dependency_warnings: warnings,
     })
+}
+
+/// The Java clients Glacier installs itself as a mod into the active
+/// instance, so picking one in the client menu "just works". Each value is
+/// the jar-name prefix used to tell whether it's already installed.
+fn client_mod_prefix(client: &str) -> Option<&'static str> {
+    match client {
+        "Essential" => Some("essential"),
+        "NoRisk" => Some("nrc-standalone"),
+        "Dawn" => Some("dawn-standalone"),
+        _ => None,
+    }
+}
+
+/// Resolves where a client's standalone mod for this game version and
+/// loader comes from: `(download url, file name, modrinth version)`.
+async fn resolve_client_mod(
+    state: &State<'_, AppState>,
+    client: &str,
+    game_version: &str,
+    loader: &str,
+) -> Result<(String, String, Option<MrVersion>), String> {
+    let unavailable = || format!("{client} isn't available for {game_version} ({loader}) yet.");
+    match client {
+        "Essential" => {
+            let version = ModrinthClient::new(state.http.clone())
+                .get_latest_version_for("essential", game_version, loader)
+                .await
+                .map_err(|e| e.to_string())?
+                .ok_or_else(unavailable)?;
+            Ok((version.url.clone(), version.file_name.clone(), Some(version)))
+        }
+        // NoRisk publishes a standalone mod per game version and loader; its
+        // website reads the list from this endpoint.
+        "NoRisk" => {
+            let list: serde_json::Value = state
+                .http
+                .get("https://norisk.gg/api/downloads")
+                .send()
+                .await
+                .map_err(|e| e.to_string())?
+                .json()
+                .await
+                .map_err(|e| e.to_string())?;
+            let href = list["mods"]
+                .as_array()
+                .and_then(|mods| {
+                    mods.iter().find(|m| {
+                        m["mcVersion"].as_str() == Some(game_version) && m["loader"].as_str() == Some(loader)
+                    })
+                })
+                .and_then(|m| m["href"].as_str())
+                .ok_or_else(unavailable)?;
+            Ok((href.to_string(), format!("nrc-standalone-{game_version}-{loader}.jar"), None))
+        }
+        // Dawn's standalone mod is a small Fabric loader (1.17.1+) that
+        // fetches the client itself at startup.
+        "Dawn" => {
+            if loader != "fabric" {
+                return Err("Dawn's standalone mod needs a Fabric instance.".into());
+            }
+            Ok((
+                "https://cdn.dawn.gg/files/standalone/libraries/dawn-standalone.jar".into(),
+                "dawn-standalone.jar".into(),
+                None,
+            ))
+        }
+        _ => Err(format!("{client} isn't a client Glacier can install.")),
+    }
+}
+
+/// Makes sure a client's standalone mod is in an instance before it
+/// launches. Returns `true` when it downloaded the jar, `false` when one was
+/// already there.
+#[tauri::command]
+pub async fn ensure_client_mod_installed(
+    state: State<'_, AppState>,
+    instance_id: String,
+    client: String,
+    game_version: String,
+    loader: String,
+) -> Result<bool, String> {
+    let prefix = client_mod_prefix(&client).ok_or_else(|| format!("{client} isn't a client Glacier can install."))?;
+    let mods_dir = instance_mods_dir(&state, &instance_id)?;
+    let already = std::fs::read_dir(&mods_dir)
+        .map(|entries| {
+            entries.flatten().any(|e| {
+                let name = e.file_name().to_string_lossy().to_lowercase();
+                name.starts_with(prefix) && name.ends_with(".jar")
+            })
+        })
+        .unwrap_or(false);
+    if already {
+        return Ok(false);
+    }
+
+    let (url, file_name, version) = resolve_client_mod(&state, &client, &game_version, &loader).await?;
+    std::fs::create_dir_all(&mods_dir).map_err(|e| e.to_string())?;
+    let dest = mods_dir.join(super::safe_file_name(&file_name)?);
+    let req = DownloadRequest::new(url, dest).with_label(file_name.clone());
+    state
+        .downloads
+        .submit(req)
+        .join()
+        .await
+        .map_err(|e| e.to_string())?;
+    if let Some(version) = version {
+        let _ = mod_provenance::record(
+            &mods_dir,
+            ModProvenance {
+                filename: version.file_name.clone(),
+                source: ModSource::Modrinth,
+                project_id: "essential".into(),
+                version_id: version.id.clone(),
+                sha1: version.sha1.clone(),
+            },
+        );
+    }
+    Ok(true)
 }
 
 // ── Update checker + changelog viewer (features 11 & 16) ───────────────────
@@ -386,7 +505,7 @@ pub async fn update_java_mod(
     version: MrVersion,
 ) -> Result<String, String> {
     let mods_dir = instance_mods_dir(&state, &instance_id)?;
-    let dest = mods_dir.join(&version.file_name);
+    let dest = mods_dir.join(super::safe_file_name(&version.file_name)?);
     let req = DownloadRequest::new(version.url.clone(), dest).with_label(version.file_name.clone());
     state
         .downloads
@@ -396,7 +515,7 @@ pub async fn update_java_mod(
         .map_err(|e| e.to_string())?;
 
     if old_file_name != version.file_name {
-        let old_path = mods_dir.join(&old_file_name);
+        let old_path = mods_dir.join(super::safe_file_name(&old_file_name)?);
         if old_path.exists() {
             std::fs::remove_file(old_path).map_err(|e| e.to_string())?;
         }
@@ -456,7 +575,7 @@ pub async fn update_all_java_mods(
 /// partially-renamed folder from a previous crash is left alone rather than
 /// overwritten.
 #[tauri::command]
-pub fn set_all_java_mods_enabled(
+pub async fn set_all_java_mods_enabled(
     state: State<'_, AppState>,
     instance_id: String,
     enabled: bool,
@@ -499,7 +618,7 @@ pub struct InstanceModDiff {
 /// Compares the installed mods of two instances, keyed by loader mod id
 /// (falling back to the jar file stem for mods without readable metadata).
 #[tauri::command]
-pub fn diff_java_instances(
+pub async fn diff_java_instances(
     state: State<'_, AppState>,
     instance_a: String,
     instance_b: String,
@@ -554,7 +673,7 @@ pub fn diff_java_instances(
 /// `DragEvent` — carries a real filesystem path) into an instance's `mods/`
 /// folder.
 #[tauri::command]
-pub fn install_local_mod_jar(
+pub async fn install_local_mod_jar(
     state: State<'_, AppState>,
     instance_id: String,
     source_path: String,

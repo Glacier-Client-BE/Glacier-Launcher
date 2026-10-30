@@ -19,7 +19,7 @@ pub use error::{ModpackError, Result};
 pub use export::curseforge::export_curseforge;
 pub use export::mrpack::export_mrpack;
 pub use export::ExportOptions;
-pub use hash::{sha1_hex_file, sha512_hex_file};
+pub use hash::{sha1_and_sha512_hex_file, sha1_hex_file, sha512_hex_file};
 pub use loaders::LoaderClient;
 pub use modrinth::ModrinthClient;
 pub use pack_preview::{preview_pack, PackPreview};

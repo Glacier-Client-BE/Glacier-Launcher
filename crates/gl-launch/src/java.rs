@@ -267,12 +267,21 @@ fn find_javaw_under(root: &Path) -> Option<PathBuf> {
     if !root.is_dir() {
         return None;
     }
-    fn walk(dir: &Path) -> Option<PathBuf> {
+    // `visited` guards against a symlink loop under the runtime directory
+    // causing unbounded recursion (real call-stack recursion here, so a
+    // cycle would be a stack overflow, not just a slow scan) — canonicalize
+    // each directory before descending so a symlinked subdir that cycles
+    // back to an ancestor is only ever walked once.
+    fn walk(dir: &Path, visited: &mut std::collections::HashSet<PathBuf>) -> Option<PathBuf> {
+        let canonical = std::fs::canonicalize(dir).unwrap_or_else(|_| dir.to_path_buf());
+        if !visited.insert(canonical) {
+            return None;
+        }
         let entries = std::fs::read_dir(dir).ok()?;
         for entry in entries.flatten() {
             let path = entry.path();
             if path.is_dir() {
-                if let Some(found) = walk(&path) {
+                if let Some(found) = walk(&path, visited) {
                     return Some(found);
                 }
             } else if path
@@ -285,5 +294,6 @@ fn find_javaw_under(root: &Path) -> Option<PathBuf> {
         }
         None
     }
-    walk(root)
+    let mut visited = std::collections::HashSet::new();
+    walk(root, &mut visited)
 }

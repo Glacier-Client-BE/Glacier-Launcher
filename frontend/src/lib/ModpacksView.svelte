@@ -1,11 +1,11 @@
 <script lang="ts">
+  import { t } from './i18nStore.svelte'
   import { invoke } from '@tauri-apps/api/core'
   import { untrack } from 'svelte'
   import PanelHeader from './components/PanelHeader.svelte'
   import Spinner from './components/Spinner.svelte'
-  import ViewModeToggle from './components/ViewModeToggle.svelte'
-  import { loadViewMode, saveViewMode, type ViewMode } from './viewMode'
   import type { LauncherSettings } from './settings'
+  import ListSkeleton from './components/ListSkeleton.svelte'
 
   // Ported from Components/ModpacksPanel.razor. Search hits
   // `search_curseforge_modpacks` / `search_modrinth_modpacks`. Install hits
@@ -39,11 +39,6 @@
   let searched = $state(false)
   let error = $state('')
   let results = $state<PackResult[]>([])
-  let modpacksViewMode = $state<ViewMode>(loadViewMode('modpacks'))
-  function setModpacksViewMode(m: ViewMode) {
-    modpacksViewMode = m
-    saveViewMode('modpacks', m)
-  }
 
   const cfAvailable = $derived(!!settings.CurseForgeApiKey?.trim())
 
@@ -80,6 +75,7 @@
     try {
       if (source === 'cf') {
         if (!cfAvailable) {
+          searched = false
           searching = false
           return
         }
@@ -163,37 +159,64 @@
   search()
 </script>
 
-<PanelHeader title="Modpacks" {onBack}>
-  {#snippet extraActions()}
-    <ViewModeToggle mode={modpacksViewMode} onChange={setModpacksViewMode} />
-  {/snippet}
-</PanelHeader>
+<style>
+  .modpack-search {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 8px 0 12px;
+  }
+  .modpack-search .panel-search-input {
+    flex: 1;
+    min-width: 0;
+  }
+  .modpack-search-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 32px;
+    min-height: 32px;
+  }
+  .modpack-icon-fallback {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--accent-bg);
+    color: var(--accent);
+  }
+  .modpack-status {
+    margin-top: 8px;
+  }
+</style>
+
+<PanelHeader title={t('panel.modpacks')} {onBack} />
 
 <div class="panel-body">
-  <div class="modpack-source-tabs">
-    <button class="vcs-btn" class:active={source === 'cf'} onclick={() => setSource('cf')}>CurseForge</button>
-    <button class="vcs-btn" class:active={source === 'mr'} onclick={() => setSource('mr')}>Modrinth</button>
+  <div class="versions-client-switcher switcher-wrap">
+    <button class="vcs-btn" class:active={source === 'cf'} aria-pressed={source === 'cf'} onclick={() => setSource('cf')}>CurseForge</button>
+    <button class="vcs-btn" class:active={source === 'mr'} aria-pressed={source === 'mr'} onclick={() => setSource('mr')}>Modrinth</button>
   </div>
 
   <div class="modpack-search">
     <input
       class="panel-search-input"
-      placeholder="Search modpacks…"
+      aria-label={t('ph.searchModpacks')}
+      placeholder={t('ph.searchModpacks')}
       bind:value={query}
       onkeydown={onSearchKey}
     />
-    <button class="btn-sm" onclick={search} aria-label="Search modpacks"><i class="fa-solid fa-magnifying-glass"></i></button>
+    <button class="btn-sm modpack-search-btn" onclick={search} aria-label={t('tt.searchModpacks')}><i class="fa-solid fa-magnifying-glass"></i></button>
   </div>
 
   {#if source === 'cf' && !cfAvailable}
     <div class="empty-state">
       <i class="fa-solid fa-key"></i>
-      <span>A CurseForge API key is required to browse CurseForge. Add one in Settings, or use Modrinth (no key needed).</span>
+      <span>{t('empty.curseforgeApiKeyIsRequiredBrowse')}</span>
     </div>
   {/if}
 
   {#if searching}
-    <div class="versions-loading"><Spinner /><span>Searching…</span></div>
+    <ListSkeleton rows={4} />
   {:else if error}
     <div class="versions-loading versions-error">
       <i class="fa-solid fa-triangle-exclamation"></i><span>{error}</span>
@@ -206,34 +229,38 @@
   {/if}
 
   {#if installMsg}
-    <div class="cache-notice"><i class="fa-solid fa-circle-info"></i><span>{installMsg}</span></div>
+    <div class="cache-notice modpack-status"><i class="fa-solid fa-circle-info"></i><span>{installMsg}</span></div>
   {/if}
 
-  <div class="version-list {modpacksViewMode === 'grid' ? 'grid-view' : ''}">
+  <div class="client-card-cols">
   {#each results as r (r.source + r.id)}
-    <div class="modpack-row">
-      {#if r.icon}
-        <img class="modpack-icon" src={r.icon} loading="lazy" alt="" />
-      {:else}
-        <div class="modpack-icon modpack-icon-fallback"><i class="fa-solid fa-cubes"></i></div>
-      {/if}
-      <div class="modpack-meta">
-        <span class="version-name">{r.title}</span>
-        <span class="version-sub">{r.author} · {formatDownloads(r.downloads)}</span>
-        <span class="modpack-summary">{truncate(r.summary, 90)}</span>
-      </div>
-      <button
-        class="vcs-btn"
-        disabled={installingId !== null}
-        onclick={() => install(r)}
-        data-tooltip="Download the pack and install it into a new Java instance."
-      >
-        {#if installingId === r.source + r.id}
-          <Spinner />
+    <div class="client-card">
+      <div class="client-card-header">
+        {#if r.icon}
+          <img class="client-card-icon client-card-icon-img" src={r.icon} loading="lazy" alt="" />
         {:else}
-          <i class="fa-solid fa-download"></i>&nbsp;Install
+          <div class="client-card-icon modpack-icon-fallback"><i class="fa-solid fa-cubes"></i></div>
         {/if}
-      </button>
+        <div class="client-card-meta">
+          <span class="client-card-name">{r.title}</span>
+          <span class="client-card-sub">{r.author} · {formatDownloads(r.downloads)}</span>
+        </div>
+        <div class="client-card-actions">
+          <button
+            class="vcs-btn"
+            disabled={installingId !== null}
+            onclick={() => install(r)}
+            data-tooltip={t('tt.downloadPackInstallItIntoNew')}
+          >
+            {#if installingId === r.source + r.id}
+              <Spinner />
+            {:else}
+              <i class="fa-solid fa-download"></i>&nbsp;Install
+            {/if}
+          </button>
+        </div>
+      </div>
+      <p class="client-card-desc">{truncate(r.summary, 140)}</p>
     </div>
   {/each}
   </div>

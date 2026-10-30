@@ -349,25 +349,26 @@ pub fn restore_backup(minecraft_dir: &Path, zip_path: &Path) -> Result<()> {
     let file = fs::File::open(zip_path).map_err(|e| JavaError::Other(e.to_string()))?;
     let mut archive = zip::ZipArchive::new(file).map_err(|e| JavaError::Other(e.to_string()))?;
 
-    let mut top: Option<String> = None;
+    let mut top: Option<std::ffi::OsString> = None;
     for i in 0..archive.len() {
         let Ok(entry) = archive.by_index(i) else {
             continue;
         };
-        let full = entry.name().replace('\\', "/");
-        if let Some(first) = full.split('/').next() {
-            if !first.is_empty() {
-                top = Some(first.to_string());
-                break;
-            }
+        let Some(rel) = entry.enclosed_name() else {
+            continue;
+        };
+        if let Some(std::path::Component::Normal(first)) = rel.components().next() {
+            top = Some(first.to_os_string());
+            break;
         }
     }
-    let top = top.unwrap_or_else(|| {
-        zip_path
-            .file_stem()
-            .map(|s| s.to_string_lossy().into_owned())
-            .unwrap_or_else(|| "world".to_string())
-    });
+    let top = top
+        .or_else(|| zip_path.file_stem().map(|s| s.to_os_string()))
+        .filter(|s| {
+            let mut c = Path::new(s).components();
+            matches!(c.next(), Some(std::path::Component::Normal(_))) && c.next().is_none()
+        })
+        .ok_or_else(|| JavaError::Other("Backup has no valid world folder.".into()))?;
 
     let target = saves.join(&top);
     if target.is_dir() {

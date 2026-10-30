@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from './i18nStore.svelte'
   /**
    * 1:1 port of the `javaversions` panel - Home.razor:5018-5166, with its
    * code-behind in Home.Panels.cs (OpenJavaVersions:404, RefreshJavaVersionsAsync:414,
@@ -19,13 +20,11 @@
    * BedrockVanillaVersionsView.svelte.
    */
   import { invoke } from '@tauri-apps/api/core'
-  import { untrack } from 'svelte'
   import { listen, type UnlistenFn } from '@tauri-apps/api/event'
-  import { onDestroy, onMount } from 'svelte'
+  import { onDestroy, onMount, untrack } from 'svelte'
   import PanelHeader from './components/PanelHeader.svelte'
+  import SubTabs from './components/SubTabs.svelte'
   import ListSkeleton from './components/ListSkeleton.svelte'
-  import ViewModeToggle from './components/ViewModeToggle.svelte'
-  import { loadViewMode, saveViewMode, type ViewMode } from './viewMode'
   import InlineProgress from './components/InlineProgress.svelte'
   import type { JavaVersion, LauncherSettings } from './settings'
 
@@ -53,31 +52,33 @@
 
   let installingId = $state<string | null>(null)
   let installProgress = $state(0)
-  let installStage = $state('')
   let unlistenInstall: UnlistenFn | undefined
 
+  let installDisposed = false
   onMount(() => {
     listen<{ version_id: string; stage: string; percent: number }>(
       'java-install-progress',
       (e) => {
         if (e.payload.version_id !== installingId) return
-        installStage = e.payload.stage
         installProgress = e.payload.percent / 100
       },
     ).then((fn) => {
-      unlistenInstall = fn
+      if (installDisposed) fn()
+      else unlistenInstall = fn
     })
   })
-  onDestroy(() => unlistenInstall?.())
+  onDestroy(() => {
+    installDisposed = true
+    unlistenInstall?.()
+  })
 
   async function installJavaVersion(v: Row) {
     if (installingId) return
     installingId = v.id
     installProgress = 0
-    installStage = 'Starting…'
     try {
       await invoke('install_java_version', { version: v })
-      onToast?.(`Minecraft ${v.id} installed.`, 'success')
+      onToast?.(t('toast.minecraftIdInstalled', { id: v.id }), 'success')
       await loadJavaVersions()
     } catch (e) {
       onToast?.(String(e), 'error')
@@ -95,7 +96,7 @@
     launchingId = v.id
     try {
       await invoke('launch_java_version', { versionId: v.id })
-      onToast?.(`Launching Minecraft ${v.id}…`, 'success')
+      onToast?.(t('toast.launchingMinecraftId', { id: v.id }), 'success')
     } catch (e) {
       onToast?.(String(e), 'error')
     } finally {
@@ -109,11 +110,6 @@
   let isLoading = $state(false)
   let loadError = $state('')
   let versionsFilter = $state('')
-  let mcVersionsViewMode = $state<ViewMode>(loadViewMode('mc-versions'))
-  function setMcVersionsViewMode(m: ViewMode) {
-    mcVersionsViewMode = m
-    saveViewMode('mc-versions', m)
-  }
 
   // Mirrors of the two persisted settings. They are held locally as well
   // because the shell currently mounts this panel without an `onSaveSettings`
@@ -179,7 +175,7 @@
     for (const jv of versionsList) jv.is_active = false
     v.is_active = true
     if (settings) persist({ ...settings, JavaActiveVersion: v.id })
-    onToast?.(`Default Java version: ${v.id}`, 'success')
+    onToast?.(t('toast.defaultJavaVersion', { id: v.id }), 'success')
   }
 
   /** Port of `FilteredJavaVersions` (Home.razor.cs:141). */
@@ -201,7 +197,24 @@
   loadJavaVersions()
 </script>
 
-<PanelHeader title="Versions" {onBack}>
+<style>
+  .java-logo {
+    width: 18px;
+    height: 18px;
+    object-fit: contain;
+  }
+  .java-retry {
+    margin-top: 8px;
+  }
+  .java-warn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--orange);
+  }
+</style>
+
+<PanelHeader title={t('panel.versions')} {onBack}>
   {#snippet extraActions()}
     <button
       type="button"
@@ -229,26 +242,25 @@
       disabled={isLoading}
       onclick={refreshJavaVersions}
       onmousedown={(e) => e.stopPropagation()}
-      data-tooltip="Refresh"
-      aria-label="Refresh"
+      data-tooltip={t('tt.refresh')}
+      aria-label={t('tt.refresh')}
     >
       <i class="fa-solid fa-rotate"></i>
     </button>
-    <ViewModeToggle mode={mcVersionsViewMode} onChange={setMcVersionsViewMode} />
   {/snippet}
 </PanelHeader>
 
-<div class="versions-client-switcher">
-  <button class="vcs-btn active" disabled data-tooltip="Java has one client kind — Vanilla">
-    <i class="fa-brands fa-java"></i> Vanilla
-  </button>
-</div>
+<!-- Java's counterpart to Bedrock's Versions/Instances cross-nav — Java
+     instance management used to live buried in a local tab inside Profile,
+     with no link back to this panel at all. -->
+<SubTabs strip="versions-instances" active="versions" onNavigate={(k) => onNavigate?.(k)} />
 
 <div class="panel-search-wrap">
   <i class="fa-solid fa-magnifying-glass"></i>
   <input
     class="panel-search-input"
-    placeholder="Filter Java versions (e.g. 1.21, 1.8.9)..."
+    aria-label={t('ph.filterJavaVersions')}
+    placeholder={t('ph.filterJavaVersions')}
     bind:value={versionsFilter}
     onkeydown={(e) => e.stopPropagation()}
   />
@@ -261,8 +273,8 @@
     <div class="versions-loading versions-error">
       <i class="fa-solid fa-triangle-exclamation"></i>
       <span>{loadError}</span>
-      <button class="vcs-btn" style="margin-top:8px;" onclick={refreshJavaVersions}>
-        <i class="fa-solid fa-rotate"></i> Retry
+      <button class="vcs-btn java-retry" onclick={refreshJavaVersions}>
+        <i class="fa-solid fa-rotate"></i> {t('common.retry')}
       </button>
     </div>
   {:else}
@@ -272,40 +284,45 @@
 
     {#if installed.length > 0}
       <span class="panel-section-label">Installed ({installed.length})</span>
-      <div class="version-list {mcVersionsViewMode === 'grid' ? 'grid-view' : ''}">
+      <div class="client-card-cols">
       {#each installed as v (v.id)}
-        <div class="version-row {v.is_active ? 'mcv-active-row' : ''}">
-          <div class="version-meta">
-            <div style="display:flex; align-items:center; gap:6px;">
-              <span class="version-name">Minecraft {v.id}</span>
-              {#if v.is_active}<span class="tag-active">Active</span>{/if}
-              <span class="version-sub" style="opacity:0.6;">{typeLabel(v.type)}</span>
+        <div class="client-card {v.is_active ? 'client-active' : ''}">
+          <div class="client-card-header">
+            <div class="client-card-icon latite-icon"><img class="chip-icon java-logo" src="images/mc-java-logo.png" alt=""></div>
+            <div class="client-card-meta">
+              <span class="client-card-name">Minecraft {v.id}</span>
+              <span class="client-card-sub">
+                {#if v.is_active}<span class="tag-active">{t('label.active')}</span>{/if}
+                {typeLabel(v.type)}
+              </span>
             </div>
-            {#if v.has_jar}
-              <span class="version-sub">Ready to launch</span>
-            {:else}
-              <span class="version-sub" style="color:var(--orange);"
-                >Profile present but jar missing — open in official launcher once</span
+            <div class="client-card-actions">
+              <button
+                class="vcs-btn vcs-btn-ghost"
+                onclick={() => setActiveJavaVersion(v)}
+                onmousedown={(e) => e.stopPropagation()}
+                data-tooltip={t('tt.setAsDefault')}
+                aria-label={t('tt.setAsDefault')}
               >
-            {/if}
+                <i class="fa-solid fa-thumbtack"></i>
+              </button>
+              <button
+                class="vcs-btn"
+                disabled={!v.has_jar || launchingId === v.id}
+                onclick={() => launchJavaVersion(v)}
+                onmousedown={(e) => e.stopPropagation()}
+              >
+                <i class={launchingId === v.id ? 'fa-solid fa-spinner fa-spin' : 'fa-solid fa-play'}></i><span>&nbsp;{launchingId === v.id ? 'Launching…' : 'Launch'}</span>
+              </button>
+            </div>
           </div>
-          <button
-            class="vcs-btn"
-            disabled={!v.has_jar || launchingId === v.id}
-            onclick={() => launchJavaVersion(v)}
-            onmousedown={(e) => e.stopPropagation()}
-          >
-            <i class="fa-solid fa-play"></i><span>&nbsp;Launch</span>
-          </button>
-          <button
-            class="vcs-btn vcs-btn-ghost"
-            onclick={() => setActiveJavaVersion(v)}
-            onmousedown={(e) => e.stopPropagation()}
-            data-tooltip="Set as default"
-            aria-label="Set as default"
-          >
-            <i class="fa-solid fa-thumbtack"></i>
-          </button>
+          {#if v.has_jar}
+            <p class="client-card-desc">{t('x.readyToLaunch')}</p>
+          {:else}
+            <p class="client-card-desc java-warn">
+              <i class="fa-solid fa-triangle-exclamation"></i> Profile present but jar missing — open in official launcher once
+            </p>
+          {/if}
         </div>
       {/each}
       </div>
@@ -313,36 +330,44 @@
 
     {#if others.length > 0}
       <span class="panel-section-label">Available ({others.length})</span>
-      <div class="version-list {mcVersionsViewMode === 'grid' ? 'grid-view' : ''}">
+      <div class="client-card-cols">
       {#each others as v (v.id)}
-        <div class="version-row">
-          <div class="version-meta">
-            <span class="version-name">Minecraft {v.id}</span>
-            <span class="version-sub" style="opacity:0.6;"
-              >{typeLabel(v.type)}
-              {v.release_time ? `· ${v.release_time.slice(0, 10)}` : ''}</span
-            >
+        <div class="client-card">
+          <div class="client-card-header">
+            <div class="client-card-icon latite-icon"><img class="chip-icon java-logo" src="images/mc-java-logo.png" alt=""></div>
+            <div class="client-card-meta">
+              <span class="client-card-name">Minecraft {v.id}</span>
+              <span class="client-card-sub"
+                >{typeLabel(v.type)}
+                {v.release_time ? `· ${v.release_time.slice(0, 10)}` : ''}</span
+              >
+            </div>
+            <div class="client-card-actions">
+              {#if installingId === v.id}
+                <InlineProgress progress={installProgress} showSpinner={false} />
+              {:else}
+                <button
+                  class="vcs-btn"
+                  disabled={installingId !== null}
+                  onclick={() => installJavaVersion(v)}
+                  onmousedown={(e) => e.stopPropagation()}
+                  data-tooltip={t('tt.install')}
+                >
+                  <i class="fa-solid fa-download"></i>&nbsp;Install {v.id}
+                </button>
+              {/if}
+            </div>
           </div>
-          {#if installingId === v.id}
-            <InlineProgress progress={installProgress} showSpinner={false} />
-          {:else}
-            <button
-              class="vcs-btn"
-              disabled={installingId !== null}
-              onclick={() => installJavaVersion(v)}
-              onmousedown={(e) => e.stopPropagation()}
-              data-tooltip="Install"
-            >
-              <i class="fa-solid fa-download"></i>&nbsp;Install
-            </button>
-          {/if}
         </div>
       {/each}
       </div>
     {/if}
 
     {#if installed.length === 0 && others.length === 0}
-      <div class="versions-loading"><span style="opacity:0.5;">No results for "{versionsFilter}"</span></div>
+      <div class="empty-state">
+        <i class="fa-solid fa-filter-circle-xmark"></i>
+        <span>{t('empty.noResultsFound')}</span>
+      </div>
     {/if}
   {/if}
 </div>

@@ -264,6 +264,14 @@ pub const PRESET_SEEDS: &[PresetSeed] = &[
     PresetSeed {
         preset: "dark",
         label: "Dark",
+        bg: "#0a0b14",
+        bg_panel: "#121526",
+        text: "#eaecf6",
+        text_dim: "#9aa1b8",
+    },
+    PresetSeed {
+        preset: "legacy",
+        label: "Legacy",
         bg: "#23272a",
         bg_panel: "#2c2f33",
         text: "#ffffff",

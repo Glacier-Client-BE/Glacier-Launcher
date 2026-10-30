@@ -26,10 +26,14 @@ log = "0.4"
 tauri = { version = "2.11.3", features = ["protocol-asset", "tray-icon"] }
 tauri-plugin-log = "2"
 tauri-plugin-dialog = "2"
+tauri-plugin-notification = "2"
+tauri-plugin-global-shortcut = "2"
 tokio.workspace = true
 reqwest.workspace = true
 base64 = "0.22"
 url = "2"
+sha2 = "0.10"
+rand = "0.8"
 
 gl-persistence = { path = "../crates/gl-persistence" }
 gl-auth = { path = "../crates/gl-auth" }
@@ -46,3 +50,5 @@ gl-settings = { path = "../crates/gl-settings" }
 gl-update = { path = "../crates/gl-update" }
 gl-launch = { path = "../crates/gl-launch" }
 gl-sync = { path = "../crates/gl-sync" }
+tauri-plugin-deep-link = "2.4.10"
+tauri-plugin-single-instance = "2.4.4"

@@ -7,6 +7,7 @@
 //! the `HttpClient` connection pool cap; here we make the limit explicit).
 
 use std::collections::VecDeque;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -28,6 +29,10 @@ pub enum DownloadStatus {
     Completed,
     Failed,
     Cancelled,
+    /// QOL pause/resume: stopped mid-transfer with its partial `.tmp` kept
+    /// on disk (unlike `Cancelled`, which deletes it) so `resume` can
+    /// continue via a Range request instead of restarting from zero.
+    Paused,
 }
 
 /// Snapshot of a tracked download's state, mirroring `DownloadEntry` in the C#
@@ -41,6 +46,12 @@ pub struct DownloadEntry {
     pub downloaded_bytes: u64,
     pub total_bytes: u64,
     pub error: Option<String>,
+    /// Unix-ms timestamp of the last time `status` left `Queued`/`Downloading`
+    /// (i.e. became `Completed`/`Failed`/`Cancelled`). `None` while still in
+    /// flight. Backs QOL "auto-clear finished downloads after N days" -
+    /// without a finish time there was nothing to age a finished entry
+    /// against.
+    pub finished_at_unix_ms: Option<i64>,
 }
 
 impl DownloadEntry {
@@ -53,8 +64,16 @@ impl DownloadEntry {
             downloaded_bytes: 0,
             total_bytes,
             error: None,
+            finished_at_unix_ms: None,
         }
     }
+}
+
+fn now_unix_ms() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as i64)
+        .unwrap_or(0)
 }
 
 /// A handle to a single queued download: lets the caller observe status updates
@@ -130,6 +149,15 @@ struct RegistryEntry {
     id: Uuid,
     watch: watch::Receiver<DownloadEntry>,
     cancel: CancellationToken,
+    /// The request that started this entry, kept around so a failed
+    /// download can be resubmitted (QOL: "Retry all failed") without the
+    /// caller having to remember and rebuild the original URL/destination.
+    req: DownloadRequest,
+    /// Set just before `cancel`ling to request a pause rather than a real
+    /// cancel - read by the spawned task once it observes the
+    /// cancellation, to decide "keep the `.tmp` for `resume`" vs "delete
+    /// it, this is a real cancel" and "settle to `Paused`" vs `Cancelled`.
+    pause_requested: Arc<AtomicBool>,
 }
 
 impl DownloadQueue {
@@ -165,14 +193,64 @@ impl DownloadQueue {
         reg.iter().map(|r| r.watch.borrow().clone()).collect()
     }
 
-    /// Cancels a tracked download by id, if it's still running.
+    /// Cancels a tracked download by id, if it's still running. Unlike
+    /// [`pause`](Self::pause), this deletes the partial `.tmp` - a real
+    /// cancel means "I don't want this file," not "not right now."
     pub fn cancel(&self, id: Uuid) {
         let reg = self.registry.lock().unwrap_or_else(|e| e.into_inner());
         if let Some(r) = reg.iter().find(|r| r.id == id) {
+            r.pause_requested.store(false, Ordering::SeqCst);
             r.cancel.cancel();
         }
         drop(reg);
         self.raise_changed();
+    }
+
+    /// QOL pause/resume: stops a running download but keeps its partial
+    /// `.tmp` on disk so [`resume`](Self::resume) can continue it via a
+    /// Range request instead of restarting from zero. A no-op for an entry
+    /// that isn't currently `Downloading`.
+    pub fn pause(&self, id: Uuid) {
+        let reg = self.registry.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(r) = reg.iter().find(|r| r.id == id) {
+            if matches!(r.watch.borrow().status, DownloadStatus::Downloading) {
+                r.pause_requested.store(true, Ordering::SeqCst);
+                r.cancel.cancel();
+            }
+        }
+        drop(reg);
+        self.raise_changed();
+    }
+
+    /// String-id convenience wrapper around [`pause`](Self::pause).
+    pub fn pause_str(&self, id: &str) -> std::result::Result<(), String> {
+        let uuid = Uuid::parse_str(id).map_err(|e| e.to_string())?;
+        self.pause(uuid);
+        Ok(())
+    }
+
+    /// Resumes a `Paused` entry: resubmits its original request, which
+    /// picks the same deterministic `.tmp` path back up and continues it
+    /// via Range request (see `download.rs::download_once`) rather than
+    /// starting over. A no-op (returns `false`) for anything not currently
+    /// `Paused`.
+    pub fn resume(&self, id: Uuid) -> bool {
+        let req = {
+            let reg = self.registry.lock().unwrap_or_else(|e| e.into_inner());
+            reg.iter()
+                .find(|r| r.id == id && matches!(r.watch.borrow().status, DownloadStatus::Paused))
+                .map(|r| r.req.clone())
+        };
+        let Some(req) = req else { return false };
+        self.remove(id);
+        self.submit(req);
+        true
+    }
+
+    /// String-id convenience wrapper around [`resume`](Self::resume).
+    pub fn resume_str(&self, id: &str) -> std::result::Result<bool, String> {
+        let uuid = Uuid::parse_str(id).map_err(|e| e.to_string())?;
+        Ok(self.resume(uuid))
     }
 
     /// String-id convenience wrapper around [`cancel`](Self::cancel), so
@@ -193,7 +271,39 @@ impl DownloadQueue {
     /// the same `!= Downloading` test to decide whether to show the button.
     pub fn clear_finished(&self) {
         let mut reg = self.registry.lock().unwrap_or_else(|e| e.into_inner());
-        reg.retain(|r| matches!(r.watch.borrow().status, DownloadStatus::Downloading));
+        // `Paused` is deliberately not "finished" here alongside
+        // Downloading/Queued - clearing it would drop the tracked `req`
+        // `resume` needs, orphaning the `.tmp` it left on disk with no way
+        // to continue it short of removing the file by hand.
+        reg.retain(|r| {
+            matches!(
+                r.watch.borrow().status,
+                DownloadStatus::Downloading | DownloadStatus::Paused
+            )
+        });
+        drop(reg);
+        self.raise_changed();
+    }
+
+    /// Drops every finished (non-Queued/Downloading) entry whose
+    /// `finished_at_unix_ms` is older than `max_age_ms`. QOL "auto-clear
+    /// finished downloads after N days" - a periodic caller (see
+    /// `retry_failed_downloads`'s sibling command) sweeps with this instead
+    /// of the panel accumulating every finished download forever until the
+    /// user notices and hits "Clear finished" manually.
+    pub fn clear_finished_older_than(&self, max_age_ms: i64) {
+        let cutoff = now_unix_ms() - max_age_ms;
+        let mut reg = self.registry.lock().unwrap_or_else(|e| e.into_inner());
+        reg.retain(|r| {
+            let entry = r.watch.borrow();
+            if matches!(entry.status, DownloadStatus::Downloading | DownloadStatus::Queued) {
+                return true;
+            }
+            match entry.finished_at_unix_ms {
+                Some(t) => t > cutoff,
+                None => true,
+            }
+        });
         drop(reg);
         self.raise_changed();
     }
@@ -213,9 +323,51 @@ impl DownloadQueue {
         Ok(())
     }
 
+    /// Resubmits a single tracked entry using its original request,
+    /// regardless of its current status. Returns `false` if `id` isn't
+    /// tracked (already removed/cleared).
+    pub fn retry(&self, id: Uuid) -> bool {
+        let req = {
+            let reg = self.registry.lock().unwrap_or_else(|e| e.into_inner());
+            reg.iter().find(|r| r.id == id).map(|r| r.req.clone())
+        };
+        let Some(req) = req else { return false };
+        self.remove(id);
+        self.submit(req);
+        true
+    }
+
+    /// String-id convenience wrapper around [`retry`](Self::retry).
+    pub fn retry_str(&self, id: &str) -> std::result::Result<bool, String> {
+        let uuid = Uuid::parse_str(id).map_err(|e| e.to_string())?;
+        Ok(self.retry(uuid))
+    }
+
     /// How many download slots are currently free.
     pub fn available_permits(&self) -> usize {
         self.permits.available_permits()
+    }
+
+    /// Resubmits every tracked entry currently `Failed`, using each one's
+    /// original request (URL, destination, label). QOL "Retry all failed":
+    /// previously the only recovery from a failed download was to remove it
+    /// and go re-trigger whatever action originally queued it, which for
+    /// something like a batch mod install could mean re-finding every failed
+    /// item's source individually. Returns the number of retries submitted.
+    pub fn retry_failed(&self) -> usize {
+        let failed: Vec<(Uuid, DownloadRequest)> = {
+            let reg = self.registry.lock().unwrap_or_else(|e| e.into_inner());
+            reg.iter()
+                .filter(|r| matches!(r.watch.borrow().status, DownloadStatus::Failed))
+                .map(|r| (r.id, r.req.clone()))
+                .collect()
+        };
+        let count = failed.len();
+        for (old_id, req) in failed {
+            self.remove(old_id);
+            self.submit(req);
+        }
+        count
     }
 
     /// Submits a download to the queue and returns immediately with a handle;
@@ -224,24 +376,35 @@ impl DownloadQueue {
         let id = Uuid::new_v4();
         let label = req.label.clone().unwrap_or_else(|| req.url.clone());
         let total = req.known_total_bytes.unwrap_or(0);
+        let req_for_registry = req.clone();
         let (tx, rx) = watch::channel(DownloadEntry::new(id, label, total));
         let cancel = CancellationToken::new();
+        let pause_requested = Arc::new(AtomicBool::new(false));
 
         let client = self.client.clone();
         let permits = self.permits.clone();
         let min_interval = self.progress_min_interval;
         let task_cancel = cancel.clone();
+        let task_pause_requested = pause_requested.clone();
         let changed = self.changed.clone();
+        let destination_for_cleanup = req.destination.clone();
 
         let task = tokio::spawn(async move {
-            let _permit = match permits.acquire_owned().await {
-                Ok(permit) => permit,
-                Err(_) => {
-                    // Semaphore closed (queue dropped mid-flight); treat as cancelled.
-                    tx.send_modify(|e| e.status = DownloadStatus::Cancelled);
-                    let _ = changed.send(());
-                    return Err(crate::error::DownloadError::Cancelled);
-                }
+            // Cancelling a download still waiting for a slot must settle it now, not
+            // only once a slot frees up. A closed semaphore (queue dropped mid-flight)
+            // also lands here and is treated as cancelled.
+            let permit = tokio::select! {
+                permit = permits.acquire_owned() => permit.ok(),
+                _ = task_cancel.cancelled() => None,
+            };
+            let Some(_permit) = permit else {
+                tx.send_modify(|e| {
+                    e.status = DownloadStatus::Cancelled;
+                    e.finished_at_unix_ms = Some(now_unix_ms());
+                });
+                let _ = tokio::fs::remove_file(crate::download::tmp_sibling(&destination_for_cleanup)).await;
+                let _ = changed.send(());
+                return Err(crate::error::DownloadError::Cancelled);
             };
 
             tx.send_modify(|e| e.status = DownloadStatus::Downloading);
@@ -300,16 +463,29 @@ impl DownloadQueue {
                     if e.total_bytes == 0 {
                         e.total_bytes = outcome.bytes;
                     }
+                    e.finished_at_unix_ms = Some(now_unix_ms());
                 }),
                 Err(err) => {
                     let cancelled = matches!(err, crate::error::DownloadError::Cancelled);
+                    let paused = cancelled && task_pause_requested.load(Ordering::SeqCst);
+                    if cancelled && !paused {
+                        // A real cancel (not a pause): `download_file` never
+                        // deletes the `.tmp` on `Cancelled` any more (pause
+                        // needs it kept), so that cleanup belongs here now.
+                        let _ = tokio::fs::remove_file(crate::download::tmp_sibling(&destination_for_cleanup)).await;
+                    }
                     tx.send_modify(|e| {
-                        e.status = if cancelled {
+                        e.status = if paused {
+                            DownloadStatus::Paused
+                        } else if cancelled {
                             DownloadStatus::Cancelled
                         } else {
                             DownloadStatus::Failed
                         };
-                        e.error = Some(err.to_string());
+                        if !paused {
+                            e.error = Some(err.to_string());
+                            e.finished_at_unix_ms = Some(now_unix_ms());
+                        }
                     });
                 }
             }
@@ -324,6 +500,8 @@ impl DownloadQueue {
                 id,
                 watch: rx.clone(),
                 cancel: cancel.clone(),
+                req: req_for_registry,
+                pause_requested,
             });
         }
         self.raise_changed();
@@ -452,5 +630,36 @@ mod tests {
         let handle = queue.submit(req);
         let result = handle.join().await;
         assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn resume_is_a_no_op_for_an_entry_that_isnt_paused() {
+        let queue = DownloadQueue::new(DownloadClient::from_client(reqwest::Client::new()), 1);
+        let dir = tempfile::tempdir().unwrap();
+        let dest = dir.path().join("out.bin");
+        let req = DownloadRequest::new("not a valid url", &dest).with_max_attempts(1);
+
+        let handle = queue.submit(req);
+        let id = handle.id();
+        let _ = handle.join().await; // settles to Failed, not Paused
+        assert!(!queue.resume(id));
+    }
+
+    #[tokio::test]
+    async fn pausing_a_download_that_finished_before_the_pause_request_is_a_no_op() {
+        let queue = DownloadQueue::new(DownloadClient::from_client(reqwest::Client::new()), 1);
+        let dir = tempfile::tempdir().unwrap();
+        let dest = dir.path().join("out.bin");
+        let req = DownloadRequest::new("not a valid url", &dest).with_max_attempts(1);
+
+        let handle = queue.submit(req);
+        let id = handle.id();
+        let _ = handle.join().await;
+        // Already Failed by the time pause() looks at it - must not
+        // clobber that into a bogus Paused status.
+        queue.pause(id);
+        let entries = queue.active_entries();
+        let entry = entries.iter().find(|e| e.id == id).unwrap();
+        assert_eq!(entry.status, DownloadStatus::Failed);
     }
 }

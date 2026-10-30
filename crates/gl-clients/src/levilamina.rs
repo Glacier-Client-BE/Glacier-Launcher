@@ -26,17 +26,10 @@ pub struct LeviLaminaRelease {
 /// Fetches and parses the latest LeviLamina release from GitHub, picking
 /// the Windows zip asset. Mirrors `LeviLaminaService.FetchLatestReleaseAsync`.
 ///
-/// Note: the C# version routes this through `GitHubApiCache` for ETag-based
-/// caching; that caching layer isn't ported here, so callers that need it
-/// should wrap this call themselves.
+/// Responses are cached briefly by `github::get_text_cached`, replacing the
+/// C# `GitHubApiCache` for this lookup.
 pub async fn fetch_latest_release(http: &Client) -> Result<LeviLaminaRelease> {
-    let body = http
-        .get(RELEASES_API_URL)
-        .header("User-Agent", "GlacierLauncher")
-        .send()
-        .await?
-        .text()
-        .await?;
+    let body = github::get_text_cached(http, RELEASES_API_URL).await?;
     parse_latest_release(&body)
 }
 

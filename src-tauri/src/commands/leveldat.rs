@@ -64,7 +64,7 @@ fn level_dat_path(world_dir: &str) -> PathBuf {
     Path::new(world_dir).join("level.dat")
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn read_level_dat_summary(world_dir: String) -> Result<LevelDatSummaryDto, String> {
     let path = level_dat_path(&world_dir);
     let bytes =
@@ -76,7 +76,7 @@ pub fn read_level_dat_summary(world_dir: String) -> Result<LevelDatSummaryDto, S
 /// Applies `summary` onto the world's `level.dat`, with a mandatory backup
 /// and round-trip verification before the write is committed. Returns the
 /// path of the backup file that was created.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn write_level_dat_summary(
     world_dir: String,
     summary: LevelDatSummaryDto,

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from './i18nStore.svelte'
   /**
    * 1:1 port of the `bedrockinstances` panel in `Pages/Home.razor` plus its
    * code-behind `Pages/Home.BedrockInstances.cs` (92 lines).
@@ -8,13 +9,16 @@
    * delete confirmations, and the fact that the bottom `.panel-tabs` strip
    * highlights `mcversions` rather than this panel.
    *
-   * No scoped <style> block: every class below lives in app.css, which is a
-   * verbatim copy of the original stylesheet. Scoped rules would win on
-   * specificity and silently override it.
+   * Scoped <style> block at the bottom only adds spacing-token rhythm, the
+   * hover/disabled states and truncation. Every other class still lives in
+   * app.css, so the scoped rules only touch the properties listed there.
    */
   import { invoke } from '@tauri-apps/api/core'
+  import { invokeCached } from './invokeCache'
   import PanelHeader from './components/PanelHeader.svelte'
   import SubTabs from './components/SubTabs.svelte'
+  import IconBtn from './components/IconBtn.svelte'
+  import ListSkeleton from './components/ListSkeleton.svelte'
   import type { BedrockInstance } from './settings'
 
   let {
@@ -53,6 +57,7 @@
   // no drag library (e.g. svelte-dnd-action) is a dependency in package.json,
   // and the spec says only attempt this if one is already present.
   let instances = $state<BedrockInstance[]>([])
+  let instancesLoading = $state(true)
   let activeInstanceId = $state('')
   let mcVersionsList = $state<VanillaVersion[]>([])
 
@@ -70,6 +75,8 @@
       activeInstanceId = (await invoke<string | null>('active_bedrock_instance_id')) ?? ''
     } catch (e) {
       toast(String(e), 'error')
+    } finally {
+      instancesLoading = false
     }
   }
 
@@ -81,8 +88,13 @@
   async function loadMcVersions() {
     if (mcVersionsList.length > 0) return
     try {
-      const versions =
-        await invoke<Omit<VanillaVersion, 'is_downloaded'>[]>('list_vanilla_bedrock_versions')
+      // Windows Update version list rarely changes; a 10-minute cache keeps
+      // re-opening the instance picker instant.
+      const versions = await invokeCached<Omit<VanillaVersion, 'is_downloaded'>[]>(
+        'list_vanilla_bedrock_versions',
+        undefined,
+        10 * 60 * 1000,
+      )
       mcVersionsList = await Promise.all(
         versions.map(async (v) => ({
           ...v,
@@ -178,6 +190,18 @@
     renamingBedrockInstanceId = ''
   }
 
+  /** Per-card "More" menu — Backup is secondary to Rename/Delete, same
+   *  overflow-avoidance reasoning applied to JavaInstancesView's cards. */
+  let openCardMenuId = $state('')
+
+  function toggleCardMenu(id: string) {
+    openCardMenuId = openCardMenuId === id ? '' : id
+  }
+
+  function closeCardMenu() {
+    openCardMenuId = ''
+  }
+
   function confirmDeleteBedrockInstance(id: string) {
     confirmDeleteBedrockInstanceId = id
   }
@@ -222,15 +246,15 @@
   loadMcVersions()
 </script>
 
-<PanelHeader title="Instances" {onBack}>
+<PanelHeader title={t('panel.instances')} {onBack}>
   {#snippet extraActions()}
     <button
       type="button"
       class="panel-icon-btn"
       onclick={newBedrockInstance}
       onmousedown={(e) => e.stopPropagation()}
-      data-tooltip="New instance"
-      aria-label="New instance"
+      data-tooltip={t('tt.newInstance')}
+      aria-label={t('tt.newInstance')}
     >
       <i class="fa-solid fa-plus"></i>
     </button>
@@ -241,62 +265,124 @@
 
 <div class="panel-body">
   <div class="empty-state align-left">
-  <small
-    >Each instance keeps its own worlds, packs, and local settings. Switching copies the active
-    instance's data out and the new one's data in — give it a moment on large worlds. Optionally
-    pin a downloaded game version per instance in <button
-      type="button"
-      class="link-button"
-      onclick={() => onNavigate?.('versions')}
-      onmousedown={(e) => e.stopPropagation()}>MC Versions</button
-    > — switching to that instance registers it too.</small
-  >
-</div>
+    <small>
+      Each instance keeps its own worlds, packs, and local settings. Switching copies the active
+      instance's data out and the new one's data in — give it a moment on large worlds. Optionally
+      pin a downloaded game version per instance in <button
+        type="button"
+        class="link-button"
+        onclick={() => onNavigate?.('versions')}
+        onmousedown={(e) => e.stopPropagation()}>{t('nav.mcversions')}</button
+      > — switching to that instance registers it too.
+    </small>
+  </div>
+  <!--
+    Redesign: every instance was one long row cramming a name button, a
+    version select, a color input, and three icon buttons onto a single
+    line — the exact "too many controls in one row" case the rest of this
+    overhaul turned into cards elsewhere. Same `.client-card-cols` grid, one
+    card per instance, with a clear header (switch target) and a body that
+    actually has room for its two settings and three actions.
+  -->
+  {#if instancesLoading && instances.length === 0}
+    <ListSkeleton rows={3} />
+  {:else if instances.length === 0}
+    <div class="empty-state">
+      <i class="fa-solid fa-cubes"></i>
+      <span>{t('empty.noInstancesYet')}</span>
+      <small>{t('empty.createOneKeepSeparateWorldsPacks')}</small>
+    </div>
+  {/if}
+  <div class="client-card-cols">
   {#each instances as inst (inst.id)}
     {@const isActive = inst.id === activeInstanceId}
     <div
-      class="instance-row {isActive ? 'active' : ''}"
+      class="client-card instance-card {isActive ? 'client-active' : ''}"
       style={inst.accent_color ? `--instance-accent: ${inst.accent_color};` : ''}
     >
-      {#if inst.accent_color}
-        <span class="instance-accent-dot" style="background: var(--instance-accent);"></span>
-      {/if}
-      {#if renamingBedrockInstanceId === inst.id}
-        <input
-          class="setting-input instance-rename"
-          value={renameBedrockInstanceValue}
-          oninput={(e) => (renameBedrockInstanceValue = e.currentTarget.value)}
-          onkeydown={(e) => e.stopPropagation()}
-        />
-        <button
-          type="button"
-          class="vcs-btn"
-          onclick={commitRenameBedrockInstance}
-          onmousedown={(e) => e.stopPropagation()}
-          aria-label="Save name"><i class="fa-solid fa-check"></i></button
+      <div class="client-card-header">
+        <div
+          class="client-card-icon"
+          style={inst.accent_color
+            ? `background:color-mix(in srgb, var(--instance-accent) 18%, transparent); color:var(--instance-accent);`
+            : 'background:var(--accent-bg); color:var(--accent);'}
         >
-      {:else}
-        <button
-          type="button"
-          class="instance-name-btn"
-          onclick={() => switchBedrockInstance(inst.id)}
-          disabled={isSwitchingBedrockInstance}
-          onmousedown={(e) => e.stopPropagation()}
-        >
-          {#if isActive}<i class="fa-solid fa-circle-check"></i>{:else}<i
-              class="fa-regular fa-circle"
-            ></i>{/if}
-          <span>{inst.name}</span>
-        </button>
+          <i class="fa-solid fa-cubes"></i>
+        </div>
+        <div class="client-card-meta">
+          {#if renamingBedrockInstanceId === inst.id}
+            <input
+              class="setting-input instance-rename"
+              aria-label={t('tt.rename')}
+              value={renameBedrockInstanceValue}
+              oninput={(e) => (renameBedrockInstanceValue = e.currentTarget.value)}
+              onkeydown={(e) => { e.stopPropagation(); if (e.key === 'Enter') commitRenameBedrockInstance() }}
+            />
+          {:else}
+            <button
+              type="button"
+              class="instance-name-btn"
+              onclick={() => switchBedrockInstance(inst.id)}
+              disabled={isSwitchingBedrockInstance}
+              onmousedown={(e) => e.stopPropagation()}
+            >
+              {#if isActive}<i class="fa-solid fa-circle-check"></i>{:else}<i
+                  class="fa-regular fa-circle"
+                ></i>{/if}
+              <span class="client-card-name" title={inst.name}>{inst.name}</span>
+            </button>
+          {/if}
+          <span class="client-card-sub">{isActive ? 'Active instance' : 'Click name to switch'}</span>
+        </div>
+        <div class="client-card-actions">
+          {#if renamingBedrockInstanceId === inst.id}
+            <IconBtn ghost icon="fa-solid fa-check" title="Save name" onClick={commitRenameBedrockInstance} onMouseDown={(e) => e.stopPropagation()} />
+          {:else}
+            {#if !isActive}
+              <IconBtn
+                ghost
+                icon="fa-solid fa-right-left"
+                title="Switch to this instance"
+                disabled={isSwitchingBedrockInstance}
+                onClick={() => switchBedrockInstance(inst.id)}
+                onMouseDown={(e) => e.stopPropagation()}
+              />
+            {/if}
+            <IconBtn ghost icon="fa-solid fa-pen" title="Rename" onClick={() => beginRenameBedrockInstance(inst.id, inst.name)} onMouseDown={(e) => e.stopPropagation()} />
+            {#if confirmDeleteBedrockInstanceId === inst.id}
+              <IconBtn ghost icon="fa-solid fa-check" title="Confirm delete" onClick={() => deleteBedrockInstance(inst.id)} onMouseDown={(e) => e.stopPropagation()} />
+              <IconBtn ghost icon="fa-solid fa-xmark" title="Cancel" onClick={cancelDeleteBedrockInstance} onMouseDown={(e) => e.stopPropagation()} />
+            {:else if !isActive}
+              <IconBtn ghost icon="fa-solid fa-trash" title="Delete" onClick={() => confirmDeleteBedrockInstance(inst.id)} onMouseDown={(e) => e.stopPropagation()} />
+            {/if}
+            <div class="card-menu-anchor" role="presentation" onmousedown={(e) => e.stopPropagation()}>
+              <IconBtn ghost icon="fa-solid fa-ellipsis-vertical" title="More" onClick={() => toggleCardMenu(inst.id)} />
+              {#if openCardMenuId === inst.id}
+                <div class="tw-dropdown-menu">
+                  <button
+                    type="button"
+                    class="tw-dropdown-item"
+                    onclick={() => { closeCardMenu(); backupBedrockInstance(inst) }}
+                  >
+                    <span><i class="fa-solid fa-camera"></i> Back up</span>
+                  </button>
+                </div>
+              {/if}
+            </div>
+          {/if}
+        </div>
+      </div>
+
+      <div class="instance-card-footer">
         <select
           class="setting-select instance-version-select"
           value={inst.version_tag}
           onchange={(e) => onBedrockInstanceVersionChanged(inst.id, e.currentTarget.value)}
           onclick={(e) => e.stopPropagation()}
-          data-tooltip="Game version to register when switching to this instance"
-          aria-label="Game version to register when switching to this instance"
+          aria-label={t('tt.gameVersionRegisterWhenSwitchingThis')}
+          data-tooltip={t('tt.gameVersionRegisteredWhenYouSwitch')}
         >
-          <option value="">Current version</option>
+          <option value="">{t('x.currentVersion')}</option>
           {#each downloadedMcVersions as v (v.version)}
             <option value={v.version}>{displayName(v)}</option>
           {/each}
@@ -305,55 +391,61 @@
           type="color"
           class="instance-accent-input"
           value={inst.accent_color || '#7289da'}
-          oninput={(e) => onBedrockInstanceAccentChanged(inst.id, e.currentTarget.value)}
+          onchange={(e) => onBedrockInstanceAccentChanged(inst.id, e.currentTarget.value)}
           onclick={(e) => e.stopPropagation()}
-          data-tooltip="Instance accent color"
-          aria-label="Instance accent color"
+          aria-label={t('tt.instanceAccentColor')}
+          data-tooltip={t('tt.accentColorShownAsThisCard')}
         />
-        <button
-          type="button"
-          class="instance-icon-btn"
-          onclick={() => beginRenameBedrockInstance(inst.id, inst.name)}
-          onmousedown={(e) => e.stopPropagation()}
-          data-tooltip="Rename"
-          aria-label="Rename"><i class="fa-solid fa-pen"></i></button
-        >
-        <button
-          type="button"
-          class="instance-icon-btn"
-          onclick={() => backupBedrockInstance(inst)}
-          onmousedown={(e) => e.stopPropagation()}
-          data-tooltip="Back up"
-          aria-label="Back up"><i class="fa-solid fa-camera"></i></button
-        >
-        {#if confirmDeleteBedrockInstanceId === inst.id}
-          <button
-            type="button"
-            class="instance-icon-btn instance-del"
-            onclick={() => deleteBedrockInstance(inst.id)}
-            onmousedown={(e) => e.stopPropagation()}
-            data-tooltip="Confirm delete"
-            aria-label="Confirm delete"><i class="fa-solid fa-check"></i></button
-          >
-          <button
-            type="button"
-            class="instance-icon-btn"
-            onclick={cancelDeleteBedrockInstance}
-            onmousedown={(e) => e.stopPropagation()}
-            aria-label="Cancel delete"><i class="fa-solid fa-xmark"></i></button
-          >
-        {:else if !isActive}
-          <button
-            type="button"
-            class="instance-icon-btn"
-            onclick={() => confirmDeleteBedrockInstance(inst.id)}
-            onmousedown={(e) => e.stopPropagation()}
-            data-tooltip="Delete"
-            aria-label="Delete"><i class="fa-solid fa-trash"></i></button
-          >
-        {/if}
-      {/if}
+      </div>
     </div>
   {/each}
+  </div>
 </div>
 
+<style>
+  .client-card-cols {
+    gap: var(--panel-band);
+  }
+  .instance-card {
+    padding: var(--card-pad-y) var(--card-pad-x);
+  }
+  .card-menu-anchor {
+    position: relative;
+  }
+  .client-card-meta {
+    min-width: 0;
+  }
+  .client-card-name {
+    display: block;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .instance-card-footer {
+    gap: var(--panel-band);
+    padding-top: var(--row-pad-y);
+    margin-top: 0;
+  }
+  .instance-name-btn {
+    padding: 4px var(--row-pad-x) 4px 4px;
+    border-radius: var(--r-sm);
+    min-width: 0;
+    transition: background-color var(--t);
+  }
+  .instance-name-btn:hover:not(:disabled) {
+    background: var(--bg-item-hover);
+  }
+  .instance-name-btn:disabled,
+  .instance-accent-input:disabled,
+  .instance-version-select:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  .instance-accent-input {
+    transition: opacity var(--t);
+  }
+  .tw-dropdown-item:hover {
+    background: var(--bg-item-hover);
+  }
+</style>

@@ -1,9 +1,11 @@
 <script lang="ts">
+  import { t } from './i18nStore.svelte'
   import { invoke } from '@tauri-apps/api/core'
   import PanelHeader from './components/PanelHeader.svelte'
   import SettingRow from './components/SettingRow.svelte'
   import Toggle from './components/Toggle.svelte'
   import Spinner from './components/Spinner.svelte'
+  import ListSkeleton from './components/ListSkeleton.svelte'
 
   // Ported from Pages/Home.LevelDat.cs. The backend
   // (src-tauri/src/commands/leveldat.rs) backs up level.dat, writes to a
@@ -89,9 +91,35 @@
   load()
 </script>
 
-<PanelHeader title="Level.dat Editor" {onBack}>
+<style>
+  .leveldat-retry {
+    margin-top: 10px;
+  }
+  .leveldat-error {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .leveldat-saved {
+    margin-top: 10px;
+  }
+  .leveldat-saved-text {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .panel-footer-note {
+    flex: 1;
+    font-size: 11px;
+    color: var(--text-dim);
+  }
+</style>
+
+<PanelHeader title={t('panel.levelDatEditor')} {onBack}>
   {#snippet extraActions()}
-    <button type="button" class="panel-icon-btn {loading ? 'spinning' : ''}" onclick={load} disabled={loading} data-tooltip="Reload" aria-label="Reload">
+    <button type="button" class="panel-icon-btn {loading ? 'spinning' : ''}" onclick={load} disabled={loading} data-tooltip={t('tt.reload')} aria-label={t('tt.reload')}>
       <i class="fa-solid fa-rotate"></i>
     </button>
   {/snippet}
@@ -99,14 +127,14 @@
 
 <div class="panel-body">
   {#if loading}
-    <div class="versions-loading"><Spinner size={16} /><span>Reading level.dat…</span></div>
+    <ListSkeleton rows={2} />
   {:else if !summary}
     <div class="empty-state">
       <i class="fa-solid fa-triangle-exclamation"></i>
-      <span>Couldn't read level.dat</span>
+      <span>{t('empty.couldnTReadLevelDat')}</span>
       <small>{error}</small>
-      <button type="button" class="btn-sm" style="margin-top:10px;" onclick={load}>
-        <i class="fa-solid fa-rotate"></i> Retry
+      <button type="button" class="btn-sm leveldat-retry" onclick={load}>
+        <i class="fa-solid fa-rotate"></i> {t('common.retry')}
       </button>
     </div>
   {:else}
@@ -167,7 +195,7 @@
     {/if}
 
     {#if Object.keys(summary.experiments).length > 0}
-      <span class="panel-section-label">Experiments</span>
+      <span class="panel-section-label">{t('x.experiments')}</span>
       {#each Object.entries(summary.experiments) as [name, enabled] (name)}
         <SettingRow label={name}>
           {#snippet trailing()}
@@ -178,12 +206,12 @@
     {/if}
 
     {#if error}
-      <span class="error-text">{error}</span>
+      <span class="error-text leveldat-error"><i class="fa-solid fa-triangle-exclamation"></i> {error}</span>
     {/if}
     {#if saveMessage}
-      <div class="logs-share-url" style="margin-top:10px;">
+      <div class="logs-share-url leveldat-saved">
         <i class="fa-solid fa-circle-check"></i>
-        <span style="flex:1;overflow:hidden;text-overflow:ellipsis;">{saveMessage}</span>
+        <span class="leveldat-saved-text">{saveMessage}</span>
       </div>
     {/if}
   {/if}
@@ -191,7 +219,7 @@
 
 {#if summary}
   <div class="panel-footer-bar">
-    <span style="font-size:12px;color:var(--text-dim);flex:1;">
+    <span class="panel-footer-note">
       A backup is made automatically before every save.
     </span>
     <button type="button" class="action-btn" disabled={saving} onclick={save}>

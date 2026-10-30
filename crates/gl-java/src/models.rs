@@ -112,6 +112,11 @@ pub struct JavaInstance {
     /// Sync-pack ids applied to this instance (Phase 7 / gl-sync).
     #[serde(default)]
     pub sync_pack_ids: Vec<String>,
+    /// Pinned instances sort to the top of the instances list, ahead of
+    /// everything else, regardless of the list's chosen sort order. Purely a
+    /// user-set preference — no other behavior depends on it.
+    #[serde(default)]
+    pub pinned: bool,
 }
 
 /// Which mod loader (if any) an instance is configured for.

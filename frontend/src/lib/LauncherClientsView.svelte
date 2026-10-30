@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from './i18nStore.svelte'
   import { onMount, onDestroy } from 'svelte'
   import { invoke } from '@tauri-apps/api/core'
   import { listen, type UnlistenFn } from '@tauri-apps/api/event'
@@ -26,11 +27,24 @@
     onBack,
     onNavigate = () => {},
     onToast = () => {},
+    activeClient = 'Vanilla',
+    onSelectClient = () => {},
   }: {
     onBack?: () => void
     onNavigate?: (view: string) => void
     onToast?: (message: string, kind?: string) => void
+    /** The Java client the top-bar chip shows (App's `activeJavaClient`). */
+    activeClient?: string
+    /** Sets the Java client choice, the same one the top-bar dropdown sets. */
+    onSelectClient?: (name: string) => void
   } = $props()
+
+  /** Standalone mods App installs into the active instance on launch (MOD_CLIENTS). */
+  const MOD_CARDS = [
+    { id: 'Essential', logo: '/images/clients/essential.webp', desc: 'Social, cosmetics and screenshots mod — installed into your instance' },
+    { id: 'Dawn', logo: '/images/clients/dawn.png', desc: "Feather's successor — standalone Fabric mod (1.17.1+)" },
+    { id: 'NoRisk', logo: '/images/clients/norisk.png', desc: 'PvP client — standalone mod for Fabric, Forge and NeoForge' },
+  ] as const
 
   type GlacierVersion = {
     id: string
@@ -56,6 +70,10 @@
   let glacierError = $state('')
   let glacierBusy = $state(false)
   let glacierInstalled = $state(false)
+  /** Live per-version download counts from glacierclient.xyz's own public
+   * counter (the same one the website displays) — best-effort, keyed by
+   * `tag`. Empty map just means "don't show a count," not an error. */
+  let glacierDownloadCounts = $state<Record<string, number>>({})
 
   const glacierLatest = $derived.by(() => {
     if (!glacierManifest) return null
@@ -99,6 +117,13 @@
     } finally {
       glacierLoading = false
     }
+    // Best-effort, never blocks the manifest load or shows an error of its
+    // own — an empty result just means no count badge renders.
+    try {
+      glacierDownloadCounts = await invoke<Record<string, number>>('get_glacier_download_counts')
+    } catch {
+      glacierDownloadCounts = {}
+    }
   }
 
   async function refreshGlacierInstalled() {
@@ -127,7 +152,7 @@
       onToast(`Glacier ${glacierLatest.name} installed!`, 'success')
     } catch (e) {
       glacierError = String(e)
-      onToast('Install failed: ' + String(e), 'error')
+      onToast(t('toast.installFailed', { error: String(e) }), 'error')
     } finally {
       glacierBusy = false
     }
@@ -163,8 +188,6 @@
 
   loadGlacierManifest()
 
-  let launchingLunarDirect = $state(false)
-
   type LunarBadlionStatus = {
     lunar_installed: boolean
     badlion_installed: boolean
@@ -175,18 +198,14 @@
   }
 
   let status = $state<LunarBadlionStatus | null>(null)
-  let lunarSelectedVersion = $state('')
 
   const lbInstalled = $derived(!!status && (status.lunar_installed || status.badlion_installed))
-  const canDirect = $derived(!!status?.can_direct_launch_lunar)
 
   /** Port of `RefreshJavaClients` (and the detect half of `OpenJavaClientsAsync`). */
   async function refreshJavaClients() {
     try {
       const next = await invoke<LunarBadlionStatus>('detect_lunar_badlion')
       status = next
-      if (!next.lunar_installed_versions.includes(lunarSelectedVersion))
-        lunarSelectedVersion = next.lunar_installed_versions[0] ?? ''
     } catch (e) {
       onToast(String(e), 'error')
     }
@@ -196,29 +215,14 @@
   async function launchLunar() {
     const exe = status?.lunar_exe_path ?? status?.badlion_exe_path
     if (!exe) {
-      onToast("Lunar Client isn't installed. Get it from lunarclient.com.", 'error')
+      onToast(t('toast.lunarClientIsnTInstalledGet'), 'error')
       return
     }
     try {
       await invoke('launch_client_exe', { exePath: exe })
-      onToast('Lunar Client launching…', 'success')
+      onToast(t('toast.lunarClientLaunching'), 'success')
     } catch (e) {
       onToast(String(e), 'error')
-    }
-  }
-
-  /** Port of `LaunchLunarDirect` - spawns the JVM straight against Lunar's
-   *  offline multiversion install, bypassing the Lunar Electron app. */
-  async function launchLunarDirect() {
-    if (!lunarSelectedVersion || launchingLunarDirect) return
-    launchingLunarDirect = true
-    try {
-      await invoke('launch_lunar_direct', { versionId: lunarSelectedVersion })
-      onToast(`Launching Lunar ${lunarSelectedVersion}…`, 'success')
-    } catch (e) {
-      onToast(String(e), 'error')
-    } finally {
-      launchingLunarDirect = false
     }
   }
 
@@ -226,16 +230,221 @@
     invoke('open_url', { url }).catch((e) => onToast(String(e), 'error'))
   }
 
+  // ---- Horizon (horizon-rust/horizon): native Rust Java 26.3 rewrite ----
+  type HorizonBuild = {
+    id: string
+    name: string
+    zipSha256: string
+    installedAt: number
+    publishedAt: string
+    notes: string
+    playable: boolean
+  }
+  type HorizonLatest = {
+    name: string
+    publishedAt: string
+    notes: string
+    zipSha256: string
+    updateAvailable: boolean
+  }
+  type HorizonOfficialNotes = { name: string; notes: string }
+  type HorizonStatus = {
+    installed: boolean
+    officialBuild: string | null
+    officialNotes: HorizonOfficialNotes | null
+    officialNotesError: string | null
+    current: HorizonBuild | null
+    previous: HorizonBuild | null
+    canRollback: boolean
+    latest: HorizonLatest | null
+    latestError: string | null
+    stateError: string | null
+    busy: boolean
+    running: boolean
+    repoUrl: string
+    websiteUrl: string
+  }
+
+  let horizon = $state<HorizonStatus | null>(null)
+  let horizonLoading = $state(false)
+  /** Set while an install, update, rollback or uninstall is in flight. */
+  let horizonWorking = $state(false)
+  let horizonStage = $state('')
+  let horizonStageProgress = $state(0)
+  let horizonNotesOpen = $state(false)
+  /** Which installed build the version picker points at. */
+  let horizonPick = $state('')
+  let launchingHorizon = $state(false)
+
+  /** Download progress for the Horizon zip, from the shared download queue. */
+  const horizonDownloadProgress = $derived(
+    queue.find((e) => e.label === 'Horizon' && e.status === 'Downloading')?.progress ?? 0,
+  )
+  const horizonBusy = $derived(horizonWorking || !!horizon?.busy)
+  const horizonRunning = $derived(!!horizon?.running || launchingHorizon)
+  const horizonPickedPrevious = $derived(
+    !!horizon?.previous && horizonPick === horizon.previous.id,
+  )
+
+  /** Reads Horizon's install state and the published nightly. */
+  async function loadHorizon() {
+    horizonLoading = true
+    try {
+      horizon = await invoke<HorizonStatus>('horizon_status')
+      horizonPick = horizon.current?.id ?? ''
+    } catch (e) {
+      onToast(String(e), 'error')
+    } finally {
+      horizonLoading = false
+    }
+  }
+
+  /** Runs one of the long Horizon operations and keeps the card in step. */
+  async function runHorizon(
+    command: 'horizon_install' | 'horizon_update' | 'horizon_rollback',
+    doneMessage: string,
+  ) {
+    if (horizonBusy) return
+    horizonWorking = true
+    horizonStage = ''
+    horizonStageProgress = 0
+    try {
+      horizon = await invoke<HorizonStatus>(command)
+      horizonPick = horizon.current?.id ?? ''
+      onToast(doneMessage, 'success')
+    } catch (e) {
+      onToast(String(e), 'error')
+      await loadHorizon()
+    } finally {
+      horizonWorking = false
+    }
+  }
+
+  async function launchHorizon() {
+    if (horizonBusy || horizonRunning) return
+    launchingHorizon = true
+    try {
+      await invoke<number>('horizon_launch')
+      onToast('Horizon is starting…', 'success')
+      await loadHorizon()
+    } catch (e) {
+      onToast(String(e), 'error')
+    } finally {
+      launchingHorizon = false
+    }
+  }
+
+  async function uninstallHorizon() {
+    if (horizonBusy || horizonRunning) return
+    if (!window.confirm('Uninstall Horizon? Its builds are removed. Your worlds and options in its game folder are kept.')) {
+      return
+    }
+    horizonWorking = true
+    try {
+      await invoke('horizon_uninstall')
+      onToast('Horizon removed. Worlds were kept.', 'info')
+      await loadHorizon()
+    } catch (e) {
+      onToast(String(e), 'error')
+    } finally {
+      horizonWorking = false
+    }
+  }
+
+  onMount(() => {
+    listen<{ stage: string; percent: number }>('horizon-progress', (e) => {
+      horizonStage = e.payload.stage
+      horizonStageProgress = e.payload.percent
+    }).then((fn) => {
+      unlistenHorizon.push(fn)
+    })
+    listen<{ instance_id: string; status: string }>('java-process-changed', (e) => {
+      if (e.payload.instance_id === 'horizon' && e.payload.status === 'exited') {
+        loadHorizon()
+      }
+    }).then((fn) => {
+      unlistenHorizon.push(fn)
+    })
+  })
+  const unlistenHorizon: UnlistenFn[] = []
+  onDestroy(() => unlistenHorizon.forEach((fn) => fn()))
+
+  loadHorizon()
+
   refreshJavaClients()
 </script>
 
-<PanelHeader title="Launchers" {onBack}>
+<style>
+  .client-icon-accent {
+    background: var(--accent-bg);
+    color: var(--accent);
+  }
+  .client-icon-brand {
+    background: transparent;
+    padding: 0;
+    overflow: hidden;
+  }
+  .client-brand-logo {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: inherit;
+  }
+  .client-logo {
+    width: 18px;
+    height: 18px;
+    object-fit: contain;
+  }
+  .client-variant {
+    color: var(--text-dim);
+    font-weight: 500;
+  }
+  .client-card-note {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    color: var(--red);
+  }
+  .client-update-flag {
+    color: var(--accent-hover);
+    font-weight: 600;
+  }
+  .horizon-build-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin-top: 6px;
+  }
+  .horizon-notes-toggle {
+    align-self: flex-start;
+    margin-top: 6px;
+  }
+  .horizon-notes {
+    white-space: pre-wrap;
+    max-height: 220px;
+    overflow: auto;
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--text-dim);
+    margin-top: 6px;
+    padding: 10px 12px;
+    border-radius: var(--r-sm);
+    background: var(--bg-inset);
+  }
+  .horizon-notes b {
+    color: var(--text);
+  }
+</style>
+
+<PanelHeader title={t('panel.launchers')} {onBack}>
   {#snippet extraActions()}
     <button
       type="button"
       class="panel-icon-btn"
-      data-tooltip="Re-detect"
-      aria-label="Re-detect"
+      data-tooltip={t('tt.reDetect')}
+      aria-label={t('tt.reDetect')}
       onmousedown={(e) => e.stopPropagation()}
       onclick={refreshJavaClients}
     >
@@ -253,10 +462,10 @@
 </div>
 
 <div class="panel-body">
-  <span class="panel-section-label">Built-in</span>
+  <span class="panel-section-label">{t('x.builtIn')}</span>
   <div class="credits-card credits-card-glacier">
-    <div class="credits-card-icon" style="background:var(--accent-bg); color:var(--accent);">
-      <i class="fa-brands fa-java"></i>
+    <div class="credits-card-icon client-icon-accent">
+      <img class="chip-icon client-logo" src="images/mc-java-logo.png" alt="">
     </div>
     <div class="credits-card-meta">
       <span class="credits-card-name">Vanilla (Glacier built-in)</span>
@@ -276,8 +485,8 @@
   </div>
 
   <div class="credits-card">
-    <div class="credits-card-icon" style="background:var(--accent-bg); color:var(--accent);">
-      <i class="fa-solid fa-snowflake"></i>
+    <div class="credits-card-icon client-icon-accent">
+      <img class="chip-icon client-logo" src="images/icon.png" alt="">
     </div>
     <div class="credits-card-meta">
       <span class="credits-card-name">Glacier Client</span>
@@ -289,6 +498,9 @@
         {:else if glacierLatest}
           {glacierLatest.name} · {glacierLatest.fabric ? 'Fabric' : glacierLatest.forge ? 'Forge' : 'Unknown'}
           {glacierInstalled ? '· Installed' : ''}
+          {#if glacierDownloadCounts[glacierLatest.tag] > 0}
+            · {glacierDownloadCounts[glacierLatest.tag].toLocaleString()} downloads
+          {/if}
         {:else}
           No Glacier Client releases published yet.
         {/if}
@@ -299,89 +511,174 @@
         <InlineProgress progress={glacierProgress} showSpinner />
       {:else if glacierError}
         <button class="vcs-btn vcs-btn-ghost" onclick={() => loadGlacierManifest(true)}>
-          <i class="fa-solid fa-rotate"></i> Retry
+          <i class="fa-solid fa-rotate"></i> {t('common.retry')}
         </button>
       {:else if glacierLatest}
         {#if glacierInstalled}
           <button class="vcs-btn" onmousedown={(e) => e.stopPropagation()} onclick={launchGlacier}>
-            <i class="fa-solid fa-play"></i> Launch
+            <i class="fa-solid fa-play"></i> {t('common.launch')}
           </button>
           <button
             class="vcs-btn vcs-btn-ghost"
             onmousedown={(e) => e.stopPropagation()}
             onclick={uninstallGlacier}
-            data-tooltip="Uninstall" aria-label="Uninstall"
+            data-tooltip={t('tt.uninstall')} aria-label={t('tt.uninstall')}
           ><i class="fa-solid fa-trash"></i></button>
         {:else}
           <button class="vcs-btn" onmousedown={(e) => e.stopPropagation()} onclick={installGlacier}>
-            <i class="fa-solid fa-download"></i> Install
+            <i class="fa-solid fa-download"></i> {t('common.install')}
           </button>
         {/if}
       {/if}
     </div>
   </div>
 
-  <span class="panel-section-label">Third-party</span>
+  <span class="panel-section-label">{t('x.thirdParty')}</span>
 
+  {#if lbInstalled}
   <div class="credits-card">
-    <div class="credits-card-icon" style="background:#06b6d422; color:#22d3ee;">
-      <i class="fa-solid fa-moon"></i>
+    <div class="credits-card-icon client-icon-brand">
+      <img class="client-brand-logo" src="/images/clients/lunar.png" alt="" />
     </div>
     <div class="credits-card-meta">
       <span class="credits-card-name"
-        >Lunar Client <span style="opacity:0.55; font-weight:500;">incl. Badlion</span></span
+        >Lunar Client <span class="client-variant">incl. Badlion</span></span
       >
-      <span class="credits-card-sub">
-        {#if lbInstalled && canDirect}
-          Direct launch ready · {status?.lunar_installed_versions.length} version(s) installed offline
-        {:else if lbInstalled}
-          Detected · {status?.lunar_exe_path ?? status?.badlion_exe_path} — first launch may show the
-          Lunar splash
-        {:else}
-          Not installed — download from lunarclient.com (Lunar's purchase of Badlion lets one app
-          cover both)
-        {/if}
+      <span class="credits-card-sub" title={status?.lunar_exe_path ?? status?.badlion_exe_path ?? ''}>
+        Opens the Lunar launcher, which signs you in and starts the game
       </span>
     </div>
     <div class="credits-card-actions">
-      {#if lbInstalled && canDirect}
-        <select
-          class="setting-select"
-          bind:value={lunarSelectedVersion}
-          onclick={(e) => e.stopPropagation()}
-        >
-          {#each status?.lunar_installed_versions ?? [] as lv (lv)}
-            <option value={lv}>{lv}</option>
-          {/each}
-        </select>
-        <button
-          class="vcs-btn"
-          disabled={launchingLunarDirect}
-          onmousedown={(e) => e.stopPropagation()}
-          onclick={launchLunarDirect}
-          data-tooltip="Direct launch"
-        >
-          {#if launchingLunarDirect}
-            <span class="spinner"></span>
-          {:else}
-            <i class="fa-solid fa-bolt"></i>
+      <button class="vcs-btn" onmousedown={(e) => e.stopPropagation()} onclick={launchLunar}>
+        <i class="fa-solid fa-play"></i> {t('common.launch')}
+      </button>
+    </div>
+  </div>
+  {/if}
+
+  {#if horizon?.installed}
+  <div class="credits-card horizon-card">
+    <div class="credits-card-icon client-icon-brand">
+      <img class="client-brand-logo" src="/images/clients/horizon.svg" alt="" />
+    </div>
+    <div class="credits-card-meta">
+      <span class="credits-card-name"
+        >Horizon <span class="client-variant">native Java 26.3 rewrite · nightly</span></span
+      >
+      <span class="credits-card-sub">
+        {#if horizonLoading && !horizon}
+          Checking Horizon…
+        {:else if horizon?.officialBuild}
+          Using Horizon launcher's install · {horizon.officialBuild}
+          {#if horizon.latest?.updateAvailable}· <b class="client-update-flag">Update available in Horizon launcher</b>{/if}
+        {:else if horizon?.installed && horizon.current}
+          Installed · {horizon.current.name}
+          {#if horizon.latest?.updateAvailable}· <b class="client-update-flag">update available</b>{/if}
+        {:else}
+          Not installed. Horizon plays Minecraft Java 26.3 natively. It needs a Microsoft account
+          that owns Minecraft: Java Edition, and Java mods don't run in it.
+        {/if}
+      </span>
+      {#if horizonWorking || horizonStage}
+        <span class="client-card-note">{horizonStage}</span>
+      {/if}
+      {#if horizon?.latestError}
+        <span class="client-card-note"><i class="fa-solid fa-triangle-exclamation"></i> Could not check for updates: {horizon.latestError}</span>
+      {/if}
+      {#if horizon?.stateError}
+        <span class="client-card-note">{horizon.stateError}</span>
+      {/if}
+      {#if horizon && !horizon.officialBuild && horizon.installed && horizon.previous && horizonPick}
+        <span class="credits-card-sub horizon-build-row">
+          Build
+          <select class="setting-select" bind:value={horizonPick} disabled={horizonBusy}>
+            <option value={horizon.current?.id}>{horizon.current?.name} (current)</option>
+            <option value={horizon.previous.id}>{horizon.previous.name} (previous)</option>
+          </select>
+          {#if horizonPickedPrevious}
+            <button class="vcs-btn vcs-btn-ghost" disabled={horizonBusy} onclick={() => runHorizon('horizon_rollback', 'Switched Horizon to the previous build')}>
+              <i class="fa-solid fa-clock-rotate-left"></i> Use this build
+            </button>
           {/if}
-          Launch
+        </span>
+      {/if}
+      {#if horizon && (horizon.officialBuild || horizon.latest?.notes || horizon.current?.notes)}
+        <button class="vcs-btn vcs-btn-ghost horizon-notes-toggle" onclick={() => (horizonNotesOpen = !horizonNotesOpen)}>
+          <i class="fa-solid fa-scroll"></i> {horizonNotesOpen ? 'Hide patch notes' : 'Patch notes'}
         </button>
-      {:else if lbInstalled}
-        <button class="vcs-btn" onmousedown={(e) => e.stopPropagation()} onclick={launchLunar}>
-          <i class="fa-solid fa-play"></i> Launch
+        {#if horizonNotesOpen}
+          <div class="horizon-notes">
+            {#if horizon.officialBuild}
+              {#if horizon.officialNotes?.notes}
+                <b>{horizon.officialNotes.name}</b>{'\n'}{horizon.officialNotes.notes}
+              {:else}
+                <b>{horizon.officialNotes?.name ?? horizon.officialBuild}</b>{'\n'}No patch notes found for this build.
+                {#if horizon.officialNotesError}{'\n'}({horizon.officialNotesError}){/if}
+              {/if}
+            {:else if horizon?.latest?.updateAvailable && horizon.latest.notes}
+              <b>{horizon.latest.name}</b>{'\n'}{horizon.latest.notes}
+            {:else if horizon?.current?.notes}
+              <b>{horizon.current.name}</b>{'\n'}{horizon.current.notes}
+            {:else}
+              No patch notes for this build.
+            {/if}
+          </div>
+        {/if}
+      {/if}
+    </div>
+    <div class="credits-card-actions">
+      {#if horizonWorking || (horizonLoading && !horizon)}
+        <InlineProgress progress={horizonDownloadProgress || horizonStageProgress / 100} showSpinner />
+      {:else if horizon?.installed}
+        <button class="vcs-btn" disabled={horizonBusy || horizonRunning} onmousedown={(e) => e.stopPropagation()} onclick={launchHorizon}>
+          <i class="fa-solid fa-play"></i> {horizonRunning ? 'Running' : t('common.launch')}
         </button>
-      {:else}
-        <button
-          class="vcs-btn vcs-btn-ghost"
-          onmousedown={(e) => e.stopPropagation()}
-          onclick={() => openUrl('https://www.lunarclient.com')}
-        >
-          <i class="fa-solid fa-arrow-up-right-from-square"></i> Get it
+        {#if horizon.latest?.updateAvailable && !horizon.officialBuild}
+          <button class="vcs-btn vcs-btn-ghost" disabled={horizonBusy || horizonRunning} onclick={() => runHorizon('horizon_update', 'Horizon updated')}>
+            <i class="fa-solid fa-arrow-up"></i> Update
+          </button>
+        {/if}
+        <button class="vcs-btn vcs-btn-ghost" onclick={() => openUrl('https://playhorizon.dev')} data-tooltip="playhorizon.dev" aria-label="playhorizon.dev">
+          <i class="fa-solid fa-globe"></i>
+        </button>
+        {#if !horizon.officialBuild}
+        <button class="vcs-btn vcs-btn-ghost" disabled={horizonBusy || horizonRunning} onclick={uninstallHorizon} data-tooltip={t('tt.uninstall')} aria-label={t('tt.uninstall')}>
+          <i class="fa-solid fa-trash"></i>
+        </button>
+        {/if}
+      {:else if horizon}
+        <button class="vcs-btn" disabled={horizonBusy} onclick={() => runHorizon('horizon_install', 'Horizon installed')}>
+          <i class="fa-solid fa-download"></i> {t('common.install')}
+        </button>
+        <button class="vcs-btn vcs-btn-ghost" onclick={() => openUrl('https://github.com/horizon-rust/horizon')} data-tooltip="GitHub" aria-label="GitHub">
+          <i class="fa-brands fa-github"></i>
         </button>
       {/if}
     </div>
   </div>
+  {/if}
+
+  {#each MOD_CARDS as card (card.id)}
+  <div class="credits-card">
+    <div class="credits-card-icon client-icon-brand">
+      <img class="client-brand-logo" src={card.logo} alt="" />
+    </div>
+    <div class="credits-card-meta">
+      <span class="credits-card-name">{card.id}</span>
+      <span class="credits-card-sub">{card.desc}</span>
+    </div>
+    <div class="credits-card-actions">
+      {#if activeClient === card.id}
+        <button class="vcs-btn vcs-btn-ghost" disabled>
+          <i class="fa-solid fa-check"></i> Active
+        </button>
+      {:else}
+        <button class="vcs-btn" onmousedown={(e) => e.stopPropagation()} onclick={() => onSelectClient(card.id)}>
+          <i class="fa-solid fa-check"></i> Use
+        </button>
+      {/if}
+    </div>
+  </div>
+  {/each}
 </div>
 

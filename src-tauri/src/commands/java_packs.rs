@@ -38,7 +38,7 @@ fn instance_mods_dir(state: &State<'_, AppState>, instance_id: &str) -> Result<P
 // ── Resource packs / shader packs ───────────────────────────────────────────
 
 #[tauri::command]
-pub fn list_java_resourcepacks(
+pub async fn list_java_resourcepacks(
     state: State<'_, AppState>,
     instance_id: String,
 ) -> Result<Vec<JavaInstanceFile>, String> {
@@ -47,7 +47,7 @@ pub fn list_java_resourcepacks(
 }
 
 #[tauri::command]
-pub fn import_java_resourcepack(
+pub async fn import_java_resourcepack(
     state: State<'_, AppState>,
     instance_id: String,
     source_path: String,
@@ -59,12 +59,12 @@ pub fn import_java_resourcepack(
 }
 
 #[tauri::command]
-pub fn delete_java_resourcepack(path: String) -> Result<(), String> {
+pub async fn delete_java_resourcepack(path: String) -> Result<(), String> {
     packs::delete_pack(&PathBuf::from(path)).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-pub fn list_java_shaderpacks(
+pub async fn list_java_shaderpacks(
     state: State<'_, AppState>,
     instance_id: String,
 ) -> Result<Vec<JavaInstanceFile>, String> {
@@ -73,7 +73,7 @@ pub fn list_java_shaderpacks(
 }
 
 #[tauri::command]
-pub fn import_java_shaderpack(
+pub async fn import_java_shaderpack(
     state: State<'_, AppState>,
     instance_id: String,
     source_path: String,
@@ -85,7 +85,7 @@ pub fn import_java_shaderpack(
 }
 
 #[tauri::command]
-pub fn delete_java_shaderpack(path: String) -> Result<(), String> {
+pub async fn delete_java_shaderpack(path: String) -> Result<(), String> {
     packs::delete_pack(&PathBuf::from(path)).map_err(|e| e.to_string())
 }
 

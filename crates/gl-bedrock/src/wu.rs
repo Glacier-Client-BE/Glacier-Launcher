@@ -598,10 +598,14 @@ pub fn extract_appx(zip_path: &Path, dest_dir: &Path) -> Result<()> {
             continue;
         }
 
-        let dest_path = dest_dir.join(relative.replace('/', std::path::MAIN_SEPARATOR_STR));
-        if !dest_path.starts_with(dest_dir) {
-            continue; // zip-slip guard
+        // `starts_with` is lexical, so `dest/../x` passes it; reject any non-normal component instead.
+        if Path::new(relative)
+            .components()
+            .any(|c| !matches!(c, std::path::Component::Normal(_)))
+        {
+            continue;
         }
+        let dest_path = dest_dir.join(relative.replace('/', std::path::MAIN_SEPARATOR_STR));
 
         if let Some(parent) = dest_path.parent() {
             std::fs::create_dir_all(parent).ctx(parent)?;

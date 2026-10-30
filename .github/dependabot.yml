@@ -1,0 +1,26 @@
+version: 2
+updates:
+  # Rust workspace (src-tauri + every crate under crates/) shares one lockfile
+  # at the repo root, so one Cargo entry covers all of it.
+  - package-ecosystem: "cargo"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    groups:
+      cargo-patch-minor:
+        update-types: ["patch", "minor"]
+
+  - package-ecosystem: "npm"
+    directory: "/frontend"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    groups:
+      npm-patch-minor:
+        update-types: ["patch", "minor"]
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"

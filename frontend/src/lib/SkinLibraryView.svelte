@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from './i18nStore.svelte'
   /**
    * Port of `Components/SkinLibraryPanel.razor` (172 lines) — the "Skin
    * Library" panel, reached from `currentView == "skinlibrary"`
@@ -13,6 +14,7 @@
   import { invoke, convertFileSrc } from '@tauri-apps/api/core'
   import { open } from '@tauri-apps/plugin-dialog'
   import PanelHeader from './components/PanelHeader.svelte'
+  import ListSkeleton from './components/ListSkeleton.svelte'
   import type { LauncherSettings } from './settings'
 
   let {
@@ -33,6 +35,7 @@
   let skins = $state<SavedSkin[]>([])
   let username = $state('')
   let busy = $state(false)
+  let loaded = $state(false)
 
   /**
    * The crate fills `SavedSkin.url` for the remote case, but a library entry
@@ -50,6 +53,8 @@
       skins = await invoke<SavedSkin[]>('list_saved_skins')
     } catch (e) {
       onToast?.(String(e), 'error')
+    } finally {
+      loaded = true
     }
   }
 
@@ -73,7 +78,7 @@
     try {
       await invoke('add_skin_from_file', { sourcePath: path, slim: false })
       await reload()
-      onToast?.('Skin added to library.', 'success')
+      onToast?.(t('toast.skinAddedLibrary'), 'success')
     } catch (e) {
       onToast?.(String(e), 'error')
     }
@@ -83,14 +88,14 @@
   async function saveCurrent() {
     const name = settings?.JavaUsername ?? ''
     if (!name.trim()) {
-      onToast?.('Sign in with Microsoft (Java) first to save your current skin.', 'error')
+      onToast?.(t('toast.signWithMicrosoftJavaFirstSave'), 'error')
       return
     }
     busy = true
     try {
       await invoke('add_skin_from_username', { username: name })
       await reload()
-      onToast?.('Your current skin was saved to the library.', 'success')
+      onToast?.(t('toast.yourCurrentSkinWasSavedLibrary'), 'success')
     } catch (e) {
       onToast?.(String(e), 'error')
     } finally {
@@ -106,7 +111,7 @@
       await invoke('add_skin_from_username', { username })
       username = ''
       await reload()
-      onToast?.('Skin saved to library.', 'success')
+      onToast?.(t('toast.skinSavedLibrary'), 'success')
     } catch (e) {
       onToast?.(String(e), 'error')
     } finally {
@@ -125,7 +130,7 @@
    */
   async function apply(s: SavedSkin, slim: boolean) {
     if (!settings?.JavaAccessToken) {
-      onToast?.('Sign in with Microsoft (Java) first to apply skins.', 'error')
+      onToast?.(t('toast.signWithMicrosoftJavaFirstApply'), 'error')
       return
     }
     busy = true
@@ -139,11 +144,11 @@
       // keeps the value comparable with anything written by the old app.
       SkinChangedTicks: Date.now() * 10000 + 621355968000000000,
     })
-    onToast?.('Applying skin…', 'info')
+    onToast?.(t('toast.applyingSkin'), 'info')
 
     try {
       await invoke('apply_skin', { path: s.path, slim })
-      onToast?.(`Applied "${s.name}" as ${slim ? 'slim' : 'classic'}.`, 'success')
+      onToast?.(t('toast.appliedNameAsVariant', { name: s.name, variant: slim ? t('x.slim') : t('x.classic') }), 'success')
     } catch (e) {
       onSaveSettings?.({
         ...settings,
@@ -158,22 +163,26 @@
 
   /** Port of `Delete`. */
   async function remove(s: SavedSkin) {
-    await invoke('delete_saved_skin', { path: s.path })
-    await reload()
-    onToast?.('Skin removed.', 'info')
+    try {
+      await invoke('delete_saved_skin', { path: s.path })
+      await reload()
+      onToast?.(t('toast.skinRemoved'), 'info')
+    } catch (e) {
+      onToast?.(String(e), 'error')
+    }
   }
 
   reload()
 </script>
 
-<PanelHeader title="Skin Library" {onBack}>
+<PanelHeader title={t('panel.skinLibrary')} {onBack}>
   {#snippet extraActions()}
     <button
       class="btn-sm"
       onclick={saveCurrent}
       disabled={busy}
       onmousedown={(e) => e.stopPropagation()}
-      data-tooltip="Save your account's current skin into the library"
+      data-tooltip={t('tt.saveYourAccountSCurrentSkin')}
     >
       <i class="fa-solid fa-floppy-disk"></i> Save current
     </button>
@@ -187,7 +196,8 @@
   <div class="skinlib-add">
     <input
       class="panel-search-input"
-      placeholder="Add by username (grabs their current skin)…"
+      aria-label={t('ph.addByUsername')}
+      placeholder={t('ph.addByUsername')}
       bind:value={username}
       onkeydown={(e) => {
         e.stopPropagation()
@@ -200,17 +210,18 @@
       onclick={addFromUsername}
       disabled={busy}
       onmousedown={(e) => e.stopPropagation()}
-      aria-label="Add by username"
+      aria-label={t('tt.addByUsername')}
     >
       <i class="fa-solid fa-user-plus"></i>
     </button>
   </div>
 
-  {#if skins.length === 0}
+  {#if !loaded}
+    <ListSkeleton rows={3} />
+  {:else if skins.length === 0}
     <div class="empty-state">
       <i class="fa-solid fa-shirt"></i>
-      <span>No saved skins yet. Add a PNG or pull one in by username, then apply it to your signed-in
-      account.</span>
+      <span>{t('empty.noSavedSkinsYetAddPng')}</span>
     </div>
   {:else}
     <div class="skinlib-grid">
@@ -242,8 +253,8 @@
               class="btn-sm ts-danger"
               onclick={() => remove(s)}
               onmousedown={(e) => e.stopPropagation()}
-              data-tooltip="Remove from library"
-              aria-label="Remove from library"><i class="fa-solid fa-trash"></i></button
+              data-tooltip={t('tt.removeFromLibrary')}
+              aria-label={t('tt.removeFromLibrary')}><i class="fa-solid fa-trash"></i></button
             >
           </div>
         </div>

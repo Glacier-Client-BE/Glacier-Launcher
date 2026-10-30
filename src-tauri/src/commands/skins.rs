@@ -23,7 +23,7 @@ fn skins_dir() -> PathBuf {
 }
 
 /// Port of `SkinLibraryService.List()`.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn list_saved_skins() -> Result<Vec<SavedSkin>, String> {
     skin_library::list_skins(&skins_dir()).map_err(|e| e.to_string())
 }
@@ -32,7 +32,7 @@ pub fn list_saved_skins() -> Result<Vec<SavedSkin>, String> {
 /// tauri-plugin-dialog's native picker, the same route the settings
 /// export/import commands use — WebView2 gives no real path for a dropped or
 /// `<input type=file>` file, so the pick must originate in the host.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn add_skin_from_file(source_path: String, slim: bool) -> Result<String, String> {
     skin_library::add_from_file(&skins_dir(), Path::new(&source_path), slim)
         .map(|p| p.to_string_lossy().into_owned())
@@ -54,7 +54,7 @@ pub async fn add_skin_from_username(
 
 /// Port of `SkinLibraryService.Delete` — never fails, as the crate's
 /// `delete_skin` swallows the error exactly as the C# does.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn delete_saved_skin(path: String) {
     skin_library::delete_skin(Path::new(&path));
 }

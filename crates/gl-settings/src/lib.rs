@@ -11,6 +11,7 @@ pub mod notifications;
 pub mod themes;
 
 use std::path::PathBuf;
+use std::sync::{Mutex, MutexGuard};
 
 use serde::{Deserialize, Serialize};
 
@@ -136,6 +137,55 @@ pub struct LauncherSettings {
     pub remember_window_size: bool,
     pub minimize_to_tray: bool,
 
+    /// QOL: auto-remove finished (completed/failed/cancelled) downloads from
+    /// the Downloads panel after this many days. `0` disables it - the
+    /// panel keeps every finished entry until "Clear finished" is clicked
+    /// manually, same as before this existed.
+    pub auto_clear_downloads_after_days: i32,
+
+    /// QOL: tooltip hover delay in milliseconds. Some users want tooltips
+    /// instant, some want them to basically never pop up while just moving
+    /// the mouse across the UI - this was a hardcoded 350ms.
+    pub tooltip_delay_ms: i32,
+
+    /// QOL: max simultaneous downloads. Read once at startup when the
+    /// download queue is built (`AppState::new`) - changing it takes effect
+    /// on the next launch rather than live-resizing the running semaphore,
+    /// which tokio doesn't support shrinking safely mid-flight.
+    pub max_concurrent_downloads: i32,
+
+    /// QOL: notification categories ("downloads", "updates", "social") the
+    /// user doesn't want recorded into the notification bell / toast
+    /// history. Category is inferred client-side (see App.svelte's
+    /// `notificationCategory`) from the notification's own text, so this is
+    /// enforced entirely in the frontend before the record call is made -
+    /// nothing backend-side needs to know about categories.
+    pub muted_notification_categories: Vec<String>,
+
+    /// QOL: OS-level (system tray/toast) notifications for long operations
+    /// finishing while the window isn't focused - separate from the in-app
+    /// toast/notification-bell system, which is easy to miss while alt-
+    /// tabbed into the game.
+    pub desktop_notifications_enabled: bool,
+
+    /// QOL: labels (from the Ctrl+K search index) the user has pinned to
+    /// the Home screen's quick-access row. Keyed by label rather than a
+    /// dedicated id since every search-index entry's label is already a
+    /// fixed, unique string.
+    pub pinned_panels: Vec<String>,
+
+    /// QOL: global (works even when the launcher isn't focused/is minimized
+    /// to tray) hotkey that launches the game, as a Tauri accelerator string
+    /// (e.g. `"CommandOrControl+Shift+L"`). Empty disables it - registering
+    /// nothing at startup, same as never having this feature.
+    pub quick_launch_hotkey: String,
+
+    /// Unix-ms timestamp of the last automatic (not user-triggered) settings
+    /// export, so a periodic check can tell "due" from "already ran today".
+    /// A plain timestamp rather than an ISO string specifically to avoid
+    /// needing a date-parsing dependency just for this one staleness check.
+    pub last_settings_auto_export_unix_ms: i64,
+
     pub show_recently_launched: bool,
     pub recently_launched: Vec<String>,
 
@@ -170,6 +220,11 @@ pub struct LauncherSettings {
     pub java_server_port: i32,
 
     pub show_launch_console: bool,
+
+    /// Whether instance group/folder sections in `JavaInstancesView` start
+    /// collapsed. Purely a display preference — `false` (expanded, today's
+    /// existing behavior) for every setting file that predates this field.
+    pub collapse_instance_groups: bool,
 
     pub java_show_snapshots: bool,
     pub java_show_historical: bool,
@@ -207,6 +262,11 @@ pub struct LauncherSettings {
 
     pub curse_forge_api_key: String,
 
+    /// User-supplied Gemini API key — never shipped with the app, entered by
+    /// the user in Settings and used directly from their own machine. Powers
+    /// "Explain with AI" on crash logs (see `commands::ai::explain_crash_log`).
+    pub gemini_api_key: String,
+
     pub check_updates_on_startup: bool,
     pub skipped_launcher_version: String,
     pub last_update_check: String,
@@ -236,9 +296,21 @@ pub struct LauncherSettings {
 
     pub accessibility_mode: bool,
 
+    /// UI display language — a frontend `i18n.svelte.ts` `LangCode` string
+    /// (`"en"`, `"es"`, `"de"`, `"fr"`, `"zh"`, `"hi"`, `"ja"`, `"id"`,
+    /// `"fil"`). The backend never interprets this itself, just persists
+    /// it; an unrecognized value (e.g. from a downgrade) is handled
+    /// frontend-side by falling back to English rather than erroring here.
     pub language: String,
 
     pub last_dismissed_announcement_id: String,
+
+    /// QOL "What's new": the launcher version the user has already seen the
+    /// changelog popup for. Compared against the running version at
+    /// startup — a mismatch (and a non-empty value, so this doesn't fire on
+    /// someone's very first launch ever) means the app was just updated,
+    /// so the changelog for the new version is shown once automatically.
+    pub last_seen_changelog_version: String,
 
     /// Auto-backup-every-N-launches for Bedrock worlds (feature 20). `0`
     /// disables it. Global rather than per-world, matching the scope of the
@@ -251,6 +323,13 @@ pub struct LauncherSettings {
     /// Feature 23: whether the user has dismissed the one-time marketplace
     /// content reminder banner on the Bedrock Worlds/Backups panels.
     pub bedrock_marketplace_reminder_dismissed: bool,
+
+    /// Absolute paths of screenshots the user has starred in the Photos
+    /// panel. A plain list rather than a per-file marker because screenshots
+    /// live in the live `com.mojang` folder, not launcher-managed storage —
+    /// there's nowhere else to persist a per-file flag that survives the
+    /// game (or a backup/restore) touching that folder.
+    pub bedrock_favorite_screenshots: Vec<String>,
 
     /// UI polish feature 37: user-rebound keyboard shortcuts, serialized as a
     /// JSON object mapping action name (`"search"`, `"launch"`,
@@ -302,10 +381,18 @@ impl Default for LauncherSettings {
             panel_side: "right".into(),
             panel_width_px: 0.0,
 
-            window_width: 880.0,
-            window_height: 600.0,
+            window_width: 720.0,
+            window_height: 480.0,
             remember_window_size: true,
             minimize_to_tray: false,
+            auto_clear_downloads_after_days: 0,
+            tooltip_delay_ms: 350,
+            max_concurrent_downloads: 4,
+            muted_notification_categories: Vec::new(),
+            desktop_notifications_enabled: false,
+            pinned_panels: Vec::new(),
+            quick_launch_hotkey: String::new(),
+            last_settings_auto_export_unix_ms: 0,
 
             show_recently_launched: true,
             recently_launched: Vec::new(),
@@ -341,6 +428,8 @@ impl Default for LauncherSettings {
             java_server_port: 25565,
 
             show_launch_console: true,
+
+            collapse_instance_groups: false,
 
             java_show_snapshots: false,
             java_show_historical: false,
@@ -378,6 +467,8 @@ impl Default for LauncherSettings {
 
             curse_forge_api_key: String::new(),
 
+            gemini_api_key: String::new(),
+
             check_updates_on_startup: true,
             skipped_launcher_version: String::new(),
             last_update_check: String::new(),
@@ -410,11 +501,13 @@ impl Default for LauncherSettings {
             language: "en".into(),
 
             last_dismissed_announcement_id: String::new(),
+            last_seen_changelog_version: String::new(),
 
             bedrock_auto_backup_every_n_launches: 0,
             bedrock_launches_since_backup: 0,
 
             bedrock_marketplace_reminder_dismissed: false,
+            bedrock_favorite_screenshots: Vec::new(),
 
             keyboard_shortcuts: "{}".into(),
             onboarding_checklist_dismissed: false,
@@ -424,10 +517,33 @@ impl Default for LauncherSettings {
     }
 }
 
+/// In-memory copy of the settings file. `load()` is called from many hot
+/// paths (skin/token lookups, launch, downloads), so it serves this copy
+/// instead of re-reading and re-parsing `settings.json` on every call.
+/// `save()` writes through to disk first and only then updates the copy, so
+/// a failed write never leaves the cache ahead of the file. The lock is held
+/// across the disk read/write so the cache and file cannot diverge under
+/// concurrent load/save.
+static CACHE: Mutex<Option<LauncherSettings>> = Mutex::new(None);
+
+fn lock_cache() -> MutexGuard<'static, Option<LauncherSettings>> {
+    CACHE.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
 /// Load settings, migrating from the legacy flat (no-envelope, PascalCase)
 /// `glacier-settings.json` on first run if the new envelope-based
 /// `settings.json` doesn't exist yet.
 pub fn load() -> gl_persistence::Result<LauncherSettings> {
+    let mut cache = lock_cache();
+    if let Some(settings) = cache.as_ref() {
+        return Ok(settings.clone());
+    }
+    let settings = load_from_disk()?;
+    *cache = Some(settings.clone());
+    Ok(settings)
+}
+
+fn load_from_disk() -> gl_persistence::Result<LauncherSettings> {
     if let Some(envelope) = gl_persistence::load::<LauncherSettings>(&settings_path())? {
         return Ok(envelope.data);
     }
@@ -435,27 +551,35 @@ pub fn load() -> gl_persistence::Result<LauncherSettings> {
     // No new-format file yet - try the legacy flat file written by the
     // C# JsonStore-backed SettingsService.
     let legacy_path = legacy_settings_path();
-    if legacy_path.exists() {
-        let contents = std::fs::read_to_string(&legacy_path)?;
-        match serde_json::from_str::<LauncherSettings>(&contents) {
+    match std::fs::read_to_string(&legacy_path) {
+        Ok(contents) => match serde_json::from_str::<LauncherSettings>(&contents) {
             Ok(settings) => {
                 // Persist immediately in the new envelope format; never
-                // touch/delete the original legacy file.
-                save(&settings)?;
-                return Ok(settings);
+                // touch/delete the original legacy file. Written directly
+                // (not via `save`) because the caller already holds the
+                // cache lock.
+                write_to_disk(&settings)?;
+                Ok(settings)
             }
             Err(e) => {
                 gl_persistence::quarantine_corrupt(&legacy_path);
-                return Err(e.into());
+                Err(e.into())
             }
-        }
+        },
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(LauncherSettings::default()),
+        Err(e) => Err(e.into()),
     }
+}
 
-    Ok(LauncherSettings::default())
+fn write_to_disk(settings: &LauncherSettings) -> gl_persistence::Result<()> {
+    gl_persistence::save(&settings_path(), SETTINGS_SCHEMA_VERSION, settings)
 }
 
 pub fn save(settings: &LauncherSettings) -> gl_persistence::Result<()> {
-    gl_persistence::save(&settings_path(), SETTINGS_SCHEMA_VERSION, settings)
+    let mut cache = lock_cache();
+    write_to_disk(settings)?;
+    *cache = Some(settings.clone());
+    Ok(())
 }
 
 #[cfg(test)]
