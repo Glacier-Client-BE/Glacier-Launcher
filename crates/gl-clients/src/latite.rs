@@ -148,15 +148,13 @@ fn format_display_name(api_name: &str, tag: &str, published_at: Option<&str>) ->
 /// Parses tags like `release-20240102-030405` into ("Release", "2024-01-02 03:04").
 fn parse_latite_tag(tag: &str) -> Option<(String, String)> {
     let lower = tag.to_ascii_lowercase();
-    let (kind, rest) = if let Some(r) = lower.strip_prefix("nightly-") {
-        ("Nightly", r)
-    } else if let Some(r) = lower.strip_prefix("debug-") {
-        ("Debug", r)
-    } else if let Some(r) = lower.strip_prefix("release-") {
-        ("Release", r)
-    } else {
-        return None;
-    };
+    let (kind, rest) = [
+        ("nightly-", "Nightly"),
+        ("debug-", "Debug"),
+        ("release-", "Release"),
+    ]
+    .iter()
+    .find_map(|(prefix, kind)| lower.strip_prefix(prefix).map(|r| (*kind, r)))?;
 
     // rest should be YYYYMMDD-HHMMSS
     let parts: Vec<&str> = rest.split('-').collect();

@@ -31,13 +31,11 @@ pub const SOURCE: &str = "gdk";
 /// `MinecraftWindowsBeta`.
 fn parse_asset_name(name: &str) -> Option<(&'static str, String)> {
     let rest = name.strip_prefix("Microsoft.")?;
-    let (family, rest) = if let Some(r) = strip_prefix_ci(rest, "MinecraftUWP_") {
-        ("MinecraftUWP", r)
-    } else if let Some(r) = strip_prefix_ci(rest, "MinecraftWindowsBeta_") {
-        ("MinecraftWindowsBeta", r)
-    } else {
-        return None;
-    };
+    let (family, rest) = strip_prefix_ci(rest, "MinecraftUWP_")
+        .map(|r| ("MinecraftUWP", r))
+        .or_else(|| {
+            strip_prefix_ci(rest, "MinecraftWindowsBeta_").map(|r| ("MinecraftWindowsBeta", r))
+        })?;
 
     let rest = strip_suffix_ci(rest, "_x64__8wekyb3d8bbwe.zip")?;
 
