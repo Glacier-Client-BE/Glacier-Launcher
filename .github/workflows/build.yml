@@ -19,11 +19,45 @@ env:
   CARGO_INCREMENTAL: 0
   CARGO_TERM_COLOR: always
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      # Release rules (same as the C# launcher): a push to main whose commit
+      # message starts with "update:" bumps the middle number (2.0.0 -> 2.1.0),
+      # "hotfix:" bumps the last (2.0.0 -> 2.0.1). Anything else just builds.
+      # The Rust rewrite starts its own line at 2.0.0.
+      - name: Determine release version
+        id: ver
+        shell: pwsh
+        run: |
+          $msg = git log -1 --pretty=%s
+          $release = "${{ github.event_name }}" -eq "push" -and "${{ github.ref }}" -eq "refs/heads/main" -and $msg -match '^(update|hotfix):'
+          if ($release -and (git tag --points-at HEAD)) { Write-Host "HEAD already released"; $release = $false }
+          if (-not $release) { "release=false" >> $env:GITHUB_OUTPUT; exit 0 }
+          $tags = @(git tag -l "v*" | Where-Object { $_ -match '^v\d+\.\d+\.\d+$' } | Sort-Object { [version]($_.TrimStart('v')) })
+          $v = if ($tags.Count) { [version]$tags[-1].TrimStart('v') } else { [version]"0.0.0" }
+          if ($v -lt [version]"2.0.0") { $next = "2.0.0" }
+          elseif ($msg -match '^hotfix:') { $next = "$($v.Major).$($v.Minor).$($v.Build + 1)" }
+          else { $next = "$($v.Major).$($v.Minor + 1).0" }
+          Write-Host "Releasing v$next"
+          "release=true" >> $env:GITHUB_OUTPUT
+          "version=$next" >> $env:GITHUB_OUTPUT
+
+      - name: Stamp version
+        if: steps.ver.outputs.release == 'true'
+        shell: pwsh
+        run: |
+          $v = "${{ steps.ver.outputs.version }}"
+          (Get-Content src-tauri/tauri.conf.json -Raw) -replace '"version": "[^"]+"', "`"version`": `"$v`"" | Set-Content src-tauri/tauri.conf.json -NoNewline
+          (Get-Content src-tauri/Cargo.toml -Raw) -replace '(?m)^version = "[^"]+"', "version = `"$v`"" | Set-Content src-tauri/Cargo.toml -NoNewline
 
       - uses: dtolnay/rust-toolchain@stable
 
@@ -71,3 +105,22 @@ jobs:
             target/release/bundle/nsis/*.exe
             target/release/bundle/msi/*.msi
           if-no-files-found: error
+
+      # Only the setup .exe goes on the release: the in-app updater installs
+      # the first .exe asset of the newest release.
+      - name: Publish release
+        if: steps.ver.outputs.release == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.ver.outputs.version }}
+          name: Glacier Launcher v${{ steps.ver.outputs.version }}
+          generate_release_notes: true
+          make_latest: true
+          files: target/release/bundle/nsis/*-setup.exe
+
+      - name: Notify website
+        if: steps.ver.outputs.release == 'true'
+        continue-on-error: true
+        run: gh api repos/Glacier-Client-BE/Glacier-Website/dispatches -f event_type=launcher-release
+        env:
+          GH_TOKEN: ${{ secrets.DISPATCH_TOKEN }}
