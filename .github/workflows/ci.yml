@@ -3,10 +3,27 @@ name: CI
 on:
   push:
     branches: [main]
+    paths-ignore: ['**.md', 'docs/**', 'video/**', 'graphify-out/**', '.github/dependabot.yml']
   pull_request:
+    paths-ignore: ['**.md', 'docs/**', 'video/**', 'graphify-out/**']
+
+# A newer push supersedes an older run on the same branch.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_INCREMENTAL: 0
+  # No debug info: CI only needs pass/fail, and it shrinks build + link + cache.
+  CARGO_PROFILE_DEV_DEBUG: 0
+  CARGO_PROFILE_TEST_DEBUG: 0
+  CARGO_TERM_COLOR: always
+  CLIPPY_ALLOW: -A clippy::too_many_arguments -A clippy::doc_lazy_continuation -A clippy::doc_overindented_list_items
 
 jobs:
-  rust:
+  # fmt + clippy and the tests compile different artifacts, so they run as
+  # parallel jobs with their own caches instead of one after the other.
+  lint:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v7
@@ -14,10 +31,23 @@ jobs:
         with:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: lint
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: cargo fmt --check
         run: cargo fmt --all -- --check
       - name: cargo clippy
-        run: cargo clippy --workspace --all-targets -- -D warnings -A clippy::too_many_arguments -A clippy::doc_lazy_continuation -A clippy::doc_overindented_list_items
+        run: cargo clippy --workspace --all-targets -- -D warnings ${{ env.CLIPPY_ALLOW }}
+
+  test:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: test
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: cargo test
         run: cargo test --workspace
 
@@ -31,8 +61,15 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 22
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
-      - run: npm ci
+      # Restore node_modules itself (keyed on the lockfile) so npm ci only
+      # runs when dependencies actually change.
+      - id: nm
+        uses: actions/cache@v4
+        with:
+          path: frontend/node_modules
+          key: nm-${{ runner.os }}-${{ hashFiles('frontend/package-lock.json') }}
+      - if: steps.nm.outputs.cache-hit != 'true'
+        working-directory: frontend
+        run: npm ci --prefer-offline --no-audit --no-fund
       - run: npx tsc --noEmit -p tsconfig.app.json
       - run: npm run build
