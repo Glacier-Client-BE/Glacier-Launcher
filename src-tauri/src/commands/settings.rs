@@ -3,13 +3,27 @@
 
 use gl_settings::LauncherSettings;
 
+/// CurseForge key baked in by the release workflow (repo secret), used when
+/// the user hasn't entered their own — as the C# launcher shipped it.
+const BUILTIN_CURSEFORGE_KEY: Option<&str> = option_env!("GLACIER_CURSEFORGE_API_KEY");
+
 #[tauri::command(async)]
 pub fn get_settings() -> Result<LauncherSettings, String> {
-    gl_settings::load().map_err(|e| e.to_string())
+    let mut settings = gl_settings::load().map_err(|e| e.to_string())?;
+    if settings.curse_forge_api_key.trim().is_empty() {
+        if let Some(key) = BUILTIN_CURSEFORGE_KEY {
+            settings.curse_forge_api_key = key.to_string();
+        }
+    }
+    Ok(settings)
 }
 
 #[tauri::command(async)]
 pub fn set_settings(mut settings: LauncherSettings) -> Result<(), String> {
+    // Never write the built-in key to the user's settings file.
+    if BUILTIN_CURSEFORGE_KEY.is_some_and(|k| settings.curse_forge_api_key == k) {
+        settings.curse_forge_api_key.clear();
+    }
     if let Ok(disk) = gl_settings::load() {
         keep_newer_java_token(&mut settings, &disk);
     }

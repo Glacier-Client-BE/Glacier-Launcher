@@ -96,6 +96,8 @@ jobs:
 
       - name: Build (frontend + Tauri release bundle)
         run: npm run build
+        env:
+          GLACIER_CURSEFORGE_API_KEY: ${{ secrets.CURSEFORGE_API_KEY }}
 
       - uses: actions/upload-artifact@v7
         with:
