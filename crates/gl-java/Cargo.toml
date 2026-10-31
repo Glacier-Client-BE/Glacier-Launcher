@@ -20,7 +20,7 @@ gl-persistence = { path = "../gl-persistence" }
 gl-download = { path = "../gl-download" }
 
 [target.'cfg(windows)'.dependencies]
-winreg = "0.52"
+winreg = "0.55"
 
 [dev-dependencies]
 tempfile = "3"
