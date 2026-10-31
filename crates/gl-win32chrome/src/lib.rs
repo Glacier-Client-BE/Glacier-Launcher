@@ -147,7 +147,7 @@ pub fn install_resize_hittest(hwnd: HWND) -> WinResult<()> {
     if ok.as_bool() {
         Ok(())
     } else {
-        Err(windows::core::Error::from_win32())
+        Err(windows::core::Error::from_thread())
     }
 }
 

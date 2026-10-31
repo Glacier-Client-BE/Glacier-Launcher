@@ -121,7 +121,7 @@ impl ShaderService {
                     let mut zip = ZipArchive::new(file)?;
                     for i in 0..zip.len() {
                         let mut entry = zip.by_index(i)?;
-                        let entry_name = entry.name().to_string();
+                        let entry_name = entry.name().unwrap_or_default().to_string();
                         if !entry_name.to_lowercase().ends_with(".material.bin") {
                             continue;
                         }

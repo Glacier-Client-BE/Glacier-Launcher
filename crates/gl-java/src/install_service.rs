@@ -442,7 +442,7 @@ fn extract_native_jar(jar_path: &Path, dest_dir: &Path) -> Result<()> {
     let mut archive = zip::ZipArchive::new(file)?;
     for i in 0..archive.len() {
         let mut entry = archive.by_index(i)?;
-        let name = entry.name().to_string();
+        let name = entry.name().unwrap_or_default().to_string();
         if name.starts_with("META-INF/") {
             continue;
         }

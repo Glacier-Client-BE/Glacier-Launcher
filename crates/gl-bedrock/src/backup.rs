@@ -206,7 +206,7 @@ impl BedrockBackupService {
         let mut top_level_folders = std::collections::BTreeSet::new();
         for i in 0..archive.len() {
             let entry = archive.by_index(i)?;
-            if let Some(top) = entry.name().split('/').next() {
+            if let Some(top) = entry.name().unwrap_or_default().split('/').next() {
                 if MANAGED_FOLDERS.contains(&top) {
                     top_level_folders.insert(top.to_string());
                 }
@@ -222,7 +222,7 @@ impl BedrockBackupService {
 
         for i in 0..archive.len() {
             let mut entry = archive.by_index(i)?;
-            if entry.name().ends_with('/') {
+            if entry.name().unwrap_or_default().ends_with('/') {
                 continue;
             }
             let Some(relative) = entry.enclosed_name() else {
@@ -298,10 +298,10 @@ impl BedrockBackupService {
         let mut out = std::collections::HashMap::with_capacity(archive.len());
         for i in 0..archive.len() {
             let entry = archive.by_index(i)?;
-            if entry.name().ends_with('/') {
+            if entry.name().unwrap_or_default().ends_with('/') {
                 continue;
             }
-            out.insert(entry.name().to_string(), entry.size());
+            out.insert(entry.name().unwrap_or_default().to_string(), entry.size());
         }
         Ok(out)
     }

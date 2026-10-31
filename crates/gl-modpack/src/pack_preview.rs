@@ -37,7 +37,7 @@ pub fn preview_pack(zip_path: &Path) -> Result<PackPreview> {
         || (0..archive.len()).any(|i| {
             archive
                 .by_index(i)
-                .map(|e| e.name().starts_with("overrides/"))
+                .map(|e| e.name().unwrap_or_default().starts_with("overrides/"))
                 .unwrap_or(false)
         });
 

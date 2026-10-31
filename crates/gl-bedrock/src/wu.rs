@@ -545,13 +545,13 @@ pub fn extract_appx(zip_path: &Path, dest_dir: &Path) -> Result<()> {
     let mut manifest_full_name: Option<String> = None;
     for i in 0..archive.len() {
         let entry = archive.by_index(i)?;
-        let is_manifest = Path::new(entry.name())
+        let is_manifest = Path::new(&*entry.name().unwrap_or_default())
             .file_name()
             .and_then(|f| f.to_str())
             .map(|f| f.eq_ignore_ascii_case("AppxManifest.xml"))
             .unwrap_or(false);
         if is_manifest {
-            manifest_full_name = Some(entry.name().to_string());
+            manifest_full_name = Some(entry.name().unwrap_or_default().to_string());
             break;
         }
     }
@@ -574,7 +574,7 @@ pub fn extract_appx(zip_path: &Path, dest_dir: &Path) -> Result<()> {
 
     for i in 0..archive.len() {
         let mut entry = archive.by_index(i)?;
-        let name = entry.name().to_string();
+        let name = entry.name().unwrap_or_default().to_string();
         if name.ends_with('/') {
             continue;
         }

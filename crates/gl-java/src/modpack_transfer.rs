@@ -190,7 +190,7 @@ pub fn import_modpack(zip_path: &Path, instance_dir: &Path) -> Result<()> {
         let Ok(entry) = archive.by_index(i) else {
             continue;
         };
-        let full = entry.name().replace('\\', "/");
+        let full = entry.name().unwrap_or_default().replace('\\', "/");
         if full.to_ascii_lowercase().starts_with("overrides/")
             || full.to_ascii_lowercase().starts_with("client-overrides/")
         {
@@ -262,7 +262,7 @@ fn detect_multimc_root<R: Read + std::io::Seek>(
             let Ok(entry) = archive.by_index(i) else {
                 continue;
             };
-            let full = entry.name().replace('\\', "/");
+            let full = entry.name().unwrap_or_default().replace('\\', "/");
             let lower = full.to_ascii_lowercase();
             if lower.ends_with(candidate)
                 || lower.contains(&format!("/{candidate}"))

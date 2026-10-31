@@ -146,7 +146,7 @@ fn extract_overrides(zip_path: &Path, instance_root: &Path) -> Result<(), String
         if entry.is_dir() {
             continue;
         }
-        let name = entry.name().replace('\\', "/");
+        let name = entry.name().unwrap_or_default().replace('\\', "/");
         let rel = if let Some(r) = name.strip_prefix("overrides/") {
             r
         } else if let Some(r) = name.strip_prefix("client-overrides/") {

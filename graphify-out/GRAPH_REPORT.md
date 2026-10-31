@@ -1,16 +1,16 @@
 # Graph Report - MinecraftLauncher  (2026-10-31)
 
 ## Corpus Check
-- 298 files · ~1,381,032 words
+- 298 files · ~1,381,036 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 4042 nodes · 9465 edges · 186 communities (152 shown, 25 thin omitted)
+- 4037 nodes · 9368 edges · 193 communities (157 shown, 26 thin omitted)
 - Extraction: 98% EXTRACTED · 2% INFERRED · 0% AMBIGUOUS · INFERRED: 156 edges (avg confidence: 0.85)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `980708fa`
+- Built from commit: `41d51369`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -30,13 +30,13 @@
 - GitHubApiCache
 - sync_packs.rs
 - gl-injection/src/lib.rs
-- versions.rs
+- wu.rs
 - ImportCandidate
 - App.svelte
 - worlds.rs
 - tests.rs
 - levilamina.rs
-- gl-settings/src/lib.rs
+- BedrockBackupService
 - mod_analyzer.rs
 - UtilitiesView.svelte
 - modpack.rs
@@ -51,7 +51,7 @@
 - src/notifications.rs
 - nsis
 - BedrockOptionsService
-- wu.rs
+- gl-bedrock/src/util.rs
 - export/curseforge.rs
 - logs.rs
 - PARITY.md (parity ledger)
@@ -65,7 +65,7 @@
 - JavaInstancesView.svelte
 - flarial.rs
 - bedrock_addons.rs
-- AppState
+- commands/notifications.rs
 - video/package.json
 - java_packs.rs
 - src/tweaks.rs
@@ -75,10 +75,10 @@
 - collector
 - version_service.rs
 - jar_inspect.rs
-- queueEntry
+- gl-integrations/src/models.rs
 - manifest.rs
 - gl-bedrock/src/lib.rs
-- theme.rs
+- src/glacier_client.rs
 - DownloadQueue
 - ClientLibraryView.svelte
 - gl-persistence/src/lib.rs
@@ -86,10 +86,10 @@
 - gdk.rs
 - RuntimeDownloadService
 - launcher_import.rs
-- modpack_transfer.rs
+- gl-clients/src/models.rs
 - java_mods.rs
 - java_screenshots.rs
-- src/client_library.rs
+- src/skins.rs
 - lan.rs
 - src/java.rs
 - gl-win32chrome/src/lib.rs
@@ -101,7 +101,7 @@
 - mod_provenance.rs
 - SkinViewer.svelte
 - compilerOptions
-- downloads.rs
+- AppState
 - integrations.rs
 - dir_link.rs
 - SyncTarget
@@ -133,11 +133,11 @@
 - compilerOptions
 - WinResult
 - check
-- apply
+- .export_world
 - package.json
 - presets.rs
 - setup_tray
-- parse_version_db
+- news.rs
 - default.json
 - set_settings
 - JavaInstance
@@ -192,18 +192,24 @@
 - EffectiveLaunchConfig
 - LauncherSettings
 - LauncherSettings
+- OptionsDocument
+- .list_screenshots
+- io_err
+- gl-bedrock/src/model.rs
+- pipeline.rs
+- ClientDownloadState
 
 ## God Nodes (most connected - your core abstractions)
 1. `AppState` - 90 edges
 2. `InstanceService` - 43 edges
 3. `DownloadQueue` - 36 edges
-4. `SyncReport` - 26 edges
-5. `BedrockInstanceService` - 26 edges
+4. `BedrockInstanceService` - 26 edges
+5. `SyncReport` - 26 edges
 6. `ThemeDefinition` - 25 edges
 7. `ImportCandidate` - 23 edges
 8. `ProcessRegistry` - 22 edges
 9. `DownloadRequest` - 21 edges
-10. `SyncRegistry` - 20 edges
+10. `read_version_profile()` - 20 edges
 
 ## Surprising Connections (you probably didn't know these)
 - `frontend/README.md (Svelte+Vite template doc)` --semantically_similar_to--> `Glacier Launcher (product)`  [INFERRED] [semantically similar]
@@ -225,27 +231,27 @@
 - **CI/build verification gates for the cutover commit** — github_workflows_ci, github_workflows_build, concept_cutover_commit [EXTRACTED 1.00]
 - **Transcription ledger and its supporting line-range inventories** — parity, docs_inventory_shell, docs_inventory_bedrock_panels, docs_inventory_bedrock_services [EXTRACTED 1.00]
 
-## Communities (186 total, 25 thin omitted)
+## Communities (193 total, 26 thin omitted)
 
 ### Community 0 - "InstanceService"
-Cohesion: 0.07
-Nodes (49): count_files_with_ext(), count_mods(), count_worlds(), dir_size_bytes(), Path, copy_dir_recursive(), import_many(), import_one() (+41 more)
+Cohesion: 0.08
+Nodes (38): count_files_with_ext(), count_mods(), count_worlds(), dir_size_bytes(), Path, ensure_enough_disk_space(), ensure_no_id_collision(), free_disk_bytes() (+30 more)
 
 ### Community 1 - "build_jvm_args"
 Cohesion: 0.35
 Nodes (12): build_classpath(), build_game_args(), build_jvm_args(), is_jvm_arg_compatible(), LaunchOptions, HashMap, Result, String (+4 more)
 
 ### Community 2 - "launch.rs"
-Cohesion: 0.12
-Nodes (48): Child, ResolvedAuth, available_ram_mb(), cancel_launch(), console_content_title(), console_stop_game(), ConsoleExitPayload, ConsoleLogPayload (+40 more)
+Cohesion: 0.07
+Nodes (69): Child, cache_dir(), default_settings_round_trip_through_persistence(), JavaAccount, launcher_root(), LauncherSettings, legacy_settings_path(), load() (+61 more)
 
 ### Community 3 - "ShaderService"
-Cohesion: 0.05
-Nodes (58): AppliedShader, BedrockBackup, BedrockInstance, BedrockPack, BedrockWorld, OptionEntry, OptionKind, PackKind (+50 more)
+Cohesion: 0.13
+Nodes (28): AppliedShader, Into, Path, PathBuf, Result, Self, String, Vec (+20 more)
 
 ### Community 4 - "ImportLauncherView.svelte"
-Cohesion: 0.31
-Nodes (6): goToPreview(), openLauncher(), pickCustomRoot(), runDetection(), runImport(), toast()
+Cohesion: 0.24
+Nodes (8): goToPreview(), openLauncher(), pickCustomRoot(), runDetection(), runImport(), toast(), toggle(), @tauri-apps/plugin-dialog
 
 ### Community 5 - "gl-auth/src/lib.rs"
 Cohesion: 0.05
@@ -253,7 +259,7 @@ Nodes (68): B, authenticate_with_minecraft(), AuthError, DisplayClaims, exchange
 
 ### Community 6 - "utilities.rs"
 Cohesion: 0.11
-Nodes (57): CustomClientEntry, add_custom_client_from_file(), add_custom_client_from_url(), backup_path(), bedrock_options_exist(), bedrock_options_has_backup(), delete_custom_client(), disks() (+49 more)
+Nodes (58): CustomClientEntry, add_custom_client_from_file(), add_custom_client_from_url(), backup_path(), bedrock_options_exist(), bedrock_options_has_backup(), delete_custom_client(), disks() (+50 more)
 
 ### Community 7 - "gl-nbt/src/lib.rs"
 Cohesion: 0.06
@@ -268,12 +274,12 @@ Cohesion: 0.32
 Nodes (12): clear_pending_marker(), clear_pending_marker_is_idempotent(), marker_path(), marker_pointing_at_missing_file_is_ignored(), marker_pointing_at_real_file_is_returned_and_consumed(), no_marker_returns_none(), Option, Path (+4 more)
 
 ### Community 10 - "BedrockInstanceService"
-Cohesion: 0.07
-Nodes (44): BackupDiff, BedrockBackupService, BedrockRoot, HashMap, Into, Option, Path, PathBuf (+36 more)
+Cohesion: 0.19
+Nodes (13): BedrockInstanceService, IndexFile, BedrockInstance, Into, Option, Path, PathBuf, Result (+5 more)
 
 ### Community 11 - "themes.rs"
-Cohesion: 0.09
-Nodes (31): css_vars_cover_every_variable_the_original_emits(), duplicated_gets_a_fresh_id(), exports_dir(), fmt3(), light_text_uses_subtler_item_overlays(), lighten(), new_id(), overlay_strength_scales_the_overlay_alphas() (+23 more)
+Cohesion: 0.07
+Nodes (48): css_vars_cover_every_variable_the_original_emits(), duplicated_gets_a_fresh_id(), exports_dir(), fmt3(), light_text_uses_subtler_item_overlays(), lighten(), new_id(), overlay_strength_scales_the_overlay_alphas() (+40 more)
 
 ### Community 12 - "GitHubApiCache"
 Cohesion: 0.22
@@ -287,17 +293,17 @@ Nodes (24): apply_sync_pack(), clear_sync_conflict_override(), create_sync_pack(
 Cohesion: 0.08
 Nodes (37): c_void, activate_application(), enable_debug_privilege(), find_process_by_name(), find_processes_by_name(), grant_uwp_access(), inject_dll(), inject_rejects_missing_dll_before_touching_win32() (+29 more)
 
-### Community 15 - "versions.rs"
-Cohesion: 0.21
-Nodes (30): WuVersion, LatiteVersion, available_free_space(), delete_latite_version(), delete_vanilla_bedrock_version(), download_latite_version(), download_vanilla_bedrock_version(), ensure_disk_space() (+22 more)
+### Community 15 - "wu.rs"
+Cohesion: 0.05
+Nodes (87): first_seen_wins_on_duplicate_key(), list_versions(), parse_version_db(), Client, Result, Vec, skips_section_headers_eappx_and_non_x64(), sorts_newest_first() (+79 more)
 
 ### Community 16 - "ImportCandidate"
 Cohesion: 0.19
 Nodes (14): atlauncher_adapter_parses_neoforge_instance(), curseforge_app_adapter_parses_forge_instance(), DetectedLauncher, ImportCandidate, mmc_adapter_parses_a_fabric_instance(), modrinth_app_adapter_parses_quilt_profile(), pipeline_imports_and_copies_files(), ModLoaderKind (+6 more)
 
 ### Community 17 - "App.svelte"
-Cohesion: 0.12
-Nodes (4): i(), [], lang, ViewMode
+Cohesion: 0.10
+Nodes (7): i(), [], lang, cancelFor(), progressFor(), queueEntry(), ViewMode
 
 ### Community 18 - "worlds.rs"
 Cohesion: 0.14
@@ -311,17 +317,17 @@ Nodes (16): dir_link_apply_with_keep_existing_then_detach_materialize_round_trip
 Cohesion: 0.06
 Nodes (48): detects_not_found_payload(), falls_back_to_first_zip_when_no_windows_asset(), get_text_cached(), GitHubAsset, GitHubRelease, mod_asset_prefers_zip_over_other_files(), parse_release(), parses_release_and_picks_windows_zip() (+40 more)
 
-### Community 21 - "gl-settings/src/lib.rs"
-Cohesion: 0.18
-Nodes (21): cache_dir(), default_settings_round_trip_through_persistence(), JavaAccount, launcher_root(), LauncherSettings, legacy_settings_path(), load(), load_from_disk() (+13 more)
+### Community 21 - "BedrockBackupService"
+Cohesion: 0.19
+Nodes (14): BackupDiff, BedrockBackupService, BedrockRoot, HashMap, Into, Option, Path, PathBuf (+6 more)
 
 ### Community 22 - "mod_analyzer.rs"
 Cohesion: 0.19
 Nodes (26): analyze(), analyze_dir(), analyzes_fabric_mod_json(), analyzes_forge_mods_toml(), built_ins(), capture(), delete_mod(), is_disabled_jar() (+18 more)
 
 ### Community 23 - "UtilitiesView.svelte"
-Cohesion: 0.10
-Nodes (4): optionIsOn(), optionValue(), setOptionValue(), toggleOption()
+Cohesion: 0.09
+Nodes (8): LanguageOption, LANGUAGES, t(), Table, optionIsOn(), optionValue(), setOptionValue(), toggleOption()
 
 ### Community 24 - "modpack.rs"
 Cohesion: 0.22
@@ -345,7 +351,7 @@ Nodes (14): asset_prefers_exe_over_other_files(), fixture(), no_update_when_curr
 
 ### Community 30 - "frontend/package.json"
 Cohesion: 0.05
-Nodes (40): dependencies, skinview3d, @tauri-apps/api, @tauri-apps/plugin-dialog, @tauri-apps/plugin-log, @tauri-apps/plugin-notification, devDependencies, esbuild (+32 more)
+Nodes (39): dependencies, skinview3d, @tauri-apps/api, @tauri-apps/plugin-dialog, @tauri-apps/plugin-log, @tauri-apps/plugin-notification, devDependencies, esbuild (+31 more)
 
 ### Community 31 - "clients.rs"
 Cohesion: 0.17
@@ -367,9 +373,9 @@ Nodes (38): debugApplicationIdSuffix, app, security, trayIcon, windows, enable, 
 Cohesion: 0.13
 Nodes (18): append_ext(), BedrockOptionsService, find_meta(), infer_kind(), known_keys(), Meta, prettify(), HashMap (+10 more)
 
-### Community 36 - "wu.rs"
-Cohesion: 0.16
-Nodes (25): extract_appx(), fetch_updates(), find_text(), generic_version(), get_auth_cookie(), get_download_url(), is_dotted_number(), list_versions() (+17 more)
+### Community 36 - "gl-bedrock/src/util.rs"
+Cohesion: 0.22
+Nodes (18): civil_from_secs(), copy_directory(), directory_size(), iso7_from_systemtime(), iso7_now(), iso_from_systemtime(), Path, PathBuf (+10 more)
 
 ### Community 37 - "export/curseforge.rs"
 Cohesion: 0.09
@@ -388,8 +394,8 @@ Cohesion: 0.17
 Nodes (25): add_from_file(), add_from_username(), base64_decode(), base64_roundtrip_matches_known_vector(), delete_skin(), list_skins(), MojangProfileByName, resolve_skin_texture() (+17 more)
 
 ### Community 41 - "src/bedrock.rs"
-Cohesion: 0.19
-Nodes (25): activate_via_com(), BedrockPackageInfo, connect_external_server(), escape_data_string(), extract_application_id(), find_game_process(), find_game_process_for(), installed_version() (+17 more)
+Cohesion: 0.20
+Nodes (24): activate_via_com(), BedrockPackageInfo, connect_external_server(), escape_data_string(), extract_application_id(), find_game_process(), find_game_process_for(), installed_version() (+16 more)
 
 ### Community 42 - "horizon.rs"
 Cohesion: 0.07
@@ -400,7 +406,7 @@ Cohesion: 0.13
 Nodes (24): blank_entry(), decide_update(), decide_update_detects_matching_and_changed_hash(), hash_and_size(), head_matches_recorded_size(), index_path(), kind_for_extension(), library_dir() (+16 more)
 
 ### Community 44 - "SyncEngine"
-Cohesion: 0.25
+Cohesion: 0.28
 Nodes (10): DetachMode, HashMap, Path, PathBuf, Result, Self, String, SyncPack (+2 more)
 
 ### Community 45 - "CurseForgeClient"
@@ -423,9 +429,9 @@ Nodes (9): fetch_remote_hash(), local_hash(), local_hash_matches_known_file_cont
 Cohesion: 0.23
 Nodes (28): BedrockAddonInstallResult, check_bedrock_pack_conflicts(), copy_dir_recursive(), default_dir_name_for_class(), extract_to_temp(), find_pack_conflicts(), install_bedrock_addon(), install_into_class_dir() (+20 more)
 
-### Community 50 - "AppState"
-Cohesion: 0.19
-Nodes (19): AppNotification, JavaInstanceService, JavaVersionService, add_notification(), clear_notifications(), list_notifications(), mark_all_notifications_read(), mark_notification_read() (+11 more)
+### Community 50 - "commands/notifications.rs"
+Cohesion: 0.29
+Nodes (12): AppNotification, add_notification(), clear_notifications(), list_notifications(), mark_all_notifications_read(), mark_notification_read(), notification_unread_count(), remove_notification() (+4 more)
 
 ### Community 51 - "video/package.json"
 Cohesion: 0.09
@@ -436,8 +442,8 @@ Cohesion: 0.30
 Nodes (22): delete_java_resourcepack(), delete_java_shaderpack(), get_mod_versions(), import_java_resourcepack(), import_java_shaderpack(), install_curseforge_mod(), install_planned_file(), install_resolved_mods() (+14 more)
 
 ### Community 53 - "src/tweaks.rs"
-Cohesion: 0.05
-Nodes (68): get_announcement(), Client, Option, Announcement, AppNotification, CapeInfo, default_icon(), default_kind() (+60 more)
+Cohesion: 0.19
+Nodes (22): BedrockManifest, BedrockManifestHeader, BedrockManifestModule, BedrockTweaksIndex, build_bedrock_manifest(), builds_manifest_for_single_pack(), flatten_vanilla(), flattens_vanilla_categories_recursively() (+14 more)
 
 ### Community 54 - "java_worlds.rs"
 Cohesion: 0.32
@@ -463,9 +469,9 @@ Nodes (19): annotate_installed(), cache_entries(), CachedVersion, dirs_home(), l
 Cohesion: 0.17
 Nodes (22): analyze(), analyze_flags_duplicate_ids_and_missing_deps(), find_toml_string(), is_built_in(), parse_fabric(), parse_forge(), parses_fabric_mod_json_fixture(), parses_forge_mods_toml_fixture_and_extracts_required_deps() (+14 more)
 
-### Community 60 - "queueEntry"
-Cohesion: 0.67
-Nodes (3): cancelFor(), progressFor(), queueEntry()
+### Community 60 - "gl-integrations/src/models.rs"
+Cohesion: 0.16
+Nodes (17): get_announcement(), Client, Option, Announcement, AppNotification, default_icon(), default_kind(), new_id() (+9 more)
 
 ### Community 61 - "manifest.rs"
 Cohesion: 0.22
@@ -475,29 +481,29 @@ Nodes (17): errors_when_manifest_missing(), loader_profile_id(), parse_curseforg
 Cohesion: 0.07
 Nodes (47): copy_dir_recursive(), extract_to_temp(), import_content(), import_packs(), import_world(), ImportOutcome, imports_mcaddon_bundle_routes_by_module_type(), imports_mcpack_by_resource_module_type() (+39 more)
 
-### Community 63 - "theme.rs"
-Cohesion: 0.26
-Nodes (17): create_theme(), delete_theme(), duplicate_theme(), export_theme(), get_theme(), import_theme(), list_themes(), BTreeMap (+9 more)
+### Community 63 - "src/glacier_client.rs"
+Cohesion: 0.17
+Nodes (14): fetch_download_counts(), fetch_manifest(), glacier_dir(), installed_size_bytes(), parse_manifest(), parses_manifest_camel_case_fields(), require_installed(), Client (+6 more)
 
 ### Community 64 - "DownloadQueue"
-Cohesion: 0.06
-Nodes (58): AtomicBool, backoff_for(), commit(), content_range_total(), download_file(), download_once(), download_with_retry(), DownloadOutcome (+50 more)
+Cohesion: 0.05
+Nodes (62): AtomicBool, backoff_for(), commit(), content_range_total(), download_file(), download_once(), download_with_retry(), DownloadOutcome (+54 more)
 
 ### Community 65 - "ClientLibraryView.svelte"
 Cohesion: 0.11
 Nodes (13): app, deleteScreenshot(), installClientPack(), isClientPackExpanded(), loadClientLibrary(), packKey(), refreshInstalled(), toggleClientPack() (+5 more)
 
 ### Community 66 - "gl-persistence/src/lib.rs"
-Cohesion: 0.08
-Nodes (32): append_extension(), Envelope, load(), no_leftover_temp_file_after_write(), PersistError, quarantine_corrupt(), round_trips_through_atomic_write_and_load(), Error (+24 more)
+Cohesion: 0.18
+Nodes (18): append_extension(), Envelope, load(), no_leftover_temp_file_after_write(), PersistError, quarantine_corrupt(), round_trips_through_atomic_write_and_load(), Error (+10 more)
 
 ### Community 67 - "commands/bedrock.rs"
 Cohesion: 0.08
 Nodes (71): BackupDiff, BedrockBackup, BedrockInstance, BedrockPack, BedrockRoot, BedrockWorld, copy_dir_recursive(), delete_pack() (+63 more)
 
 ### Community 68 - "gdk.rs"
-Cohesion: 0.18
-Nodes (13): a_missing_or_odd_digest_yields_no_hash_rather_than_a_bad_one(), an_error_body_is_an_empty_list_not_a_failure(), list_versions(), maps_release_fields_and_skips_drafts(), parse_asset_name(), parse_releases(), Client, Option (+5 more)
+Cohesion: 0.17
+Nodes (14): a_missing_or_odd_digest_yields_no_hash_rather_than_a_bad_one(), an_error_body_is_an_empty_list_not_a_failure(), list_versions(), maps_release_fields_and_skips_drafts(), parse_asset_name(), parse_releases(), Client, Option (+6 more)
 
 ### Community 69 - "RuntimeDownloadService"
 Cohesion: 0.21
@@ -507,21 +513,21 @@ Nodes (14): AdoptiumBinary, AdoptiumPackage, AdoptiumRelease, extract_zip(), fin
 Cohesion: 0.32
 Nodes (11): detect_external_launchers(), import_instances(), ImportOutcome, preview_import(), JavaInstance, Option, Result, State (+3 more)
 
-### Community 71 - "modpack_transfer.rs"
-Cohesion: 0.16
-Nodes (23): add_dir_to_zip(), copy_dir_recursive(), detect_multimc_root(), err(), export_instance(), export_modpack(), extract_overrides(), import_modpack() (+15 more)
+### Community 71 - "gl-clients/src/models.rs"
+Cohesion: 0.19
+Nodes (10): ClientInfo, ClientType, default_kind(), GlacierClientVersion, GlacierLauncherMeta, GlacierManifest, Option, Path (+2 more)
 
 ### Community 72 - "java_mods.rs"
-Cohesion: 0.05
-Nodes (83): fetch_download_counts(), fetch_manifest(), glacier_dir(), installed_size_bytes(), parse_manifest(), parses_manifest_camel_case_fields(), require_installed(), Client (+75 more)
+Cohesion: 0.08
+Nodes (73): encode_path(), index_url(), media_url(), parse_index(), parses_and_groups_by_version_and_name(), PathEntry, raw_url(), Result (+65 more)
 
 ### Community 73 - "java_screenshots.rs"
 Cohesion: 0.28
 Nodes (16): delete_java_screenshot(), entry(), iso_from_systemtime(), list_java_screenshots(), open_java_screenshots_folder(), AppState, Option, Path (+8 more)
 
-### Community 74 - "src/client_library.rs"
-Cohesion: 0.19
-Nodes (16): encode_path(), index_url(), media_url(), parse_index(), parses_and_groups_by_version_and_name(), PathEntry, raw_url(), Result (+8 more)
+### Community 74 - "src/skins.rs"
+Cohesion: 0.21
+Nodes (15): CapeInfo, ApiErrorBody, extract_api_message(), get_capes(), hide_cape(), ProfileResponse, RawCape, reset_skin() (+7 more)
 
 ### Community 75 - "lan.rs"
 Cohesion: 0.30
@@ -567,9 +573,9 @@ Nodes (16): bodyRenderUrl, capeLabel, capeMode, cleanUuid, displayName, failed, 
 Cohesion: 0.12
 Nodes (16): compilerOptions, allowImportingTsExtensions, erasableSyntaxOnly, lib, module, moduleDetection, noEmit, noFallthroughCasesInSwitch (+8 more)
 
-### Community 86 - "downloads.rs"
-Cohesion: 0.17
-Nodes (20): cancel_download(), clear_finished_downloads(), DownloadEntryDto, list_downloads(), pause_download(), remove_download(), resume_download(), retry_download() (+12 more)
+### Community 86 - "AppState"
+Cohesion: 0.18
+Nodes (22): JavaInstanceService, JavaVersionService, cancel_download(), clear_finished_downloads(), DownloadEntryDto, list_downloads(), pause_download(), remove_download() (+14 more)
 
 ### Community 87 - "integrations.rs"
 Cohesion: 0.29
@@ -612,7 +618,7 @@ Cohesion: 0.50
 Nodes (3): Result, Self, String
 
 ### Community 97 - "SyncRegistry"
-Cohesion: 0.20
+Cohesion: 0.19
 Nodes (10): AdoptStrategy, Mutex, Option, Path, PathBuf, Result, Self, SyncPack (+2 more)
 
 ### Community 98 - "compilerOptions"
@@ -656,8 +662,8 @@ Cohesion: 0.25
 Nodes (13): DllEntry, list_dlls(), parse_dll_list(), parses_and_sorts_dll_entries_newest_first(), raw_url(), Client, Result, String (+5 more)
 
 ### Community 110 - "OnboardingModal.svelte"
-Cohesion: 0.12
-Nodes (13): LanguageOption, LANGUAGES, t(), Table, toggle(), currentStepKey, finish(), handleKeydown() (+5 more)
+Cohesion: 0.18
+Nodes (8): currentStepKey, finish(), handleKeydown(), lastStep, on, selected, skip(), visibleSteps
 
 ### Community 111 - ".parse"
 Cohesion: 0.21
@@ -683,9 +689,9 @@ Nodes (10): compilerOptions, esModuleInterop, jsx, module, moduleResolution, noE
 Cohesion: 0.33
 Nodes (9): check(), PrelaunchWarning, Into, JavaInstance, Option, Path, String, Vec (+1 more)
 
-### Community 118 - "apply"
-Cohesion: 0.36
-Nodes (7): apply(), detach(), AdoptStrategy, DetachMode, Option, Path, Result
+### Community 118 - ".export_world"
+Cohesion: 0.24
+Nodes (11): BedrockWorldService, find_icon(), read_world_name(), Into, Option, Path, PathBuf, Result (+3 more)
 
 ### Community 119 - "package.json"
 Cohesion: 0.25
@@ -699,9 +705,9 @@ Nodes (6): args_for(), find(), JvmPreset, Option, String, Vec
 Cohesion: 0.38
 Nodes (6): apply_native_window_chrome(), AppHandle, Result, run(), setup_tray(), WebviewWindow
 
-### Community 122 - "parse_version_db"
-Cohesion: 0.31
-Nodes (9): first_seen_wins_on_duplicate_key(), list_versions(), parse_version_db(), Client, Result, Vec, skips_section_headers_eappx_and_non_x64(), sorts_newest_first() (+1 more)
+### Community 122 - "news.rs"
+Cohesion: 0.27
+Nodes (14): NewsPost, cached_news(), decode(), decode_entity(), decode_posts_decodes_exactly_once(), fetch_client_changelog(), get_news(), html_decode() (+6 more)
 
 ### Community 123 - "default.json"
 Cohesion: 0.33
@@ -812,15 +818,15 @@ Cohesion: 0.20
 Nodes (7): BeatProps, bedrockChips, Chip, clamp, Clients(), javaChips, windowStyle
 
 ### Community 164 - "SyncReport"
-Cohesion: 0.14
-Nodes (15): apply(), detach(), Path, Result, preview(), Path, String, DetachMode (+7 more)
+Cohesion: 0.13
+Nodes (17): preview(), Path, String, apply(), detach(), AdoptStrategy, DetachMode, Option (+9 more)
 
 ### Community 167 - "InstallProfile"
 Cohesion: 0.15
 Nodes (16): DataSides, DataValue, InstallLibrary, InstallProfile, LibraryArtifact, LibraryDownloads, parses_real_shape(), Processor (+8 more)
 
 ### Community 168 - "ModpacksView.svelte"
-Cohesion: 0.32
+Cohesion: 0.22
 Nodes (4): r(), onSearchKey(), search(), setSource()
 
 ### Community 170 - "Speed.tsx"
@@ -835,6 +841,26 @@ Nodes (4): react, clamp, Intro(), TITLE_WORDS
 Cohesion: 0.23
 Nodes (10): io_err(), JavaError, Error, FnOnce, Into, PathBuf, String, ZipError (+2 more)
 
+### Community 186 - "OptionsDocument"
+Cohesion: 0.22
+Nodes (7): OptionsDocument, Option, Path, Result, Self, String, Vec
+
+### Community 187 - ".list_screenshots"
+Cohesion: 0.23
+Nodes (10): ScreenshotFile, BedrockScreenshotService, Into, Option, Path, PathBuf, Result, Self (+2 more)
+
+### Community 188 - "io_err"
+Cohesion: 0.22
+Nodes (12): io_err(), Error, Path, PathBuf, String, SyncError, apply(), detach() (+4 more)
+
+### Community 189 - "gl-bedrock/src/model.rs"
+Cohesion: 0.27
+Nodes (9): BedrockBackup, BedrockInstance, BedrockPack, BedrockWorld, OptionEntry, OptionKind, PackKind, Option (+1 more)
+
+### Community 190 - "pipeline.rs"
+Cohesion: 0.35
+Nodes (11): copy_dir_recursive(), import_many(), import_one(), rollback(), JavaInstance, Path, PathBuf, Result (+3 more)
+
 ## Ambiguous Edges - Review These
 - `inventory-shell.md` → `scratch.txt (per-file special-character scratch dump)`  [AMBIGUOUS]
   scratch.txt · relation: references
@@ -844,9 +870,9 @@ Nodes (10): io_err(), JavaError, Error, FnOnce, Into, PathBuf, String, ZipError 
   scratch.txt · relation: references
 
 ## Knowledge Gaps
-- **203 isolated node(s):** `visibleSteps`, `lastStep`, `currentStepKey`, `selected`, `on` (+198 more)
-  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 862 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
-- **25 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **203 isolated node(s):** `BedrockInstance`, `EffectiveLaunchConfig`, `JavaAccount`, `JvmPreset`, `ModLoaderKind` (+198 more)
+  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 866 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
+- **26 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
@@ -857,11 +883,11 @@ _Questions this graph is uniquely positioned to answer:_
   _Edge tagged AMBIGUOUS (relation: references) - confidence is low._
 - **What is the exact relationship between `README.md (Glacier Launcher overview)` and `scratch.txt (per-file special-character scratch dump)`?**
   _Edge tagged AMBIGUOUS (relation: references) - confidence is low._
-- **Why does `AppState` connect `AppState` to `DownloadQueue`, `src/notifications.rs`, `.new`, `gl-auth/src/lib.rs`, `launcher_import.rs`, `ai.rs`, `java_mods.rs`, `BedrockInstanceService`, `themes.rs`, `SyncEngine`, `java_process.rs`, `DiscordRpcService`, `java_packs.rs`, `downloads.rs`, `integrations.rs`, `commands/levilamina_mods.rs`, `commands/skins.rs`, `theme.rs`?**
-  _High betweenness centrality (0.312) - this node is a cross-community bridge._
+- **Why does `AppState` connect `AppState` to `DownloadQueue`, `src/notifications.rs`, `.new`, `gl-auth/src/lib.rs`, `launcher_import.rs`, `ai.rs`, `java_mods.rs`, `utilities.rs`, `BedrockInstanceService`, `themes.rs`, `SyncEngine`, `java_process.rs`, `commands/notifications.rs`, `DiscordRpcService`, `java_packs.rs`, `integrations.rs`, `commands/levilamina_mods.rs`, `commands/skins.rs`?**
+  _High betweenness centrality (0.292) - this node is a cross-community bridge._
 - **Why does `ProcessRegistry` connect `java_process.rs` to `launch.rs`, `AppState`?**
-  _High betweenness centrality (0.077) - this node is a cross-community bridge._
+  _High betweenness centrality (0.086) - this node is a cross-community bridge._
 - **Why does `BedrockInstanceService` connect `BedrockInstanceService` to `AppState`, `gl-bedrock/src/lib.rs`?**
-  _High betweenness centrality (0.067) - this node is a cross-community bridge._
-- **What connects `visibleSteps`, `lastStep`, `currentStepKey` to the rest of the system?**
+  _High betweenness centrality (0.079) - this node is a cross-community bridge._
+- **What connects `BedrockInstance`, `EffectiveLaunchConfig`, `JavaAccount` to the rest of the system?**
   _203 weakly-connected nodes found - possible documentation gaps or missing edges._
