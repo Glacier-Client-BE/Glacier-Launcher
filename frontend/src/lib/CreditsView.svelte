@@ -49,10 +49,23 @@
       ],
     },
     {
-      icon: '', faIcon: 'fa-solid fa-sun', name: 'Horizon', sub: 'credits.horizonSub',
+      icon: 'images/clients/horizon.svg', name: 'Horizon', sub: 'credits.horizonSub',
       links: [
         { tooltip: 'tt.website', icon: 'fa-solid fa-globe', url: 'https://playhorizon.dev' },
         { tooltip: 'tt.github', icon: 'fa-brands fa-github', url: 'https://github.com/horizon-rust/horizon' },
+      ],
+    },
+    {
+      icon: 'images/clients/dawn.svg', name: 'Dawn Client', sub: 'credits.dawnSub',
+      links: [
+        { tooltip: 'tt.website', icon: 'fa-solid fa-globe', url: 'https://dawn.gg' },
+      ],
+    },
+    {
+      icon: 'images/clients/norisk.svg', name: 'NoRisk Client', sub: 'credits.noRiskSub',
+      links: [
+        { tooltip: 'tt.website', icon: 'fa-solid fa-globe', url: 'https://norisk.gg' },
+        { tooltip: 'tt.github', icon: 'fa-brands fa-github', url: 'https://github.com/NoRiskClient' },
       ],
     },
   ]

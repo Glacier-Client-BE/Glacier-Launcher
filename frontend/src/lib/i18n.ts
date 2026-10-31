@@ -727,6 +727,8 @@ const TABLE: Table = {
     'credits.flarialSub': 'by the Flarial team',
     'credits.oderSoSub': 'by MasonOderSo',
     'credits.horizonSub': 'Native Rust rewrite of Java 26.3 · horizon-rust team (MIT)',
+    'credits.dawnSub': 'Java Edition client · standalone Fabric mod by the Dawn team',
+    'credits.noRiskSub': 'Java Edition client · standalone mod by the NoRisk team',
     'credits.vanillaTweaksSub': 'Java resource packs · VanillaTweaks team',
     'credits.bedrockTweaksSub': 'Bedrock resource packs · BedrockTweaks team',
     'credits.builtBy': 'Built by Pepe · Glacier Productions',
