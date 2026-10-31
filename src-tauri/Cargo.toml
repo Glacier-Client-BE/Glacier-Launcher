@@ -33,7 +33,7 @@ reqwest.workspace = true
 base64 = "0.22"
 url = "2"
 sha2 = "0.10"
-rand = "0.8"
+rand = "0.10"
 
 gl-persistence = { path = "../crates/gl-persistence" }
 gl-auth = { path = "../crates/gl-auth" }
