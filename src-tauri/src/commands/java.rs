@@ -1,4 +1,7 @@
-use gl_java::{EffectiveLaunchConfig, GlobalJavaDefaults, InstanceSettings, JavaInstance, JavaVersion, ModLoaderKind};
+use gl_java::{
+    EffectiveLaunchConfig, GlobalJavaDefaults, InstanceSettings, JavaInstance, JavaVersion,
+    ModLoaderKind,
+};
 use tauri::{AppHandle, Emitter, State};
 
 use crate::state::AppState;
@@ -160,7 +163,9 @@ pub async fn import_java_instance_zip(
         .unwrap_or_else(|| "Imported Instance".to_string());
 
     let instance = svc.create(&name, "").map_err(|e| e.to_string())?;
-    if let Err(e) = gl_java::modpack_transfer::import_modpack(path, std::path::Path::new(&instance.directory)) {
+    if let Err(e) =
+        gl_java::modpack_transfer::import_modpack(path, std::path::Path::new(&instance.directory))
+    {
         let _ = svc.delete(&instance.id);
         return Err(e.to_string());
     }
@@ -183,9 +188,9 @@ pub async fn import_official_minecraft(state: State<'_, AppState>) -> Result<Jav
     let instance = svc
         .create("Official .minecraft", "")
         .map_err(|e| e.to_string())?;
-    if let Err(e) =
-        gl_java::modpack_transfer::import_official_minecraft(std::path::Path::new(&instance.directory))
-    {
+    if let Err(e) = gl_java::modpack_transfer::import_official_minecraft(std::path::Path::new(
+        &instance.directory,
+    )) {
         let _ = svc.delete(&instance.id);
         return Err(e.to_string());
     }
@@ -288,7 +293,8 @@ pub async fn set_instance_group(
         .java_instances
         .lock()
         .map_err(|_| "java instance service lock poisoned".to_string())?;
-    svc.set_instance_group(&id, group).map_err(|e| e.to_string())
+    svc.set_instance_group(&id, group)
+        .map_err(|e| e.to_string())
 }
 
 /// Pins (or unpins) an instance — pinned instances sort to the top of the
@@ -303,7 +309,8 @@ pub async fn set_instance_pinned(
         .java_instances
         .lock()
         .map_err(|_| "java instance service lock poisoned".to_string())?;
-    svc.set_instance_pinned(&id, pinned).map_err(|e| e.to_string())
+    svc.set_instance_pinned(&id, pinned)
+        .map_err(|e| e.to_string())
 }
 
 /// Exports an instance's entire directory tree as a zip at `dest_path`
@@ -322,7 +329,8 @@ pub async fn export_java_instance(
             .java_instances
             .lock()
             .map_err(|_| "java instance service lock poisoned".to_string())?;
-        svc.get(&id).ok_or_else(|| format!("Java instance not found: {id}"))?
+        svc.get(&id)
+            .ok_or_else(|| format!("Java instance not found: {id}"))?
     };
     gl_java::export_instance(
         std::path::Path::new(&instance.directory),

@@ -473,7 +473,7 @@ const DISPLAY_CLASS_KEY: &str =
 /// unreadable subkey/value is skipped rather than failing the whole scan.
 #[cfg(windows)]
 fn read_gpus() -> Vec<GpuInfo> {
-    use winreg::enums::{HKEY_LOCAL_MACHINE, RegType};
+    use winreg::enums::{RegType, HKEY_LOCAL_MACHINE};
     use winreg::RegKey;
 
     let mut out: Vec<GpuInfo> = Vec::new();
@@ -691,8 +691,7 @@ fn read_system_snapshot() -> SystemSnapshot {
         read_bios("BIOSVersion").unwrap_or_default(),
     );
     #[cfg(not(windows))]
-    let (board_vendor, board_product, bios_version) =
-        (String::new(), String::new(), String::new());
+    let (board_vendor, board_product, bios_version) = (String::new(), String::new(), String::new());
 
     SystemSnapshot {
         cpu_name: read_cpu_name(),

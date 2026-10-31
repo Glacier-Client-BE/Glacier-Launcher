@@ -41,9 +41,9 @@
 
   /** Standalone mods App installs into the active instance on launch (MOD_CLIENTS). */
   const MOD_CARDS = [
-    { id: 'Essential', logo: '/images/clients/essential.webp', desc: 'Social, cosmetics and screenshots mod — installed into your instance' },
-    { id: 'Dawn', logo: '/images/clients/dawn.png', desc: "Feather's successor — standalone Fabric mod (1.17.1+)" },
-    { id: 'NoRisk', logo: '/images/clients/norisk.png', desc: 'PvP client — standalone mod for Fabric, Forge and NeoForge' },
+    { id: 'Essential', logo: '/images/clients/essential.svg', desc: 'Social, cosmetics and screenshots mod — installed into your instance' },
+    { id: 'Dawn', logo: '/images/clients/dawn.svg', desc: "Feather's successor — standalone Fabric mod (1.17.1+)" },
+    { id: 'NoRisk', logo: '/images/clients/norisk.svg', desc: 'PvP client — standalone mod for Fabric, Forge and NeoForge' },
   ] as const
 
   type GlacierVersion = {
@@ -465,7 +465,7 @@
   <span class="panel-section-label">{t('x.builtIn')}</span>
   <div class="credits-card credits-card-glacier">
     <div class="credits-card-icon client-icon-accent">
-      <img class="chip-icon client-logo" src="images/mc-java-logo.png" alt="">
+      <img class="chip-icon client-logo" src="images/mc-java-logo.svg" alt="">
     </div>
     <div class="credits-card-meta">
       <span class="credits-card-name">Vanilla (Glacier built-in)</span>
@@ -486,7 +486,7 @@
 
   <div class="credits-card">
     <div class="credits-card-icon client-icon-accent">
-      <img class="chip-icon client-logo" src="images/icon.png" alt="">
+      <img class="chip-icon client-logo" src="images/icon.svg" alt="">
     </div>
     <div class="credits-card-meta">
       <span class="credits-card-name">Glacier Client</span>
@@ -538,7 +538,7 @@
   {#if lbInstalled}
   <div class="credits-card">
     <div class="credits-card-icon client-icon-brand">
-      <img class="client-brand-logo" src="/images/clients/lunar.png" alt="" />
+      <img class="client-brand-logo" src="/images/clients/lunar.svg" alt="" />
     </div>
     <div class="credits-card-meta">
       <span class="credits-card-name"

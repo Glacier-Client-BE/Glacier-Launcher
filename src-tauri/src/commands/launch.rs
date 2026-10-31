@@ -379,7 +379,11 @@ fn now_unix() -> i64 {
 fn unix_to_rfc3339(secs: i64) -> String {
     let days = secs.div_euclid(86400);
     let secs_of_day = secs.rem_euclid(86400);
-    let (hour, min, sec) = (secs_of_day / 3600, (secs_of_day / 60) % 60, secs_of_day % 60);
+    let (hour, min, sec) = (
+        secs_of_day / 3600,
+        (secs_of_day / 60) % 60,
+        secs_of_day % 60,
+    );
 
     let z = days + 719468;
     let era = if z >= 0 { z } else { z - 146096 } / 146097;
@@ -448,7 +452,14 @@ pub async fn launch_java_instance(
 ) -> Result<u32, String> {
     let settings = gl_settings::load().map_err(|e| e.to_string())?;
 
-    let (mc_dir, version_id, effective_config, instance_extra_jvm_args, glacier_runtime_root, registry_key) = {
+    let (
+        mc_dir,
+        version_id,
+        effective_config,
+        instance_extra_jvm_args,
+        glacier_runtime_root,
+        registry_key,
+    ) = {
         let svc = state
             .java_instances
             .lock()
@@ -572,7 +583,7 @@ pub fn java_prelaunch_check(
 #[cfg(windows)]
 fn available_ram_mb() -> Option<u64> {
     #[repr(C)]
-    #[allow(non_snake_case)]
+    #[allow(non_snake_case, clippy::upper_case_acronyms)]
     struct MEMORYSTATUSEX {
         dwLength: u32,
         dwMemoryLoad: u32,
@@ -669,7 +680,10 @@ pub async fn launch_java_version(
             .java_instances
             .lock()
             .map_err(|_| "java instance service lock poisoned".to_string())?;
-        (svc.root_dir().to_path_buf(), svc.root_dir().join("runtimes"))
+        (
+            svc.root_dir().to_path_buf(),
+            svc.root_dir().join("runtimes"),
+        )
     };
 
     // No instance is involved for a bare version launch, so the "effective"
@@ -722,10 +736,7 @@ async fn launch_java_with(
     extra_jvm_args: Vec<String>,
 ) -> Result<u32, String> {
     let bundled_runtime_root = mc_dir.join("runtime");
-    let explicit_java_path = effective_config
-        .java_path
-        .clone()
-        .map(PathBuf::from);
+    let explicit_java_path = effective_config.java_path.clone().map(PathBuf::from);
     let extra_game_args = effective_config.extra_game_args.clone();
     let auth = resolve_java_auth(&http, &mut settings).await;
     let options = effective_config.into_launch_options(extra_jvm_args, settings.xbox_xuid.clone());

@@ -67,8 +67,14 @@ pub struct HorizonRelease {
 /// Parses a `releases/tags/nightly` response body.
 pub fn parse_release(body: &str) -> Result<HorizonRelease> {
     let release: HorizonRelease = serde_json::from_str(body)?;
-    if release.message.as_deref().is_some_and(|m| m.eq_ignore_ascii_case("not found")) {
-        return Err(ClientsError::NotFound(format!("Horizon release {RELEASE_TAG}")));
+    if release
+        .message
+        .as_deref()
+        .is_some_and(|m| m.eq_ignore_ascii_case("not found"))
+    {
+        return Err(ClientsError::NotFound(format!(
+            "Horizon release {RELEASE_TAG}"
+        )));
     }
     Ok(release)
 }
@@ -107,7 +113,9 @@ pub fn release_for_build<'a>(
 ) -> Option<&'a HorizonRelease> {
     let commit = build_commit(build_id)?;
     releases.iter().find(|r| {
-        r.name.as_deref().is_some_and(|n| n.to_ascii_lowercase().contains(&commit))
+        r.name
+            .as_deref()
+            .is_some_and(|n| n.to_ascii_lowercase().contains(&commit))
             || r.tag_name.to_ascii_lowercase().contains(&commit)
             || r.target_commitish.to_ascii_lowercase().starts_with(&commit)
     })
@@ -184,9 +192,13 @@ fn replace_html_links(s: &str) -> String {
             pos = start + 2;
             continue;
         }
-        let Some(open_rel) = lower[start..].find('>') else { break };
+        let Some(open_rel) = lower[start..].find('>') else {
+            break;
+        };
         let open_end = start + open_rel;
-        let Some(close_rel) = lower[open_end..].find("</a>") else { break };
+        let Some(close_rel) = lower[open_end..].find("</a>") else {
+            break;
+        };
         let close = open_end + close_rel;
         let href = attr_value(&s[start..open_end], "href").unwrap_or_default();
         let label = strip_tags(&s[open_end + 1..close]);
@@ -249,7 +261,9 @@ fn html_tags_to_text(s: &str) -> String {
             rest = &rest[lt + 1..];
             continue;
         }
-        let Some(gt) = rest[lt..].find('>') else { break };
+        let Some(gt) = rest[lt..].find('>') else {
+            break;
+        };
         out.push_str(&rest[..lt]);
         out.push_str(tag_break(&rest[lt + 1..lt + gt]));
         rest = &rest[lt + gt + 1..];
@@ -429,7 +443,11 @@ pub fn build_id(release_name: Option<&str>, zip_sha256: &str) -> String {
         }
     }
     let slug: String = slug.trim_matches('-').chars().take(40).collect();
-    let slug = if slug.is_empty() { RELEASE_TAG.to_string() } else { slug };
+    let slug = if slug.is_empty() {
+        RELEASE_TAG.to_string()
+    } else {
+        slug
+    };
     let short: String = zip_sha256.chars().take(8).collect();
     format!("{slug}-{short}")
 }
@@ -649,7 +667,12 @@ pub fn launch_args(resources: &Path, game_dir: &Path, home_dir: &Path) -> Vec<St
 
 /// The account JSON `horizon-client --session-stdin` reads. Name, uuid and
 /// token are required; `user_type` is always `msa`.
-pub fn session_json(name: &str, uuid: &str, access_token: &str, xuid: Option<&str>) -> Result<String> {
+pub fn session_json(
+    name: &str,
+    uuid: &str,
+    access_token: &str,
+    xuid: Option<&str>,
+) -> Result<String> {
     if name.trim().is_empty() || uuid.trim().is_empty() || access_token.trim().is_empty() {
         return Err(ClientsError::InvalidInput(
             "Horizon needs a signed-in Microsoft account that owns Minecraft: Java Edition".into(),
@@ -675,10 +698,18 @@ pub fn server_jar_from_version_json(text: &str) -> Result<(String, String)> {
         .get("downloads")
         .and_then(|d| d.get("server"))
         .ok_or_else(|| ClientsError::NotFound("downloads.server in the version JSON".into()))?;
-    let url = server.get("url").and_then(|v| v.as_str()).unwrap_or_default();
-    let sha1 = server.get("sha1").and_then(|v| v.as_str()).unwrap_or_default();
+    let url = server
+        .get("url")
+        .and_then(|v| v.as_str())
+        .unwrap_or_default();
+    let sha1 = server
+        .get("sha1")
+        .and_then(|v| v.as_str())
+        .unwrap_or_default();
     if url.is_empty() || sha1.is_empty() {
-        return Err(ClientsError::NotFound("server url and sha1 in the version JSON".into()));
+        return Err(ClientsError::NotFound(
+            "server url and sha1 in the version JSON".into(),
+        ));
     }
     Ok((url.to_string(), sha1.to_ascii_lowercase()))
 }
@@ -766,7 +797,10 @@ not-a-hash  junk.txt
         let json = r#"{"tag_name":"nightly","assets":[
             {"name":"horizon-linux-x86_64.tar.gz","browser_download_url":"https://x/a"}]}"#;
         let release = parse_release(json).unwrap();
-        assert!(matches!(pick_zip_asset(&release), Err(ClientsError::NoAssetFound(_))));
+        assert!(matches!(
+            pick_zip_asset(&release),
+            Err(ClientsError::NoAssetFound(_))
+        ));
     }
 
     #[test]
@@ -786,7 +820,10 @@ not-a-hash  junk.txt
         let sums = parse_sha256sums(SUMS);
         assert_eq!(sums.len(), 2);
         assert_eq!(expected_sha256(&sums, ZIP_ASSET_NAME).unwrap(), HASH_A);
-        assert_eq!(expected_sha256(&sums, "horizon-linux-x86_64.tar.gz").unwrap(), HASH_B);
+        assert_eq!(
+            expected_sha256(&sums, "horizon-linux-x86_64.tar.gz").unwrap(),
+            HASH_B
+        );
         assert!(expected_sha256(&sums, "junk.txt").is_err());
     }
 
@@ -856,14 +893,23 @@ not-a-hash  junk.txt
     #[test]
     fn layout_paths_are_under_root() {
         let l = HorizonLayout::new("/x/horizon");
-        assert_eq!(l.build_dir("abc"), PathBuf::from("/x/horizon").join("builds").join("abc"));
+        assert_eq!(
+            l.build_dir("abc"),
+            PathBuf::from("/x/horizon").join("builds").join("abc")
+        );
         assert!(l.game_dir().ends_with("game"));
         assert!(l.server_jar_path().ends_with("server-26.3.jar"));
     }
 
     #[test]
     fn session_json_has_msa_user_and_optional_xuid() {
-        let json = session_json("Alex", "069a79f444e94726a5befca90e38aaf5", "tok", Some("123")).unwrap();
+        let json = session_json(
+            "Alex",
+            "069a79f444e94726a5befca90e38aaf5",
+            "tok",
+            Some("123"),
+        )
+        .unwrap();
         let v: serde_json::Value = serde_json::from_str(&json).unwrap();
         assert_eq!(v["name"], "Alex");
         assert_eq!(v["user_type"], "msa");
@@ -988,13 +1034,19 @@ Not an official Minecraft product. Not approved by or associated with Mojang or 
     #[test]
     fn release_body_becomes_plain_text() {
         let text = release_notes_text(NIGHTLY_BODY);
-        assert!(!text.contains('<') && !text.contains('>'), "markup left: {text}");
+        assert!(
+            !text.contains('<') && !text.contains('>'),
+            "markup left: {text}"
+        );
         assert!(!text.contains("&amp;"), "entity left: {text}");
         assert!(!text.contains("\n\n\n"));
         assert!(text.starts_with("Want to play? Download the Horizon launcher (https://playhorizon.dev), not the files below"));
         assert!(text.contains("the launcher releases (https://github.com/horizon-rust/horizon/releases?q=launcher&expanded=true)"));
-        assert!(text.contains("\nFixed\n- Fix detail requests for retiring fine LOD leaves (#4048, fixes #4039)\n"));
-        assert!(text.contains("- Thrown tridents: clip blocks with vanilla's centre ray, not the 0.5 box"));
+        assert!(text.contains(
+            "\nFixed\n- Fix detail requests for retiring fine LOD leaves (#4048, fixes #4039)\n"
+        ));
+        assert!(text
+            .contains("- Thrown tridents: clip blocks with vanilla's centre ray, not the 0.5 box"));
         assert!(text.contains("\nKnown issues\n"));
         assert!(text.ends_with("Mojang or Microsoft."));
     }
@@ -1003,25 +1055,44 @@ Not an official Minecraft product. Not approved by or associated with Mojang or 
     fn entities_decode_once_and_markup_is_dropped() {
         assert_eq!(release_notes_text("a &amp;lt; b"), "a &lt; b");
         assert_eq!(release_notes_text("&lt;b&gt;bold&lt;/b&gt;"), "<b>bold</b>");
-        assert_eq!(release_notes_text("it&#39;s &quot;x&quot; &#x41;&nbsp;&copy;"), "it's \"x\" A &copy;");
+        assert_eq!(
+            release_notes_text("it&#39;s &quot;x&quot; &#x41;&nbsp;&copy;"),
+            "it's \"x\" A &copy;"
+        );
         assert_eq!(release_notes_text("<b>bold</b> <code>x</code>"), "bold x");
         assert_eq!(release_notes_text("1 < 2 and 3 > 2"), "1 < 2 and 3 > 2");
     }
 
     #[test]
     fn blocks_become_lines_and_items_bullets() {
-        let text = release_notes_text("<h3>Fixed</h3><p>One<br>two</p><ul><li>a</li><li>b</li></ul>");
+        let text =
+            release_notes_text("<h3>Fixed</h3><p>One<br>two</p><ul><li>a</li><li>b</li></ul>");
         assert_eq!(text, "Fixed\n\nOne\ntwo\n\n- a\n- b");
     }
 
     #[test]
     fn links_and_images_are_rewritten() {
-        assert_eq!(release_notes_text(r#"<a href="https://x.y/z">https://x.y/z</a>"#), "https://x.y/z");
-        assert_eq!(release_notes_text(r#"<a href='https://x.y'>site</a>"#), "site (https://x.y)");
-        assert_eq!(release_notes_text(r#"<a href="https://x.y"></a>"#), "https://x.y");
-        assert_eq!(release_notes_text("see ![shot](https://img/x.png) here"), "see  here");
+        assert_eq!(
+            release_notes_text(r#"<a href="https://x.y/z">https://x.y/z</a>"#),
+            "https://x.y/z"
+        );
+        assert_eq!(
+            release_notes_text(r#"<a href='https://x.y'>site</a>"#),
+            "site (https://x.y)"
+        );
+        assert_eq!(
+            release_notes_text(r#"<a href="https://x.y"></a>"#),
+            "https://x.y"
+        );
+        assert_eq!(
+            release_notes_text("see ![shot](https://img/x.png) here"),
+            "see  here"
+        );
         assert_eq!(release_notes_text("<!-- hidden -->shown"), "shown");
-        assert_eq!(release_notes_text("### Heading\n\n\n\nbody"), "Heading\n\nbody");
+        assert_eq!(
+            release_notes_text("### Heading\n\n\n\nbody"),
+            "Heading\n\nbody"
+        );
     }
 
     #[test]
@@ -1036,7 +1107,10 @@ Not an official Minecraft product. Not approved by or associated with Mojang or 
         assert!(release_for_build(&releases, "nightly-2026-10-30-abcdef1").is_none());
         assert!(release_for_build(&releases, "nightly").is_none());
         assert_eq!(commit_of_release(&releases[0]).as_deref(), Some("1da354b"));
-        assert_eq!(build_commit("nightly-2026-10-30-587F81F").as_deref(), Some("587f81f"));
+        assert_eq!(
+            build_commit("nightly-2026-10-30-587F81F").as_deref(),
+            Some("587f81f")
+        );
     }
 
     #[test]

@@ -710,7 +710,7 @@ function fileName(p: string): string {
         <div class="ts-preview-pane">
           <div class="ts-preview-card">
             <div class="ts-preview-topbar">
-              <img class="ts-preview-logo" src="/images/icon.png" alt="" />
+              <img class="ts-preview-logo" src="/images/icon.svg" alt="" />
               <span class="ts-preview-title">Glacier Launcher</span>
               <span class="ts-preview-pill">{isActive(sel) ? 'ACTIVE' : 'PREVIEW'}</span>
             </div>

@@ -194,10 +194,10 @@
   }
   const CLIENT_IMAGES: Record<string, string> = {
     'Flarial Client': '/images/clients/flarial.svg',
-    'OderSo Client': '/images/clients/oderso.png',
-    'Latite Client': '/images/clients/latite.png',
-    'LeviLamina Client': '/images/clients/levi-lamina.png',
-    Vanilla: '/images/mc-logo.png',
+    'OderSo Client': '/images/clients/oderso.svg',
+    'Latite Client': '/images/clients/latite.svg',
+    'LeviLamina Client': '/images/clients/levi-lamina.svg',
+    Vanilla: '/images/mc-logo.svg',
   }
   const CYCLE_CLIENTS = ['Vanilla', 'Flarial Client', 'Latite Client', 'OderSo Client', 'LeviLamina Client' ]
 
@@ -286,12 +286,12 @@
   // Lunar only when they are actually on this PC. The pick is a per-machine
   // preference.
   const JAVA_CLIENT_IMAGES: Record<string, string> = {
-    Vanilla: '/images/mc-java-logo.png',
+    Vanilla: '/images/mc-java-logo.svg',
     Horizon: '/images/clients/horizon.svg',
-    Lunar: '/images/clients/lunar.png',
-    Essential: '/images/clients/essential.webp',
-    Dawn: '/images/clients/dawn.png',
-    NoRisk: '/images/clients/norisk.png',
+    Lunar: '/images/clients/lunar.svg',
+    Essential: '/images/clients/essential.svg',
+    Dawn: '/images/clients/dawn.svg',
+    NoRisk: '/images/clients/norisk.svg',
   }
   const MOD_CLIENTS = ['Essential', 'Dawn', 'NoRisk']
   let lunarExe = $state<string | null>(null)
@@ -534,7 +534,7 @@
     { icon: 'fa-solid fa-box-archive', label: 'Vanilla Bedrock Versions', category: 'Bedrock', sub: 'Install and switch vanilla Bedrock game versions', run: () => { closeSearch(); openPanel('bedrock-versions') } },
     { icon: 'fa-solid fa-clock-rotate-left', label: 'Bedrock Backups', category: 'Bedrock', sub: 'Back up and restore Bedrock worlds', run: () => { closeSearch(); openPanel('bedrockbackups') } },
     { icon: 'fa-solid fa-camera', label: 'Bedrock Photos', category: 'Bedrock', sub: 'Bedrock screenshots gallery', run: () => { closeSearch(); openPanel('bedrockscreenshots') } },
-    { icon: '/images/mc-java-logo.png', label: 'Java Versions', category: 'Java', sub: 'Install or launch Java Edition', run: () => { closeSearch(); openPanel('versions') } },
+    { icon: '/images/mc-java-logo.svg', label: 'Java Versions', category: 'Java', sub: 'Install or launch Java Edition', run: () => { closeSearch(); openPanel('versions') } },
     { icon: 'fa-solid fa-cubes', label: 'Browse Modpacks', category: 'Java', sub: 'Install CurseForge / Modrinth modpacks into an instance', run: () => { closeSearch(); openPanel('modpacks') } },
     { icon: 'fa-solid fa-puzzle-piece', label: 'Mods', category: 'Java', sub: 'Manage installed mods', run: () => { closeSearch(); openPanel('java-mods') } },
     { icon: 'fa-solid fa-file-lines', label: 'Logs and Crashes', category: 'Java', sub: 'View logs, detect crashes, share to mclo.gs', run: () => { closeSearch(); openPanel('logs') } },
@@ -550,8 +550,8 @@
     { icon: 'fa-solid fa-file-export', label: 'Export Settings', category: 'Settings', sub: 'Save settings as JSON', run: () => { closeSearch(); invoke('export_settings').catch(() => {}) } },
     { icon: 'fa-solid fa-expand', label: 'Toggle Fullscreen', category: 'Quick Actions', sub: 'F11 fullscreen mode', shortcut: 'F11', run: () => { closeSearch(); toggleFullscreen() } },
     { icon: '/images/clients/flarial.svg', label: 'Select Flarial', category: 'Clients', sub: 'Switch active client to Flarial', run: () => { closeSearch(); selectClient('Flarial Client') } },
-    { icon: '/images/clients/latite.png', label: 'Select Latite', category: 'Clients', sub: 'Switch active client to Latite', run: () => { closeSearch(); selectClient('Latite Client') } },
-    { icon: '/images/clients/oderso.png', label: 'Select OderSo', category: 'Clients', sub: 'Switch active client to OderSo', run: () => { closeSearch(); selectClient('OderSo Client') } },
+    { icon: '/images/clients/latite.svg', label: 'Select Latite', category: 'Clients', sub: 'Switch active client to Latite', run: () => { closeSearch(); selectClient('Latite Client') } },
+    { icon: '/images/clients/oderso.svg', label: 'Select OderSo', category: 'Clients', sub: 'Switch active client to OderSo', run: () => { closeSearch(); selectClient('OderSo Client') } },
     { icon: 'fa-solid fa-cube', label: 'Select Vanilla', category: 'Clients', sub: 'Launch Minecraft without a client', run: () => { closeSearch(); selectClient('Vanilla') } },
     { icon: 'fa-solid fa-newspaper', label: 'News and Updates', category: 'About', sub: 'Changelogs and announcements', run: () => { closeSearch(); openPanel('news') } },
     { icon: 'fa-solid fa-heart', label: 'Credits', category: 'About', sub: 'View launcher credits', run: () => { closeSearch(); openPanel('credits') } },
@@ -1798,7 +1798,7 @@
 
   <div class="top-bar">
     <div class="branding">
-      <img class="logo-icon" src="/images/icon.png" alt="" />
+      <img class="logo-icon" src="/images/icon.svg" alt="" />
       <div class="branding-text">
         <span class="branding-title">Glacier Launcher</span>
         <span class="branding-sub">Glacier Productions</span>
@@ -1830,10 +1830,10 @@
     {#if settings}
       <div class="edition-switcher" role="presentation" onmousedown={(e) => e.stopPropagation()} data-tooltip={t('tt.switchMinecraftEdition', settings?.Language)}>
         <button class="edition-tab" class:active={isBedrock} onclick={() => setEdition('bedrock')}>
-          <img class="chip-icon" src="images/mc-logo.png" alt="" style="width:14px;height:14px;object-fit:contain;"><span>Bedrock</span>
+          <img class="chip-icon" src="images/mc-logo.svg" alt="" style="width:14px;height:14px;object-fit:contain;"><span>Bedrock</span>
         </button>
         <button class="edition-tab" class:active={!isBedrock} onclick={() => setEdition('java')}>
-          <img class="chip-icon" src="images/mc-java-logo.png" alt="" style="width:18px;height:18px;object-fit:contain;"><span>Java</span>
+          <img class="chip-icon" src="images/mc-java-logo.svg" alt="" style="width:18px;height:18px;object-fit:contain;"><span>Java</span>
         </button>
       </div>
 

@@ -375,8 +375,8 @@ pub async fn download_levilamina_client(state: State<'_, AppState>) -> Result<St
     let dir = levilamina_dir(&state);
     let zip_path = dir.join(format!("{}.zip", release.tag));
 
-    let req = gl_download::DownloadRequest::new(&release.zip_url, &zip_path)
-        .with_label("LeviLamina");
+    let req =
+        gl_download::DownloadRequest::new(&release.zip_url, &zip_path).with_label("LeviLamina");
     let handle = state.downloads.submit(req);
     handle
         .join()

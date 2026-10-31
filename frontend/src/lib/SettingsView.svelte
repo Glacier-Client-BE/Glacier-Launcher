@@ -924,7 +924,7 @@
         onclick={() => setCategory('java')}
         onmousedown={(e) => e.stopPropagation()}
       >
-        <img class="chip-icon nav-logo" src="images/mc-java-logo.png" alt=""> Java
+        <img class="chip-icon nav-logo" src="images/mc-java-logo.svg" alt=""> Java
         <span class="settings-nav-btn-count">{categoryCount('java')}</span>
       </button>
     {/if}

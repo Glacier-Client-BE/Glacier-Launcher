@@ -148,7 +148,9 @@ fn available_free_space(_path: &std::path::Path) -> Option<u64> {
 }
 
 fn version_cache_path() -> PathBuf {
-    gl_settings::launcher_root().join("cache").join("mc-versions.json")
+    gl_settings::launcher_root()
+        .join("cache")
+        .join("mc-versions.json")
 }
 
 /// Persists the merged version list so a total fetch failure (offline, all

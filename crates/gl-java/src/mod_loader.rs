@@ -493,7 +493,8 @@ async fn install_from_installer_jar(
         .json
         .clone()
         .unwrap_or_else(|| "/version.json".to_string());
-    let version_json = read_jar_entry_string(installer_jar, version_json_entry.trim_start_matches('/'))?;
+    let version_json =
+        read_jar_entry_string(installer_jar, version_json_entry.trim_start_matches('/'))?;
     let versions_dir = mc_dir.join("versions").join(&profile.version);
     tokio::fs::create_dir_all(&versions_dir)
         .await
@@ -554,7 +555,8 @@ async fn download_via_queue(
     if dest.is_file() {
         return Ok(());
     }
-    let req = DownloadRequest::new(url.to_string(), dest.to_path_buf()).with_label(label.to_string());
+    let req =
+        DownloadRequest::new(url.to_string(), dest.to_path_buf()).with_label(label.to_string());
     downloads
         .submit(req)
         .join()
@@ -566,12 +568,9 @@ async fn download_via_queue(
 fn read_jar_entry_string(jar_path: &Path, entry: &str) -> Result<String> {
     let file = std::fs::File::open(jar_path).map_err(io_err(jar_path))?;
     let mut archive = zip::ZipArchive::new(file)?;
-    let mut zf = archive.by_name(entry).map_err(|_| {
-        JavaError::Other(format!(
-            "{} has no entry '{entry}'",
-            jar_path.display()
-        ))
-    })?;
+    let mut zf = archive
+        .by_name(entry)
+        .map_err(|_| JavaError::Other(format!("{} has no entry '{entry}'", jar_path.display())))?;
     let mut out = String::new();
     zf.read_to_string(&mut out).map_err(io_err(jar_path))?;
     Ok(out)

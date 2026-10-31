@@ -143,7 +143,10 @@ pub async fn bedrock_worlds_dir() -> String {
 }
 
 #[tauri::command]
-pub async fn list_bedrock_packs(_instance_dir: String, kind: String) -> Result<Vec<BedrockPack>, String> {
+pub async fn list_bedrock_packs(
+    _instance_dir: String,
+    kind: String,
+) -> Result<Vec<BedrockPack>, String> {
     let kind = parse_pack_kind(&kind)?;
     let dir_name = match kind {
         PackKind::Resource => "resource_packs",
@@ -195,7 +198,10 @@ pub async fn create_bedrock_backup(
 }
 
 #[tauri::command]
-pub async fn restore_bedrock_backup(backup_path: String, instance_dir: String) -> Result<(), String> {
+pub async fn restore_bedrock_backup(
+    backup_path: String,
+    instance_dir: String,
+) -> Result<(), String> {
     let svc = BedrockBackupService::new(backups_dir());
     svc.restore_backup_into(Path::new(&backup_path), &bedrock_root(&instance_dir))
         .map_err(|e| e.to_string())
@@ -328,7 +334,9 @@ pub async fn set_bedrock_auto_backup_interval(every_n_launches: i32) -> Result<(
 }
 
 #[tauri::command]
-pub async fn list_bedrock_screenshots(_instance_dir: String) -> Result<Vec<ScreenshotFile>, String> {
+pub async fn list_bedrock_screenshots(
+    _instance_dir: String,
+) -> Result<Vec<ScreenshotFile>, String> {
     // C# `BedrockScreenshotService.ComMojangScreenshotsDir` is a static
     // property over `CurseForgeService.ComMojangRoot` — screenshots always
     // come from the live install, never from a managed instance folder. The
@@ -397,7 +405,9 @@ fn dirs_captures_dir() -> std::path::PathBuf {
 }
 
 #[tauri::command]
-pub async fn list_bedrock_instances(state: State<'_, AppState>) -> Result<Vec<BedrockInstance>, String> {
+pub async fn list_bedrock_instances(
+    state: State<'_, AppState>,
+) -> Result<Vec<BedrockInstance>, String> {
     let svc = state
         .bedrock_instances
         .lock()
@@ -459,7 +469,10 @@ pub async fn set_bedrock_instance_accent_color(
 /// is the destructive part and must not be reported as a failure just because
 /// the version switch afterwards didn't take.
 #[tauri::command]
-pub async fn switch_bedrock_instance(state: State<'_, AppState>, id: String) -> Result<String, String> {
+pub async fn switch_bedrock_instance(
+    state: State<'_, AppState>,
+    id: String,
+) -> Result<String, String> {
     let live_root = gl_bedrock::com_mojang_root();
 
     let version_tag = {
@@ -522,13 +535,18 @@ pub async fn set_bedrock_instance_version(
 
 /// The id of the currently active Bedrock instance, if any.
 #[tauri::command]
-pub async fn active_bedrock_instance_id(state: State<'_, AppState>) -> Result<Option<String>, String> {
+pub async fn active_bedrock_instance_id(
+    state: State<'_, AppState>,
+) -> Result<Option<String>, String> {
     let svc = state.bedrock_instances.lock().map_err(|e| e.to_string())?;
     Ok(svc.active_instance_id().map(str::to_string))
 }
 
 #[tauri::command]
-pub async fn delete_bedrock_instance(state: State<'_, AppState>, id: String) -> Result<bool, String> {
+pub async fn delete_bedrock_instance(
+    state: State<'_, AppState>,
+    id: String,
+) -> Result<bool, String> {
     let mut svc = state
         .bedrock_instances
         .lock()

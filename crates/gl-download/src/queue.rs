@@ -296,7 +296,10 @@ impl DownloadQueue {
         let mut reg = self.registry.lock().unwrap_or_else(|e| e.into_inner());
         reg.retain(|r| {
             let entry = r.watch.borrow();
-            if matches!(entry.status, DownloadStatus::Downloading | DownloadStatus::Queued) {
+            if matches!(
+                entry.status,
+                DownloadStatus::Downloading | DownloadStatus::Queued
+            ) {
                 return true;
             }
             match entry.finished_at_unix_ms {
@@ -402,7 +405,9 @@ impl DownloadQueue {
                     e.status = DownloadStatus::Cancelled;
                     e.finished_at_unix_ms = Some(now_unix_ms());
                 });
-                let _ = tokio::fs::remove_file(crate::download::tmp_sibling(&destination_for_cleanup)).await;
+                let _ =
+                    tokio::fs::remove_file(crate::download::tmp_sibling(&destination_for_cleanup))
+                        .await;
                 let _ = changed.send(());
                 return Err(crate::error::DownloadError::Cancelled);
             };
@@ -472,7 +477,10 @@ impl DownloadQueue {
                         // A real cancel (not a pause): `download_file` never
                         // deletes the `.tmp` on `Cancelled` any more (pause
                         // needs it kept), so that cleanup belongs here now.
-                        let _ = tokio::fs::remove_file(crate::download::tmp_sibling(&destination_for_cleanup)).await;
+                        let _ = tokio::fs::remove_file(crate::download::tmp_sibling(
+                            &destination_for_cleanup,
+                        ))
+                        .await;
                     }
                     tx.send_modify(|e| {
                         e.status = if paused {

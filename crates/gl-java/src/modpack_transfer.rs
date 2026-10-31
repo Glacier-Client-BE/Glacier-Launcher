@@ -78,8 +78,8 @@ pub fn export_modpack(
 
     let file = fs::File::create(&zip_path).map_err(err)?;
     let mut zip = zip::ZipWriter::new(file);
-    let options =
-        zip::write::SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
+    let options = zip::write::SimpleFileOptions::default()
+        .compression_method(zip::CompressionMethod::Deflated);
 
     for (sub, prefix) in [
         ("mods", "overrides/mods"),
@@ -101,8 +101,12 @@ pub fn export_modpack(
     });
     zip.start_file("manifest.json", options).map_err(err)?;
     use std::io::Write;
-    zip.write_all(serde_json::to_string_pretty(&manifest).map_err(err)?.as_bytes())
-        .map_err(err)?;
+    zip.write_all(
+        serde_json::to_string_pretty(&manifest)
+            .map_err(err)?
+            .as_bytes(),
+    )
+    .map_err(err)?;
     zip.finish().map_err(err)?;
     Ok(zip_path)
 }
@@ -119,8 +123,8 @@ pub fn export_instance(instance_dir: &Path, dest_zip_path: &Path) -> Result<()> 
     }
     let file = fs::File::create(dest_zip_path).map_err(err)?;
     let mut zip = zip::ZipWriter::new(file);
-    let options =
-        zip::write::SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
+    let options = zip::write::SimpleFileOptions::default()
+        .compression_method(zip::CompressionMethod::Deflated);
     add_dir_to_zip(&mut zip, instance_dir, ".", options)?;
     zip.finish().map_err(err)?;
     Ok(())
@@ -138,7 +142,9 @@ fn add_dir_to_zip<W: std::io::Write + std::io::Seek>(
     for entry in walk_files(dir) {
         let rel = entry.strip_prefix(dir).expect("walked under dir");
         let entry_name = format!("{prefix}/{}", rel.to_string_lossy().replace('\\', "/"));
-        let Ok(mut file) = fs::File::open(&entry) else { continue };
+        let Ok(mut file) = fs::File::open(&entry) else {
+            continue;
+        };
         if zip.start_file(&entry_name, options).is_err() {
             continue;
         }
@@ -181,7 +187,9 @@ pub fn import_modpack(zip_path: &Path, instance_dir: &Path) -> Result<()> {
     let mut has_overrides = false;
     let mut has_cfg = false;
     for i in 0..archive.len() {
-        let Ok(entry) = archive.by_index(i) else { continue };
+        let Ok(entry) = archive.by_index(i) else {
+            continue;
+        };
         let full = entry.name().replace('\\', "/");
         if full.to_ascii_lowercase().starts_with("overrides/")
             || full.to_ascii_lowercase().starts_with("client-overrides/")
@@ -219,7 +227,8 @@ pub fn import_modpack(zip_path: &Path, instance_dir: &Path) -> Result<()> {
             if let Some(r) = full.strip_prefix("overrides/") {
                 Some(r.to_string())
             } else {
-                full.strip_prefix("client-overrides/").map(|r| r.to_string())
+                full.strip_prefix("client-overrides/")
+                    .map(|r| r.to_string())
             }
         } else if let Some(root) = &mmc_root {
             full.strip_prefix(root.as_str()).map(|r| r.to_string())
@@ -245,10 +254,14 @@ pub fn import_modpack(zip_path: &Path, instance_dir: &Path) -> Result<()> {
 
 /// Port of `DetectMultiMcRoot`: finds the `.minecraft/`/`minecraft/` prefix
 /// used by MultiMC-family instance zips.
-fn detect_multimc_root<R: Read + std::io::Seek>(archive: &mut zip::ZipArchive<R>) -> Option<String> {
+fn detect_multimc_root<R: Read + std::io::Seek>(
+    archive: &mut zip::ZipArchive<R>,
+) -> Option<String> {
     for candidate in [".minecraft/", "minecraft/"] {
         for i in 0..archive.len() {
-            let Ok(entry) = archive.by_index(i) else { continue };
+            let Ok(entry) = archive.by_index(i) else {
+                continue;
+            };
             let full = entry.name().replace('\\', "/");
             let lower = full.to_ascii_lowercase();
             if lower.ends_with(candidate)

@@ -72,9 +72,9 @@ pub fn launch_client_exe(exe_path: String) -> Result<(), String> {
         info.lunar_exe_path.as_deref(),
         info.badlion_exe_path.as_deref(),
     ]
-        .into_iter()
-        .flatten()
-        .any(|p| p == requested);
+    .into_iter()
+    .flatten()
+    .any(|p| p == requested);
     if !allowed {
         return Err("That launcher isn't a detected Lunar or Badlion install.".into());
     }
@@ -161,7 +161,9 @@ pub fn launch_lunar_direct(version_id: String) -> Result<u32, String> {
         .current_dir(&files.version_dir);
     #[cfg(windows)]
     lunar_cmd.creation_flags(CREATE_NO_WINDOW);
-    let child = lunar_cmd.spawn().map_err(|e| format!("Failed to start Lunar: {e}"))?;
+    let child = lunar_cmd
+        .spawn()
+        .map_err(|e| format!("Failed to start Lunar: {e}"))?;
 
     Ok(child.id())
 }
@@ -298,7 +300,9 @@ fn horizon_layout(state: &AppState) -> HorizonLayout {
 fn load_horizon_state(layout: &HorizonLayout) -> Result<InstallState, String> {
     match std::fs::read_to_string(layout.state_file()) {
         Ok(text) => serde_json::from_str(&text).map_err(|e| {
-            format!("Horizon's state file is unreadable ({e}). Uninstall Horizon and install it again.")
+            format!(
+                "Horizon's state file is unreadable ({e}). Uninstall Horizon and install it again."
+            )
         }),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(InstallState::default()),
         Err(e) => Err(format!("Could not read Horizon's state: {e}")),
@@ -510,7 +514,11 @@ fn official_minecraft_dir() -> Option<PathBuf> {
 async fn ensure_minecraft_26_3(app: &AppHandle, state: &AppState) -> Result<PathBuf, String> {
     if let Some(official) = official_minecraft_dir() {
         if hz::has_vanilla_26_3(&official) {
-            emit_horizon_progress(app, "Using your Minecraft 26.3 files from the official launcher", 5.0);
+            emit_horizon_progress(
+                app,
+                "Using your Minecraft 26.3 files from the official launcher",
+                5.0,
+            );
             return Ok(official);
         }
     }
@@ -525,7 +533,11 @@ async fn ensure_minecraft_26_3(app: &AppHandle, state: &AppState) -> Result<Path
         return Ok(root);
     }
 
-    emit_horizon_progress(app, "Downloading Minecraft 26.3 from Mojang for your account", 3.0);
+    emit_horizon_progress(
+        app,
+        "Downloading Minecraft 26.3 from Mojang for your account",
+        3.0,
+    );
     let versions_dir = root.join("versions");
     let versions = {
         let mut guard = state.java_versions.lock().await;
@@ -537,7 +549,12 @@ async fn ensure_minecraft_26_3(app: &AppHandle, state: &AppState) -> Result<Path
     let version = versions
         .into_iter()
         .find(|v| v.id == hz::MINECRAFT_VERSION)
-        .ok_or_else(|| format!("Minecraft {} is not in Mojang's version list", hz::MINECRAFT_VERSION))?;
+        .ok_or_else(|| {
+            format!(
+                "Minecraft {} is not in Mojang's version list",
+                hz::MINECRAFT_VERSION
+            )
+        })?;
     gl_java::InstallService::new()
         .install(&version, &root, |p: &gl_java::InstallProgress| {
             emit_horizon_progress(app, p.stage.clone(), p.percent);
@@ -562,8 +579,13 @@ async fn ensure_java_25(app: &AppHandle) -> Result<PathBuf, String> {
         })
         .await
         .map_err(|e| format!("Could not get Java {}: {e}", hz::JAVA_MAJOR))?;
-    hz::java_home_from_javaw(&javaw)
-        .ok_or_else(|| format!("Unexpected Java {} location: {}", hz::JAVA_MAJOR, javaw.display()))
+    hz::java_home_from_javaw(&javaw).ok_or_else(|| {
+        format!(
+            "Unexpected Java {} location: {}",
+            hz::JAVA_MAJOR,
+            javaw.display()
+        )
+    })
 }
 
 /// The 26.3 server jar that `horizon-prepare` needs (first preparation),
@@ -586,7 +608,11 @@ async fn ensure_server_jar(
     if hz::file_has_sha1(&dest, &sha1) {
         return Ok(dest);
     }
-    emit_horizon_progress(app, "Downloading the 26.3 server jar (used once, for preparing)", 6.0);
+    emit_horizon_progress(
+        app,
+        "Downloading the 26.3 server jar (used once, for preparing)",
+        6.0,
+    );
     let bytes = state
         .http
         .get(&url)
@@ -650,7 +676,10 @@ async fn run_horizon_prepare(
     tauri::async_runtime::spawn_blocking(move || -> Result<(), String> {
         let exe = build_dir.join(hz::PREPARE_EXE);
         if !exe.is_file() {
-            return Err(format!("{} is missing from the Horizon build", hz::PREPARE_EXE));
+            return Err(format!(
+                "{} is missing from the Horizon build",
+                hz::PREPARE_EXE
+            ));
         }
         let mut cmd = Command::new(&exe);
         cmd.arg("--prepare")
@@ -768,7 +797,11 @@ async fn install_latest_horizon(
     }
     let _ = std::fs::remove_file(&zip_path);
 
-    emit_horizon_progress(app, "Preparing Horizon's resources (a few minutes the first time)", 40.0);
+    emit_horizon_progress(
+        app,
+        "Preparing Horizon's resources (a few minutes the first time)",
+        40.0,
+    );
     if let Err(e) = run_horizon_prepare(
         app.clone(),
         build_dir.clone(),
@@ -895,7 +928,9 @@ pub async fn horizon_rollback(state: tauri::State<'_, AppState>) -> Result<Horiz
             .clone()
             .ok_or_else(|| "There is no previous build to roll back to.".to_string())?;
         if !hz::is_playable(&layout.build_dir(&previous.id)) {
-            return Err("The previous build is missing or incomplete. Update Horizon instead.".into());
+            return Err(
+                "The previous build is missing or incomplete. Update Horizon instead.".into(),
+            );
         }
         install.rollback();
         save_horizon_state(&layout, &install)?;
@@ -1017,7 +1052,9 @@ pub async fn horizon_launch(
             .unwrap_or_else(|| "no output".to_string());
         return Err(format!(
             "Horizon closed right after starting (exit code {}): {last}",
-            status.code().map_or("unknown".to_string(), |c| c.to_string())
+            status
+                .code()
+                .map_or("unknown".to_string(), |c| c.to_string())
         ));
     }
 

@@ -149,7 +149,12 @@ fn read_uninstall_exe(display_name_contains: &str) -> Option<PathBuf> {
                 }
                 // Strip the optional ",<icon-index>" suffix (e.g.
                 // `"C:\...\app.exe",0`), then surrounding quotes.
-                let icon = icon.split(',').next().unwrap_or(&icon).trim().trim_matches('"');
+                let icon = icon
+                    .split(',')
+                    .next()
+                    .unwrap_or(&icon)
+                    .trim()
+                    .trim_matches('"');
                 let path = PathBuf::from(icon);
                 if path.is_file() {
                     return Some(path);

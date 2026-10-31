@@ -1,10 +1,1 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="305" height="268.36">
-    <g id="back" transform="translate(5,8.66)">
-        <polygon points="100,0 150,86.6 250,86.6 300,0" fill="#822a2b"/>
-        <polygon points="0,173.2 50,259.7 100,173.2 200,173.2 150,86.6 50,86.6" fill="#652626"/>
-    </g>
-    <g id="front">
-        <polygon points="100,0 150,86.6 250,86.6 300,0" fill="#ff4444"/>
-        <polygon points="0,173.2 50,259.7 100,173.2 200,173.2 150,86.6 50,86.6" fill="#c33b3a"/>
-    </g>
-</svg>
+<svg xmlns="http://www.w3.org/2000/svg" width="305" height="268.4"><path fill="#822a2b" d="m105 8.7 50 86.6h100l50-86.6z"/><path fill="#652626" d="m5 181.9 50 86.5 50-86.5h100l-50-86.6H55z"/><path fill="#f44" d="m100 0 50 86.6h100L300 0z"/><path fill="#c33b3a" d="m0 173.2 50 86.5 50-86.5h100l-50-86.6H50z"/></svg>

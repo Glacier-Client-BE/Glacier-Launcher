@@ -512,7 +512,9 @@ pub async fn update_modpack(
                     continue;
                 }
                 let dest = instance_root.join(&f.relative_path);
-                reqs.push(DownloadRequest::new(f.url.clone(), dest).with_label(f.relative_path.clone()));
+                reqs.push(
+                    DownloadRequest::new(f.url.clone(), dest).with_label(f.relative_path.clone()),
+                );
             }
             let outcomes = state.downloads.download_all(reqs).await;
             let failed = outcomes.iter().filter(|o| o.is_err()).count();
@@ -521,7 +523,10 @@ pub async fn update_modpack(
 
             write_pack_source(
                 &instance_root,
-                &PackSource { file_id: version.id, ..src },
+                &PackSource {
+                    file_id: version.id,
+                    ..src
+                },
             );
 
             Ok(ModpackInstallResult {
@@ -560,7 +565,8 @@ pub async fn update_modpack(
             let plan = {
                 let file = std::fs::File::open(&zip_path).map_err(|e| e.to_string())?;
                 let mut archive = zip::ZipArchive::new(file).map_err(|e| e.to_string())?;
-                parse_curseforge_manifest(&mut archive, &src.pack_name).map_err(|e| e.to_string())?
+                parse_curseforge_manifest(&mut archive, &src.pack_name)
+                    .map_err(|e| e.to_string())?
             };
             extract_overrides(&zip_path, &instance_root)?;
 
@@ -595,7 +601,10 @@ pub async fn update_modpack(
             let new_file_id = pack_file.file_id.to_string();
             write_pack_source(
                 &instance_root,
-                &PackSource { file_id: new_file_id, ..src },
+                &PackSource {
+                    file_id: new_file_id,
+                    ..src
+                },
             );
 
             Ok(ModpackInstallResult {

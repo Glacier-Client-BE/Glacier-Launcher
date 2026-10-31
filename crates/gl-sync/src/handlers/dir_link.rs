@@ -198,10 +198,8 @@ pub fn apply(
         }
     }
 
-    if !store_dir.exists() {
-        if !dry_run {
-            std::fs::create_dir_all(store_dir).map_err(io_err(store_dir))?;
-        }
+    if !store_dir.exists() && !dry_run {
+        std::fs::create_dir_all(store_dir).map_err(io_err(store_dir))?;
     }
 
     // `instance_dir` may no longer exist at this point: the KeepExisting /
@@ -245,7 +243,11 @@ pub fn apply(
         instance_id,
         target_label,
         ReportAction::LinkCreated,
-        format!("junction {} -> {}", instance_dir.display(), store_dir.display()),
+        format!(
+            "junction {} -> {}",
+            instance_dir.display(),
+            store_dir.display()
+        ),
     );
     Ok(())
 }
@@ -260,7 +262,12 @@ pub fn detach(
     dry_run: bool,
 ) -> Result<()> {
     if !instance_dir.exists() {
-        report.push(instance_id, target_label, ReportAction::NoOp, "nothing to detach");
+        report.push(
+            instance_id,
+            target_label,
+            ReportAction::NoOp,
+            "nothing to detach",
+        );
         return Ok(());
     }
     let was_junction = is_junction(instance_dir);
@@ -275,7 +282,8 @@ pub fn detach(
                     .unwrap_or_else(|_| instance_dir.to_path_buf());
                 if !dry_run {
                     let tmp = staging_sibling(instance_dir, "gl-sync-materialize-tmp");
-                    let junction_stub = staging_sibling(instance_dir, "gl-sync-materialize-junction");
+                    let junction_stub =
+                        staging_sibling(instance_dir, "gl-sync-materialize-junction");
                     if tmp.exists() {
                         std::fs::remove_dir_all(&tmp).map_err(io_err(&tmp))?;
                     }
@@ -345,12 +353,30 @@ mod keep_existing_tests {
         std::fs::write(inst.join("both.jar"), "player").unwrap();
 
         let mut report = SyncReport::new("p", false);
-        apply(&mut report, "i", "mods", &store, &inst, Some(AdoptStrategy::KeepExisting), false).unwrap();
+        apply(
+            &mut report,
+            "i",
+            "mods",
+            &store,
+            &inst,
+            Some(AdoptStrategy::KeepExisting),
+            false,
+        )
+        .unwrap();
 
-        assert_eq!(std::fs::read_to_string(store.join("mine.jar")).unwrap(), "player");
-        assert_eq!(std::fs::read_to_string(store.join("both.jar")).unwrap(), "player");
+        assert_eq!(
+            std::fs::read_to_string(store.join("mine.jar")).unwrap(),
+            "player"
+        );
+        assert_eq!(
+            std::fs::read_to_string(store.join("both.jar")).unwrap(),
+            "player"
+        );
         assert!(store.join("shared.jar").exists());
         let backup = staging_sibling(&inst, "gl-sync-backup");
-        assert_eq!(std::fs::read_to_string(backup.join("mine.jar")).unwrap(), "player");
+        assert_eq!(
+            std::fs::read_to_string(backup.join("mine.jar")).unwrap(),
+            "player"
+        );
     }
 }

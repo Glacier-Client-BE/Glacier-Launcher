@@ -43,11 +43,7 @@ struct AssetJob {
 
 /// Places a verified copy of `expected` at `dest` from another launcher's
 /// folder when one exists. `false` means the caller should download.
-async fn try_reuse(
-    roots: &Arc<Vec<PathBuf>>,
-    expected: Option<&Expected>,
-    dest: &Path,
-) -> bool {
+async fn try_reuse(roots: &Arc<Vec<PathBuf>>, expected: Option<&Expected>, dest: &Path) -> bool {
     let Some(expected) = expected.cloned() else {
         return false;
     };
@@ -151,16 +147,17 @@ impl InstallService {
             .iter()
             .map(|j| (j.url.clone(), j.dest.clone(), j.expected.clone()))
             .collect();
-        let mut lib_stream = futures_util::stream::iter(pairs.into_iter().map(|(url, dest, expected)| {
-            async move {
-                if !dest.is_file() && !try_reuse(roots_ref, expected.as_ref(), &dest).await {
-                    // TODO: replace with gl_download once available
-                    download::download_to_file(client, &url, &dest).await?;
+        let mut lib_stream =
+            futures_util::stream::iter(pairs.into_iter().map(|(url, dest, expected)| {
+                async move {
+                    if !dest.is_file() && !try_reuse(roots_ref, expected.as_ref(), &dest).await {
+                        // TODO: replace with gl_download once available
+                        download::download_to_file(client, &url, &dest).await?;
+                    }
+                    Ok::<(), JavaError>(())
                 }
-                Ok::<(), JavaError>(())
-            }
-        }))
-        .buffer_unordered(DOWNLOAD_CONCURRENCY);
+            }))
+            .buffer_unordered(DOWNLOAD_CONCURRENCY);
         let mut lib_done = 0usize;
         while let Some(res) = lib_stream.next().await {
             res?;
@@ -205,16 +202,17 @@ impl InstallService {
             .iter()
             .map(|j| (j.url.clone(), j.dest.clone(), j.expected.clone()))
             .collect();
-        let mut asset_stream = futures_util::stream::iter(pairs.into_iter().map(|(url, dest, expected)| {
-            async move {
-                if !dest.is_file() && !try_reuse(roots_ref, expected.as_ref(), &dest).await {
-                    // TODO: replace with gl_download once available
-                    download::download_to_file(client, &url, &dest).await?;
+        let mut asset_stream =
+            futures_util::stream::iter(pairs.into_iter().map(|(url, dest, expected)| {
+                async move {
+                    if !dest.is_file() && !try_reuse(roots_ref, expected.as_ref(), &dest).await {
+                        // TODO: replace with gl_download once available
+                        download::download_to_file(client, &url, &dest).await?;
+                    }
+                    Ok::<(), JavaError>(())
                 }
-                Ok::<(), JavaError>(())
-            }
-        }))
-        .buffer_unordered(DOWNLOAD_CONCURRENCY);
+            }))
+            .buffer_unordered(DOWNLOAD_CONCURRENCY);
         let mut asset_done = 0usize;
         while let Some(res) = asset_stream.next().await {
             res?;
@@ -287,7 +285,9 @@ impl InstallService {
             &format!("{index_id}.json"),
         )
         .ok_or_else(|| {
-            JavaError::Other(format!("asset index id {index_id:?} is not a safe file name"))
+            JavaError::Other(format!(
+                "asset index id {index_id:?} is not a safe file name"
+            ))
         })?;
 
         // TODO: replace with gl_download once available
@@ -326,10 +326,7 @@ impl InstallService {
                     None
                 };
                 // Asset objects are named by their SHA-1.
-                let expected = Some(Expected::new(
-                    format!("assets/objects/{sub}/{hash}"),
-                    hash,
-                ));
+                let expected = Some(Expected::new(format!("assets/objects/{sub}/{hash}"), hash));
                 jobs.push(AssetJob {
                     url,
                     dest,
@@ -490,7 +487,10 @@ mod tests {
         assert_eq!(jobs.len(), 1);
         assert_eq!(
             jobs[0].dest,
-            mc.join("libraries").join("com").join("ok").join("ok-1.0.jar")
+            mc.join("libraries")
+                .join("com")
+                .join("ok")
+                .join("ok-1.0.jar")
         );
     }
 }

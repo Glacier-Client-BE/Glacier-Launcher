@@ -44,7 +44,10 @@ pub async fn fetch_image_bytes(state: State<'_, AppState>, url: String) -> Resul
     let bytes = state
         .http
         .get(&url)
-        .header("Accept", "image/avif,image/webp,image/png,image/*,*/*;q=0.8")
+        .header(
+            "Accept",
+            "image/avif,image/webp,image/png,image/*,*/*;q=0.8",
+        )
         .header("Accept-Language", "en-US,en;q=0.9")
         .send()
         .await
@@ -60,12 +63,19 @@ pub async fn fetch_image_bytes(state: State<'_, AppState>, url: String) -> Resul
 }
 
 fn sniff_image_mime(bytes: &[u8]) -> &'static str {
-    if bytes.starts_with(b"\x89PNG") { "image/png" }
-    else if bytes.starts_with(b"\xff\xd8") { "image/jpeg" }
-    else if bytes.starts_with(b"GIF") { "image/gif" }
-    else if bytes.len() >= 12 && &bytes[0..4] == b"RIFF" && &bytes[8..12] == b"WEBP" { "image/webp" }
-    else if bytes.starts_with(b"<svg") || bytes.starts_with(b"<?xml") { "image/svg+xml" }
-    else { "image/png" }
+    if bytes.starts_with(b"\x89PNG") {
+        "image/png"
+    } else if bytes.starts_with(b"\xff\xd8") {
+        "image/jpeg"
+    } else if bytes.starts_with(b"GIF") {
+        "image/gif"
+    } else if bytes.len() >= 12 && &bytes[0..4] == b"RIFF" && &bytes[8..12] == b"WEBP" {
+        "image/webp"
+    } else if bytes.starts_with(b"<svg") || bytes.starts_with(b"<?xml") {
+        "image/svg+xml"
+    } else {
+        "image/png"
+    }
 }
 
 #[tauri::command]

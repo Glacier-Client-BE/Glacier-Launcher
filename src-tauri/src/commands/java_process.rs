@@ -66,8 +66,8 @@ const MATCHERS: &[Matcher] = &[
 /// callers should still let the user open/share the raw log.
 #[tauri::command]
 pub async fn analyze_crash(log_path: String) -> Result<CrashAnalysis, String> {
-    let text = std::fs::read_to_string(&log_path)
-        .map_err(|e| format!("Couldn't read {log_path}: {e}"))?;
+    let text =
+        std::fs::read_to_string(&log_path).map_err(|e| format!("Couldn't read {log_path}: {e}"))?;
 
     for matcher in MATCHERS {
         if let Some(analysis) = matcher(&text) {
@@ -161,21 +161,19 @@ fn match_mixin_failure(text: &str) -> Option<CrashAnalysis> {
     // Best-effort: mixin failure lines commonly look like
     // "Mixin apply failed <modid>.mixins.json:SomeMixin -> ..." — grab the
     // modid prefix off the ".mixins.json" config name if present.
-    let mod_name = text
-        .find(".mixins.json")
-        .and_then(|end| {
-            let before = &text[..end];
-            let start = before
-                .rfind(|c: char| c.is_whitespace() || c == '[' || c == '(')
-                .map(|i| i + 1)
-                .unwrap_or(0);
-            let candidate = before[start..].trim();
-            if candidate.is_empty() {
-                None
-            } else {
-                Some(candidate.to_string())
-            }
-        });
+    let mod_name = text.find(".mixins.json").and_then(|end| {
+        let before = &text[..end];
+        let start = before
+            .rfind(|c: char| c.is_whitespace() || c == '[' || c == '(')
+            .map(|i| i + 1)
+            .unwrap_or(0);
+        let candidate = before[start..].trim();
+        if candidate.is_empty() {
+            None
+        } else {
+            Some(candidate.to_string())
+        }
+    });
 
     Some(CrashAnalysis {
         category: "Mixin failure".to_string(),
@@ -267,7 +265,9 @@ fn find_nearby_jar_name(text: &str, pos: usize) -> Option<String> {
     let jar_idx = window.find(".jar")?;
     let before = &window[..jar_idx];
     let start = before
-        .rfind(|c: char| c.is_whitespace() || c == '"' || c == '\'' || c == '(' || c == '[' || c == '\\')
+        .rfind(|c: char| {
+            c.is_whitespace() || c == '"' || c == '\'' || c == '(' || c == '[' || c == '\\'
+        })
         .map(|i| i + 1)
         .unwrap_or(0);
     let name = &window[start..jar_idx + 4];
@@ -297,13 +297,17 @@ mod tests {
 
     #[test]
     fn detects_oom() {
-        let a = analyze_text("Exception in thread \"main\" java.lang.OutOfMemoryError: Java heap space");
+        let a = analyze_text(
+            "Exception in thread \"main\" java.lang.OutOfMemoryError: Java heap space",
+        );
         assert_eq!(a.category, "Out of memory");
     }
 
     #[test]
     fn detects_missing_class() {
-        let a = analyze_text("Caused by: java.lang.NoClassDefFoundError: com/example/somemod/SomeClass");
+        let a = analyze_text(
+            "Caused by: java.lang.NoClassDefFoundError: com/example/somemod/SomeClass",
+        );
         assert_eq!(a.category, "Missing dependency");
         assert!(a.suggested_fix.contains("com"));
     }
@@ -326,13 +330,16 @@ mod tests {
 
     #[test]
     fn detects_gpu_driver() {
-        let a = analyze_text("org.lwjgl.LWJGLException: Pixel format not accelerated GLFW error 65542");
+        let a =
+            analyze_text("org.lwjgl.LWJGLException: Pixel format not accelerated GLFW error 65542");
         assert_eq!(a.category, "GPU / driver");
     }
 
     #[test]
     fn detects_corrupt_jar() {
-        let a = analyze_text("java.util.zip.ZipException: zip END header not found in libs/somemod-1.0.jar");
+        let a = analyze_text(
+            "java.util.zip.ZipException: zip END header not found in libs/somemod-1.0.jar",
+        );
         assert_eq!(a.category, "Corrupt jar");
     }
 
@@ -345,7 +352,9 @@ mod tests {
     #[test]
     fn matcher_order_prefers_oom_over_gpu_mentions() {
         // If a log mentions both OOM and LWJGL, OOM (listed first) should win.
-        let a = analyze_text("java.lang.OutOfMemoryError: Java heap space\norg.lwjgl.LWJGLException: driver reset");
+        let a = analyze_text(
+            "java.lang.OutOfMemoryError: Java heap space\norg.lwjgl.LWJGLException: driver reset",
+        );
         assert_eq!(a.category, "Out of memory");
     }
 }

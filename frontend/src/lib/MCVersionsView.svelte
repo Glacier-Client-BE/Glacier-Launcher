@@ -288,7 +288,7 @@
       {#each installed as v (v.id)}
         <div class="client-card {v.is_active ? 'client-active' : ''}">
           <div class="client-card-header">
-            <div class="client-card-icon latite-icon"><img class="chip-icon java-logo" src="images/mc-java-logo.png" alt=""></div>
+            <div class="client-card-icon latite-icon"><img class="chip-icon java-logo" src="images/mc-java-logo.svg" alt=""></div>
             <div class="client-card-meta">
               <span class="client-card-name">Minecraft {v.id}</span>
               <span class="client-card-sub">
@@ -334,7 +334,7 @@
       {#each others as v (v.id)}
         <div class="client-card">
           <div class="client-card-header">
-            <div class="client-card-icon latite-icon"><img class="chip-icon java-logo" src="images/mc-java-logo.png" alt=""></div>
+            <div class="client-card-icon latite-icon"><img class="chip-icon java-logo" src="images/mc-java-logo.svg" alt=""></div>
             <div class="client-card-meta">
               <span class="client-card-name">Minecraft {v.id}</span>
               <span class="client-card-sub"

@@ -78,7 +78,10 @@ pub fn apply(
                 instance_id,
                 target_label,
                 ReportAction::Merged,
-                format!("{} pack-managed key(s) merged, local-only keys preserved", managed_keys.len()),
+                format!(
+                    "{} pack-managed key(s) merged, local-only keys preserved",
+                    managed_keys.len()
+                ),
             );
         }
     }

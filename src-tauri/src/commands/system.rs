@@ -67,8 +67,8 @@ pub fn open_path(path: String) -> Result<(), String> {
         .map(|e| e.to_ascii_lowercase())
         .unwrap_or_default();
     const EXECUTABLE_EXTS: &[&str] = &[
-        "exe", "com", "bat", "cmd", "ps1", "msi", "msix", "scr", "vbs", "vbe", "js", "jse",
-        "wsf", "wsh", "lnk", "reg", "dll", "jar", "appx",
+        "exe", "com", "bat", "cmd", "ps1", "msi", "msix", "scr", "vbs", "vbe", "js", "jse", "wsf",
+        "wsh", "lnk", "reg", "dll", "jar", "appx",
     ];
     if EXECUTABLE_EXTS.contains(&ext.as_str()) {
         return Err(format!("Refusing to open executable file '{path}'."));
@@ -117,7 +117,11 @@ pub fn open_url(url: String) -> Result<(), String> {
         .args(["url.dll,FileProtocolHandler", trimmed])
         .status()
         .map_err(|e| e.to_string())?;
-    if status.success() { Ok(()) } else { Err(format!("start command exited with {status}")) }
+    if status.success() {
+        Ok(())
+    } else {
+        Err(format!("start command exited with {status}"))
+    }
 }
 
 #[cfg(test)]
@@ -274,9 +278,14 @@ pub fn auto_export_settings_if_due() -> Result<(), String> {
         let mut files: Vec<(std::time::SystemTime, PathBuf)> = entries
             .flatten()
             .filter(|e| e.path().extension().and_then(|x| x.to_str()) == Some("json"))
-            .filter_map(|e| e.metadata().ok().and_then(|m| m.modified().ok()).map(|t| (t, e.path())))
+            .filter_map(|e| {
+                e.metadata()
+                    .ok()
+                    .and_then(|m| m.modified().ok())
+                    .map(|t| (t, e.path()))
+            })
             .collect();
-        files.sort_by(|a, b| b.0.cmp(&a.0));
+        files.sort_by_key(|f| std::cmp::Reverse(f.0));
         for (_, path) in files.into_iter().skip(10) {
             let _ = std::fs::remove_file(path);
         }
@@ -361,7 +370,11 @@ fn force_delete_dir_contents(dir: &std::path::Path) -> Vec<String> {
             if std::fs::remove_dir(&path).is_err() {
                 // Non-empty because some child failed above, or a fresh
                 // permission error - either way, note it and move on.
-                if path.read_dir().map(|mut d| d.next().is_some()).unwrap_or(true) {
+                if path
+                    .read_dir()
+                    .map(|mut d| d.next().is_some())
+                    .unwrap_or(true)
+                {
                     failures.push(path.display().to_string());
                 }
             }
@@ -441,7 +454,13 @@ pub fn save_config_profile(name: String) -> Result<String, String> {
     // Sanitize to a safe filename - profile names come from free-text input.
     let safe_name: String = name
         .chars()
-        .map(|c| if c.is_alphanumeric() || c == ' ' || c == '-' || c == '_' { c } else { '_' })
+        .map(|c| {
+            if c.is_alphanumeric() || c == ' ' || c == '-' || c == '_' {
+                c
+            } else {
+                '_'
+            }
+        })
         .collect();
     let safe_name = safe_name.trim();
     if safe_name.is_empty() {
@@ -491,7 +510,12 @@ pub fn delete_all_data(app: AppHandle) -> Result<(), String> {
     let failures = force_delete_dir_contents(&root);
     let _ = std::fs::remove_dir(&root);
 
-    if root.exists() && root.read_dir().map(|mut d| d.next().is_none()).unwrap_or(false) {
+    if root.exists()
+        && root
+            .read_dir()
+            .map(|mut d| d.next().is_none())
+            .unwrap_or(false)
+    {
         // Directory itself survives (Windows sometimes needs a beat to
         // release a just-emptied directory handle) but is empty - fine.
     }

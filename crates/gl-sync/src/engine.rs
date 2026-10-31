@@ -63,7 +63,14 @@ impl SyncEngine {
 
         for (instance_id, instance_dir) in instance_dirs {
             for target in &pack.targets {
-                self.apply_target(&mut report, &pack, instance_id, instance_dir, target, dry_run)?;
+                self.apply_target(
+                    &mut report,
+                    &pack,
+                    instance_id,
+                    instance_dir,
+                    target,
+                    dry_run,
+                )?;
             }
         }
         Ok(report)
@@ -85,14 +92,32 @@ impl SyncEngine {
             SyncTarget::DirLink { relative_path } => {
                 let store_dir = self.registry.target_store_path(&pack.id, &label);
                 let instance_path = instance_dir.join(relative_path);
-                dir_link::apply(report, instance_id, &label, &store_dir, &instance_path, adopt, dry_run)
+                dir_link::apply(
+                    report,
+                    instance_id,
+                    &label,
+                    &store_dir,
+                    &instance_path,
+                    adopt,
+                    dry_run,
+                )
             }
             SyncTarget::FileCopy { relative_path } => {
                 let store_file = self.registry.target_store_path(&pack.id, &label);
                 let instance_path = instance_dir.join(relative_path);
-                file_copy::apply(report, instance_id, &label, &store_file, &instance_path, dry_run)
+                file_copy::apply(
+                    report,
+                    instance_id,
+                    &label,
+                    &store_file,
+                    &instance_path,
+                    dry_run,
+                )
             }
-            SyncTarget::FileMerge { relative_path, format } => match format {
+            SyncTarget::FileMerge {
+                relative_path,
+                format,
+            } => match format {
                 MergeFormat::OptionsTxt => {
                     let store_file = self.registry.target_store_path(&pack.id, &label);
                     let instance_path = instance_dir.join(relative_path);
@@ -134,16 +159,40 @@ impl SyncEngine {
             match target {
                 SyncTarget::DirLink { relative_path } => {
                     let instance_path = instance_dir.join(relative_path);
-                    dir_link::detach(&mut report, instance_id, &label, &instance_path, mode, false)?;
+                    dir_link::detach(
+                        &mut report,
+                        instance_id,
+                        &label,
+                        &instance_path,
+                        mode,
+                        false,
+                    )?;
                 }
                 SyncTarget::FileCopy { relative_path } => {
                     let instance_path = instance_dir.join(relative_path);
-                    file_copy::detach(&mut report, instance_id, &label, &instance_path, mode, false)?;
+                    file_copy::detach(
+                        &mut report,
+                        instance_id,
+                        &label,
+                        &instance_path,
+                        mode,
+                        false,
+                    )?;
                 }
-                SyncTarget::FileMerge { relative_path, format } => match format {
+                SyncTarget::FileMerge {
+                    relative_path,
+                    format,
+                } => match format {
                     MergeFormat::OptionsTxt => {
                         let instance_path = instance_dir.join(relative_path);
-                        options_merge::detach(&mut report, instance_id, &label, &instance_path, mode, false)?;
+                        options_merge::detach(
+                            &mut report,
+                            instance_id,
+                            &label,
+                            &instance_path,
+                            mode,
+                            false,
+                        )?;
                     }
                 },
                 SyncTarget::Mods { .. } => {

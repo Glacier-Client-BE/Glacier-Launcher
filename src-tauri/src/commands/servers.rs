@@ -146,6 +146,8 @@ pub async fn ping_java_server(host: String, port: u16) -> ServerStatus {
 /// Scans for Java Edition "Open to LAN" worlds broadcast via UDP multicast
 /// on 224.0.2.60:4445 for `scan_ms` milliseconds (default 5000).
 #[tauri::command]
-pub async fn scan_lan_games(scan_ms: Option<u64>) -> Result<Vec<gl_integrations::lan::LanGame>, String> {
+pub async fn scan_lan_games(
+    scan_ms: Option<u64>,
+) -> Result<Vec<gl_integrations::lan::LanGame>, String> {
     gl_integrations::lan::scan_lan_games(scan_ms.unwrap_or(5000)).await
 }

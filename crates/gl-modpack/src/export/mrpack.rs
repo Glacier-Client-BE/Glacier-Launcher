@@ -103,8 +103,16 @@ pub fn export_mrpack(instance_dir: &Path, dest_path: &Path, opts: &ExportOptions
     zip.write_all(serde_json::to_string_pretty(&index)?.as_bytes())?;
 
     for path in &override_mod_files {
-        let filename = path.file_name().and_then(|n| n.to_str()).unwrap_or_default();
-        add_file_to_zip(&mut zip, path, &format!("overrides/mods/{filename}"), options)?;
+        let filename = path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or_default();
+        add_file_to_zip(
+            &mut zip,
+            path,
+            &format!("overrides/mods/{filename}"),
+            options,
+        )?;
     }
 
     for dir_name in OVERRIDE_DIRS {

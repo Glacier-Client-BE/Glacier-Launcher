@@ -88,7 +88,9 @@ fn version_cmp(a: &str, b: &str) -> std::cmp::Ordering {
                         if !c.is_ascii_digit() {
                             break;
                         }
-                        an = an.saturating_mul(10).saturating_add(c.to_digit(10).unwrap() as u64);
+                        an = an
+                            .saturating_mul(10)
+                            .saturating_add(c.to_digit(10).unwrap() as u64);
                         ai.next();
                     }
                     let mut bn: u64 = 0;
@@ -96,7 +98,9 @@ fn version_cmp(a: &str, b: &str) -> std::cmp::Ordering {
                         if !c.is_ascii_digit() {
                             break;
                         }
-                        bn = bn.saturating_mul(10).saturating_add(c.to_digit(10).unwrap() as u64);
+                        bn = bn
+                            .saturating_mul(10)
+                            .saturating_add(c.to_digit(10).unwrap() as u64);
                         bi.next();
                     }
                     match an.cmp(&bn) {
@@ -104,7 +108,11 @@ fn version_cmp(a: &str, b: &str) -> std::cmp::Ordering {
                         other => return other,
                     }
                 } else if xd != yd {
-                    return if xd { Ordering::Greater } else { Ordering::Less };
+                    return if xd {
+                        Ordering::Greater
+                    } else {
+                        Ordering::Less
+                    };
                 } else {
                     ai.next();
                     bi.next();

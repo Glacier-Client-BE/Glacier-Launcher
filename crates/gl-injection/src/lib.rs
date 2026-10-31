@@ -42,8 +42,8 @@ use windows::Win32::Foundation::GENERIC_ALL;
 use windows::Win32::Foundation::{CloseHandle, FILETIME, HANDLE, HLOCAL, LUID};
 use windows::Win32::Security::Authorization::{
     BuildTrusteeWithNameW, GetNamedSecurityInfoW, SetEntriesInAclW, SetNamedSecurityInfoW,
-    EXPLICIT_ACCESS_W, SET_ACCESS,
-    SE_FILE_OBJECT, TRUSTEE_IS_NAME, TRUSTEE_IS_WELL_KNOWN_GROUP, TRUSTEE_W,
+    EXPLICIT_ACCESS_W, SET_ACCESS, SE_FILE_OBJECT, TRUSTEE_IS_NAME, TRUSTEE_IS_WELL_KNOWN_GROUP,
+    TRUSTEE_W,
 };
 use windows::Win32::Security::{
     AdjustTokenPrivileges, LookupPrivilegeValueW, SE_PRIVILEGE_ENABLED, TOKEN_ADJUST_PRIVILEGES,
@@ -757,9 +757,7 @@ pub fn process_start_time_unix(process_id: u32) -> Option<u64> {
     let mut exit = FILETIME::default();
     let mut kernel = FILETIME::default();
     let mut user = FILETIME::default();
-    let ok = unsafe {
-        GetProcessTimes(handle.0, &mut creation, &mut exit, &mut kernel, &mut user)
-    };
+    let ok = unsafe { GetProcessTimes(handle.0, &mut creation, &mut exit, &mut kernel, &mut user) };
     if ok.is_err() {
         return None;
     }

@@ -111,7 +111,7 @@ pub async fn search_mods(
             let Some(cf) = curseforge else {
                 return Err(crate::error::ModpackError::MissingApiKey);
             };
-            let page = if limit == 0 { 0 } else { offset / limit };
+            let page = offset.checked_div(limit).unwrap_or(0);
             let result = cf
                 .search(
                     crate::curseforge::GAME_ID_JAVA,
@@ -152,9 +152,9 @@ pub async fn fetch_versions(
             let Some(cf) = curseforge else {
                 return Err(crate::error::ModpackError::MissingApiKey);
             };
-            let mod_id: i32 = project_id
-                .parse()
-                .map_err(|_| crate::error::ModpackError::Other("invalid CurseForge mod id".into()))?;
+            let mod_id: i32 = project_id.parse().map_err(|_| {
+                crate::error::ModpackError::Other("invalid CurseForge mod id".into())
+            })?;
             let files = cf.get_files(mod_id).await?;
             Ok(files
                 .into_iter()

@@ -49,7 +49,9 @@ pub fn parse_version_db(text: &str) -> Vec<WuVersion> {
             continue;
         }
         let lower = line.to_ascii_lowercase();
-        if lower.starts_with("releases") || lower.starts_with("betas") || lower.starts_with("previews")
+        if lower.starts_with("releases")
+            || lower.starts_with("betas")
+            || lower.starts_with("previews")
         {
             continue;
         }
@@ -106,8 +108,12 @@ Previews
         let versions = parse_version_db(FIXTURE);
         // Only the two legitimate x64, non-EAppx lines should survive.
         assert_eq!(versions.len(), 2);
-        assert!(versions.iter().any(|v| v.version == "1.20.0.0" && v.channel == "Release"));
-        assert!(versions.iter().any(|v| v.version == "1.20.10.0" && v.channel == "Preview"));
+        assert!(versions
+            .iter()
+            .any(|v| v.version == "1.20.0.0" && v.channel == "Release"));
+        assert!(versions
+            .iter()
+            .any(|v| v.version == "1.20.10.0" && v.channel == "Preview"));
     }
 
     #[test]

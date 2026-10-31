@@ -70,11 +70,7 @@ pub fn effective(instance: &JavaInstance, defaults: &GlobalJavaDefaults) -> Effe
     let (use_custom_resolution, window_width, window_height) =
         if let Some((width, height)) = s.resolution {
             overridden.push("resolution");
-            (
-                s.use_custom_resolution.unwrap_or(true),
-                width,
-                height,
-            )
+            (s.use_custom_resolution.unwrap_or(true), width, height)
         } else if let Some(explicit) = s.use_custom_resolution {
             overridden.push("resolution");
             (explicit, defaults.window_width, defaults.window_height)
@@ -130,7 +126,11 @@ impl EffectiveLaunchConfig {
     /// Build a `LaunchOptions` from this resolved config, filling in the
     /// remaining fields (`extra_jvm_args`, `auth_xuid`) the caller already
     /// has to hand.
-    pub fn into_launch_options(self, extra_jvm_args: Vec<String>, auth_xuid: String) -> LaunchOptions {
+    pub fn into_launch_options(
+        self,
+        extra_jvm_args: Vec<String>,
+        auth_xuid: String,
+    ) -> LaunchOptions {
         LaunchOptions {
             max_ram_mb: self.max_ram_mb,
             min_ram_mb: self.min_ram_mb,

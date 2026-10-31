@@ -124,7 +124,8 @@ mod tests {
             }"#,
         )
         .unwrap();
-        zip.start_file("overrides/config/foo.json", options).unwrap();
+        zip.start_file("overrides/config/foo.json", options)
+            .unwrap();
         zip.write_all(b"{}").unwrap();
         zip.finish().unwrap();
     }

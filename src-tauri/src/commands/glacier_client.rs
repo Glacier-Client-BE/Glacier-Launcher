@@ -47,9 +47,11 @@ pub async fn get_glacier_manifest(
 pub async fn get_glacier_download_counts(
     state: State<'_, AppState>,
 ) -> Result<std::collections::HashMap<String, u64>, String> {
-    Ok(gl_clients::glacier_client::fetch_download_counts(&state.http)
-        .await
-        .unwrap_or_default())
+    Ok(
+        gl_clients::glacier_client::fetch_download_counts(&state.http)
+            .await
+            .unwrap_or_default(),
+    )
 }
 
 /// Downloads and SHA-256-verifies one Glacier Client version's jar into

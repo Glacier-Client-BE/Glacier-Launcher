@@ -321,7 +321,10 @@ async fn start_minecraft(info: &BedrockPackageInfo) -> Result<u32> {
 
     let mut strategies: Vec<(&str, Strategy)> = Vec::new();
     if is_gdk {
-        strategies.push(("Invoke-CommandInDesktopPackage (GDK)", Strategy::DesktopPackage));
+        strategies.push((
+            "Invoke-CommandInDesktopPackage (GDK)",
+            Strategy::DesktopPackage,
+        ));
     }
     strategies.push(("minecraft:// URI", Strategy::Uri));
     if !is_gdk {

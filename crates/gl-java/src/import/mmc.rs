@@ -52,8 +52,12 @@ fn read_instance(dir: &Path) -> Option<ImportCandidate> {
         return None;
     }
 
-    let name = parse_instance_cfg_name(&cfg_path)
-        .unwrap_or_else(|| dir.file_name().unwrap_or_default().to_string_lossy().into_owned());
+    let name = parse_instance_cfg_name(&cfg_path).unwrap_or_else(|| {
+        dir.file_name()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .into_owned()
+    });
 
     let mc_dir = if dir.join(".minecraft").is_dir() {
         dir.join(".minecraft")

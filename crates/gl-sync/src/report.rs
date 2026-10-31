@@ -79,6 +79,8 @@ impl SyncReport {
     }
 
     pub fn has_failures(&self) -> bool {
-        self.entries.iter().any(|e| e.action == ReportAction::Failed)
+        self.entries
+            .iter()
+            .any(|e| e.action == ReportAction::Failed)
     }
 }

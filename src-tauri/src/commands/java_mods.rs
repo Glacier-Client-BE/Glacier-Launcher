@@ -332,7 +332,11 @@ async fn resolve_client_mod(
                 .await
                 .map_err(|e| e.to_string())?
                 .ok_or_else(unavailable)?;
-            Ok((version.url.clone(), version.file_name.clone(), Some(version)))
+            Ok((
+                version.url.clone(),
+                version.file_name.clone(),
+                Some(version),
+            ))
         }
         // NoRisk publishes a standalone mod per game version and loader; its
         // website reads the list from this endpoint.
@@ -350,12 +354,17 @@ async fn resolve_client_mod(
                 .as_array()
                 .and_then(|mods| {
                     mods.iter().find(|m| {
-                        m["mcVersion"].as_str() == Some(game_version) && m["loader"].as_str() == Some(loader)
+                        m["mcVersion"].as_str() == Some(game_version)
+                            && m["loader"].as_str() == Some(loader)
                     })
                 })
                 .and_then(|m| m["href"].as_str())
                 .ok_or_else(unavailable)?;
-            Ok((href.to_string(), format!("nrc-standalone-{game_version}-{loader}.jar"), None))
+            Ok((
+                href.to_string(),
+                format!("nrc-standalone-{game_version}-{loader}.jar"),
+                None,
+            ))
         }
         // Dawn's standalone mod is a small Fabric loader (1.17.1+) that
         // fetches the client itself at startup.
@@ -384,7 +393,8 @@ pub async fn ensure_client_mod_installed(
     game_version: String,
     loader: String,
 ) -> Result<bool, String> {
-    let prefix = client_mod_prefix(&client).ok_or_else(|| format!("{client} isn't a client Glacier can install."))?;
+    let prefix = client_mod_prefix(&client)
+        .ok_or_else(|| format!("{client} isn't a client Glacier can install."))?;
     let mods_dir = instance_mods_dir(&state, &instance_id)?;
     let already = std::fs::read_dir(&mods_dir)
         .map(|entries| {
@@ -398,7 +408,8 @@ pub async fn ensure_client_mod_installed(
         return Ok(false);
     }
 
-    let (url, file_name, version) = resolve_client_mod(&state, &client, &game_version, &loader).await?;
+    let (url, file_name, version) =
+        resolve_client_mod(&state, &client, &game_version, &loader).await?;
     std::fs::create_dir_all(&mods_dir).map_err(|e| e.to_string())?;
     let dest = mods_dir.join(super::safe_file_name(&file_name)?);
     let req = DownloadRequest::new(url, dest).with_label(file_name.clone());
@@ -560,8 +571,13 @@ pub async fn update_all_java_mods(
 ) -> Result<Vec<String>, String> {
     let mut installed = Vec::new();
     for u in updates {
-        let name = update_java_mod(state.clone(), instance_id.clone(), u.old_file_name, u.version)
-            .await?;
+        let name = update_java_mod(
+            state.clone(),
+            instance_id.clone(),
+            u.old_file_name,
+            u.version,
+        )
+        .await?;
         installed.push(name);
     }
     Ok(installed)
@@ -584,7 +600,7 @@ pub async fn set_all_java_mods_enabled(
     let report = mod_analyzer::analyze_dir(&mods_dir);
     let mut toggled = 0usize;
     for m in &report.mods {
-        if m.disabled == !enabled {
+        if m.disabled != enabled {
             // Already in the requested state.
             continue;
         }
@@ -692,7 +708,9 @@ pub async fn install_local_mod_jar(
     std::fs::create_dir_all(&mods_dir).map_err(|e| e.to_string())?;
     let dest = mods_dir.join(&file_name);
     if dest.exists() {
-        return Err(format!("{file_name} is already installed in this instance."));
+        return Err(format!(
+            "{file_name} is already installed in this instance."
+        ));
     }
     std::fs::copy(&source, &dest).map_err(|e| e.to_string())?;
     Ok(file_name)

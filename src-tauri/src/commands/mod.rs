@@ -56,8 +56,16 @@ pub fn safe_file_name(name: &str) -> Result<&str, String> {
 /// `root` (after resolving symlinks and `..`). Used before any command deletes
 /// a path that the frontend supplied, so a crafted or stale path can't reach
 /// outside the folder the feature actually manages.
-pub fn ensure_direct_child(root: &std::path::Path, target: &std::path::Path) -> Result<std::path::PathBuf, String> {
-    let refuse = || format!("Refusing to touch {}: it is not inside the expected folder.", target.display());
+pub fn ensure_direct_child(
+    root: &std::path::Path,
+    target: &std::path::Path,
+) -> Result<std::path::PathBuf, String> {
+    let refuse = || {
+        format!(
+            "Refusing to touch {}: it is not inside the expected folder.",
+            target.display()
+        )
+    };
     let root_c = root.canonicalize().map_err(|_| refuse())?;
     let target_c = target.canonicalize().map_err(|_| refuse())?;
     if target_c.parent() == Some(root_c.as_path()) {
@@ -95,7 +103,11 @@ mod tests {
         assert!(ensure_direct_child(&root, &root.join("a.json")).is_ok());
         assert!(ensure_direct_child(&root, &d.join("outside.json")).is_err());
         assert!(ensure_direct_child(&root, &root.join("sub")).is_ok());
-        assert!(ensure_direct_child(&root, &root.join("sub").join("..").join("..").join("outside.json")).is_err());
+        assert!(ensure_direct_child(
+            &root,
+            &root.join("sub").join("..").join("..").join("outside.json")
+        )
+        .is_err());
         assert!(ensure_direct_child(&root, &root.join("missing.json")).is_err());
         let _ = std::fs::remove_dir_all(&d);
     }

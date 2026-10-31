@@ -85,7 +85,10 @@ fn read_profile(dir: &Path) -> Option<ImportCandidate> {
     };
 
     let name = if name.trim().is_empty() {
-        dir.file_name().unwrap_or_default().to_string_lossy().into_owned()
+        dir.file_name()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .into_owned()
     } else {
         name
     };

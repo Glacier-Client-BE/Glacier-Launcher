@@ -168,9 +168,13 @@ mod tests {
     #[test]
     fn listing_creates_its_directory_and_returns_empty() {
         let dir = tempfile::tempdir().unwrap();
-        assert!(list_packs(dir.path(), PackKind::ResourcePack).unwrap().is_empty());
+        assert!(list_packs(dir.path(), PackKind::ResourcePack)
+            .unwrap()
+            .is_empty());
         assert!(dir.path().join("resourcepacks").is_dir());
-        assert!(list_packs(dir.path(), PackKind::ShaderPack).unwrap().is_empty());
+        assert!(list_packs(dir.path(), PackKind::ShaderPack)
+            .unwrap()
+            .is_empty());
         assert!(dir.path().join("shaderpacks").is_dir());
     }
 
@@ -187,7 +191,9 @@ mod tests {
         assert_eq!(listed[0].name, "incoming.zip");
 
         delete_pack(&dest).unwrap();
-        assert!(list_packs(dir.path(), PackKind::ResourcePack).unwrap().is_empty());
+        assert!(list_packs(dir.path(), PackKind::ResourcePack)
+            .unwrap()
+            .is_empty());
     }
 
     #[test]
@@ -208,9 +214,12 @@ mod tests {
     #[test]
     fn importing_a_missing_source_is_an_error() {
         let dir = tempfile::tempdir().unwrap();
-        let err =
-            import_pack(dir.path(), PackKind::ResourcePack, &dir.path().join("nope.zip"))
-                .unwrap_err();
+        let err = import_pack(
+            dir.path(),
+            PackKind::ResourcePack,
+            &dir.path().join("nope.zip"),
+        )
+        .unwrap_err();
         assert!(err.to_string().contains("Pack file not found"));
     }
 
@@ -220,6 +229,8 @@ mod tests {
         let rp = dir.path().join("resourcepacks");
         fs::create_dir_all(&rp).unwrap();
         fs::write(rp.join("notes.txt"), b"ignored").unwrap();
-        assert!(list_packs(dir.path(), PackKind::ResourcePack).unwrap().is_empty());
+        assert!(list_packs(dir.path(), PackKind::ResourcePack)
+            .unwrap()
+            .is_empty());
     }
 }

@@ -630,9 +630,9 @@
     "semantic_hash": ""
   },
   "frontend/src/App.svelte": {
-    "mtime": 1793399898.062052,
-    "seen": 1793399974.5801728,
-    "ast_hash": "0a720ecf03321fd275cd65a4b77a4ea3",
+    "mtime": 1793403259.9534945,
+    "seen": 1793403353.5043738,
+    "ast_hash": "d1ee86d89cc80e756f00df45d71d47aa",
     "semantic_hash": ""
   },
   "frontend/src/GameConsoleApp.svelte": {
@@ -750,9 +750,9 @@
     "semantic_hash": ""
   },
   "frontend/src/lib/LauncherClientsView.svelte": {
-    "mtime": 1793389731.449471,
-    "seen": 1793390074.1425402,
-    "ast_hash": "56c2b662d2b93fddd025da9ed6d2c346",
+    "mtime": 1793403259.7690034,
+    "seen": 1793403353.5043738,
+    "ast_hash": "a1162894427cb071e780b6f31cd47bde",
     "semantic_hash": ""
   },
   "frontend/src/lib/LevelDatEditorView.svelte": {
@@ -1128,9 +1128,9 @@
     "semantic_hash": ""
   },
   "src-tauri/src/commands/launchers.rs": {
-    "mtime": 1793399984.6996644,
-    "seen": 1793400102.567833,
-    "ast_hash": "829f4728627b3d15d163713f0b075985",
+    "mtime": 1793403175.6862366,
+    "seen": 1793403353.5377314,
+    "ast_hash": "c21d4963033d676320bf371768b4815e",
     "semantic_hash": ""
   },
   "src-tauri/src/commands/leveldat.rs": {
@@ -1986,9 +1986,9 @@
     "semantic_hash": ""
   },
   "video/src/Release.tsx": {
-    "mtime": 1793392406.1922247,
-    "seen": 1793396178.6710317,
-    "ast_hash": "1cff850f03ff25aaaa3904e6926603c0",
+    "mtime": 1793402009.6401188,
+    "seen": 1793403353.5543854,
+    "ast_hash": "176fc35bd015c9cc31f2f501358daf08",
     "semantic_hash": ""
   },
   "video/src/Root.tsx": {
@@ -2136,9 +2136,9 @@
     "semantic_hash": ""
   },
   "video/public/music.wav": {
-    "mtime": 1793395235.1448748,
-    "seen": 1793396178.6943266,
-    "ast_hash": "946d0a7242da3983a097f42c26804c42",
+    "mtime": 1793402060.8666387,
+    "seen": 1793403353.5877113,
+    "ast_hash": "9ec59ecd1066b735f2e8dbeef975a85d",
     "semantic_hash": ""
   },
   "video/public/vo/vo0.mp3": {
@@ -2205,6 +2205,84 @@
     "mtime": 1793399311.0249205,
     "seen": 1793399974.644231,
     "ast_hash": "d8e8216fea878150ea165959e9d1c9f2",
+    "semantic_hash": ""
+  },
+  "video/scripts/music.py": {
+    "mtime": 1793402039.231367,
+    "seen": 1793403353.5543854,
+    "ast_hash": "d296440989314ca2a1174d502a7a2906",
+    "semantic_hash": ""
+  },
+  "video/src/scenes/Clients.tsx": {
+    "mtime": 1793402064.6699035,
+    "seen": 1793403353.5543854,
+    "ast_hash": "0ff229b2d140a9db82ae2d40bb1accd4",
+    "semantic_hash": ""
+  },
+  "video/public/clients/dawn.png": {
+    "mtime": 1793402031.4418252,
+    "seen": 1793403353.5787907,
+    "ast_hash": "8282dddf3708a4c41772762e01025057",
+    "semantic_hash": ""
+  },
+  "video/public/clients/essential.webp": {
+    "mtime": 1793402031.4273047,
+    "seen": 1793403353.5787907,
+    "ast_hash": "34b72d7fd9eddf30b6586e8d677de3de",
+    "semantic_hash": ""
+  },
+  "video/public/clients/flarial.svg": {
+    "mtime": 1793402031.3928955,
+    "seen": 1793403353.5787907,
+    "ast_hash": "4393cfece8362fd87365d8856a053a3d",
+    "semantic_hash": ""
+  },
+  "video/public/clients/horizon.svg": {
+    "mtime": 1793402031.4585142,
+    "seen": 1793403353.5787907,
+    "ast_hash": "3dd638b7346ab8d3668cfbdf5380ac40",
+    "semantic_hash": ""
+  },
+  "video/public/clients/latite.png": {
+    "mtime": 1793402031.411646,
+    "seen": 1793403353.5787907,
+    "ast_hash": "f333be1866c3634fd783375fcad9db5b",
+    "semantic_hash": ""
+  },
+  "video/public/clients/lunar.png": {
+    "mtime": 1793402031.477816,
+    "seen": 1793403353.5787907,
+    "ast_hash": "76082552b9604d6b2d5f891e99c43b26",
+    "semantic_hash": ""
+  },
+  "video/public/clients/norisk.png": {
+    "mtime": 1793402031.4418252,
+    "seen": 1793403353.5787907,
+    "ast_hash": "d8e8216fea878150ea165959e9d1c9f2",
+    "semantic_hash": ""
+  },
+  "video/public/shots/bedrock-clients.png": {
+    "mtime": 1793401981.611265,
+    "seen": 1793403353.5877113,
+    "ast_hash": "f468e64d6561f956671314f7997d03d5",
+    "semantic_hash": ""
+  },
+  "video/public/shots/bedrock-home.png": {
+    "mtime": 1793401980.694439,
+    "seen": 1793403353.5877113,
+    "ast_hash": "e3dc47d0ab7a014a360b02b765b81f1f",
+    "semantic_hash": ""
+  },
+  "video/public/shots/java-clients.png": {
+    "mtime": 1793401979.7093995,
+    "seen": 1793403353.5877113,
+    "ast_hash": "cb6f48a9e85ce9e78df9e0562e53a861",
+    "semantic_hash": ""
+  },
+  "video/public/vo/vo-clients.mp3": {
+    "mtime": 1793401994.6748345,
+    "seen": 1793403353.5877113,
+    "ast_hash": "6efac41476d534b759607ad3a75ce741",
     "semantic_hash": ""
   }
 }

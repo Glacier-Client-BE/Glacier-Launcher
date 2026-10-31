@@ -78,7 +78,7 @@
 
 <div class="search-overlay">
   <div class="onboarding-box" role="dialog" aria-modal="true" aria-labelledby="onboarding-title">
-    <img class="onboarding-logo" src="/images/icon.png" alt="" />
+    <img class="onboarding-logo" src="/images/icon.svg" alt="" />
     <span class="onboarding-title" id="onboarding-title">Welcome to Glacier</span>
 
     <div class="onboarding-progress">
@@ -91,17 +91,17 @@
       <span class="onboarding-lede">Let's get you set up. Pick your edition and we'll tailor the launcher to how you play.</span>
       <div class="onboarding-edition-row">
         <button class="onboarding-edition-tile" class:selected={edition === 'bedrock'} onclick={() => pickEdition('bedrock')}>
-          <img class="chip-icon onboarding-icon-bedrock" src="images/mc-logo.png" alt="">
+          <img class="chip-icon onboarding-icon-bedrock" src="images/mc-logo.svg" alt="">
           <span>Bedrock</span>
         </button>
         <button class="onboarding-edition-tile" class:selected={edition === 'java'} onclick={() => pickEdition('java')}>
-          <img class="chip-icon onboarding-icon-java" src="images/mc-java-logo.png" alt="">
+          <img class="chip-icon onboarding-icon-java" src="images/mc-java-logo.svg" alt="">
           <span>Java</span>
         </button>
         <button class="onboarding-edition-tile" class:selected={edition === 'both'} onclick={() => pickEdition('both')}>
           <span class="onboarding-both-icons">
-            <img class="chip-icon onboarding-icon-bedrock" src="images/mc-logo.png" alt="">
-            <img class="chip-icon onboarding-icon-java" src="images/mc-java-logo.png" alt="">
+            <img class="chip-icon onboarding-icon-bedrock" src="images/mc-logo.svg" alt="">
+            <img class="chip-icon onboarding-icon-java" src="images/mc-java-logo.svg" alt="">
           </span>
           <span>{t('x.both', settings.Language)}</span>
         </button>

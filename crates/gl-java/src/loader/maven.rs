@@ -52,16 +52,17 @@ impl MavenCoordinate {
             ),
             _ => format!("{}-{}.{}", self.artifact, self.version, self.extension),
         };
-        format!(
-            "{group_path}/{}/{}/{file}",
-            self.artifact, self.version
-        )
+        format!("{group_path}/{}/{}/{file}", self.artifact, self.version)
     }
 
     /// Full download URL against a maven repository base (no trailing slash
     /// required on `base_repo`).
     pub fn url(&self, base_repo: &str) -> String {
-        format!("{}/{}", base_repo.trim_end_matches('/'), self.relative_path())
+        format!(
+            "{}/{}",
+            base_repo.trim_end_matches('/'),
+            self.relative_path()
+        )
     }
 }
 
@@ -86,8 +87,7 @@ mod tests {
     #[test]
     fn parses_classifier_and_extension() {
         let c =
-            MavenCoordinate::parse("net.minecraftforge:forge:1.20.1-47.2.0:installer@jar")
-                .unwrap();
+            MavenCoordinate::parse("net.minecraftforge:forge:1.20.1-47.2.0:installer@jar").unwrap();
         assert_eq!(c.classifier.as_deref(), Some("installer"));
         assert_eq!(c.extension, "jar");
         assert_eq!(

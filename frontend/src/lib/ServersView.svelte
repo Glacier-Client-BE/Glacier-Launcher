@@ -136,15 +136,15 @@
    *  icons now point at the real server-brand images shipped in
    *  /images/servers/ instead of generic Font Awesome glyphs. */
   const _serverSuggestions: SavedServer[] = [
-    { id: '', name: 'Hive', address: 'geo.hivebedrock.network', port: 19132, icon: '/images/servers/hive.png', icon_color: '#f5a623', favorite: false, tags: [] },
-    { id: '', name: 'CubeCraft', address: 'play.cubecraft.net', port: 19132, icon: '/images/servers/cubecraft.png', icon_color: '#4a90e2', favorite: false, tags: [] },
-    { id: '', name: 'Mineplex', address: 'mco.mineplex.com', port: 19132, icon: '/images/servers/mineplex.png', icon_color: '#e94e4e', favorite: false, tags: [] },
-    { id: '', name: 'Lifeboat', address: 'play.lbsg.net', port: 19132, icon: '/images/servers/lifeboat.png', icon_color: '#00bcd4', favorite: false, tags: [] },
-    { id: '', name: 'Galaxite', address: 'play.galaxite.net', port: 19132, icon: '/images/servers/galaxite.png', icon_color: '#9b51e0', favorite: false, tags: [] },
-    { id: '', name: 'NetherGames', address: 'play.nethergames.org', port: 19132, icon: '/images/servers/nethergames.png', icon_color: '#2ecc71', favorite: false, tags: [] },
-    { id: '', name: 'Zeqa', address: 'zeqa.net', port: 19132, icon: '/images/servers/zeqa.png', icon_color: '#c94ee0', favorite: false, tags: [] },
+    { id: '', name: 'Hive', address: 'geo.hivebedrock.network', port: 19132, icon: '/images/servers/hive.svg', icon_color: '#f5a623', favorite: false, tags: [] },
+    { id: '', name: 'CubeCraft', address: 'play.cubecraft.net', port: 19132, icon: '/images/servers/cubecraft.svg', icon_color: '#4a90e2', favorite: false, tags: [] },
+    { id: '', name: 'Mineplex', address: 'mco.mineplex.com', port: 19132, icon: '/images/servers/mineplex.svg', icon_color: '#e94e4e', favorite: false, tags: [] },
+    { id: '', name: 'Lifeboat', address: 'play.lbsg.net', port: 19132, icon: '/images/servers/lifeboat.svg', icon_color: '#00bcd4', favorite: false, tags: [] },
+    { id: '', name: 'Galaxite', address: 'play.galaxite.net', port: 19132, icon: '/images/servers/galaxite.svg', icon_color: '#9b51e0', favorite: false, tags: [] },
+    { id: '', name: 'NetherGames', address: 'play.nethergames.org', port: 19132, icon: '/images/servers/nethergames.svg', icon_color: '#2ecc71', favorite: false, tags: [] },
+    { id: '', name: 'Zeqa', address: 'zeqa.net', port: 19132, icon: '/images/servers/zeqa.svg', icon_color: '#c94ee0', favorite: false, tags: [] },
     { id: '', name: 'Mineville', address: 'play.mineville.club', port: 19132, icon: '/images/servers/mineville.png', icon_color: '#3ddc97', favorite: false, tags: [] },
-    { id: '', name: 'Ectary', address: 'play.ectary.net', port: 19132, icon: '/images/servers/ectary.png', icon_color: '#6c7ae0', favorite: false, tags: [] },
+    { id: '', name: 'Ectary', address: 'play.ectary.net', port: 19132, icon: '/images/servers/ectary.svg', icon_color: '#6c7ae0', favorite: false, tags: [] },
   ]
 
   // Live status keyed by "address:port". A present-but-null value means a ping

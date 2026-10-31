@@ -122,10 +122,7 @@ impl ModrinthClient {
     pub async fn get_project_title(&self, project_id: &str) -> Result<Option<String>> {
         let url = format!("{BASE_URL}/project/{project_id}");
         let json = self.get_json(&url).await?;
-        Ok(json
-            .get("title")
-            .and_then(Value::as_str)
-            .map(|s| html_decode(s)))
+        Ok(json.get("title").and_then(Value::as_str).map(html_decode))
     }
 
     /// Looks up the exact version matching a jar's sha1 hash (feature 11:

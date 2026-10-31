@@ -96,13 +96,13 @@
         : {
             key: 'clientlib',
             icon: 'fa-solid fa-wand-sparkles',
-            img: edition === 'bedrock' ? '/images/clients/levi-lamina.png' : undefined,
+            img: edition === 'bedrock' ? '/images/clients/levi-lamina.svg' : undefined,
             label: 'Clients',
           },
       {
         key: 'tweaks',
         icon: 'fa-solid fa-wand-magic-sparkles',
-        img: edition === 'java' ? '/images/vanilla-tweaks.png' : edition === 'bedrock' ? '/images/bedrock-tweaks.png' : undefined,
+        img: edition === 'java' ? '/images/vanilla-tweaks.svg' : edition === 'bedrock' ? '/images/bedrock-tweaks.svg' : undefined,
         label: 'Tweaks',
       },
       edition === 'java' ? null : { key: 'packs', icon: 'fa-solid fa-boxes-stacked', label: 'Manage' },

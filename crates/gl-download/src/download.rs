@@ -235,7 +235,8 @@ async fn download_once(
 
     let mut request_builder = client.inner().get(&req.url);
     if existing_len > 0 {
-        request_builder = request_builder.header(reqwest::header::RANGE, format!("bytes={existing_len}-"));
+        request_builder =
+            request_builder.header(reqwest::header::RANGE, format!("bytes={existing_len}-"));
     }
     let response = request_builder.send().await.map_err(DownloadError::Http)?;
 
@@ -314,7 +315,9 @@ async fn download_once(
 
     while let Some(chunk) = stream.next().await {
         if cancel.is_cancelled() {
-            file.flush().await.map_err(|e| DownloadError::io(tmp_path, e))?;
+            file.flush()
+                .await
+                .map_err(|e| DownloadError::io(tmp_path, e))?;
             return Err(DownloadError::Cancelled);
         }
         let chunk = chunk.map_err(DownloadError::Http)?;
@@ -359,7 +362,11 @@ async fn download_once(
 /// response header. `None` for a missing/malformed header or a server that
 /// doesn't know the total (`.../*`).
 fn content_range_total(response: &reqwest::Response) -> Option<u64> {
-    let value = response.headers().get(reqwest::header::CONTENT_RANGE)?.to_str().ok()?;
+    let value = response
+        .headers()
+        .get(reqwest::header::CONTENT_RANGE)?
+        .to_str()
+        .ok()?;
     let total_part = value.rsplit('/').next()?;
     total_part.parse::<u64>().ok()
 }

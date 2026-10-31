@@ -448,7 +448,7 @@
       {#each activeList as v (`${v.version}|${v.channel}`)}
         <div class="client-card client-active">
           <div class="client-card-header">
-            <div class="client-card-icon oderso-icon"><img src="images/mc-logo.png" alt=""></div>
+            <div class="client-card-icon oderso-icon"><img src="images/mc-logo.svg" alt=""></div>
             <div class="client-card-meta">
               <span class="client-card-name">Minecraft {displayName(v)}</span>
               <span class="client-card-sub">
@@ -475,7 +475,7 @@
     {#each restList as v (`${v.version}|${v.channel}`)}
       <div class="client-card {v.error_message ? 'error-row' : ''}">
         <div class="client-card-header">
-          <div class="client-card-icon oderso-icon"><img src="images/mc-logo.png" alt=""></div>
+          <div class="client-card-icon oderso-icon"><img src="images/mc-logo.svg" alt=""></div>
           <div class="client-card-meta">
             <span class="client-card-name">Minecraft {displayName(v)}</span>
             {#if isGdk(v)}

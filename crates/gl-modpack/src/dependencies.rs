@@ -128,8 +128,9 @@ async fn resolve_modrinth_node_inner(
     };
 
     let Some(version) = version else {
-        plan.conflicts
-            .push(format!("{project_id} has no downloadable version; skipped."));
+        plan.conflicts.push(format!(
+            "{project_id} has no downloadable version; skipped."
+        ));
         return Ok(());
     };
 

@@ -241,10 +241,7 @@ pub fn detach_sync_pack(
 /// tracking it (via `JavaInstance.sync_pack_ids`), so the UI can show a
 /// pack's current status without the caller re-collecting instance ids.
 #[tauri::command(async)]
-pub fn get_sync_report(
-    state: State<'_, AppState>,
-    pack_id: String,
-) -> Result<SyncReport, String> {
+pub fn get_sync_report(state: State<'_, AppState>, pack_id: String) -> Result<SyncReport, String> {
     let ids: Vec<String> = {
         let svc = state
             .java_instances

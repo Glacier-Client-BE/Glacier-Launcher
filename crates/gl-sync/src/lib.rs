@@ -24,7 +24,7 @@ pub mod report;
 pub mod resolution;
 
 pub use engine::SyncEngine;
-pub use error::{SyncError, Result};
+pub use error::{Result, SyncError};
 pub use model::{AdoptStrategy, DetachMode, MergeFormat, SyncPack, SyncTarget, VersionOverride};
 pub use registry::SyncRegistry;
 pub use report::{ReportAction, ReportEntry, SyncReport};

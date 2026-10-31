@@ -54,7 +54,13 @@ impl SyncRegistry {
     pub fn target_store_path(&self, pack_id: &str, target_label: &str) -> PathBuf {
         let safe: String = target_label
             .chars()
-            .map(|c| if c.is_alphanumeric() || c == '-' || c == '_' { c } else { '_' })
+            .map(|c| {
+                if c.is_alphanumeric() || c == '-' || c == '_' {
+                    c
+                } else {
+                    '_'
+                }
+            })
             .collect();
         Self::store_root_of(&self.root_dir).join(pack_id).join(safe)
     }

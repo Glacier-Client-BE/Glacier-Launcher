@@ -131,7 +131,9 @@ impl VersionService {
             versions
         })
         .await
-        .map_err(|e| crate::error::JavaError::Other(format!("version annotate task failed: {e}")))?;
+        .map_err(|e| {
+            crate::error::JavaError::Other(format!("version annotate task failed: {e}"))
+        })?;
 
         Ok(versions)
     }
@@ -206,7 +208,6 @@ impl VersionService {
             })
             .collect())
     }
-
 }
 
 fn cache_entries(versions: &[JavaVersion]) -> Vec<CachedVersion> {

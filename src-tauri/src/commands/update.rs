@@ -46,8 +46,11 @@ pub async fn list_client_releases(
     state: State<'_, AppState>,
     max: Option<usize>,
 ) -> Result<Vec<LauncherRelease>, String> {
-    let checker =
-        gl_update::UpdateChecker::with_client(CLIENT_REPO_ORG, CLIENT_REPO_NAME, state.http.clone());
+    let checker = gl_update::UpdateChecker::with_client(
+        CLIENT_REPO_ORG,
+        CLIENT_REPO_NAME,
+        state.http.clone(),
+    );
     checker
         .recent_releases(max.unwrap_or(12))
         .await
@@ -331,8 +334,7 @@ pub fn install_launcher_update(app: AppHandle, installer_path: String) -> Result
 /// for the next attempt rather than lost).
 #[tauri::command(async)]
 pub fn resume_pending_launcher_update(app: AppHandle) -> Result<bool, String> {
-    let Some(installer_path) = gl_update::take_pending_update().map_err(|e| e.to_string())?
-    else {
+    let Some(installer_path) = gl_update::take_pending_update().map_err(|e| e.to_string())? else {
         return Ok(false);
     };
 

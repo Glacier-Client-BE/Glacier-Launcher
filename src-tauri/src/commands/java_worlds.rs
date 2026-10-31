@@ -40,7 +40,9 @@ pub async fn list_java_worlds(state: State<'_, AppState>) -> Result<Vec<JavaWorl
 
 /// Port of `ListBackups`.
 #[tauri::command]
-pub async fn list_java_backups(state: State<'_, AppState>) -> Result<Vec<JavaInstanceFile>, String> {
+pub async fn list_java_backups(
+    state: State<'_, AppState>,
+) -> Result<Vec<JavaInstanceFile>, String> {
     let dir = active_dir(&state)?;
     worlds::list_backups(&dir).map_err(|e| e.to_string())
 }

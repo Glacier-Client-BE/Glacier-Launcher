@@ -81,9 +81,10 @@ impl ProcessorContext {
     fn resolve_data_value(&self, raw: &str) -> Result<String> {
         match DataValue::parse(raw) {
             DataValue::Literal(text) => Ok(text),
-            DataValue::Artifact(reference) if reference.starts_with('/') => {
-                Ok(self.extract_installer_entry(&reference)?.display().to_string())
-            }
+            DataValue::Artifact(reference) if reference.starts_with('/') => Ok(self
+                .extract_installer_entry(&reference)?
+                .display()
+                .to_string()),
             DataValue::Artifact(coord) => Ok(self.library_path(&coord)?.display().to_string()),
         }
     }
@@ -129,12 +130,12 @@ pub fn read_main_class(jar_path: &Path) -> Result<String> {
     })?;
     let mut raw = String::new();
     entry.read_to_string(&mut raw).map_err(io_err(jar_path))?;
-    Ok(parse_main_class(&raw).ok_or_else(|| {
+    parse_main_class(&raw).ok_or_else(|| {
         JavaError::Other(format!(
             "processor jar {} manifest has no Main-Class",
             jar_path.display()
         ))
-    })?)
+    })
 }
 
 fn parse_main_class(manifest: &str) -> Option<String> {
@@ -172,7 +173,11 @@ pub async fn run_processors(ctx: &ProcessorContext, profile: &InstallProfile) ->
     Ok(())
 }
 
-async fn run_one(ctx: &ProcessorContext, profile: &InstallProfile, processor: &Processor) -> Result<()> {
+async fn run_one(
+    ctx: &ProcessorContext,
+    profile: &InstallProfile,
+    processor: &Processor,
+) -> Result<()> {
     let jar_path = ctx.library_path(&processor.jar)?;
     if !jar_path.is_file() {
         return Err(JavaError::Other(format!(
@@ -196,21 +201,30 @@ async fn run_one(ctx: &ProcessorContext, profile: &InstallProfile, processor: &P
     }
 
     let mut cmd = tokio::process::Command::new(&ctx.java_exe);
-    cmd.arg("-cp").arg(&classpath_str).arg(&main_class).args(&args);
+    cmd.arg("-cp")
+        .arg(&classpath_str)
+        .arg(&main_class)
+        .args(&args);
     #[cfg(windows)]
     {
         const CREATE_NO_WINDOW: u32 = 0x0800_0000;
         cmd.creation_flags(CREATE_NO_WINDOW);
     }
 
-    let output = cmd
-        .output()
-        .await
-        .map_err(|e| JavaError::Other(format!("could not start processor {}: {e}", processor.jar)))?;
+    let output = cmd.output().await.map_err(|e| {
+        JavaError::Other(format!("could not start processor {}: {e}", processor.jar))
+    })?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        let tail: String = stderr.chars().rev().take(2000).collect::<Vec<_>>().into_iter().rev().collect();
+        let tail: String = stderr
+            .chars()
+            .rev()
+            .take(2000)
+            .collect::<Vec<_>>()
+            .into_iter()
+            .rev()
+            .collect();
         return Err(JavaError::Other(format!(
             "processor {} ({main_class}) exited with {}: ...{tail}",
             processor.jar, output.status
@@ -229,8 +243,8 @@ mod tests {
         {
             let cursor = std::io::Cursor::new(&mut buf);
             let mut zip = zip::ZipWriter::new(cursor);
-            let options: zip::write::FileOptions<()> =
-                zip::write::FileOptions::default().compression_method(zip::CompressionMethod::Stored);
+            let options: zip::write::FileOptions<()> = zip::write::FileOptions::default()
+                .compression_method(zip::CompressionMethod::Stored);
             zip.start_file("META-INF/MANIFEST.MF", options).unwrap();
             zip.write_all(manifest.as_bytes()).unwrap();
             zip.finish().unwrap();
@@ -240,7 +254,8 @@ mod tests {
 
     #[test]
     fn reads_main_class_from_manifest() {
-        let jar_bytes = make_jar_with_manifest("Manifest-Version: 1.0\nMain-Class: com.example.Tool\n");
+        let jar_bytes =
+            make_jar_with_manifest("Manifest-Version: 1.0\nMain-Class: com.example.Tool\n");
         let dir = tempfile::tempdir().unwrap();
         let jar_path = dir.path().join("tool.jar");
         std::fs::write(&jar_path, jar_bytes).unwrap();
@@ -277,13 +292,17 @@ mod tests {
             ctx.minecraft_jar.display().to_string()
         );
         assert_eq!(
-            ctx.resolve_token(&profile, "[net.minecraftforge:forge:1.0]").unwrap(),
+            ctx.resolve_token(&profile, "[net.minecraftforge:forge:1.0]")
+                .unwrap(),
             ctx.libraries_dir
                 .join("net/minecraftforge/forge/1.0/forge-1.0.jar")
                 .display()
                 .to_string()
         );
-        assert_eq!(ctx.resolve_token(&profile, "plain-text").unwrap(), "plain-text");
+        assert_eq!(
+            ctx.resolve_token(&profile, "plain-text").unwrap(),
+            "plain-text"
+        );
     }
 
     #[test]

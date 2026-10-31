@@ -207,20 +207,27 @@ fn file_copy_apply_and_detach_discard() {
 
     std::fs::write(dirs["a"].join("icon.png"), b"pixels").unwrap();
     // First apply seeds the store from "a".
-    engine.apply(&pack.id, &{
-        let mut m = HashMap::new();
-        m.insert("a".to_string(), dirs["a"].clone());
-        m
-    }).unwrap();
+    engine
+        .apply(&pack.id, &{
+            let mut m = HashMap::new();
+            m.insert("a".to_string(), dirs["a"].clone());
+            m
+        })
+        .unwrap();
 
     // Applying to "b" copies the canonical file in.
-    let report = engine.apply(&pack.id, &{
-        let mut m = HashMap::new();
-        m.insert("b".to_string(), dirs["b"].clone());
-        m
-    }).unwrap();
+    let report = engine
+        .apply(&pack.id, &{
+            let mut m = HashMap::new();
+            m.insert("b".to_string(), dirs["b"].clone());
+            m
+        })
+        .unwrap();
     assert!(!report.has_failures());
-    assert_eq!(std::fs::read(dirs["b"].join("icon.png")).unwrap(), b"pixels");
+    assert_eq!(
+        std::fs::read(dirs["b"].join("icon.png")).unwrap(),
+        b"pixels"
+    );
 
     let detach = engine
         .detach(&pack.id, "b", &dirs["b"], DetachMode::Discard)
@@ -237,7 +244,12 @@ fn registry_persists_across_reload() {
         let engine = SyncEngine::new(root.clone()).unwrap();
         engine
             .registry()
-            .upsert(make_pack("p1", vec![SyncTarget::Mods { mod_ids: vec!["sodium".into()] }]))
+            .upsert(make_pack(
+                "p1",
+                vec![SyncTarget::Mods {
+                    mod_ids: vec!["sodium".into()],
+                }],
+            ))
             .unwrap();
     }
     let engine2 = SyncEngine::new(root).unwrap();
@@ -263,6 +275,10 @@ fn mods_target_reports_missing_and_present() {
 
     let report = engine.preview(&pack.id, &dirs).unwrap();
     let details: Vec<_> = report.entries.iter().map(|e| e.detail.clone()).collect();
-    assert!(details.iter().any(|d| d.contains("sodium: already present")));
-    assert!(details.iter().any(|d| d.contains("lithium: needs installing")));
+    assert!(details
+        .iter()
+        .any(|d| d.contains("sodium: already present")));
+    assert!(details
+        .iter()
+        .any(|d| d.contains("lithium: needs installing")));
 }

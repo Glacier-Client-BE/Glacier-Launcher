@@ -527,7 +527,9 @@ impl Default for LauncherSettings {
 static CACHE: Mutex<Option<LauncherSettings>> = Mutex::new(None);
 
 fn lock_cache() -> MutexGuard<'static, Option<LauncherSettings>> {
-    CACHE.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+    CACHE
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
 /// Load settings, migrating from the legacy flat (no-envelope, PascalCase)

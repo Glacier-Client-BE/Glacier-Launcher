@@ -20,10 +20,10 @@
 
 use std::fs::File;
 use std::io::Read as _;
-use std::path::Path;
-use std::process::Command as StdCommand;
 #[cfg(windows)]
 use std::os::windows::process::CommandExt as _;
+use std::path::Path;
+use std::process::Command as StdCommand;
 #[cfg(windows)]
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
@@ -672,10 +672,7 @@ mod tests {
 
     #[test]
     fn escapes_ampersands_for_xml_embedding() {
-        assert_eq!(
-            xml_escape_amp("A=1&B=2&C=3"),
-            "A=1&amp;B=2&amp;C=3"
-        );
+        assert_eq!(xml_escape_amp("A=1&B=2&C=3"), "A=1&amp;B=2&amp;C=3");
     }
 
     #[test]

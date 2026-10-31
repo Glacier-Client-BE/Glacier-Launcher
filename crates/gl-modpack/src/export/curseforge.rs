@@ -26,7 +26,11 @@ fn loader_id(opts: &ExportOptions) -> String {
 /// written as `files[]` project+file references; everything else is bundled
 /// as `overrides/mods/<file>` since CurseForge's manifest format has no
 /// direct-URL fallback for arbitrary files.
-pub fn export_curseforge(instance_dir: &Path, dest_path: &Path, opts: &ExportOptions) -> Result<()> {
+pub fn export_curseforge(
+    instance_dir: &Path,
+    dest_path: &Path,
+    opts: &ExportOptions,
+) -> Result<()> {
     let mods_dir = instance_dir.join("mods");
     let provenance = read_mod_provenance(instance_dir);
 
@@ -93,8 +97,16 @@ pub fn export_curseforge(instance_dir: &Path, dest_path: &Path, opts: &ExportOpt
     zip.write_all(serde_json::to_string_pretty(&manifest)?.as_bytes())?;
 
     for path in &override_mod_files {
-        let filename = path.file_name().and_then(|n| n.to_str()).unwrap_or_default();
-        add_file_to_zip(&mut zip, path, &format!("overrides/mods/{filename}"), options)?;
+        let filename = path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or_default();
+        add_file_to_zip(
+            &mut zip,
+            path,
+            &format!("overrides/mods/{filename}"),
+            options,
+        )?;
     }
 
     for dir_name in OVERRIDE_DIRS {

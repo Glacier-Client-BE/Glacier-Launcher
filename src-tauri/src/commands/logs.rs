@@ -213,14 +213,11 @@ fn redact_user_paths(text: &str) -> String {
             // a path separator, then a username segment, then a separator.
             let word_start_ok = i == 0 || !bytes[i - 1].is_ascii_alphanumeric();
             let after = i + 5;
-            if word_start_ok
-                && after < bytes.len()
-                && matches!(bytes[after], b'\\' | b'/')
-            {
+            if word_start_ok && after < bytes.len() && matches!(bytes[after], b'\\' | b'/') {
                 let sep = bytes[after];
                 let name_start = after + 1;
                 let name_end = text[name_start..]
-                    .find(|c: char| c == '\\' || c == '/')
+                    .find(['\\', '/'])
                     .map(|off| name_start + off);
                 if let Some(name_end) = name_end {
                     if name_end > name_start {
@@ -265,7 +262,10 @@ fn redact_ipv4(text: &str) -> String {
                         break;
                     }
                 }
-                if seg_len == 0 || seg_len > 3 || rest[seg_start..end].parse::<u16>().unwrap_or(999) > 255 {
+                if seg_len == 0
+                    || seg_len > 3
+                    || rest[seg_start..end].parse::<u16>().unwrap_or(999) > 255
+                {
                     ok = false;
                     break;
                 }
@@ -283,8 +283,8 @@ fn redact_ipv4(text: &str) -> String {
             }
             // Must not be immediately followed by another digit/dot (avoid
             // chopping a longer numeric/version string) and must have hit 4 octets.
-            let boundary_ok = end >= rest.len()
-                || !matches!(rest.as_bytes()[end], b'.' | b'0'..=b'9');
+            let boundary_ok =
+                end >= rest.len() || !matches!(rest.as_bytes()[end], b'.' | b'0'..=b'9');
             if ok && octets == 4 && boundary_ok {
                 out.push_str("<redacted-ip>");
                 i += end;
@@ -451,7 +451,10 @@ pub async fn share_log(state: State<'_, AppState>, content: String) -> Result<St
 /// button, screenshotting version info, and finding the right log
 /// separately. Returns the zip's path.
 #[tauri::command(async)]
-pub fn export_support_bundle(instance_dir: String, max_logs: Option<usize>) -> Result<String, String> {
+pub fn export_support_bundle(
+    instance_dir: String,
+    max_logs: Option<usize>,
+) -> Result<String, String> {
     use std::io::Write;
 
     let dir = gl_settings::launcher_root().join("exports");
@@ -497,14 +500,21 @@ pub fn export_support_bundle(instance_dir: String, max_logs: Option<usize>) -> R
     // `share_log` redacts before uploading anywhere.
     let mut logs = Vec::new();
     scan_log_dir(&Path::new(&instance_dir).join("logs"), false, &mut logs);
-    scan_log_dir(&Path::new(&instance_dir).join("crash-reports"), true, &mut logs);
+    scan_log_dir(
+        &Path::new(&instance_dir).join("crash-reports"),
+        true,
+        &mut logs,
+    );
     logs.sort_by(|a, b| b.modified_at.cmp(&a.modified_at));
     for log in logs.into_iter().take(max_logs.unwrap_or(5)) {
         let Ok(content) = std::fs::read_to_string(&log.path) else {
             continue;
         };
         let redacted = redact(&content);
-        if zip.start_file(format!("logs/{}", log.name), options).is_ok() {
+        if zip
+            .start_file(format!("logs/{}", log.name), options)
+            .is_ok()
+        {
             let _ = zip.write_all(redacted.as_bytes());
         }
     }

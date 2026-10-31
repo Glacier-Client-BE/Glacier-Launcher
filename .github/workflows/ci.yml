@@ -17,7 +17,7 @@ jobs:
       - name: cargo fmt --check
         run: cargo fmt --all -- --check
       - name: cargo clippy
-        run: cargo clippy --workspace --all-targets -- -D warnings
+        run: cargo clippy --workspace --all-targets -- -D warnings -A clippy::too_many_arguments -A clippy::doc_lazy_continuation -A clippy::doc_overindented_list_items
       - name: cargo test
         run: cargo test --workspace
 

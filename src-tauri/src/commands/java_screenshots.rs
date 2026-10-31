@@ -91,12 +91,10 @@ pub async fn delete_java_screenshot(
             .java_instances
             .lock()
             .map_err(|_| "java instance service lock poisoned".to_string())?;
-        svc.instances()
-            .iter()
-            .find_map(|inst| {
-                let dir = svc.path_for_instance(&inst.id, "screenshots");
-                super::ensure_direct_child(&dir, Path::new(&path)).ok()
-            })
+        svc.instances().iter().find_map(|inst| {
+            let dir = svc.path_for_instance(&inst.id, "screenshots");
+            super::ensure_direct_child(&dir, Path::new(&path)).ok()
+        })
     }
     .ok_or_else(|| format!("Refusing to delete {path}: not a Java instance screenshot."))?;
     std::fs::remove_file(&target).map_err(|e| e.to_string())

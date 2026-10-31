@@ -103,7 +103,10 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let instances_root = tmp.path().join("instances");
         let inst_dir = instances_root.join("My Pack");
-        write(&inst_dir.join("instance.cfg"), "InstanceType=OneSix\nname=My Pack\niconKey=default\n");
+        write(
+            &inst_dir.join("instance.cfg"),
+            "InstanceType=OneSix\nname=My Pack\niconKey=default\n",
+        );
         write(
             &inst_dir.join("mmc-pack.json"),
             r#"{"components":[{"uid":"net.minecraft","version":"1.20.1"},{"uid":"net.fabricmc.fabric-loader","version":"0.15.7"}]}"#,
@@ -213,7 +216,9 @@ mod tests {
         };
         let created = pipeline::import_one(&svc, &candidate).expect("import should succeed");
         assert_eq!(created.loader, Some(ModLoaderKind::Fabric));
-        let copied = std::path::Path::new(&created.directory).join("mods").join("cool.jar");
+        let copied = std::path::Path::new(&created.directory)
+            .join("mods")
+            .join("cool.jar");
         assert!(copied.is_file());
     }
 }

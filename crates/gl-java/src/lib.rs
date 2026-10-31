@@ -21,8 +21,8 @@ pub mod loader;
 pub mod mod_analyzer;
 pub mod mod_loader;
 pub mod mod_provenance;
-pub mod modpack_transfer;
 pub mod models;
+pub mod modpack_transfer;
 pub mod packs;
 pub mod prelaunch;
 pub mod presets;
@@ -43,13 +43,15 @@ pub use launcher::{
     VersionProfile,
 };
 pub use mod_analyzer::{ModInfo, ModReport};
-pub use mod_loader::{install_forge, install_neoforge, install_fabric, install_quilt, run_loader_installer};
+pub use mod_loader::{
+    install_fabric, install_forge, install_neoforge, install_quilt, run_loader_installer,
+};
 pub use mod_provenance::{ModProvenance, ModSource, ProvenanceStore};
-pub use packs::{delete_pack, import_pack, list_packs, PackKind};
+pub use models::{InstanceSettings, JavaInstance, JavaVersion, ModLoaderKind};
 pub use modpack_transfer::{
     export_instance, export_modpack, extract_overrides, import_modpack, import_official_minecraft,
 };
-pub use models::{InstanceSettings, JavaInstance, JavaVersion, ModLoaderKind};
+pub use packs::{delete_pack, import_pack, list_packs, PackKind};
 pub use prelaunch::PrelaunchWarning;
 pub use presets::{JvmPreset, PRESETS as JVM_PRESETS};
 pub use runtime_download::RuntimeDownloadService;
@@ -404,9 +406,11 @@ mod tests {
 
         let profile = read_version_profile("loader", mc_dir).unwrap();
         assert_eq!(profile.jar_version_id, "1.20.1");
-        assert!(profile.libraries.iter().any(|l| l
-            .path
-            .ends_with(std::path::Path::new("versions").join("1.20.1").join("1.20.1.jar"))));
+        assert!(profile.libraries.iter().any(|l| l.path.ends_with(
+            std::path::Path::new("versions")
+                .join("1.20.1")
+                .join("1.20.1.jar")
+        )));
     }
 
     #[test]

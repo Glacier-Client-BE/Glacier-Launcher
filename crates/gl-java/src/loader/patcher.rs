@@ -34,7 +34,8 @@ pub fn requires_legacy_patching(install_profile_json: &Value) -> bool {
     if is_modern {
         return false;
     }
-    install_profile_json.get("install").is_some() || install_profile_json.get("versionInfo").is_some()
+    install_profile_json.get("install").is_some()
+        || install_profile_json.get("versionInfo").is_some()
 }
 
 #[cfg(test)]

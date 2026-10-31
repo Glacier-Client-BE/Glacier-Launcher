@@ -117,7 +117,10 @@ mod tests {
         let base = Path::new("base");
         assert_eq!(safe_join(base, "../../evil.jar"), None);
         assert_eq!(safe_join(base, "a/../../evil"), None);
-        assert_eq!(safe_join(base, "/etc/passwd"), Some(base.join("etc").join("passwd")));
+        assert_eq!(
+            safe_join(base, "/etc/passwd"),
+            Some(base.join("etc").join("passwd"))
+        );
         assert_eq!(safe_join(base, "C:/Windows/x"), None);
         assert_eq!(safe_join(base, "x:stream"), None);
         assert_eq!(safe_join(base, ""), None);

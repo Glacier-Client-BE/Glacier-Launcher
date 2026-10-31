@@ -70,10 +70,7 @@ fn free_disk_bytes(path: &Path) -> Option<u64> {
     // existing ancestor so the Win32 call has a real path to resolve.
     let mut probe = path.to_path_buf();
     while !probe.exists() {
-        let Some(parent) = probe.parent() else {
-            return None;
-        };
-        probe = parent.to_path_buf();
+        probe = probe.parent()?.to_path_buf();
     }
     let absolute = std::fs::canonicalize(&probe).unwrap_or(probe);
     let wide: Vec<u16> = absolute

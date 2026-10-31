@@ -405,7 +405,8 @@ pub fn run() {
                 // so `take_pending_deep_link` lets the frontend pull it
                 // once at its own startup instead of racing an emit.
                 if let Some(url) = std::env::args().find(|a| a.starts_with("glacier://")) {
-                    let _ = commands::system::PENDING_DEEP_LINK.set(std::sync::Mutex::new(Some(url)));
+                    let _ =
+                        commands::system::PENDING_DEEP_LINK.set(std::sync::Mutex::new(Some(url)));
                 }
             }
 
@@ -543,7 +544,9 @@ pub fn run() {
                                 let logical = size.to_logical::<f64>(scale);
                                 // Never persist a size below the window's own
                                 // configured minimum - see MIN_WINDOW_WIDTH/HEIGHT.
-                                if logical.width < MIN_WINDOW_WIDTH || logical.height < MIN_WINDOW_HEIGHT {
+                                if logical.width < MIN_WINDOW_WIDTH
+                                    || logical.height < MIN_WINDOW_HEIGHT
+                                {
                                     return;
                                 }
                                 settings.window_width = logical.width;

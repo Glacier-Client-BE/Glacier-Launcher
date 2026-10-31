@@ -29,7 +29,7 @@
 
   const clients: Credit[] = [
     {
-      icon: 'images/clients/latite.png', name: 'Latite Client', sub: 'credits.latiteSub',
+      icon: 'images/clients/latite.svg', name: 'Latite Client', sub: 'credits.latiteSub',
       links: [
         { tooltip: 'tt.githubReleases', icon: 'fa-brands fa-github', url: 'https://github.com/Imrglop/Latite-Releases' },
         { tooltip: 'tt.discord', icon: 'fa-brands fa-discord', url: 'https://discord.gg/latite' },
@@ -43,7 +43,7 @@
       ],
     },
     {
-      icon: 'images/clients/oderso.png', name: 'OderSo Client', sub: 'credits.oderSoSub',
+      icon: 'images/clients/oderso.svg', name: 'OderSo Client', sub: 'credits.oderSoSub',
       links: [
         { tooltip: 'tt.github', icon: 'fa-brands fa-github', url: 'https://github.com/MasonOderSo/oderso-data' },
       ],
@@ -59,13 +59,13 @@
 
   const tweaks: Credit[] = [
     {
-      icon: 'images/vanilla-tweaks.png', name: 'VanillaTweaks', sub: 'credits.vanillaTweaksSub',
+      icon: 'images/vanilla-tweaks.svg', name: 'VanillaTweaks', sub: 'credits.vanillaTweaksSub',
       links: [
         { tooltip: 'tt.website', icon: 'fa-solid fa-globe', url: 'https://vanillatweaks.net' },
       ],
     },
     {
-      icon: 'images/bedrock-tweaks.png', name: 'BedrockTweaks', sub: 'credits.bedrockTweaksSub',
+      icon: 'images/bedrock-tweaks.svg', name: 'BedrockTweaks', sub: 'credits.bedrockTweaksSub',
       links: [
         { tooltip: 'tt.website', icon: 'fa-solid fa-globe', url: 'https://bedrocktweaks.net' },
         { tooltip: 'tt.github', icon: 'fa-brands fa-github', url: 'https://github.com/BedrockTweaks/Files' },
@@ -79,7 +79,7 @@
 <div class="panel-body">
   <div class="credits-hero">
     <div class="credits-hero-icon">
-      <img src="images/icon.png" alt="" />
+      <img src="images/icon.svg" alt="" />
     </div>
     <div class="credits-hero-meta">
       <span class="credits-hero-name">Glacier Launcher</span>

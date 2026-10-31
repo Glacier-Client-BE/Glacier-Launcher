@@ -51,7 +51,10 @@ fn read_instance(dir: &Path) -> Option<ImportCandidate> {
     let manifest: CfManifest = serde_json::from_str(&text).ok()?;
 
     let name = if manifest.name.trim().is_empty() {
-        dir.file_name().unwrap_or_default().to_string_lossy().into_owned()
+        dir.file_name()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .into_owned()
     } else {
         manifest.name
     };

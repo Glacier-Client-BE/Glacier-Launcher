@@ -21,11 +21,11 @@
 
   const CLIENT_IMAGES: Record<string, string> = {
     'Flarial Client': '/images/clients/flarial.svg',
-    'OderSo Client': '/images/clients/oderso.png',
-    'Latite Client': '/images/clients/latite.png',
-    'LeviLamina Client': '/images/clients/levi-lamina.png',
-    'LeviLamina': '/images/clients/levi-lamina.png',
-    Vanilla: '/images/mc-logo.png',
+    'OderSo Client': '/images/clients/oderso.svg',
+    'Latite Client': '/images/clients/latite.svg',
+    'LeviLamina Client': '/images/clients/levi-lamina.svg',
+    'LeviLamina': '/images/clients/levi-lamina.svg',
+    Vanilla: '/images/mc-logo.svg',
   }
 
   /// Installed Bedrock build for the `.footer-mc-version` chip.
@@ -327,7 +327,7 @@
           ? 'Minecraft Preview — click to manage versions'
           : 'Minecraft Bedrock — click to manage versions'}
       >
-        <img class="chip-img" src="images/mc-logo.png" alt="" />
+        <img class="chip-img" src="images/mc-logo.svg" alt="" />
         <span class="footer-mc-text" title={`${mcVersion.is_preview ? 'Preview ' : ''}${mcVersion.display_version}`}>{mcVersion.is_preview ? 'Preview ' : ''}{mcVersion.display_version}</span>
       </div>
     {:else}
@@ -340,7 +340,7 @@
         onmousedown={(e) => e.stopPropagation()}
         data-tooltip={t('tt.minecraftBedrockNotDetectedClickInstall')}
       >
-        <img class="chip-img" src="images/mc-logo.png" alt="" />
+        <img class="chip-img" src="images/mc-logo.svg" alt="" />
         <span class="footer-mc-text">{t('x.notInstalled')}</span>
       </div>
     {/if}

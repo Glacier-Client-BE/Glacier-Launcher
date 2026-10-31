@@ -163,7 +163,10 @@ mod tests {
     fn hash_match_reuses_other_launcher_file() {
         let other = tempfile::tempdir().unwrap();
         let mine = tempfile::tempdir().unwrap();
-        write(&other.path().join("libraries/com/x/y/1.0/y-1.0.jar"), b"abc");
+        write(
+            &other.path().join("libraries/com/x/y/1.0/y-1.0.jar"),
+            b"abc",
+        );
 
         let roots = vec![other.path().to_path_buf()];
         let expected = Expected::new("libraries/com/x/y/1.0/y-1.0.jar", ABC_SHA1);
@@ -178,7 +181,10 @@ mod tests {
     fn hash_mismatch_falls_back_to_download() {
         let other = tempfile::tempdir().unwrap();
         let mine = tempfile::tempdir().unwrap();
-        write(&other.path().join("assets/objects/aa/aabbcc"), b"not the right bytes");
+        write(
+            &other.path().join("assets/objects/aa/aabbcc"),
+            b"not the right bytes",
+        );
 
         let roots = vec![other.path().to_path_buf()];
         let expected = Expected::new("assets/objects/aa/aabbcc", ABC_SHA1);
@@ -212,8 +218,16 @@ mod tests {
         let mine = tempfile::tempdir().unwrap();
         let dest = mine.path().join("libraries/a.jar");
 
-        assert!(!reuse_into(&roots, &Expected::new("libraries/a.jar", ""), &dest));
-        assert!(!reuse_into(&[], &Expected::new("libraries/a.jar", ABC_SHA1), &dest));
+        assert!(!reuse_into(
+            &roots,
+            &Expected::new("libraries/a.jar", ""),
+            &dest
+        ));
+        assert!(!reuse_into(
+            &[],
+            &Expected::new("libraries/a.jar", ABC_SHA1),
+            &dest
+        ));
         assert!(!dest.exists());
     }
 

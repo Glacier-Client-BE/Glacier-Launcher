@@ -15,12 +15,12 @@
 
 use std::path::{Path, PathBuf};
 
+use gl_download::DownloadRequest;
 use gl_modpack::curseforge::{
     BEDROCK_CLASS_ADDONS, BEDROCK_CLASS_MAPS, BEDROCK_CLASS_SCRIPTS, BEDROCK_CLASS_SKINS,
     BEDROCK_CLASS_TEXTURE_PACKS, GAME_ID_BEDROCK,
 };
 use gl_modpack::models::CfSearchResult;
-use gl_download::DownloadRequest;
 use serde::Serialize;
 use tauri::State;
 
@@ -300,7 +300,11 @@ fn find_pack_conflicts(candidate_dir: &Path, packs_dir: &Path) -> Vec<PackConfli
 /// Extracts an archive directly into the class's default folder — the
 /// fallback path for a bare `.zip` (or any other extension) that isn't a
 /// recognized Bedrock content container.
-fn install_into_class_dir(zip_path: &Path, class_id: i32, file_stem: &str) -> Result<Vec<String>, String> {
+fn install_into_class_dir(
+    zip_path: &Path,
+    class_id: i32,
+    file_stem: &str,
+) -> Result<Vec<String>, String> {
     let dir_name = default_dir_name_for_class(class_id);
     let dest_root = gl_bedrock::paths::live_dir_for(dir_name);
     std::fs::create_dir_all(&dest_root).map_err(|e| e.to_string())?;

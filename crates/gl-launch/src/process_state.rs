@@ -85,7 +85,11 @@ impl ProcessRegistry {
     /// the launch-streaming loop should call `push_log_line` against (or the
     /// caller can just call `push_log_line` on `self` directly, keyed by
     /// `instance_id` — this handle just avoids a second map lookup per line).
-    pub fn register(&self, instance_id: impl Into<String>, pid: u32) -> Arc<Mutex<VecDeque<String>>> {
+    pub fn register(
+        &self,
+        instance_id: impl Into<String>,
+        pid: u32,
+    ) -> Arc<Mutex<VecDeque<String>>> {
         let instance_id = instance_id.into();
         let started_at = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -288,7 +292,10 @@ mod tests {
         assert_eq!(buf.len(), LOG_BUFFER_CAP);
         // The first 10 lines ("0".."9") should have been evicted.
         assert_eq!(buf.first().unwrap(), "10");
-        assert_eq!(buf.last().unwrap(), (LOG_BUFFER_CAP + 9).to_string().as_str());
+        assert_eq!(
+            buf.last().unwrap(),
+            (LOG_BUFFER_CAP + 9).to_string().as_str()
+        );
     }
 
     #[test]

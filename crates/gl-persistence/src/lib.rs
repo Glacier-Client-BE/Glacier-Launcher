@@ -51,7 +51,9 @@ pub struct Envelope<T> {
 /// same path can't have their renames land in a nondeterministic order and
 /// silently drop one save.
 pub fn write_atomic(path: &Path, contents: &str) -> Result<()> {
-    let _guard = WRITE_LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    let _guard = WRITE_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
 
     if let Some(dir) = path.parent() {
         if !dir.as_os_str().is_empty() {

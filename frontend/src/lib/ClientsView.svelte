@@ -327,7 +327,7 @@
 <div class="panel-body">
   <div class="client-card" class:client-active={settings.SelectedClient === 'Vanilla'}>
     <div class="client-card-header">
-    <div class="client-card-icon client-card-icon-img"><img src="/images/mc-logo.png" alt="Vanilla" /></div>
+    <div class="client-card-icon client-card-icon-img"><img src="/images/mc-logo.svg" alt="Vanilla" /></div>
       <div class="client-card-meta">
         <span class="client-card-name">{t('x.vanilla')}</span>
         <span class="client-card-sub client-card-note">Launches Minecraft with no DLL injection</span>
@@ -419,7 +419,7 @@
 
   <div class="client-card" class:client-active={settings.SelectedClient === 'Latite Client'}>
     <div class="client-card-header">
-      <div class="client-card-icon client-card-icon-img"><img src="/images/clients/latite.png" alt="Latite Client" /></div>
+      <div class="client-card-icon client-card-icon-img"><img src="/images/clients/latite.svg" alt="Latite Client" /></div>
       <div class="client-card-meta">
         <span class="client-card-name">Latite Client</span>
         <span class="client-card-sub client-card-note">Versioned GitHub releases</span>
@@ -452,7 +452,7 @@
 
   <div class="client-card" class:client-active={settings.SelectedClient === 'OderSo Client'}>
     <div class="client-card-header">
-      <div class="client-card-icon client-card-icon-img"><img src="/images/clients/oderso.png" alt="OderSo Client" /></div>
+      <div class="client-card-icon client-card-icon-img"><img src="/images/clients/oderso.svg" alt="OderSo Client" /></div>
       <div class="client-card-meta">
         <span class="client-card-name">
           OderSo Client
@@ -520,7 +520,7 @@
 
   <div class="client-card" class:client-active={settings.SelectedClient === 'LeviLamina'}>
     <div class="client-card-header">
-    <div class="client-card-icon client-card-icon-img"><img src="/images/clients/levi-lamina.png" alt="LeviLamina" /></div>
+    <div class="client-card-icon client-card-icon-img"><img src="/images/clients/levi-lamina.svg" alt="LeviLamina" /></div>
       <div class="client-card-meta">
         <span class="client-card-name">
           LeviLamina

@@ -153,7 +153,11 @@ impl InstanceService {
         let Some(template) = template else {
             return Ok(instance);
         };
-        self.set_instance_jvm_args(&instance.id, crate::presets::args_for(template), Some(template.to_string()))?;
+        self.set_instance_jvm_args(
+            &instance.id,
+            crate::presets::args_for(template),
+            Some(template.to_string()),
+        )?;
         self.get(&instance.id)
             .ok_or_else(|| JavaError::InstanceNotFound(instance.id.clone()))
     }
