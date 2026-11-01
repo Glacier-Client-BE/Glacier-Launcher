@@ -64,7 +64,7 @@ jobs:
       # Restore node_modules itself (keyed on the lockfile) so npm ci only
       # runs when dependencies actually change.
       - id: nm
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: frontend/node_modules
           key: nm-${{ runner.os }}-${{ hashFiles('frontend/package-lock.json') }}
